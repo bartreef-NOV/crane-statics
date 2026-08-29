@@ -1,0 +1,50 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat >/dev/null || true; ROOT=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; PY=\"$ROOT/.venv/Scripts/python.exe\"; [ -x \"$PY\" ] || PY=\"$ROOT/.venv/bin/python\"; [ -x \"$PY\" ] || exit 0; \"$PY\" -m code_review_graph update --skip-flows --repo \"$ROOT\" || true",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/format-and-lint.sh\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git commit*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-domain-boundaries.sh\"",
+            "timeout": 90
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat >/dev/null || true; ROOT=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; PY=\"$ROOT/.venv/Scripts/python.exe\"; [ -x \"$PY\" ] || PY=\"$ROOT/.venv/bin/python\"; [ -x \"$PY\" ] || exit 0; \"$PY\" -m code_review_graph status --repo \"$ROOT\" || echo 'code-review-graph: status failed (graph may need a rebuild)'",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "pyright-lsp@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true
+  }
+}

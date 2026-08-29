@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Check formatting (black)
+        run: black --check src tests
+
+      - name: Lint (flake8)
+        run: flake8 src tests
+
+      - name: Type-check (mypy)
+        run: mypy src
+
+      - name: Run tests with coverage
+        run: pytest tests/ -v

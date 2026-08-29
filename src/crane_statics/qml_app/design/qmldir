@@ -1,0 +1,2 @@
+module Crane.DesignTokens
+singleton DesignTokens 1.0 DesignTokens.qml

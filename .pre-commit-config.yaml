@@ -1,0 +1,29 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        additional_dependencies: [pydantic>=2.0.0]
+        args: [--ignore-missing-imports]
+
+  - repo: local
+    hooks:
+      - id: architecture-boundaries
+        name: architecture boundary tests
+        # --no-cov: pytest addopts enforce 75% coverage, which a single-file run
+        # cannot reach, so without this the hook fails on coverage rather than on
+        # a boundary violation.
+        entry: pytest tests/test_architecture.py -q --no-cov
+        language: system
+        pass_filenames: false
+        always_run: true
