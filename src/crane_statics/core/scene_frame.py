@@ -133,6 +133,18 @@ class SceneAxis:
 
 
 @dataclass(frozen=True)
+class SceneWinchSpool:
+    """One row of the winch spooled-rope readout: an id and its pre-formatted value.
+
+    Screen-space annotation, not geometry: it carries no scene coordinates, so it
+    never contributes to the fit rect.
+    """
+
+    hoist_id: str
+    value_text: str
+
+
+@dataclass(frozen=True)
 class SceneStatus:
     """A centered status message for unloaded or invalid scene geometry."""
 
@@ -217,6 +229,7 @@ class SceneFrame:
     waterline: SceneWaterline | None
     hit_targets: tuple[SceneHitTarget, ...]
     boom_axes: tuple[SceneAxis, ...]
+    winch_spools: tuple[SceneWinchSpool, ...]
     status: SceneStatus | None
     #: The transform this frame was projected with, for scene<->world hit testing.
     #: ``None`` on a status-only frame, where there is no geometry to map.
@@ -243,6 +256,7 @@ class SceneFrameBuilder:
         self.boom_axes: list[SceneAxis] = []
         self.guides: list[SceneGuide] = []
         self.hit_targets: list[SceneHitTarget] = []
+        self.winch_spools: list[SceneWinchSpool] = []
         self.waterline: SceneWaterline | None = None
         self.status: SceneStatus | None = None
 
@@ -612,6 +626,11 @@ class SceneFrameBuilder:
         self.guides.append(guide)
         return guide
 
+    def add_winch_spool(self, *, hoist_id: str, value_text: str) -> SceneWinchSpool:
+        spool = SceneWinchSpool(hoist_id, value_text)
+        self.winch_spools.append(spool)
+        return spool
+
     def set_waterline(self, *, scene_y: float, elevation_z: float, label: str) -> SceneWaterline:
         self.waterline = SceneWaterline(scene_y, elevation_z, label)
         return self.waterline
@@ -669,5 +688,6 @@ class SceneFrameBuilder:
             waterline=self.waterline,
             hit_targets=tuple(self.hit_targets),
             boom_axes=tuple(self.boom_axes),
+            winch_spools=tuple(self.winch_spools),
             status=self.status,
         )

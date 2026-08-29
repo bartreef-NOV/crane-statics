@@ -1,6 +1,7 @@
 """Scene view model behaviour and QML canvas integration."""
 
 import math
+import re
 from pathlib import Path
 
 import pytest
@@ -334,6 +335,56 @@ class TestSceneViewModelState:
 
         scene_vm.toggleFreebody("boom")
         assert scene_vm.displayOptions["selected_freebody"] == "none"
+
+    def test_winch_spools_read_out_every_winch_bearing_hoist(self, scene_vm):
+        frame = scene_vm._canvas.renderer.scene_frame
+
+        assert [spool.hoist_id for spool in frame.winch_spools] == ["MH", "WH", "SH", "BH"]
+        assert all(
+            re.fullmatch(r"\d+\.\d m \(\d+\.\d t\)", spool.value_text)
+            for spool in frame.winch_spools
+        )
+
+    def test_winch_spool_rows_replace_the_winch_cg_markers(self, scene_vm):
+        """The spooled rope mass is a readout now, not a centre-of-gravity symbol.
+
+        ``calculation.rope_mass`` never fed the load model, so a CG symbol
+        overstated what the winch mass was; ``core.drawn_loads`` still does not
+        read it.
+        """
+        frame = scene_vm._canvas.renderer.scene_frame
+
+        assert frame.winch_spools
+        assert not any("Winch:" in marker.tooltip for marker in frame.markers)
+
+    def test_winch_spools_reach_qml_as_camel_case_rows(self, scene_vm):
+        rows = scene_vm.sceneFrame["winchSpools"]
+
+        assert [row["hoist_id"] for row in rows] == ["MH", "WH", "SH", "BH"]
+        assert all(row["value_text"] for row in rows)
+
+    def test_winch_spools_respect_the_free_body_cut(self, scene_vm):
+        """Winch ownership is authored per body: sh_winch on boom, the rest on platform.
+
+        There is no platform free body, so a leg cut owns no winch at all and the
+        readout is empty -- the same way the winch CG markers used to vanish.
+        """
+        scene_vm.toggleFreebody("boom")
+        boom_ids = [spool.hoist_id for spool in scene_vm._canvas.renderer.scene_frame.winch_spools]
+
+        scene_vm.toggleFreebody("boom")
+        scene_vm.toggleFreebody("front_leg")
+        leg_spools = scene_vm._canvas.renderer.scene_frame.winch_spools
+
+        assert boom_ids == ["SH"]
+        assert leg_spools == ()
+
+    def test_winch_spool_readout_is_on_by_default_and_toggleable(self, scene_vm):
+        assert scene_vm.displayOptions["show_winch_spools"] is True
+
+        scene_vm.setDisplayOption("show_winch_spools", False)
+
+        assert scene_vm._canvas.renderer.scene_frame.winch_spools == ()
 
     def test_freebody_frame_hides_guides_and_waterline(self, scene_vm):
         scene_vm.toggleFreebody("boom")

@@ -26,6 +26,7 @@ class TestSceneStateAdapter:
             "waterline",
             "hitTargets",
             "boomAxes",
+            "winchSpools",
             "status",
         }
         assert set(frame.keys()) == expected_keys
@@ -57,6 +58,7 @@ class TestSceneStateAdapter:
         source.waterline = None
         source.hit_targets = []
         source.boom_axes = []
+        source.winch_spools = []
         source.status = None
 
         result = SceneStateAdapter.scene_frame_to_dict(source)

@@ -12,7 +12,7 @@ The QML application is the only supported desktop front end. It provides Scene, 
 
 ```bash
 # Clone or extract the project
-cd crane_statics_rewrite
+cd crane_statics
 
 # Install in development mode
 pip install -e .

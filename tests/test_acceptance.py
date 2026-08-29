@@ -2367,8 +2367,8 @@ class TestResponsiveLayoutRegression:
         )
         drawn_nodes = {node.id for node in frame.nodes}
 
-        # A loaded node that coincides with a CG marker (e.g. a winch node with
-        # spooled rope mass) legitimately has its plain node pin suppressed in
+        # A loaded node that coincides with a CG marker (e.g. a support node under
+        # a split-block CG) legitimately has its plain node pin suppressed in
         # favor of the CG symbol, per add_nodes_from_positions' overlap check.
         marker_overlap_radius = 4.0
         nodes_under_markers = set()

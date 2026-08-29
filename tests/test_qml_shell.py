@@ -348,6 +348,36 @@ def test_quick_canvas_contains_all_frame_tooltip_hit_sources(qml_engine):
     assert warnings == []
 
 
+def test_quick_canvas_lays_out_the_winch_spool_readout(qml_engine):
+    """The readout only instantiates its rows once a document is loaded.
+
+    ``test_component_loads_without_warnings`` builds this canvas against an empty
+    session, so the card is hidden and its delegates never run. Loading the example
+    is what exercises the row bindings -- including the right-aligned value column,
+    whose width must come from ``TextMetrics`` rather than from its parent (which
+    would be a binding loop, reported here as a warning).
+    """
+    engine, app_vm, _model_vm, warnings = qml_engine
+    app_vm.openPath(str(EXAMPLE))
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_DIR / "scene/QuickSceneCanvas.qml"))
+    )
+    canvas = component.create()
+
+    assert canvas is not None
+    card = canvas.findChild(QObject, "winchSpoolCard")
+    assert card is not None
+    assert card.property("visible") is True
+    assert len(card.property("rows")) == 4
+
+    values = canvas.findChild(QObject, "winchSpoolValueColumn")
+    assert values is not None
+    # Four stacked rows, so the column has real height and a right-aligned width.
+    assert values.property("height") > 0
+    assert values.property("width") > 0
+    assert warnings == []
+
+
 WORKSPACES = ["ModelWorkspace.qml", "SceneWorkspace.qml", "LoadChartWorkspace.qml"]
 
 

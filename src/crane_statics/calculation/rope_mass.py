@@ -137,18 +137,3 @@ def compute_rope_on_winch(
     linear_mass_kg_m = float((hoist or {}).get("linear_mass_kg_m", 0.0))
     length_on_winch_m = max(0.0, total - reeved)
     return length_on_winch_m, length_on_winch_m * linear_mass_kg_m
-
-
-def compute_winch_marker_masses_kg(
-    doc_dict: dict[str, Any],
-    hoist_id: str,
-    positions: dict[str, dict[str, float]],
-    effective_mult: Optional[EffectiveMultFn] = None,
-) -> dict[str, float]:
-    """Mass on winch split equally across the hoist's winch node(s): {node_id: mass_kg}."""
-    winch_node_ids = find_winch_node_ids(doc_dict, hoist_id)
-    if not winch_node_ids:
-        return {}
-    _, mass_kg = compute_rope_on_winch(doc_dict, hoist_id, positions, effective_mult)
-    share_kg = mass_kg / len(winch_node_ids)
-    return {node_id: share_kg for node_id in winch_node_ids}

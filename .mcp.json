@@ -1,13 +1,13 @@
 {
   "mcpServers": {
     "code-review-graph": {
-      "command": "C:\\Users\\ReefB\\Desktop\\crane_statics_rewrite\\.venv\\Scripts\\python.exe",
+      "command": "C:\\Users\\ReefB\\Desktop\\crane_statics\\.venv\\Scripts\\python.exe",
       "args": [
         "-m",
         "code_review_graph",
         "serve"
       ],
-      "cwd": "C:\\Users\\ReefB\\Desktop\\crane_statics_rewrite",
+      "cwd": "C:\\Users\\ReefB\\Desktop\\crane_statics",
       "type": "stdio"
     }
   }

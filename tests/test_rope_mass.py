@@ -8,7 +8,6 @@ from crane_statics.calculation.rope_mass import (
     compute_reeved_length_m,
     compute_reference_reeved_length_m,
     compute_rope_on_winch,
-    compute_winch_marker_masses_kg,
     find_winch_node_ids,
     resolve_total_rope_length_m,
 )
@@ -163,27 +162,6 @@ class TestRopeOnWinch:
 
         assert length_m == 0.0
         assert mass_kg == 0.0
-
-    def test_multiple_winch_nodes_split_mass_equally(self):
-        doc_dict = _synthetic_doc_dict(rope_length_m=1000.0, winch_node_ids=("winch_a", "winch_b"))
-        kin = KinematicsAdapter(doc_dict)
-        positions = dict(kin.compute_all_node_positions(0.0))
-        positions["hook"] = {"x": positions["sheave"]["x"], "z": positions["sheave"]["z"] - 5.0}
-
-        _, total_mass_kg = compute_rope_on_winch(doc_dict, "hoist_a", positions)
-        per_node = compute_winch_marker_masses_kg(doc_dict, "hoist_a", positions)
-
-        assert set(per_node) == {"winch_a", "winch_b"}
-        assert per_node["winch_a"] == pytest.approx(total_mass_kg / 2)
-        assert per_node["winch_b"] == pytest.approx(total_mass_kg / 2)
-        assert sum(per_node.values()) == pytest.approx(total_mass_kg)
-
-    def test_no_winch_node_returns_empty_marker_dict(self):
-        doc_dict = _synthetic_doc_dict(rope_length_m=1000.0, winch_node_ids=("drum_a",))
-        kin = KinematicsAdapter(doc_dict)
-        positions = dict(kin.compute_all_node_positions(0.0))
-
-        assert compute_winch_marker_masses_kg(doc_dict, "hoist_a", positions) == {}
 
 
 def _example_effective_mult(rope_id, seg, authored_mult, *, split_active, doc_dict, hoist_id):

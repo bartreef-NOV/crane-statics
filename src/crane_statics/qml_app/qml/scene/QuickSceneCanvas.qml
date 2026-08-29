@@ -394,6 +394,93 @@ Item {
         padding: 2
     }
 
+    // How much rope sits on each winch. Screen-space, so it neither pans nor scales
+    // with the scene, and it accepts no pointer events -- the canvas gestures are
+    // handled by handlers on root and must keep working over the card.
+    Rectangle {
+        id: winchSpoolCard
+        objectName: "winchSpoolCard"
+        readonly property var rows: root.frame && root.frame.winchSpools
+            ? root.frame.winchSpools : []
+        readonly property real paddingX: 8
+        readonly property real paddingY: 5
+
+        x: 8
+        y: 8
+        visible: rows.length > 0
+        width: winchSpoolContent.implicitWidth + paddingX * 2
+        height: winchSpoolContent.implicitHeight + paddingY * 2
+        radius: 4
+        color: Design.DesignTokens.colors.surfaceAlt
+        border.color: Design.DesignTokens.colors.border
+        border.width: 1
+        antialiasing: true
+
+        // Widest value string, so the value column can be right-aligned without
+        // binding a child's width to its parent's (which would loop).
+        TextMetrics {
+            id: winchSpoolValueMetrics
+            font.pixelSize: 12
+            text: {
+                let longest = ""
+                for (let i = 0; i < winchSpoolCard.rows.length; ++i) {
+                    const value = String(winchSpoolCard.rows[i].value_text)
+                    if (value.length > longest.length)
+                        longest = value
+                }
+                return longest
+            }
+        }
+
+        Column {
+            id: winchSpoolContent
+            x: winchSpoolCard.paddingX
+            y: winchSpoolCard.paddingY
+            spacing: 3
+
+            Text {
+                text: qsTr("Rope on winches")
+                color: Design.DesignTokens.colors.textPrimary
+                font.bold: true
+                font.pixelSize: 12
+            }
+
+            Row {
+                spacing: 10
+
+                Column {
+                    Repeater {
+                        model: winchSpoolCard.rows
+
+                        delegate: Text {
+                            required property var modelData
+                            text: modelData.hoist_id
+                            color: Design.DesignTokens.colors.textSecondary
+                            font.pixelSize: 12
+                        }
+                    }
+                }
+
+                Column {
+                    objectName: "winchSpoolValueColumn"
+
+                    Repeater {
+                        model: winchSpoolCard.rows
+
+                        delegate: Text {
+                            required property var modelData
+                            text: modelData.value_text
+                            color: Design.DesignTokens.colors.textPrimary
+                            font.pixelSize: 12
+                            width: Math.max(winchSpoolValueMetrics.width, implicitWidth)
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     HoverHandler {
         cursorShape: root.hoverDragKind === "outreach" ? Qt.SizeHorCursor
             : root.hoverDragKind === "tackle_length" ? Qt.SizeVerCursor
@@ -502,7 +589,8 @@ Item {
                     { key: "show_wind_forces", label: qsTr("Wind Forces") },
                     { key: "show_inertia_forces", label: qsTr("Inertia Forces") },
                     { key: "show_reaction_forces", label: qsTr("Reactions") },
-                    { key: "show_labels", label: qsTr("Labels") }
+                    { key: "show_labels", label: qsTr("Labels") },
+                    { key: "show_winch_spools", label: qsTr("Rope on Winches") }
                 ]
 
                 MenuItem {

@@ -406,7 +406,7 @@
         "linear_mass_kg_m": 20.3,
         "hook_travel": {
           "min_m": 5.0,
-          "max_m": 80.0
+          "max_m": 197.0
         }
       },
       "WH": {

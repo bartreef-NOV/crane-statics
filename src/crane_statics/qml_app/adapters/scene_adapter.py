@@ -37,6 +37,7 @@ class SceneStateAdapter:
             "waterline": None,
             "hitTargets": [],
             "boomAxes": [],
+            "winchSpools": [],
             "status": None,
         }
 
@@ -65,5 +66,6 @@ class SceneStateAdapter:
             "waterline": None if source.waterline is None else asdict(source.waterline),
             "hitTargets": [asdict(target) for target in source.hit_targets],
             "boomAxes": [asdict(axis) for axis in source.boom_axes],
+            "winchSpools": [asdict(spool) for spool in source.winch_spools],
             "status": None if source.status is None else asdict(source.status),
         }

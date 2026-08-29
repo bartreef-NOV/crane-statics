@@ -21,7 +21,7 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Optional, Tuple
 
-from crane_statics.calculation.rope_mass import compute_winch_marker_masses_kg
+from crane_statics.calculation.rope_mass import compute_rope_on_winch, find_winch_node_ids
 from crane_statics.presentation.formatters import HoistFormatter, node_display_name
 
 from . import drawn_loads
@@ -136,6 +136,8 @@ class SceneDisplay:
     show_wind_forces: bool = False
     show_inertia_forces: bool = False
     show_reaction_forces: bool = False
+    #: The one flag that defaults on: it replaces annotation the scene drew unconditionally.
+    show_winch_spools: bool = True
     force_scale_mode: str = "hybrid"
     selected_freebody: str = "none"
 
@@ -146,6 +148,7 @@ class SceneDisplay:
         "show_wind_forces",
         "show_inertia_forces",
         "show_reaction_forces",
+        "show_winch_spools",
     )
 
     def __post_init__(self) -> None:
@@ -186,6 +189,7 @@ class SceneDisplay:
             "inertia": "show_inertia_forces",
             "reactions": "show_reaction_forces",
             "labels": "show_labels",
+            "winch_spools": "show_winch_spools",
         }.get(name)
         return self if flag is None else replace(self, **{flag: bool(visible)})
 
@@ -393,6 +397,8 @@ class _SceneBuilder:
         self._draw_cg_markers(positions, body_filter)
         self._draw_node_pins(positions, body_filter)
         self._draw_leg_members(positions)
+        if inputs.display.show_winch_spools:
+            self._draw_winch_spools(positions, body_filter)
 
         # Fit rect follows the node pins only: decorative extents (waterline fill,
         # status text, long force arrows) must not inflate what the viewport frames.
@@ -654,7 +660,6 @@ class _SceneBuilder:
             radius=self._layout.cg_marker_radius,
         )
         self._draw_split_support_cg_marker(positions, body_filter)
-        self._draw_winch_cg_markers(positions, body_filter)
 
     def _draw_split_support_cg_marker(
         self, positions: Positions, body_filter: FreeBodyFilter
@@ -672,8 +677,18 @@ class _SceneBuilder:
             radius=self._layout.cg_marker_radius,
         )
 
-    def _draw_winch_cg_markers(self, positions: Positions, body_filter: FreeBodyFilter) -> None:
-        """A centre-of-gravity symbol per winch node, carrying the rope mass spooled there."""
+    def _draw_winch_spools(self, positions: Positions, body_filter: FreeBodyFilter) -> None:
+        """One readout row per hoist: how much rope is spooled on its winch.
+
+        Screen-space annotation rather than scene geometry -- this used to be a
+        centre-of-gravity symbol per winch node, which implied a mass participating
+        in the load model. It never did: ``calculation.rope_mass`` is display and
+        validation only, and ``core.drawn_loads`` does not read it.
+
+        A hoist appears if *any* of its winch nodes belongs to the cut body, and
+        reports its whole spooled total rather than a pro-rated share -- "rope on
+        the MH winch" is a per-hoist quantity, not one divisible by a cut plane.
+        """
         document = self._inputs.document_dict
         if not document:
             return
@@ -681,27 +696,22 @@ class _SceneBuilder:
             hoist_id = str(hoist.get("id", "")).strip()
             if not hoist_id:
                 continue
+            winch_node_ids = find_winch_node_ids(document, hoist_id)
+            if not any(
+                node_id in positions and body_filter.owns_node(node_id)
+                for node_id in winch_node_ids
+            ):
+                continue
             try:
-                mass_by_node = compute_winch_marker_masses_kg(
+                length_m, mass_kg = compute_rope_on_winch(
                     document, hoist_id, positions, self._effective_multiplier
                 )
             except (ValueError, KeyError):
                 continue
-            for node_id, mass_kg in mass_by_node.items():
-                if node_id not in positions or not body_filter.owns_node(node_id):
-                    continue
-                position = positions[node_id]
-                scene_x, scene_y = self._to_scene(float(position["x"]), float(position["z"]))
-                self._frame.add_marker(
-                    kind="center_of_gravity",
-                    scene_x=float(scene_x),
-                    scene_y=float(scene_y),
-                    radius=self._layout.cg_marker_radius,
-                    tooltip=(
-                        f"Center of gravity\nWinch: {hoist_id}\n"
-                        f"Rope mass on winch: {mass_kg / 1000.0:.2f} t"
-                    ),
-                )
+            self._frame.add_winch_spool(
+                hoist_id=hoist_id,
+                value_text=f"{length_m:.1f} m ({mass_kg / 1000.0:.1f} t)",
+            )
 
     # ------------------------------------------------------------------
     # Guides and annotation
