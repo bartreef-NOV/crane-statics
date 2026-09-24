@@ -84,14 +84,14 @@ Item {
         readonly property color primaryDisabled: root.colorScheme === "dark" ? "#4d5963" : (root.colorScheme === "light" ? "#b8c1c9" : systemPalette.midlight)
 
         // Semantic colors
-        readonly property color success: "#2e7d32"                    // Success, valid state
-        readonly property color successAlt: "#66bb6a"                 // Light success
-        readonly property color warning: "#a35f00"                    // Warning, caution state
-        readonly property color warningAlt: "#f0a000"                 // Light warning
-        readonly property color error: "#c62828"                      // Error, invalid state
-        readonly property color errorAlt: "#e57373"                   // Light error
-        readonly property color info: "#1565c0"                       // Information state
-        readonly property color infoAlt: "#42a5f5"                    // Light info
+        readonly property color success: root.colorScheme === "dark" ? "#66bb6a" : "#2e7d32"      // Success, valid state
+        readonly property color successAlt: root.colorScheme === "dark" ? "#81c995" : "#66bb6a"   // Light success
+        readonly property color warning: root.colorScheme === "dark" ? "#f0b35a" : "#a35f00"       // Warning, caution state
+        readonly property color warningAlt: root.colorScheme === "dark" ? "#f5c988" : "#f0a000"    // Light warning
+        readonly property color error: root.colorScheme === "dark" ? "#ef7775" : "#c62828"         // Error, invalid state
+        readonly property color errorAlt: root.colorScheme === "dark" ? "#f2a19f" : "#e57373"      // Light error
+        readonly property color info: root.colorScheme === "dark" ? "#5c9ce6" : "#1565c0"          // Information state
+        readonly property color infoAlt: root.colorScheme === "dark" ? "#8bc0f0" : "#42a5f5"       // Light info
 
         // Borders & dividers
         readonly property color border: root.colorScheme === "dark" ? "#5a6570" : (root.colorScheme === "light" ? "#c6cdd3" : systemPalette.mid)
@@ -158,6 +158,8 @@ Item {
         readonly property int sectionGap: 16       // Gap between major sections
         readonly property int panelPadding: 12     // Padding inside panels/cards
         readonly property int dialogPadding: 16    // Padding inside dialogs
+        readonly property int compact: 6           // Table cell / group box padding
+        readonly property int hairline: 2          // Bottom padding under a single-line cell
     }
 
     /**

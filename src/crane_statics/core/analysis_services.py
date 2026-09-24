@@ -358,11 +358,7 @@ class AnalysisCalculator:
                 if comp == "M" and conn_id in pinned_momentless_connections:
                     continue
                 widths = getattr(self._session.document, "support_widths", None)
-                diameter = (
-                    float(getattr(widths, "slewing_bearing_diameter_m", 1.0))
-                    if widths is not None
-                    else 1.0
-                )
+                diameter = widths.slewing_bearing_diameter_m if widths is not None else None
                 demand = extract_connection_component_response(
                     pt,
                     hook_load_kN,
@@ -530,11 +526,7 @@ class AnalysisCalculator:
             if not entity_id or not component:
                 return None
             widths = getattr(self._session.document, "support_widths", None)
-            diameter = (
-                float(getattr(widths, "slewing_bearing_diameter_m", 1.0))
-                if widths is not None
-                else 1.0
-            )
+            diameter = widths.slewing_bearing_diameter_m if widths is not None else None
             return extract_connection_component_response(
                 point,
                 hook_load_kN,

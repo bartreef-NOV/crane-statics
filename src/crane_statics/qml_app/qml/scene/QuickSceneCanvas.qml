@@ -194,7 +194,6 @@ Item {
         width: root.width
         height: Math.max(0, root.height - y)
         color: Design.DesignTokens.colorWithAlpha(Design.DesignTokens.colors.info, 0.19)
-        antialiasing: true
         z: -2
     }
 
@@ -205,7 +204,6 @@ Item {
         width: root.width
         height: 2
         color: Design.DesignTokens.colors.info
-        antialiasing: true
         z: -1
     }
 
@@ -315,7 +313,6 @@ Item {
                 y: parent.anchorY
                 width: 2
                 height: Math.max(0, guideLabel.y - y)
-                antialiasing: true
 
                 ShapePath {
                     strokeColor: Design.DesignTokens.colors.textSecondary
@@ -335,7 +332,6 @@ Item {
                 y: parent.anchorY - 0.5
                 width: Math.max(0, guideLabel.x - x)
                 height: 2
-                antialiasing: true
 
                 ShapePath {
                     strokeColor: Design.DesignTokens.colors.textSecondary
@@ -366,7 +362,6 @@ Item {
                 color: Design.DesignTokens.colors.surfaceAlt
                 border.color: Design.DesignTokens.colors.border
                 border.width: 1
-                antialiasing: true
 
                 Text {
                     id: guideText
@@ -422,7 +417,6 @@ Item {
         color: Design.DesignTokens.colors.surfaceAlt
         border.color: Design.DesignTokens.colors.border
         border.width: 1
-        antialiasing: true
 
         // Widest value string, so the value column can be right-aligned without
         // binding a child's width to its parent's (which would loop).

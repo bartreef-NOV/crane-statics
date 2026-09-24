@@ -4,7 +4,7 @@
     "version": "5.13.0"
   },
   "metadata": {
-    "name": "Blue Wind"
+    "name": "Blue Wind Crane Retracted"
   },
   "model_definition": {
     "environment": {
@@ -16,7 +16,6 @@
       "max_wind_speed_m_s": 20.0
     },
     "boom_width_m": 12.4,
-    "slewing_bearing_diameter_m": 23.0,
     "boom_heel": {
       "x_m": 5.6,
       "z_m": 6.0
@@ -372,7 +371,6 @@
             "parts": 2
           }
         ],
-        "rope_length_m": 3620.0,
         "linear_mass_kg_m": 20.3,
         "sidelead_deg": 2.5
       },
@@ -402,7 +400,6 @@
             "to": "ah_boom_sheave_2"
           }
         ],
-        "rope_length_m": 950.0,
         "linear_mass_kg_m": 11.64,
         "sidelead_deg": 4.5
       },
@@ -436,7 +433,6 @@
             "to": "wh_boom_sheave_4"
           }
         ],
-        "rope_length_m": 350.0,
         "linear_mass_kg_m": 13.4,
         "sidelead_deg": 4.5
       }

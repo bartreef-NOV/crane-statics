@@ -20,8 +20,8 @@ RadioButton {
         id: indicator
         implicitWidth: DesignTokens.sizing.iconNormal
         implicitHeight: DesignTokens.sizing.iconNormal
-        x: 0
-        y: (root.height - height) / 2
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
         radius: width / 2
         color: DesignTokens.colors.surface
         border.width: root.activeFocus ? DesignTokens.sizing.borderNormal : DesignTokens.sizing.borderThin

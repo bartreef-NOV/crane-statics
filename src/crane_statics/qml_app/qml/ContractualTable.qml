@@ -53,11 +53,11 @@ Item {
             Layout.fillHeight: true
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: 1
+            border.width: Design.DesignTokens.sizing.borderThin
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 1
+                anchors.margins: Design.DesignTokens.sizing.borderThin
                 spacing: 0
 
                 Row {
@@ -74,12 +74,12 @@ Item {
                             height: root.tableRowHeight
                             color: root.headerColor
                             border.color: root.gridColor
-                            border.width: 1
+                            border.width: Design.DesignTokens.sizing.borderThin
                             Label {
                                 anchors.fill: parent
-                                leftPadding: 6
-                                rightPadding: 6
-                                bottomPadding: 2
+                                leftPadding: Design.DesignTokens.spacing.compact
+                                rightPadding: Design.DesignTokens.spacing.compact
+                                bottomPadding: Design.DesignTokens.spacing.hairline
                                 text: parent.modelData
                                 color: root.headerTextColor
                                 font.bold: true
@@ -119,7 +119,7 @@ Item {
                             ? root.selectedColor
                             : (pointRow.index % 2 === 0 ? root.surfaceColor : Design.DesignTokens.colors.surfaceAlt)
                         border.color: root.gridColor
-                        border.width: 1
+                        border.width: Design.DesignTokens.sizing.borderThin
 
                         Row {
                             anchors.fill: parent
@@ -132,7 +132,7 @@ Item {
                                     required property int index
                                     width: root.width / 4
                                     height: root.tableRowHeight
-                                    leftPadding: 6
+                                    leftPadding: Design.DesignTokens.spacing.compact
                                     text: modelData
                                     color: pointRow.selected ? root.selectedTextColor : root.textColor
                                     verticalAlignment: Text.AlignVCenter
@@ -142,7 +142,7 @@ Item {
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
                                         anchors.right: parent.right
-                                        width: 1
+                                        width: Design.DesignTokens.sizing.borderThin
                                         color: root.gridColor
                                     }
                                 }

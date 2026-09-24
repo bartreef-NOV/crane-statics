@@ -58,6 +58,8 @@ VESSEL_MOTION_KEYS = [
     "reference_z_m",
 ]
 SUPPORT_WIDTH_KEYS = ["boom_width_m", "slewing_bearing_diameter_m"]
+# Support-width keys that may be cleared back to "unset" via clearEnvironmentValue.
+NULLABLE_SUPPORT_WIDTH_KEYS = {"slewing_bearing_diameter_m"}
 # Document-level design duty: edited alongside the environment, stored on the document.
 DOCUMENT_KEYS = ["hook_height_at_min_outreach_m"]
 
@@ -304,12 +306,17 @@ class ModelViewModel(QObject):
         doc = self._model.document
         if doc is None:
             return EnvironmentSettings.defaults().to_dict()
-        env_dict = {key: float(getattr(doc.environment, key)) for key in ENVIRONMENT_KEYS}
+        env_dict: dict[str, Optional[float]] = {
+            key: float(getattr(doc.environment, key)) for key in ENVIRONMENT_KEYS
+        }
         env_dict.update(
             {key: float(getattr(doc.environment.vessel_motion, key)) for key in VESSEL_MOTION_KEYS}
         )
         env_dict.update(
-            {key: float(getattr(doc.support_widths, key)) for key in SUPPORT_WIDTH_KEYS}
+            {
+                key: (float(raw) if (raw := getattr(doc.support_widths, key)) is not None else None)
+                for key in SUPPORT_WIDTH_KEYS
+            }
         )
         env_dict["hook_height_at_min_outreach_m"] = float(
             doc.hook_height_at_min_outreach_m
@@ -347,6 +354,20 @@ class ModelViewModel(QObject):
                 self.editFailed.emit(str(exc))
                 return
             self.refresh()
+        self._model.mark_content_changed()
+        self.environmentChanged.emit()
+        self.healthChanged.emit()
+        self.modelEdited.emit()
+
+    @pyqtSlot(str)
+    def clearEnvironmentValue(self, key: str) -> None:
+        doc = self._model.document
+        if doc is None or key not in NULLABLE_SUPPORT_WIDTH_KEYS:
+            return
+        target = doc.support_widths
+        if getattr(target, key) is None:
+            return
+        setattr(target, key, None)
         self._model.mark_content_changed()
         self.environmentChanged.emit()
         self.healthChanged.emit()

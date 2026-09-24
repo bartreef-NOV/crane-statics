@@ -552,6 +552,25 @@ class TestEnvironmentEditing:
 
         assert document.support_widths.boom_width_m == pytest.approx(4.5)
 
+    def test_environment_map_has_none_slewing_bearing_diameter_when_unset(self, model_vm, document):
+        document.support_widths.slewing_bearing_diameter_m = None
+
+        assert model_vm.environment["slewing_bearing_diameter_m"] is None
+
+    def test_clearing_slewing_bearing_diameter_writes_through(self, model_vm, document):
+        model_vm.clearEnvironmentValue("slewing_bearing_diameter_m")
+
+        assert document.support_widths.slewing_bearing_diameter_m is None
+        assert model_vm.environment["slewing_bearing_diameter_m"] is None
+
+    def test_setting_slewing_bearing_diameter_after_clearing_restores_value(
+        self, model_vm, document
+    ):
+        model_vm.clearEnvironmentValue("slewing_bearing_diameter_m")
+        model_vm.setEnvironmentValue("slewing_bearing_diameter_m", 12.0)
+
+        assert document.support_widths.slewing_bearing_diameter_m == pytest.approx(12.0)
+
     def test_unknown_environment_key_is_ignored(self, model_vm):
         model_vm.setEnvironmentValue("not_a_field", 1.0)
 

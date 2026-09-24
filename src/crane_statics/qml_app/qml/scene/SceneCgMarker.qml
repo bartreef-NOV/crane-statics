@@ -11,7 +11,6 @@ Item {
     y: marker.scene_y - radius
     width: radius * 2
     height: width
-    antialiasing: true
 
     Shape {
         anchors.fill: parent

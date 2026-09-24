@@ -123,11 +123,11 @@ Item {
             implicitHeight: root.tableRowHeight * 8
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: 1
+            border.width: Design.DesignTokens.sizing.borderThin
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 1
+                anchors.margins: Design.DesignTokens.sizing.borderThin
                 spacing: 0
 
                 HorizontalHeaderView {
@@ -144,13 +144,13 @@ Item {
                         implicitHeight: root.tableRowHeight
                         color: root.headerColor
                         border.color: root.gridColor
-                        border.width: 1
+                        border.width: Design.DesignTokens.sizing.borderThin
 
                         Label {
                             anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            anchors.bottomMargin: 2
+                            anchors.leftMargin: Design.DesignTokens.spacing.sm
+                            anchors.rightMargin: Design.DesignTokens.spacing.sm
+                            anchors.bottomMargin: Design.DesignTokens.spacing.hairline
                             text: headerCell.display
                             color: root.headerTextColor
                             font.pixelSize: Design.DesignTokens.typography.caption
@@ -203,7 +203,7 @@ Item {
                         readonly property bool current: selected && column === root.currentColumn
                         property bool hovered: false
 
-                        implicitWidth: Math.max(80, cellText.implicitWidth + 2 * 8)
+                        implicitWidth: Math.max(80, cellText.implicitWidth + 2 * Design.DesignTokens.spacing.sm)
                         implicitHeight: root.tableRowHeight
                         color: cell.selected
                             ? root.selectedColor
@@ -216,13 +216,13 @@ Item {
                         border.color: cell.current && root.activeFocus
                             ? Design.DesignTokens.colors.focusRing
                             : root.gridColor
-                        border.width: 1
+                        border.width: Design.DesignTokens.sizing.borderThin
 
                         Label {
                             id: cellText
                             anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
+                            anchors.leftMargin: Design.DesignTokens.spacing.sm
+                            anchors.rightMargin: Design.DesignTokens.spacing.sm
                             text: cell.display
                             color: cell.selected ? root.selectedTextColor : root.textColor
                             font.pixelSize: Design.DesignTokens.typography.body

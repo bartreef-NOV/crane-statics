@@ -142,7 +142,7 @@ def run_capacity_sweep(
         entity = _resolve_entity(limit_key)
         tol = 1e-9
         if entity in pt_obj.sensitivity_reactions:
-            diameter = float(getattr(doc.support_widths, "slewing_bearing_diameter_m", 1.0))
+            diameter = doc.support_widths.slewing_bearing_diameter_m
             for comp in comps:
                 if connection_component_responds_to_hook_load(
                     pt_obj,

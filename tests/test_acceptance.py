@@ -1095,7 +1095,7 @@ class TestAuthoredSchemaPolicy:
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
-    @pytest.mark.parametrize("dimension_key", ["boom_width_m", "slewing_bearing_diameter_m"])
+    @pytest.mark.parametrize("dimension_key", ["boom_width_m"])
     def test_v5_requires_support_dimensions(self, tmp_path, dimension_key):
         data = self._minimal_v5()
         data["model_definition"].pop(dimension_key, None)
@@ -1104,6 +1104,29 @@ class TestAuthoredSchemaPolicy:
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
+
+    def test_v5_allows_missing_slewing_bearing_diameter(self, tmp_path):
+        data = self._minimal_v5()
+        data["model_definition"].pop("slewing_bearing_diameter_m", None)
+        path = tmp_path / "missing_slewing_bearing_diameter.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+        doc = load_document(path)
+
+        assert doc.support_widths.slewing_bearing_diameter_m is None
+
+    def test_v5_omits_slewing_bearing_diameter_on_round_trip_when_absent(self, tmp_path):
+        from crane_statics.data import document_to_authored_form
+
+        data = self._minimal_v5()
+        data["model_definition"].pop("slewing_bearing_diameter_m", None)
+        path = tmp_path / "missing_slewing_bearing_diameter.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+        doc = load_document(path)
+        authored = document_to_authored_form(doc)
+
+        assert "slewing_bearing_diameter_m" not in authored["model_definition"]
 
     def test_v5_linear_mass_round_trips_for_boom_and_payload(self, tmp_path):
         data = self._minimal_v5()

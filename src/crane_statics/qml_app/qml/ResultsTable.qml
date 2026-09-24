@@ -37,11 +37,11 @@ Item {
             Layout.fillHeight: true
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: 1
+            border.width: Design.DesignTokens.sizing.borderThin
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 1
+                anchors.margins: Design.DesignTokens.sizing.borderThin
                 spacing: 0
 
                 Row {
@@ -60,12 +60,12 @@ Item {
                             height: root.tableRowHeight
                             color: root.headerColor
                             border.color: root.gridColor
-                            border.width: 1
+                            border.width: Design.DesignTokens.sizing.borderThin
                             Label {
                                 anchors.fill: parent
-                                anchors.leftMargin: 6
-                                anchors.rightMargin: 6
-                                anchors.bottomMargin: 2
+                                anchors.leftMargin: Design.DesignTokens.spacing.compact
+                                anchors.rightMargin: Design.DesignTokens.spacing.compact
+                                anchors.bottomMargin: Design.DesignTokens.spacing.hairline
                                 text: parent.modelData
                                 color: root.headerTextColor
                                 font.bold: true

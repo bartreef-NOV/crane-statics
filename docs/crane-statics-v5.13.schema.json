@@ -28,13 +28,13 @@
     "model_definition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["environment", "boom_width_m", "slewing_bearing_diameter_m", "boom_heel", "upper_hinge", "rear_hinge", "front_hinge", "boom", "rear_leg", "front_leg", "platform", "boom_hoist", "payload_hoists"],
+      "required": ["environment", "boom_width_m", "boom_heel", "upper_hinge", "rear_hinge", "front_hinge", "boom", "rear_leg", "front_leg", "platform", "boom_hoist", "payload_hoists"],
       "properties": {
         "environment": { "$ref": "#/$defs/Environment" },
         "vessel_motion": { "$ref": "#/$defs/VesselMotion", "default": {} },
         "hook_height_at_min_outreach_m": { "type": "number", "description": "Absolute global Z the hook must reach at each payload hoist's minimum outreach. Every payload hoist's maximum hook travel and total rope length are derived from it. Omit to default to environment.mean_sealevel_z_m." },
         "boom_width_m": { "type": "number", "exclusiveMinimum": 0 },
-        "slewing_bearing_diameter_m": { "type": "number", "exclusiveMinimum": 0 },
+        "slewing_bearing_diameter_m": { "type": "number", "exclusiveMinimum": 0, "description": "Slewing bearing diameter. Omit to skip platform-base bearing line load checks." },
         "boom_heel": { "$ref": "#/$defs/GlobalPosition2D" },
         "upper_hinge": { "$ref": "#/$defs/GlobalPosition2D" },
         "rear_hinge": { "$ref": "#/$defs/GlobalPosition2D" },

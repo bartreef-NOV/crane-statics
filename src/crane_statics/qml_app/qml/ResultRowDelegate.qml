@@ -30,22 +30,22 @@ Item {
 
     signal barClicked()
 
-    implicitHeight: 24
-    height: 24
+    implicitHeight: Design.DesignTokens.sizing.rowHeightCompact
+    height: Design.DesignTokens.sizing.rowHeightCompact
 
     Rectangle {
         anchors.fill: parent
         color: delegateRoot.index % 2 === 0
             ? delegateRoot.surfaceColor : delegateRoot.alternateSurfaceColor
         border.color: delegateRoot.barTrackColor
-        border.width: 1
+        border.width: Design.DesignTokens.sizing.borderThin
         visible: !delegateRoot.isGroupHeader
     }
 
     Label {
         visible: delegateRoot.isGroupHeader
         anchors.fill: parent
-        anchors.leftMargin: 6 + (delegateRoot.nested ? 8 : 0)
+        anchors.leftMargin: Design.DesignTokens.spacing.compact + (delegateRoot.nested ? Design.DesignTokens.spacing.sm : 0)
         text: delegateRoot.name
         color: delegateRoot.textColor
         font.bold: true
@@ -62,7 +62,7 @@ Item {
         Label {
             width: delegateRoot.nameWidth
             height: parent.height
-            leftPadding: 6
+            leftPadding: Design.DesignTokens.spacing.compact
             text: delegateRoot.name
             color: delegateRoot.textColor
             verticalAlignment: Text.AlignVCenter
@@ -76,7 +76,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: 1
+                width: Design.DesignTokens.sizing.borderThin
                 color: delegateRoot.barTrackColor
             }
         }
@@ -84,7 +84,7 @@ Item {
         Label {
             width: delegateRoot.cellWidth
             height: parent.height
-            leftPadding: 6
+            leftPadding: Design.DesignTokens.spacing.compact
             text: delegateRoot.unit
             color: delegateRoot.textColor
             verticalAlignment: Text.AlignVCenter
@@ -94,7 +94,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: 1
+                width: Design.DesignTokens.sizing.borderThin
                 color: delegateRoot.barTrackColor
             }
         }
@@ -102,7 +102,7 @@ Item {
         Label {
             width: delegateRoot.cellWidth
             height: parent.height
-            rightPadding: 6
+            rightPadding: Design.DesignTokens.spacing.compact
             text: delegateRoot.demand
             color: delegateRoot.textColor
             horizontalAlignment: Text.AlignRight
@@ -112,7 +112,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: 1
+                width: Design.DesignTokens.sizing.borderThin
                 color: delegateRoot.barTrackColor
             }
         }
@@ -120,7 +120,7 @@ Item {
         Label {
             width: delegateRoot.cellWidth
             height: parent.height
-            rightPadding: 6
+            rightPadding: Design.DesignTokens.spacing.compact
             text: delegateRoot.limit
             color: delegateRoot.textColor
             horizontalAlignment: Text.AlignRight
@@ -130,7 +130,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: 1
+                width: Design.DesignTokens.sizing.borderThin
                 color: delegateRoot.barTrackColor
             }
         }
@@ -138,7 +138,7 @@ Item {
         Label {
             width: delegateRoot.cellWidth
             height: parent.height
-            rightPadding: 6
+            rightPadding: Design.DesignTokens.spacing.compact
             text: delegateRoot.utilization
             color: delegateRoot.textColor
             horizontalAlignment: Text.AlignRight
@@ -148,7 +148,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: 1
+                width: Design.DesignTokens.sizing.borderThin
                 color: delegateRoot.barTrackColor
             }
         }
@@ -162,17 +162,17 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin: 6
-                anchors.rightMargin: 6
+                anchors.leftMargin: Design.DesignTokens.spacing.compact
+                anchors.rightMargin: Design.DesignTokens.spacing.compact
                 height: 10
-                radius: 4
-                border.width: 1
+                radius: Design.DesignTokens.sizing.radiusNormal
+                border.width: Design.DesignTokens.sizing.borderThin
                 border.color: delegateRoot.barTrackColor
 
                 Rectangle {
                     height: parent.height
                     width: parent.width * Math.max(0, Math.min(100, delegateRoot.utilizationValue)) / 100
-                    radius: 4
+                    radius: Design.DesignTokens.sizing.radiusNormal
                     color: delegateRoot.barColor
                 }
 

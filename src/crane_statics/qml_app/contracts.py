@@ -10,7 +10,7 @@ for data flowing between:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TypedDict
+from typing import Any, Optional, TypedDict
 
 # =====================================================================
 # Model Edit Payloads
@@ -116,12 +116,12 @@ class EnvironmentSettings:
 
     # Support Widths
     boom_width_m: float = 0.0
-    slewing_bearing_diameter_m: float = 0.0
+    slewing_bearing_diameter_m: Optional[float] = None
 
     # Design duty
     hook_height_at_min_outreach_m: float = 0.0
 
-    def to_dict(self) -> dict[str, float]:
+    def to_dict(self) -> dict[str, Optional[float]]:
         """Convert to flat dict for QML or storage."""
         return {
             "gravity_m_s2": self.gravity_m_s2,
@@ -160,7 +160,9 @@ class EnvironmentSettings:
             reference_x_m=float(data.get("reference_x_m", 0.0)),
             reference_z_m=float(data.get("reference_z_m", 0.0)),
             boom_width_m=float(data.get("boom_width_m", 0.0)),
-            slewing_bearing_diameter_m=float(data.get("slewing_bearing_diameter_m", 0.0)),
+            slewing_bearing_diameter_m=(
+                float(v) if (v := data.get("slewing_bearing_diameter_m")) is not None else None
+            ),
             hook_height_at_min_outreach_m=float(data.get("hook_height_at_min_outreach_m", 0.0)),
         )
 

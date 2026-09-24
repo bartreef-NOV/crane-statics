@@ -389,7 +389,7 @@ def compute_required_connection_capacity_kN(
         pt: Any, hook_kN: float, case: DirectionalAnalysisCase
     ) -> Optional[float]:
         """Extract connection component demand from analysis point."""
-        diameter = float(getattr(doc.support_widths, "slewing_bearing_diameter_m", 1.0))
+        diameter = doc.support_widths.slewing_bearing_diameter_m
         return extract_connection_component_demand(
             pt, hook_kN, connection_id, component, support_widths_diameter_m=diameter
         )

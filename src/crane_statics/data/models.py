@@ -336,12 +336,14 @@ class SupportWidths(BaseModel):
     """Support widths used for left/right reaction splitting."""
 
     boom_width_m: float = Field(default=1.0, description="Boom support width")
-    slewing_bearing_diameter_m: float = Field(default=1.0, description="Slewing bearing diameter")
+    slewing_bearing_diameter_m: Optional[float] = Field(
+        default=None, description="Slewing bearing diameter; omit to skip bearing line load checks"
+    )
 
     @field_validator("boom_width_m", "slewing_bearing_diameter_m")
     @classmethod
-    def validate_positive_width(cls, v: float) -> float:
-        if v <= 0.0:
+    def validate_positive_width(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v <= 0.0:
             raise ValueError("Support width must be > 0")
         return v
 
@@ -820,7 +822,11 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("model_definition.vessel_motion must be an object")
 
     boom_width_m = float(md["boom_width_m"])
-    slewing_bearing_diameter_m = float(md["slewing_bearing_diameter_m"])
+    slewing_bearing_diameter_m = (
+        float(md["slewing_bearing_diameter_m"])
+        if md.get("slewing_bearing_diameter_m") is not None
+        else None
+    )
 
     # Unauthored design hook height means "the waterline": the duty every offshore
     # crane states, and the only default that does not invent an elevation.
@@ -2073,9 +2079,6 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
                 "max_wind_speed_m_s": float(env.get("max_wind_speed_m_s", 20.0)),
             },
             "boom_width_m": float((data.get("support_widths") or {}).get("boom_width_m", 1.0)),
-            "slewing_bearing_diameter_m": float(
-                (data.get("support_widths") or {}).get("slewing_bearing_diameter_m", 1.0)
-            ),
             **primary_structure_out,
             "vessel_motion": {
                 "accel_x_m_s2": float(vm.get("accel_x_m_s2", 0.0)),
@@ -2100,5 +2103,13 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
             "payload_hoists": authored_payload_hoists,
         },
     }
+
+    slewing_bearing_diameter_m = (data.get("support_widths") or {}).get(
+        "slewing_bearing_diameter_m"
+    )
+    if slewing_bearing_diameter_m is not None:
+        authored_out["model_definition"]["slewing_bearing_diameter_m"] = float(
+            slewing_bearing_diameter_m
+        )
 
     return authored_out

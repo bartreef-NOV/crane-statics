@@ -35,11 +35,11 @@ Item {
             Layout.fillHeight: true
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: 1
+            border.width: Design.DesignTokens.sizing.borderThin
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 1
+                anchors.margins: Design.DesignTokens.sizing.borderThin
                 spacing: 0
 
                 Row {
@@ -56,12 +56,12 @@ Item {
                             height: root.tableRowHeight
                             color: root.headerColor
                             border.color: root.gridColor
-                            border.width: 1
+                            border.width: Design.DesignTokens.sizing.borderThin
                             Label {
                                 anchors.fill: parent
-                                leftPadding: 6
-                                rightPadding: 6
-                                bottomPadding: 2
+                                leftPadding: Design.DesignTokens.spacing.compact
+                                rightPadding: Design.DesignTokens.spacing.compact
+                                bottomPadding: Design.DesignTokens.spacing.hairline
                                 text: parent.modelData
                                 color: root.headerTextColor
                                 font.bold: true
@@ -100,7 +100,7 @@ Item {
                             color: limitRow.index % 2 === 0
                                 ? "transparent" : Design.DesignTokens.colors.surfaceAlt
                             border.color: root.gridColor
-                            border.width: 1
+                            border.width: Design.DesignTokens.sizing.borderThin
                         }
 
                         Row {
@@ -109,7 +109,7 @@ Item {
                             Label {
                                 width: root.width * 0.38
                                 height: parent.height
-                                leftPadding: 6
+                                leftPadding: Design.DesignTokens.spacing.compact
                                 text: limitRow.name
                                 verticalAlignment: Text.AlignVCenter
                                 elide: Text.ElideRight
@@ -118,7 +118,7 @@ Item {
                                     anchors.top: parent.top
                                     anchors.bottom: parent.bottom
                                     anchors.right: parent.right
-                                    width: 1
+                                    width: Design.DesignTokens.sizing.borderThin
                                     color: root.gridColor
                                 }
                             }
@@ -126,7 +126,7 @@ Item {
                             Label {
                                 width: root.width * 0.15
                                 height: parent.height
-                                leftPadding: 6
+                                leftPadding: Design.DesignTokens.spacing.compact
                                 text: limitRow.unit
                                 verticalAlignment: Text.AlignVCenter
 
@@ -134,7 +134,7 @@ Item {
                                     anchors.top: parent.top
                                     anchors.bottom: parent.bottom
                                     anchors.right: parent.right
-                                    width: 1
+                                    width: Design.DesignTokens.sizing.borderThin
                                     color: root.gridColor
                                 }
                             }

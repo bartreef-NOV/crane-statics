@@ -25,6 +25,10 @@ TextField {
         text = Number(newValue).toFixed(decimals)
     }
 
+    function clear() {
+        text = ""
+    }
+
     text: "0.000"
     horizontalAlignment: TextInput.AlignRight
     selectByMouse: true

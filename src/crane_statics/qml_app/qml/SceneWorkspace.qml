@@ -55,11 +55,13 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
-                    border.width: 1
+                    border.width: Design.DesignTokens.sizing.borderThin
+                    border.color: Design.DesignTokens.colors.border
                 }
 
                 Label {
-                    x: 8
+                    anchors.left: canvas.left
+                    anchors.leftMargin: Design.DesignTokens.spacing.sm
                     y: canvas.mslLabelY - height - 2
                     text: canvas.mslLabelText
                     visible: canvas.mslLabelText.length > 0

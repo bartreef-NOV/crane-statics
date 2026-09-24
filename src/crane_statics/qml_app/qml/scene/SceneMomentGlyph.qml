@@ -24,7 +24,6 @@ Item {
     y: moment.origin_y - moment.radius
     width: moment.radius * 2 + 18
     height: moment.radius * 2 + 18
-    antialiasing: true
 
     Shape {
         anchors.fill: parent

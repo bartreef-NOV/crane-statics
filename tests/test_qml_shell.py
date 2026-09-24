@@ -13,6 +13,7 @@ from PyQt6.QtQml import (
     QQmlExpression,
 )
 from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtQuick import QQuickItem
 
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.app import QML_DIR
@@ -223,6 +224,26 @@ def test_component_loads_without_warnings(qml_engine, qml_file):
     assert warnings == []
 
 
+def test_environment_panel_nullable_field_shows_blank_when_unset(qml_engine):
+    """slewing_bearing_diameter_m is optional; with no document loaded it must
+    read as blank, not '0.000', while an ordinary field like boom_width_m
+    still shows its numeric default.
+    """
+    engine, _app_vm, _model_vm, warnings = qml_engine
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "EnvironmentPanel.qml")))
+    panel = component.create()
+    assert panel is not None, component.errorString()
+
+    nullable_field = panel.findChild(QObject, "envField_slewing_bearing_diameter_m")
+    ordinary_field = panel.findChild(QObject, "envField_boom_width_m")
+
+    assert nullable_field is not None, "NumberField for the nullable row must be discoverable"
+    assert ordinary_field is not None, "NumberField for an ordinary row must be discoverable"
+    assert nullable_field.property("text") == ""
+    assert ordinary_field.property("text") == "0.000"
+    assert warnings == []
+
+
 @pytest.mark.parametrize(
     "qml_file",
     [
@@ -238,6 +259,66 @@ def test_delegate_component_compiles(qml_engine, qml_file):
 
     # Delegates declare required model roles, so they compile but cannot be built standalone.
     assert component.status() == QQmlComponent.Status.Ready, component.errorString()
+
+
+def test_scene_canvas_segment_delegates_are_antialiased(qml_engine):
+    """Booms and ropes are drawn at arbitrary angles; Qt only antialiases a
+    Rectangle by default when it has a radius, so these delegates need the
+    property set explicitly or their diagonal edges come out jagged.
+    """
+    engine, _app_vm, _model_vm, warnings = qml_engine
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_DIR / "scene/QuickSceneCanvas.qml"))
+    )
+    canvas = component.create()
+    assert canvas is not None, component.errorString()
+
+    canvas.setProperty(
+        "frame",
+        {
+            "structuralSegments": [
+                {
+                    "start_x": 0.0,
+                    "start_y": 0.0,
+                    "end_x": 10.0,
+                    "end_y": 6.0,
+                    "width": 4.0,
+                    "color": "#808080",
+                },
+            ],
+            "ropeSegments": [
+                {
+                    "start_x": 0.0,
+                    "start_y": 0.0,
+                    "end_x": 8.0,
+                    "end_y": -3.0,
+                    "width": 2.0,
+                    "color": "#c0c0c0",
+                },
+            ],
+        },
+    )
+    QTest.qWait(20)
+
+    def _iter_items(item: QQuickItem):
+        yield item
+        for child in item.childItems():
+            yield from _iter_items(child)
+
+    # Repeater delegates aren't in the QObject parent/child tree (their
+    # QObject parent is None; only the QQuickItem visual parentItem() chain
+    # reaches them), and an inline `Rectangle { ... }` delegate with extra
+    # properties gets a synthesized class name like "QQuickRectangle_QML_48"
+    # rather than the bare built-in name, so match by prefix.
+    segment_rects = [
+        item
+        for item in _iter_items(canvas)
+        if item.metaObject().className().startswith("QQuickRectangle")
+        and item.property("rotation") not in (0, 0.0, None)
+    ]
+    assert len(segment_rects) == 2, "expected one structural and one rope segment delegate"
+    assert all(rect.property("antialiasing") for rect in segment_rects)
+    assert warnings == []
 
 
 def _cell_editor(engine, **properties):

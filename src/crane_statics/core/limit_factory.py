@@ -63,7 +63,10 @@ class DesignLimitFactory:
                 )
 
             # Platform-specific limits
-            if connection_id == "platform_base":
+            if (
+                connection_id == "platform_base"
+                and doc.support_widths.slewing_bearing_diameter_m is not None
+            ):
                 limits.append(
                     DesignLimit(
                         id=f"{connection_id}_max_bearing_line_load",
