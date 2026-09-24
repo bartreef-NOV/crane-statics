@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Optional
 
 from ..data.models import (
+    Body,
     ContractualPoint,
     CraneDocument,
+    derive_payload_hoist_rope_geometry,
     Hoist,
     MassPoint,
     Node,
@@ -129,11 +131,10 @@ def build_payload_hoist(
     split_hook_mass_t: Optional[float] = None,
     hook_daf: float = 1.0,
     offlead_deg: float = 0.0,
-    side_lead_deg: float = 0.0,
-    min_hook_travel_m: float = 0.0,
-    max_hook_travel_m: float = 0.0,
+    sidelead_deg: float = 0.0,
     linear_mass_kg_m: float = 0.0,
-    rope_length_m: Optional[float] = None,
+    drum_dead_turns: int = 0,
+    drum_diameter_m: Optional[float] = None,
 ) -> Hoist:
     hoist_id = hoist_id.strip()
     if not hoist_id:
@@ -156,11 +157,10 @@ def build_payload_hoist(
         split_hook_mass_t=None if split_hook_mass_t is None else float(split_hook_mass_t),
         hook_daf=float(hook_daf),
         offlead_deg=float(offlead_deg),
-        side_lead_deg=float(side_lead_deg),
-        min_hook_travel_m=float(min_hook_travel_m),
-        max_hook_travel_m=float(max_hook_travel_m),
+        sidelead_deg=float(sidelead_deg),
         linear_mass_kg_m=max(0.0, float(linear_mass_kg_m)),
-        rope_length_m=None if rope_length_m is None else max(0.0, float(rope_length_m)),
+        drum_dead_turns=max(0, int(drum_dead_turns)),
+        drum_diameter_m=None if drum_diameter_m is None else max(1e-9, float(drum_diameter_m)),
         split_contractual_points=(
             [ContractualPoint(outreach_m=0.0, load_t=0.0)] if splitable_block else []
         ),
@@ -195,6 +195,15 @@ class DocumentEditor:
     @property
     def document(self) -> CraneDocument:
         return self._doc
+
+    def refresh_derived_geometry(self) -> None:
+        """Re-derive every payload hoist's hook travel and rope length.
+
+        Any edit can move the sheave -- a node, a hinge, a gravity change that
+        shifts nothing but is cheap to re-run -- and both values are consequences
+        of the design hook height, so they are recomputed rather than carried.
+        """
+        derive_payload_hoist_rope_geometry(self._doc)
 
     # -- discovery -----------------------------------------------------
 
@@ -242,7 +251,7 @@ class DocumentEditor:
             raise DocumentEditError(f"Hoist '{hoist_id}' not found")
         return hoist
 
-    def _body(self, body_id: str):
+    def _body(self, body_id: str) -> Body:
         body = next((b for b in self._doc.bodies if b.id == body_id), None)
         if body is None:
             raise DocumentEditError(f"Component '{body_id}' not found")
@@ -259,8 +268,38 @@ class DocumentEditor:
         for index, existing in enumerate(self._doc.nodes):
             if existing.id == previous_id:
                 self._doc.nodes[index] = node
-                return
-        raise DocumentEditError(f"Node '{previous_id}' not found")
+                break
+        else:
+            raise DocumentEditError(f"Node '{previous_id}' not found")
+        if node.id != previous_id:
+            self._rename_node_references(previous_id, node.id)
+
+    def _rename_node_references(self, previous_id: str, new_id: str) -> None:
+        """Carry a renamed node through everything that names it.
+
+        A node id is a reference, not a label: ropes are reeved through it, hoists
+        hang from it and other nodes hang below it. Renaming without rewriting would
+        leave the document pointing at a node that no longer exists, which the
+        authored schema rejects on the next save.
+        """
+        for rope in self._doc.ropes:
+            for segment in rope.segments:
+                if segment.from_node_id == previous_id:
+                    segment.from_node_id = new_id
+                if segment.to_node_id == previous_id:
+                    segment.to_node_id = new_id
+        for hoist in self._doc.hoists:
+            if hoist.load_node_id == previous_id:
+                hoist.load_node_id = new_id
+            if hoist.support_node_id == previous_id:
+                hoist.support_node_id = new_id
+        for other in self._doc.nodes:
+            if other.below_node_id == previous_id:
+                other.below_node_id = new_id
+        for body in self._doc.bodies:
+            for mass_point in body.mass_points:
+                if mass_point.below_node_id == previous_id:
+                    mass_point.below_node_id = new_id
 
     def delete_node(self, node_id: str) -> None:
         remaining = [n for n in self._doc.nodes if n.id != node_id]
@@ -329,19 +368,32 @@ class DocumentEditor:
         self._doc.hoists.append(hoist)
         self.sync_managed_payload_hook(hoist)
 
+    def update_boom_hoist(
+        self,
+        hoist_id: str,
+        *,
+        linear_mass_kg_m: float,
+        rope_length_m: Optional[float],
+    ) -> None:
+        """Edit the two boom-hoist fields that are authored rather than derived."""
+        current = self._hoist(hoist_id)
+        if not self.is_solve_hoist(current):
+            raise DocumentEditError(f"Hoist '{hoist_id}' is not the boom hoist")
+        rope = self.rope_for_hoist(current)
+        if rope is None:
+            raise DocumentEditError("Boom hoist rope is missing")
+        rope.linear_mass_kg_m = max(0.0, float(linear_mass_kg_m))
+        current.linear_mass_kg_m = max(0.0, float(linear_mass_kg_m))
+        current.rope_length_m = None if rope_length_m is None else max(0.0, float(rope_length_m))
+
     def update_hoist(self, hoist_id: str, edited: Hoist) -> None:
         current = self._hoist(hoist_id)
         if self.is_solve_hoist(current):
-            rope = self.rope_for_hoist(current)
-            if rope is None:
-                raise DocumentEditError("Boom hoist rope is missing")
-            rope.linear_mass_kg_m = float(edited.linear_mass_kg_m)
-            current.linear_mass_kg_m = float(edited.linear_mass_kg_m)
-            current.rope_length_m = (
-                None if edited.rope_length_m is None else float(edited.rope_length_m)
-            )
-            return
+            raise DocumentEditError(f"Hoist '{hoist_id}' is the boom hoist; use update_boom_hoist")
 
+        # The derived pair belongs to the document, not the edit form.
+        edited.max_hook_travel_m = current.max_hook_travel_m
+        edited.rope_length_m = current.rope_length_m
         edited.rope_id = current.rope_id
         edited.load_node_id = current.load_node_id
         edited.contractual_points = [cp.model_copy(deep=True) for cp in current.contractual_points]

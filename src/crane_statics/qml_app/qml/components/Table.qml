@@ -7,7 +7,7 @@ import "."
 /**
  * Table Component
  *
- * Enhanced data table with consistent header/row styling, density support,
+ * Enhanced data table with consistent header/row styling,
  * and keyboard navigation. Builds on DataTable with token-aware design.
  *
  * Usage:
@@ -20,7 +20,7 @@ import "."
  *   }
  *
  * Design tokens used:
- * - layout.tableRowHeight (density-aware)
+ * - layout.tableRowHeight
  * - colors.surface, surfaceAlt, border, textPrimary
  * - sizing.borderThin
  * - typography.body, bodyLarge

@@ -223,7 +223,7 @@ class SceneViewModel(QObject):
         """The range a drag may move each quantity through."""
         return DragLimits(
             angle_deg=self._kinematics.angle_bounds.get(
-                self._model.selected_hoist_id, (-180.0, 180.0)
+                self._model.selected_hoist_id or "", (-180.0, 180.0)
             ),
             tackle_m=self._tackle_bounds(),
         )
@@ -303,11 +303,8 @@ class SceneViewModel(QObject):
             return
         self._geometry_sync_active = True
         try:
-            if state.scene_state.hook_load_auto:
-                lo, hi = self._kinematics.angle_bounds.get(
-                    self._model.selected_hoist_id, (-180.0, 180.0)
-                )
-                value = max(lo, min(hi, float(value)))
+            lo, hi = self._kinematics.spinbox_angle_bounds(self._model.selected_hoist_id)
+            value = max(lo, min(hi, float(value)))
             self._clear_contractual_selection()
             state.scene_state.boom_angle_deg = float(value)
             self.geometryChanged.emit()
@@ -330,6 +327,8 @@ class SceneViewModel(QObject):
         if not self._model.document or not hoist_id:
             return
         kin = self._kinematics.kinematics()
+        lo_m, hi_m = self._outreach_bounds()
+        value = max(lo_m, min(hi_m, float(value)))
         try:
             angle = None if kin is None else kin.outreach_to_angle(float(value), hoist_id)
         except (TypeError, ValueError, RuntimeError) as exc:
@@ -339,8 +338,7 @@ class SceneViewModel(QObject):
             self.statusMessage.emit(f"Outreach {value:.1f} m is outside the reachable range")
             self.geometryChanged.emit()
             return
-        lo, hi = self._kinematics.angle_bounds.get(hoist_id, (-180.0, 180.0))
-        self.setAngle(max(lo, min(hi, float(angle))))
+        self.setAngle(float(angle))
 
     @pyqtProperty(float, notify=angleBoundsChanged)
     def angleMin(self) -> float:
@@ -349,6 +347,39 @@ class SceneViewModel(QObject):
     @pyqtProperty(float, notify=angleBoundsChanged)
     def angleMax(self) -> float:
         return self._kinematics.spinbox_angle_bounds(self._model.selected_hoist_id)[1]
+
+    @pyqtProperty(float, notify=angleBoundsChanged)
+    def outreachMin(self) -> float:
+        return self._outreach_bounds()[0]
+
+    @pyqtProperty(float, notify=angleBoundsChanged)
+    def outreachMax(self) -> float:
+        return self._outreach_bounds()[1]
+
+    def _outreach_bounds(self) -> tuple[float, float]:
+        """The reachable outreach band, derived from the boom-angle band.
+
+        Deriving it rather than reading ``outreach_min_m``/``outreach_max_m`` keeps
+        the two controls from ever disagreeing: unchecking Auto relaxes the angle
+        floor to 0 deg, and the outreach the operator can dial has to follow it out.
+        """
+        hoist_id = self._model.selected_hoist_id
+        hoist = self._hoist_state.selected_hoist()
+        authored = (
+            (float(hoist.outreach_min_m or 0.0), float(hoist.outreach_max_m or 200.0))
+            if hoist is not None
+            else (0.0, 200.0)
+        )
+        kin = self._kinematics.kinematics()
+        if kin is None or not hoist_id:
+            return authored
+        lo_angle, hi_angle = self._kinematics.spinbox_angle_bounds(hoist_id)
+        try:
+            reach = [float(kin.compute_outreach(angle, hoist_id)) for angle in (lo_angle, hi_angle)]
+        except (TypeError, ValueError, RuntimeError) as exc:
+            _LOG.debug("Failed to derive outreach bounds for %s: %s", hoist_id, exc)
+            return authored
+        return min(reach), max(reach)
 
     @pyqtProperty(float, notify=geometryChanged)
     def tackle(self) -> float:
@@ -377,13 +408,8 @@ class SceneViewModel(QObject):
         hoist = self._hoist_state.selected_hoist()
         if hoist is None:
             return 0.0, 500.0
-        lo = float(hoist.min_hook_travel_m) if hoist.min_hook_travel_m is not None else 0.0
-        hi = (
-            float(hoist.max_hook_travel_m)
-            if hoist.max_hook_travel_m is not None
-            else max(lo, 500.0)
-        )
-        return (lo, hi) if hi >= lo else (hi, lo)
+        hi = float(hoist.max_hook_travel_m) if hoist.max_hook_travel_m is not None else 500.0
+        return 0.0, max(0.0, hi)
 
     def _sync_outreach_from_angle(self, angle: float) -> None:
         hoist_id = self._model.selected_hoist_id
@@ -447,13 +473,13 @@ class SceneViewModel(QObject):
         self._set_scene_field("offlead_deg", float(value), self.loadChanged)
 
     @pyqtProperty(float, notify=loadChanged)
-    def sideLead(self) -> float:
+    def sidelead(self) -> float:
         state = self._model.get_active_hoist_state()
-        return 0.0 if state is None else float(state.scene_state.side_lead_deg)
+        return 0.0 if state is None else float(state.scene_state.sidelead_deg)
 
     @pyqtSlot(float)
-    def setSideLead(self, value: float) -> None:
-        self._set_scene_field("side_lead_deg", float(value), self.loadChanged)
+    def setSidelead(self, value: float) -> None:
+        self._set_scene_field("sidelead_deg", float(value), self.loadChanged)
 
     @pyqtSlot()
     def recomputeAutoLoad(self) -> None:
@@ -517,7 +543,7 @@ class SceneViewModel(QObject):
 
     @pyqtProperty(str, notify=environmentChanged)
     def windAxis(self) -> str:
-        direction = self.windDirection
+        direction = str(self.windDirection)
         return direction[-1:] if direction[-1:] in {"X", "Y"} else "X"
 
     @pyqtSlot(str)

@@ -287,16 +287,16 @@ Rectangle {
 
 ---
 
-### Table with Density Support
+### Table
 
-**Purpose:** Data table responding to density mode changes
+**Purpose:** Data table using the shared row-height token
 
 **Example:**
 ```qml
 TableView {
     id: table
     
-    rowHeight: DesignTokens.layout.tableRowHeight  // Auto-adjusts with density
+    rowHeight: DesignTokens.layout.tableRowHeight
     
     delegate: ItemDelegate {
         implicitHeight: DesignTokens.layout.tableRowHeight

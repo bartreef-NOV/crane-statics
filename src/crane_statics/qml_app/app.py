@@ -79,4 +79,4 @@ def main(argv: list[str] | None = None) -> int:
     if len(args) > 1:
         QTimer.singleShot(0, lambda: app_vm.openPath(args[1]))
 
-    return app.exec()
+    return int(app.exec())

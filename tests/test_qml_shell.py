@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 from PyQt6.QtCore import QObject, QCoreApplication, QUrl
 from PyQt6.QtTest import QTest
-from PyQt6.QtQml import QQmlApplicationEngine, QQmlComponent
+from PyQt6.QtQml import (
+    QJSValue,
+    QQmlApplicationEngine,
+    QQmlComponent,
+    QQmlEngine,
+    QQmlExpression,
+)
 from PyQt6.QtGui import QGuiApplication
 
 from crane_statics.qml_app.session import SessionState
@@ -41,6 +47,10 @@ def qml_engine():
     yield engine, app_vm, model_vm, warnings
     for root in engine.rootObjects():
         root.deleteLater()
+    # Drain the deferred deletions before the next engine is built. Objects left
+    # pending are destroyed inside a later test's event loop, and a QML item torn
+    # down mid-frame takes the whole process down with it.
+    QTest.qWait(20)
 
 
 def test_main_qml_loads_without_warnings(qml_engine):
@@ -176,6 +186,7 @@ def test_chart_legend_handles_long_labels_and_toggles_visibility(qml_engine):
         "NumberField.qml",
         "NumericRow.qml",
         "DataTable.qml",
+        "CellEditor.qml",
         "NoDocumentPage.qml",
         "EnvironmentPanel.qml",
         "ModelWorkspace.qml",
@@ -227,6 +238,75 @@ def test_delegate_component_compiles(qml_engine, qml_file):
 
     # Delegates declare required model roles, so they compile but cannot be built standalone.
     assert component.status() == QQmlComponent.Status.Ready, component.errorString()
+
+
+def _cell_editor(engine, **properties):
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "CellEditor.qml")))
+    assert component.status() == QQmlComponent.Status.Ready, component.errorString()
+    editor = component.createWithInitialProperties(properties)
+    assert editor is not None
+    return editor
+
+
+@pytest.mark.parametrize(
+    "kind, initial, expected",
+    [
+        ("text", "mh_winch", "mh_winch"),
+        ("number", "1.500", "1.500"),
+        ("int", 3, "3"),
+        ("bool", True, True),
+        ("node", "bh_winch", "bh_winch"),
+    ],
+)
+def test_cell_editor_reads_back_what_the_operator_left_in_it(qml_engine, kind, initial, expected):
+    engine, _app_vm, _model_vm, warnings = qml_engine
+
+    editor = _cell_editor(engine, kind=kind, initialValue=initial, choices=["bh_winch", "mh_winch"])
+
+    assert editor.property("value") == expected
+    assert warnings == []
+
+
+def test_cell_editor_offers_a_node_it_was_not_given(qml_engine):
+    """Ropes are reeved through primary-structure nodes the editable list leaves out.
+
+    The combo box has to keep such an id rather than snap to the first choice,
+    or opening the cell would silently re-route the rope.
+    """
+    engine, _app_vm, _model_vm, warnings = qml_engine
+
+    editor = _cell_editor(engine, kind="node", initialValue="boom_heel", choices=["mh_winch"])
+
+    assert editor.property("value") == "boom_heel"
+    assert warnings == []
+
+
+def test_cell_editor_commits_once_and_not_at_all_after_escape(qml_engine):
+    """Qt closes an editor for Return, for Escape and for losing focus alike.
+
+    Return commits and then drops focus, and Escape drops focus too, so the
+    editor has to remember which of the two happened.
+    """
+    engine, _app_vm, _model_vm, warnings = qml_engine
+    accepted = _cell_editor(engine, kind="number", initialValue="1.500")
+    commits: list[object] = []
+    accepted.commitRequested.connect(lambda: commits.append(accepted.property("value")))
+
+    _evaluate_in(accepted, "commit()")
+    _evaluate_in(accepted, "commit()")
+
+    assert commits == ["1.500"]
+
+    cancelled = _cell_editor(engine, kind="number", initialValue="2.500")
+    refused: list[int] = []
+    cancelled.commitRequested.connect(lambda: refused.append(1))
+
+    _evaluate_in(cancelled, "cancel()")
+    _evaluate_in(cancelled, "commit()")
+
+    assert refused == []
+    assert cancelled.property("cancelled") is True
+    assert warnings == []
 
 
 def test_model_workspace_tables_populate_from_document(qml_engine):
@@ -334,7 +414,22 @@ def test_quick_canvas_allocates_report_dialog_content(qml_engine):
     assert warnings == []
 
 
-def test_quick_canvas_contains_all_frame_tooltip_hit_sources(qml_engine):
+def _evaluate_in(canvas: QObject, script: str):
+    """Run a JS expression in the canvas's own QML scope and return its value."""
+    expression = QQmlExpression(QQmlEngine.contextForObject(canvas), canvas, script)
+    # PyQt returns (value, isUndefined); only the value is interesting here.
+    value, _undefined = expression.evaluate()
+    assert not expression.hasError(), expression.error().toString()
+    return value.toVariant() if isinstance(value, QJSValue) else value
+
+
+def test_quick_canvas_click_pins_one_tooltip_and_a_second_click_closes_it(qml_engine):
+    """Tooltips are pinned by a click, not raised by hovering.
+
+    The canvas holds a single ``pinnedTip``, so "one tooltip at a time" is a
+    property of the state rather than of the click handling: clicking the element
+    that already owns the tooltip closes it, and any new frame drops it.
+    """
     engine, app_vm, _model_vm, warnings = qml_engine
     app_vm.openPath(str(EXAMPLE))
     component = QQmlComponent(
@@ -343,8 +438,54 @@ def test_quick_canvas_contains_all_frame_tooltip_hit_sources(qml_engine):
     canvas = component.create()
 
     assert canvas is not None
-    frame = app_vm.session.model.get_active_hoist_state()
-    assert frame is not None
+    canvas.setProperty("width", 900.0)
+    canvas.setProperty("height", 700.0)
+
+    outcome = _evaluate_in(
+        canvas,
+        """
+        (function () {
+            const nodes = sceneVm.sceneFrame.nodes
+            for (let i = 0; i < nodes.length; ++i) {
+                const x = mapSceneX(nodes[i].scene_x)
+                const y = mapSceneY(nodes[i].scene_y)
+                if (dragTargetAt(x, y).length > 0 || pickAt(x, y) === null)
+                    continue
+                toggleTipAt(x, y)
+                const opened = pinnedTip === null ? "" : pinnedTip.text
+                toggleTipAt(x, y)
+                return [opened, pinnedTip === null ? "closed" : "still open"]
+            }
+            return ["", "no pickable node"]
+        })()
+        """,
+    )
+
+    assert outcome[0]
+    assert outcome[1] == "closed"
+
+    reopened = _evaluate_in(
+        canvas,
+        """
+        (function () {
+            const nodes = sceneVm.sceneFrame.nodes
+            for (let i = 0; i < nodes.length; ++i) {
+                const x = mapSceneX(nodes[i].scene_x)
+                const y = mapSceneY(nodes[i].scene_y)
+                if (dragTargetAt(x, y).length > 0 || pickAt(x, y) === null)
+                    continue
+                toggleTipAt(x, y)
+                return pinnedTip !== null
+            }
+            return false
+        })()
+        """,
+    )
+    assert reopened is True
+
+    # A new frame renumbers the keys the pinned tooltip was named by.
+    engine.rootContext().contextProperty("sceneVm").setAngle(40.0)
+    assert canvas.property("pinnedTip") is None
     assert warnings == []
 
 
@@ -405,19 +546,17 @@ def test_workspace_layout_fits_without_clipping(qml_engine, qml_file, width, hei
     assert warnings == []
 
 
-def test_density_changes_update_live_table_rows(qml_engine):
+def test_live_tables_use_the_shared_row_height_token(qml_engine):
     engine, app_vm, _model_vm, warnings = qml_engine
-    app_vm.setDensity("normal")
     app_vm.openPath(str(EXAMPLE))
-    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
 
-    root = engine.rootObjects()[-1]
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "ModelWorkspace.qml")))
+    assert component.status() == QQmlComponent.Status.Ready, component.errorString()
+    root = component.create()
+    assert root is not None
     root.setProperty("width", 1400)
     root.setProperty("height", 900)
-    tabs = root.findChild(QObject, "workspaceTabs")
-    assert tabs is not None
-    tabs.setProperty("currentIndex", 2)
-    QTest.qWait(100)
+    QTest.qWait(50)
 
     tables = [
         child
@@ -425,15 +564,8 @@ def test_density_changes_update_live_table_rows(qml_engine):
         if child.property("title") == "Nodes" and child.property("tableRowHeight") is not None
     ]
     assert len(tables) == 1
-    table = tables[0]
 
-    assert table.property("tableRowHeight") == 28
-    app_vm.setDensity("compact")
-    QTest.qWait(50)
-    assert table.property("tableRowHeight") == 24
-    app_vm.setDensity("relaxed")
-    QTest.qWait(50)
-    assert table.property("tableRowHeight") == 32
+    assert tables[0].property("tableRowHeight") == 28
     assert warnings == []
 
 

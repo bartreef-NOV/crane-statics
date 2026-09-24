@@ -22,7 +22,7 @@ def relative_luminance(rgb: Iterable[float | int]) -> float:
     for channel in channels:
         value = _channel(channel)
         linear.append(value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4)
-    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    return float(0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2])
 
 
 def contrast_ratio(foreground: Iterable[float | int], background: Iterable[float | int]) -> float:

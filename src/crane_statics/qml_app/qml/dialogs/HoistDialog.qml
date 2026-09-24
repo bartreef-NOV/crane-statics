@@ -33,11 +33,12 @@ Components.Dialog {
                                     ? values.split_hook_mass_t : hookMassField.value)
         dafField.setValue(values && values.hook_daf !== undefined ? values.hook_daf : 1)
         offleadField.setValue(values && values.offlead_deg !== undefined ? values.offlead_deg : 0)
-        sideLeadField.setValue(values && values.side_lead_deg !== undefined ? values.side_lead_deg : 0)
-        minTravelField.setValue(values && values.min_hook_travel_m !== undefined && values.min_hook_travel_m !== null
-                                ? values.min_hook_travel_m : 0)
-        maxTravelField.setValue(values && values.max_hook_travel_m !== undefined && values.max_hook_travel_m !== null
-                                ? values.max_hook_travel_m : 0)
+        sideleadField.setValue(values && values.sidelead_deg !== undefined ? values.sidelead_deg : 0)
+        deadTurnsSpin.value = values && values.drum_dead_turns ? values.drum_dead_turns : 0
+        if (values && values.drum_diameter_m !== undefined && values.drum_diameter_m !== null)
+            drumDiameterField.setValue(values.drum_diameter_m)
+        else
+            drumDiameterField.text = ""
         open()
     }
 
@@ -58,9 +59,9 @@ Components.Dialog {
         "split_hook_mass_t": splitHookMassField.value,
         "hook_daf": dafField.value,
         "offlead_deg": offleadField.value,
-        "side_lead_deg": sideLeadField.value,
-        "min_hook_travel_m": minTravelField.value,
-        "max_hook_travel_m": maxTravelField.value
+        "sidelead_deg": sideleadField.value,
+        "drum_dead_turns": deadTurnsSpin.value,
+        "drum_diameter_m": drumDiameterField.text.trim() === "" ? null : drumDiameterField.value
     })
 
     GridLayout {
@@ -93,11 +94,13 @@ Components.Dialog {
             validator: DoubleValidator { bottom: 0; notation: DoubleValidator.StandardNotation }
         }
 
-        Label { text: qsTr("Rope Length (m):") }
+        // Only the boom hoist owns an authored rope length; a payload hoist's is
+        // derived from the document's hook height at minimum outreach.
+        Label { text: qsTr("Rope Length (m):"); visible: root.isBoomHoist }
         NumberField {
             id: ropeLengthField
             Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth
-            placeholderText: qsTr("auto (reeved length)")
+            visible: root.isBoomHoist
             validator: DoubleValidator { bottom: 0; notation: DoubleValidator.StandardNotation }
         }
 
@@ -124,17 +127,23 @@ Components.Dialog {
         Label { text: qsTr("DAF:"); visible: !root.isBoomHoist }
         NumberField { id: dafField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist }
 
-        Label { text: qsTr("Off Lead (deg):"); visible: !root.isBoomHoist }
+        Label { text: qsTr("Offlead (deg):"); visible: !root.isBoomHoist }
         NumberField { id: offleadField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist }
 
-        Label { text: qsTr("Side Lead (deg):"); visible: !root.isBoomHoist }
-        NumberField { id: sideLeadField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist }
+        Label { text: qsTr("Sidelead (deg):"); visible: !root.isBoomHoist }
+        NumberField { id: sideleadField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist }
 
-        Label { text: qsTr("Min Hook Travel (m):"); visible: !root.isBoomHoist }
-        NumberField { id: minTravelField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist }
+        Label { text: qsTr("Drum Dead Turns:"); visible: !root.isBoomHoist }
+        SpinBox { id: deadTurnsSpin; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; from: 0; to: 999; value: 0; visible: !root.isBoomHoist }
 
-        Label { text: qsTr("Max Hook Travel (m):"); visible: !root.isBoomHoist }
-        NumberField { id: maxTravelField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist }
+        Label { text: qsTr("Drum Diameter (m):"); visible: !root.isBoomHoist }
+        NumberField {
+            id: drumDiameterField
+            Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth
+            visible: !root.isBoomHoist
+            placeholderText: qsTr("required for dead turns")
+            validator: DoubleValidator { bottom: 0; notation: DoubleValidator.StandardNotation }
+        }
     }
 }
 

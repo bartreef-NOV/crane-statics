@@ -99,11 +99,11 @@ Item {
 }
 ```
 
-### Density-Aware Table
+### Table Rows
 
 ```qml
 TableView {
-    rowHeight: DesignTokens.layout.tableRowHeight  // Auto-adjusts
+    rowHeight: DesignTokens.layout.tableRowHeight
 }
 ```
 
@@ -145,7 +145,7 @@ radiusNone, radiusSmall, radiusNormal, radiusLarge
 breakpointCompact = 1240px    → 1-column layout
 breakpointWide = 1240px       → 2-column layout
 breakpointUltraWide = 1800px  → data-dense layout
-tableRowHeight                → Responds to density mode
+tableRowHeight                → Shared table row height
 ```
 
 ---
@@ -177,11 +177,6 @@ tableRowHeight                → Responds to density mode
 1. Windows: Settings > Personalization > Colors > Dark
 2. Relaunch app
 3. Is text readable? Are form fields distinct from background?
-
-### Density Modes
-1. Run app
-2. View > Appearance > Relaxed / Normal / Compact
-3. Do tables still look good? Is spacing appropriate?
 
 ---
 

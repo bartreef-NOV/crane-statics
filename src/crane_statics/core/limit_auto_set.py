@@ -7,7 +7,6 @@ and chart-row Auto-Set use identical semantics.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-import logging
 import math
 from typing import Optional, Callable, Any
 
@@ -20,9 +19,6 @@ from .analysis_cases import (
     DirectionalAnalysisCase,
 )
 from .demand_extraction import extract_rope_tension_demand, extract_connection_component_demand
-
-
-_LOG = logging.getLogger(__name__)
 
 
 @dataclass
@@ -51,7 +47,7 @@ class RopeAutoSetResult:
     governing_outreach_m: Optional[float] = None
     governing_angle_deg: Optional[float] = None
     governing_offlead_deg: Optional[float] = None
-    governing_side_lead_deg: Optional[float] = None
+    governing_sidelead_deg: Optional[float] = None
     governing_wind_direction: Optional[str] = None
     governing_mode: Optional[str] = None
     used_system_rope_fallback: bool = False
@@ -70,7 +66,7 @@ class ConnectionAutoSetResult:
     governing_outreach_m: Optional[float] = None
     governing_angle_deg: Optional[float] = None
     governing_offlead_deg: Optional[float] = None
-    governing_side_lead_deg: Optional[float] = None
+    governing_sidelead_deg: Optional[float] = None
     governing_wind_direction: Optional[str] = None
     governing_mode: Optional[str] = None
 
@@ -85,10 +81,10 @@ def _required_hook_force_kN(
 def _compose_lead_channel_point(pt: Any, case: DirectionalAnalysisCase) -> Any:
     """Compose one lead-sign case from a zero-lead analysis point."""
     offlead_scale = math.sin(math.radians(float(case.offlead_deg or 0.0)))
-    side_lead_scale = math.sin(math.radians(float(case.side_lead_deg or 0.0)))
+    sidelead_scale = math.sin(math.radians(float(case.sidelead_deg or 0.0)))
     offlead_rope_channels = pt.offlead_lateral_unit_rope_tensions or {}
     offlead_reaction_channels = pt.offlead_lateral_unit_reactions or {}
-    side_lead_reaction_channels = pt.side_lead_lateral_unit_reactions or {}
+    sidelead_reaction_channels = pt.sidelead_lateral_unit_reactions or {}
 
     sensitivity_ropes = {
         rope_id: float(sensitivity) + offlead_scale * float(offlead_rope_channels.get(rope_id, 0.0))
@@ -98,17 +94,17 @@ def _compose_lead_channel_point(pt: Any, case: DirectionalAnalysisCase) -> Any:
     entity_ids = (
         set(pt.sensitivity_reactions)
         | set(offlead_reaction_channels)
-        | set(side_lead_reaction_channels)
+        | set(sidelead_reaction_channels)
     )
     for entity_id in entity_ids:
         base_components = pt.sensitivity_reactions.get(entity_id, {})
         offlead_components = offlead_reaction_channels.get(entity_id, {})
-        side_lead_components = side_lead_reaction_channels.get(entity_id, {})
-        component_ids = set(base_components) | set(offlead_components) | set(side_lead_components)
+        sidelead_components = sidelead_reaction_channels.get(entity_id, {})
+        component_ids = set(base_components) | set(offlead_components) | set(sidelead_components)
         sensitivity_reactions[entity_id] = {
             component: float(base_components.get(component, 0.0))
             + offlead_scale * float(offlead_components.get(component, 0.0))
-            + side_lead_scale * float(side_lead_components.get(component, 0.0))
+            + sidelead_scale * float(sidelead_components.get(component, 0.0))
             for component in component_ids
         }
 
@@ -177,7 +173,7 @@ def _evaluate_contractual_points(
                             wind_speed_m_s=wind_speed,
                             wind_direction=case.wind_direction,
                             offlead_deg=0.0,
-                            side_lead_deg=0.0,
+                            sidelead_deg=0.0,
                             hoist_runtime_overrides=mode.runtime_overrides,
                         )
 
@@ -190,7 +186,7 @@ def _evaluate_contractual_points(
                             wind_speed_m_s=wind_speed,
                             wind_direction=case.wind_direction,
                             offlead_deg=case.offlead_deg,
-                            side_lead_deg=case.side_lead_deg,
+                            sidelead_deg=case.sidelead_deg,
                             hoist_runtime_overrides=mode.runtime_overrides,
                         )
                     else:
@@ -309,7 +305,7 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
             best.cp_outreach_m,
             best.angle_deg,
             best.best_case.offlead_deg,
-            best.best_case.side_lead_deg,
+            best.best_case.sidelead_deg,
             best.best_case.wind_direction,
             best.mode_name,
         )
@@ -322,7 +318,7 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
         governing_outreach_m,
         governing_angle_deg,
         governing_offlead_deg,
-        governing_side_lead_deg,
+        governing_sidelead_deg,
         governing_wind_direction,
         governing_mode,
     ) = _evaluate(relevant_hoists)
@@ -343,7 +339,7 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
             governing_outreach_m,
             governing_angle_deg,
             governing_offlead_deg,
-            governing_side_lead_deg,
+            governing_sidelead_deg,
             governing_wind_direction,
             governing_mode,
         ) = _evaluate(list(doc.hoists))
@@ -351,7 +347,6 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
             using_fallback = True
 
     if evaluated_points == 0 or not math.isfinite(required_kN):
-        calc._directional_basis_cache.log_stats(_LOG)
         return RopeAutoSetResult(
             required_kN=None,
             evaluated_points=0,
@@ -359,7 +354,6 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
             message=f"No contractual points could be evaluated for rope '{requested_rope_id}'",
         )
 
-    calc._directional_basis_cache.log_stats(_LOG)
     return RopeAutoSetResult(
         required_kN=float(required_kN),
         evaluated_points=evaluated_points,
@@ -370,7 +364,7 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
         governing_outreach_m=governing_outreach_m,
         governing_angle_deg=governing_angle_deg,
         governing_offlead_deg=governing_offlead_deg,
-        governing_side_lead_deg=governing_side_lead_deg,
+        governing_sidelead_deg=governing_sidelead_deg,
         governing_wind_direction=governing_wind_direction,
         governing_mode=governing_mode,
         used_system_rope_fallback=using_fallback,
@@ -410,7 +404,6 @@ def compute_required_connection_capacity_kN(
     )
 
     if not results:
-        calc._directional_basis_cache.log_stats(_LOG)
         return ConnectionAutoSetResult(
             required_kN=None,
             evaluated_points=0,
@@ -422,7 +415,6 @@ def compute_required_connection_capacity_kN(
         )
 
     best = max(results, key=lambda r: r.best_demand)
-    calc._directional_basis_cache.log_stats(_LOG)
     return ConnectionAutoSetResult(
         required_kN=float(best.best_demand),
         evaluated_points=len(results),
@@ -433,7 +425,7 @@ def compute_required_connection_capacity_kN(
         governing_outreach_m=best.cp_outreach_m,
         governing_angle_deg=best.angle_deg,
         governing_offlead_deg=best.best_case.offlead_deg,
-        governing_side_lead_deg=best.best_case.side_lead_deg,
+        governing_sidelead_deg=best.best_case.sidelead_deg,
         governing_wind_direction=best.best_case.wind_direction,
         governing_mode=best.mode_name,
     )

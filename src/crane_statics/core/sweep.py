@@ -6,8 +6,9 @@ import logging
 import math
 from typing import Any, Callable, Optional
 
-from ..calculation.engine import get_calculator
+from ..calculation.engine import AllowableCapacity, AnalysisPoint, get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
+from ..data.models import CraneDocument
 from .analysis_cases import analysis_mode_by_name, iter_wind_directional_cases
 from .demand_extraction import (
     connection_component_responds_to_hook_load,
@@ -51,7 +52,7 @@ def build_absolute_outreach_grid(lo_out: float, hi_out: float, outreach_step: fl
 
 
 def run_capacity_sweep(
-    doc,
+    doc: CraneDocument,
     hoist_id: str,
     enabled_limits: dict,
     outreach_step: float,
@@ -101,7 +102,9 @@ def run_capacity_sweep(
                 points.append(pt)
         return points
 
-    def _min_capacity(points: list, design_limits_map: dict[str, dict], hook_mass_t: float):
+    def _min_capacity(
+        points: list, design_limits_map: dict[str, dict], hook_mass_t: float
+    ) -> Optional[AllowableCapacity]:
         best = None
         for pt in points:
             cap = calc.compute_allowable_load(
@@ -135,7 +138,7 @@ def run_capacity_sweep(
             return "boom_hoist" if rope.tension_mode == "solve" else rid
         return entity
 
-    def _affects_hook_load(pt_obj, limit_key: str, comps: dict) -> bool:
+    def _affects_hook_load(pt_obj: AnalysisPoint, limit_key: str, comps: dict) -> bool:
         entity = _resolve_entity(limit_key)
         tol = 1e-9
         if entity in pt_obj.sensitivity_reactions:
@@ -185,7 +188,7 @@ def run_capacity_sweep(
         )
 
         report(f"Stage 1/2 ({mode_name}): Contractual sweep...")
-        contractual_results = []
+        contractual_results: list[tuple[Any, Optional[float], Optional[bool]]] = []
         for cp in mode_contractual_points:
             check_cancelled()
             try:
@@ -293,9 +296,6 @@ def run_capacity_sweep(
         split_falls = getattr(hoist, "split_falls", None)
         if split_hook_mass is not None and split_falls is not None:
             mode_results["split"] = _compute_mode("split")
-
-    # Log cache performance statistics
-    calc._directional_basis_cache.log_stats(_LOG)
 
     return {
         "hoist": hoist,

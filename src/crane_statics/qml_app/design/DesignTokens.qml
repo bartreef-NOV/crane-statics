@@ -29,7 +29,7 @@ import QtQuick.Controls.Fusion
  * - shadows:      Elevation levels for modals, cards, tooltips
  * - border:       Border widths and radius values
  * - transitions:  Animation durations for theme switching and interactions
- * - layout:       Responsive breakpoints and density modes
+ * - layout:       Responsive breakpoints
  */
 
 Item {
@@ -247,8 +247,8 @@ Item {
     }
 
     /**
-     * LAYOUT: Responsive breakpoints and density modes
-     * Workspace layout adapts based on window width and density setting.
+     * LAYOUT: Responsive breakpoints
+     * Workspace layout adapts based on window width.
      */
     readonly property QtObject layout: QtObject {
         // Responsive breakpoints (in logical pixels)
@@ -256,32 +256,13 @@ Item {
         readonly property int breakpointWide: 1240       // ≥ 1240px → 2-column layout
         readonly property int breakpointUltraWide: 1800  // ≥ 1800px → 3-column or data-dense tables
 
-        // Density modes (controls row height, padding, spacing across all views)
-        // Values: "relaxed" (current default), "normal", "compact"
-        property string density: "normal"  // Set from View > Appearance > Density
+        // Row height and spacing are fixed; the multipliers remain as the seam
+        // callers already multiply through, so they are simply unity.
+        readonly property real rowHeightMultiplier: 1.0
+        readonly property real spacingMultiplier: 1.0
 
-        // Density-based sizing (applied to tables, forms, etc.)
-        property real rowHeightMultiplier: {
-            switch (density) {
-                case "compact": return 0.85
-                case "normal": return 1.0
-                case "relaxed": return 1.15
-                default: return 1.0
-            }
-        }
-
-        property real spacingMultiplier: {
-            switch (density) {
-                case "compact": return 0.75
-                case "normal": return 1.0
-                case "relaxed": return 1.25
-                default: return 1.0
-            }
-        }
-
-        // Computed sizes based on density
-        readonly property int tableRowHeight: Math.round(sizing.rowHeight * rowHeightMultiplier)
-        readonly property int effectiveSpacing: Math.round(spacing.md * spacingMultiplier)
+        readonly property int tableRowHeight: sizing.rowHeight
+        readonly property int effectiveSpacing: spacing.md
     }
 
     /**

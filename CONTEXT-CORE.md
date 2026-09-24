@@ -18,7 +18,7 @@ Essential terms for understanding the codebase structure. For the complete vocab
 
 **Session** — the loaded document plus changes since load. Held by pure `core/session_model.py::SessionModel`.
 
-**Scene state** — the operator's inputs for one hoist: boom angle, hook load, tackle length, offlead, side lead, wind, and accelerations.
+**Scene state** — the operator's inputs for one hoist: boom angle, hook load, tackle length, offlead, sidelead, wind, and accelerations.
 
 **Scene frame** — `core/scene_frame.py::SceneFrame`: immutable description of what the canvas shows (nodes, ropes, forces, labels, hit targets, mapping).
 

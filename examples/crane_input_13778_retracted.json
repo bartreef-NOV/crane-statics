@@ -1,0 +1,445 @@
+{
+  "schema": {
+    "name": "crane-statics",
+    "version": "5.13.0"
+  },
+  "metadata": {
+    "name": "Blue Wind"
+  },
+  "model_definition": {
+    "environment": {
+      "gravity_m_s2": 9.81,
+      "air_density_kg_m3": 1.226,
+      "wind_profile_exponent": 0.12,
+      "wind_reference_height_m_asl": 10.0,
+      "mean_sealevel_z_m": -45.0,
+      "max_wind_speed_m_s": 20.0
+    },
+    "boom_width_m": 12.4,
+    "slewing_bearing_diameter_m": 23.0,
+    "boom_heel": {
+      "x_m": 5.6,
+      "z_m": 6.0
+    },
+    "upper_hinge": {
+      "x_m": -10.0,
+      "z_m": 40.0
+    },
+    "rear_hinge": {
+      "x_m": -10.0,
+      "z_m": 13.66
+    },
+    "front_hinge": {
+      "x_m": 5.6,
+      "z_m": 6.0
+    },
+    "vessel_motion": {
+      "accel_x_m_s2": 0.0,
+      "accel_y_m_s2": 0.0,
+      "accel_z_m_s2": 0.0,
+      "pitch_angular_accel_rad_s2": 0.0,
+      "roll_angular_accel_rad_s2": 0.0,
+      "reference_x_m": 0.0,
+      "reference_z_m": 0.0
+    },
+    "hook_height_at_min_outreach_m": -45.0,
+    "boom": {
+      "mass_points": [
+        {
+          "id": "boom_structure",
+          "mass_t": 833.465,
+          "position": {
+            "u_m": 78.568,
+            "v_m": 0.029,
+            "w_m": -0.411
+          }
+        }
+      ],
+      "wind_areas": [
+        {
+          "id": "base_boom_lattice",
+          "cd": 0.8,
+          "position": {
+            "u_m": 45.5,
+            "w_m": 0.0
+          },
+          "area_w_m2": 355.0,
+          "area_v_m2": 333.0
+        },
+        {
+          "id": "base_boom_collar",
+          "cd": 0.75,
+          "position": {
+            "u_m": 91.0,
+            "w_m": 0.0
+          },
+          "area_w_m2": 13.0,
+          "area_v_m2": 11.0
+        },
+        {
+          "id": "telescopic_boom_lattice",
+          "cd": 1.6,
+          "position": {
+            "u_m": 63.5,
+            "w_m": 0.0
+          },
+          "area_w_m2": 195.0,
+          "area_v_m2": 167.0
+        },
+        {
+          "id": "telescopic_boom_jib",
+          "cd": 0.75,
+          "position": {
+            "u_m": 96.5,
+            "w_m": 0.0
+          },
+          "area_w_m2": 16.0,
+          "area_v_m2": 25.0
+        },
+        {
+          "id": "telescopic_boom_jib",
+          "cd": 1.2,
+          "position": {
+            "u_m": 100.0,
+            "w_m": 0.0
+          },
+          "area_w_m2": 16.0,
+          "area_v_m2": 12.0
+        }
+      ],
+      "nodes": {
+        "bh_boom_sheave_2": {
+          "u_m": 94.4,
+          "w_m": 5.25
+        },
+        "bh_boom_sheave_3": {
+          "u_m": 90.0,
+          "w_m": 4.3
+        },
+        "mh_boom_sheave_2": {
+          "u_m": 94.4,
+          "w_m": 5.25
+        },
+        "mh_boom_sheave_3": {
+          "u_m": 96.5,
+          "w_m": -5.0
+        },
+        "ah_boom_sheave_1": {
+          "u_m": 30.75,
+          "w_m": 2.2
+        },
+        "ah_boom_sheave_2": {
+          "u_m": 103.5,
+          "w_m": -8.5
+        },
+        "wh_boom_sheave_3": {
+          "u_m": 94.4,
+          "w_m": 0.01
+        },
+        "wh_boom_sheave_4": {
+          "u_m": 101.05,
+          "w_m": -7.25
+        }
+      }
+    },
+    "rear_leg": {
+      "mass_points": [],
+      "wind_areas": [],
+      "nodes": {}
+    },
+    "front_leg": {
+      "mass_points": [],
+      "wind_areas": [],
+      "nodes": {
+        "bh_aframe_sheave_1": {
+          "x_m": -10.0,
+          "z_m": 40.0
+        },
+        "mh_aframe_sheave_1": {
+          "x_m": -10.0,
+          "z_m": 40.0
+        },
+        "ah_aframe_sheave_1": {
+          "x_m": 7.805,
+          "z_m": 6.26
+        },
+        "wh_aframe_sheave_1": {
+          "x_m": 5.6,
+          "z_m": 6.0
+        }
+      }
+    },
+    "platform": {
+      "mass_points": [
+        {
+          "id": "platform_structure",
+          "mass_t": 530.482,
+          "position": {
+            "x_m": -3.13,
+            "y_m": 0.0,
+            "z_m": 4.17
+          }
+        },
+        {
+          "id": "aframe_structure",
+          "mass_t": 262.529,
+          "position": {
+            "x_m": -6.57,
+            "y_m": 0.05,
+            "z_m": 26.94
+          }
+        },
+        {
+          "id": "slewing_system",
+          "mass_t": 172.377,
+          "position": {
+            "x_m": 1.9,
+            "y_m": 0.0,
+            "z_m": 1.04
+          }
+        },
+        {
+          "id": "winches_and_drives",
+          "mass_t": 209.927,
+          "position": {
+            "x_m": -4.93,
+            "y_m": 0.0,
+            "z_m": 1.71
+          }
+        },
+        {
+          "id": "electrical",
+          "mass_t": 44.903,
+          "position": {
+            "x_m": -7.21,
+            "y_m": -0.06,
+            "z_m": 5.07
+          }
+        },
+        {
+          "id": "utility",
+          "mass_t": 21.0,
+          "position": {
+            "x_m": 0.75,
+            "y_m": 0.0,
+            "z_m": 0.0
+          }
+        }
+      ],
+      "wind_areas": [
+        {
+          "id": "platform_wind_x",
+          "cd": 1.0,
+          "position": {
+            "x_m": 0.0,
+            "z_m": 3.4
+          },
+          "area_x_m2": 156.5,
+          "area_y_m2": 0.0
+        },
+        {
+          "id": "platform_wind_y",
+          "cd": 1.0,
+          "position": {
+            "x_m": -0.1,
+            "z_m": 3.6
+          },
+          "area_x_m2": 0.0,
+          "area_y_m2": 164.6
+        },
+        {
+          "id": "ehouse_wind_x",
+          "cd": 1.0,
+          "position": {
+            "x_m": 0.0,
+            "z_m": 8.4
+          },
+          "area_x_m2": 51.1,
+          "area_y_m2": 0.0
+        },
+        {
+          "id": "ehouse_wind_y",
+          "cd": 1.0,
+          "position": {
+            "x_m": -14.9,
+            "z_m": 6.6
+          },
+          "area_x_m2": 0.0,
+          "area_y_m2": 35.6
+        },
+        {
+          "id": "aframe_wind_x",
+          "cd": 1.0,
+          "position": {
+            "x_m": 0.0,
+            "z_m": 31.0
+          },
+          "area_x_m2": 310.9,
+          "area_y_m2": 0.0
+        },
+        {
+          "id": "aframe_wind_y",
+          "cd": 1.0,
+          "position": {
+            "x_m": -5.3,
+            "z_m": 29.4
+          },
+          "area_x_m2": 0.0,
+          "area_y_m2": 169.4
+        }
+      ],
+      "nodes": {
+        "bh_winch": {
+          "x_m": -13.05,
+          "z_m": -1.2
+        },
+        "mh_winch": {
+          "x_m": -14.15,
+          "z_m": 2.375
+        },
+        "ah_winch": {
+          "x_m": 7.805,
+          "z_m": 6.26
+        },
+        "wh_winch": {
+          "x_m": 5.6,
+          "z_m": 6.0
+        }
+      }
+    },
+    "boom_hoist": {
+      "rope_segments": [
+        {
+          "from": "bh_winch",
+          "to": "bh_aframe_sheave_1",
+          "parts": 2
+        },
+        {
+          "from": "bh_aframe_sheave_1",
+          "to": "bh_boom_sheave_2",
+          "parts": 16
+        },
+        {
+          "from": "bh_aframe_sheave_1",
+          "to": "bh_boom_sheave_3",
+          "parts": 6
+        }
+      ],
+      "rope_length_m": 3600.0,
+      "linear_mass_kg_m": 23.59
+    },
+    "payload_hoists": {
+      "MH": {
+        "support_node_id": "mh_boom_sheave_3",
+        "hook_daf": 1.1,
+        "offlead_deg": 1.0,
+        "falls": 24,
+        "hook_mass_t": 121.915,
+        "contractual_points": [
+          {
+            "outreach_m": 19.0,
+            "load_t": 2500.0
+          },
+          {
+            "outreach_m": 30.0,
+            "load_t": 2500.0
+          }
+        ],
+        "split": {
+          "falls": 12,
+          "hook_mass_t": 85.548,
+          "contractual_points": [
+            {
+              "outreach_m": 19.0,
+              "load_t": 1250.0
+            }
+          ]
+        },
+        "rope_segments": [
+          {
+            "from": "mh_winch",
+            "to": "mh_aframe_sheave_1",
+            "parts": 2
+          },
+          {
+            "from": "mh_aframe_sheave_1",
+            "to": "mh_boom_sheave_2",
+            "parts": 2
+          },
+          {
+            "from": "mh_boom_sheave_2",
+            "to": "mh_boom_sheave_3",
+            "parts": 2
+          }
+        ],
+        "rope_length_m": 3620.0,
+        "linear_mass_kg_m": 20.3,
+        "sidelead_deg": 2.5
+      },
+      "AH": {
+        "support_node_id": "ah_boom_sheave_2",
+        "hook_daf": 1.3,
+        "offlead_deg": 4.0,
+        "falls": 4,
+        "hook_mass_t": 13.125,
+        "contractual_points": [
+          {
+            "outreach_m": 23.10,
+            "load_t": 250.0
+          },
+          {
+            "outreach_m": 105.0,
+            "load_t": 250.0
+          }
+        ],
+        "rope_segments": [
+          {
+            "from": "ah_winch",
+            "to": "ah_boom_sheave_1"
+          },
+          {
+            "from": "ah_boom_sheave_1",
+            "to": "ah_boom_sheave_2"
+          }
+        ],
+        "rope_length_m": 950.0,
+        "linear_mass_kg_m": 11.64,
+        "sidelead_deg": 4.5
+      },
+      "WH": {
+        "support_node_id": "wh_boom_sheave_4",
+        "hook_daf": 1.3,
+        "offlead_deg": 2.0,
+        "falls": 1,
+        "hook_mass_t": 13.77,
+        "contractual_points": [
+          {
+            "outreach_m": 31.4,
+            "load_t": 15.0
+          },
+          {
+            "outreach_m": 119.0,
+            "load_t": 15.0
+          }
+        ],
+        "rope_segments": [
+          {
+            "from": "wh_winch",
+            "to": "wh_aframe_sheave_1"
+          },
+          {
+            "from": "wh_aframe_sheave_1",
+            "to": "wh_boom_sheave_3"
+          },
+          {
+            "from": "wh_boom_sheave_3",
+            "to": "wh_boom_sheave_4"
+          }
+        ],
+        "rope_length_m": 350.0,
+        "linear_mass_kg_m": 13.4,
+        "sidelead_deg": 4.5
+      }
+    }
+  }
+}

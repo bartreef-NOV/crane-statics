@@ -2,10 +2,10 @@
 
 import math
 import pytest
+from dataclasses import fields, replace
 from pathlib import Path
 import json
 from importlib import resources
-import crane_statics.calculation.engine as engine_module
 import crane_statics.core.limit_auto_set as limit_auto_set_module
 from jsonschema import Draft202012Validator
 from PyQt6.QtGui import QGuiApplication
@@ -79,6 +79,30 @@ def scene_inputs(
     )
 
 
+def scene_inputs_at_drawn_tackle(doc, hoist_id: str, *, angle: float = 45.0, **kwargs):
+    """Scene inputs whose analysis point was solved at the tackle length it draws.
+
+    Rope weight moves between the falls and the winch drum as the hook is lowered,
+    so drawn loads only balance the solved reactions when both were evaluated at
+    the same hook position -- which is what the view model does.
+    """
+    drawn = {field.name for field in fields(dl.LoadConditions)} | {"display", "tackle_length_m"}
+    inputs = scene_inputs(
+        doc,
+        hoist_id,
+        angle=angle,
+        **{key: value for key, value in kwargs.items() if key in drawn},
+    )
+    point = CraneCalculator(doc).compute_analysis_point(
+        angle,
+        0.0,
+        hoist_id,
+        tackle_length_m=inputs.tackle_length_m,
+        **{key: value for key, value in kwargs.items() if key != "display"},
+    )
+    return replace(inputs, analysis_point=point)
+
+
 class SceneHarness:
     """Headless stand-in for the QML scene workspace (view model + painted-item canvas)."""
 
@@ -127,8 +151,10 @@ class SceneHarness:
     def report(self) -> dict:
         """The drawn-load report backing both Equilibrium Check and Load Summary."""
         inputs = self.inputs
+        document_dict = inputs.document_dict
+        assert document_dict is not None
         return self.vm._presenter.build_drawn_load_sections(
-            document_dict=inputs.document_dict,
+            document_dict=document_dict,
             analysis_point=inputs.analysis_point,
             node_positions=inputs.node_positions(),
             conditions=inputs.conditions,
@@ -574,7 +600,7 @@ class TestAuthoredSchemaPolicy:
 
     def _minimal_v5(self) -> dict:
         return {
-            "schema": {"name": "crane-statics", "version": "5.12.0"},
+            "schema": {"name": "crane-statics", "version": "5.13.0"},
             "metadata": {"name": "V5 Minimal"},
             "model_definition": {
                 "boom_width_m": 1.0,
@@ -637,7 +663,6 @@ class TestAuthoredSchemaPolicy:
                 "payload_hoists": {
                     "MH": {
                         "support_node_id": "mh_hook",
-                        "hook_travel": {"min_m": 5.0, "max_m": 80.0},
                         "hook_daf": 1.0,
                         "offlead_deg": 0.0,
                         "rope_segments": [{"from": "boom_heel", "to": "mh_hook", "parts": 2}],
@@ -656,7 +681,7 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v5()
         data["schema"]["version"] = "3.2.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema version 5.12.0 is supported"
+            ValueError, match="Only crane-statics schema version 5.13.0 is supported"
         ):
             normalize_document(data)
 
@@ -664,7 +689,7 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v5()
         data["schema"]["version"] = "5.1.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema version 5.12.0 is supported"
+            ValueError, match="Only crane-statics schema version 5.13.0 is supported"
         ):
             normalize_document(data)
 
@@ -728,15 +753,72 @@ class TestAuthoredSchemaPolicy:
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
-    def test_v5_rejects_reversed_hook_travel_bounds(self):
+    def test_v5_rejects_authored_hook_travel(self, tmp_path):
         data = self._minimal_v5()
         data["model_definition"]["payload_hoists"]["MH"]["hook_travel"] = {
-            "min_m": 80.0,
-            "max_m": 5.0,
+            "min_m": 5.0,
+            "max_m": 80.0,
         }
+        path = tmp_path / "authored_travel.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
 
-        with pytest.raises(ValueError, match=r"hook_travel\.min_m must be <= max_m"):
-            normalize_document(data)
+        with pytest.raises(DocumentIOError, match="hook_travel"):
+            load_document(path)
+
+    def test_v5_rejects_authored_payload_rope_length(self, tmp_path):
+        data = self._minimal_v5()
+        data["model_definition"]["payload_hoists"]["MH"]["rope_length_m"] = 500.0
+        path = tmp_path / "authored_rope_length.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+        with pytest.raises(DocumentIOError, match="rope_length_m"):
+            load_document(path)
+
+    def test_v5_dead_turns_require_a_drum_diameter(self, tmp_path):
+        data = self._minimal_v5()
+        data["model_definition"]["payload_hoists"]["MH"]["drum_dead_turns"] = 4
+        path = tmp_path / "dead_turns.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+        with pytest.raises(DocumentIOError, match="drum_diameter_m"):
+            load_document(path)
+
+    def _reachable_v5(self) -> dict:
+        """_minimal_v5 with a contractual outreach the 40 m boom can actually reach."""
+        data = self._minimal_v5()
+        data["model_definition"]["payload_hoists"]["MH"]["contractual_points"] = [
+            {"outreach_m": 30.0, "load_t": 100.0}
+        ]
+        return data
+
+    def test_v5_dead_turns_extend_the_derived_rope_length(self):
+        bare = normalize_document(self._reachable_v5())
+        data = self._reachable_v5()
+        data["model_definition"]["payload_hoists"]["MH"]["drum_dead_turns"] = 4
+        data["model_definition"]["payload_hoists"]["MH"]["drum_diameter_m"] = 1.5
+        with_dead_turns = normalize_document(data)
+
+        bare_mh = next(h for h in bare.hoists if h.id == "MH")
+        dead_mh = next(h for h in with_dead_turns.hoists if h.id == "MH")
+
+        assert dead_mh.max_hook_travel_m == pytest.approx(bare_mh.max_hook_travel_m)
+        assert dead_mh.rope_length_m - bare_mh.rope_length_m == pytest.approx(4 * math.pi * 1.5)
+
+    def test_v5_hook_height_defaults_to_mean_sea_level(self):
+        doc = normalize_document(self._minimal_v5())
+        assert doc.hook_height_at_min_outreach_m == pytest.approx(-35.0)
+
+    def test_v5_authored_hook_height_drives_the_derived_travel(self):
+        data = self._reachable_v5()
+        data["model_definition"]["hook_height_at_min_outreach_m"] = -60.0
+        deeper = normalize_document(data)
+        shallower = normalize_document(self._reachable_v5())
+
+        deeper_mh = next(h for h in deeper.hoists if h.id == "MH")
+        shallower_mh = next(h for h in shallower.hoists if h.id == "MH")
+
+        assert deeper_mh.max_hook_travel_m - shallower_mh.max_hook_travel_m == pytest.approx(25.0)
+        assert deeper_mh.rope_length_m > shallower_mh.rope_length_m
 
     def test_v5_directional_wind_area_fields_round_trip(self):
         data = self._minimal_v5()
@@ -812,7 +894,7 @@ class TestAuthoredSchemaPolicy:
             pitch_accel_rad_s2=0.0,
             roll_accel_rad_s2=0.0,
             offlead_deg=0.0,
-            side_lead_deg=0.0,
+            sidelead_deg=0.0,
         )
         offset_pt = offset_calc.compute_analysis_point(
             45.0,
@@ -826,7 +908,7 @@ class TestAuthoredSchemaPolicy:
             pitch_accel_rad_s2=0.0,
             roll_accel_rad_s2=0.0,
             offlead_deg=0.0,
-            side_lead_deg=0.0,
+            sidelead_deg=0.0,
         )
 
         assert base_pt is not None
@@ -855,7 +937,7 @@ class TestAuthoredSchemaPolicy:
             pitch_accel_rad_s2=0.0,
             roll_accel_rad_s2=0.05,
             offlead_deg=0.0,
-            side_lead_deg=0.0,
+            sidelead_deg=0.0,
         )
 
         assert pt is not None
@@ -1088,7 +1170,6 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v5()
         data["model_definition"]["payload_hoists"]["AH"] = {
             "support_node_id": "boom_heel",
-            "hook_travel": {"min_m": 5.0, "max_m": 80.0},
             "hook_daf": 1.0,
             "offlead_deg": 0.0,
             "falls": 2,
@@ -1118,7 +1199,7 @@ class TestAuthoredSchemaPolicy:
         save_document(doc, out_path)
 
         saved = json.loads(out_path.read_text())
-        schema_path = Path(__file__).parent.parent / "docs" / "crane-statics-v5.12.schema.json"
+        schema_path = Path(__file__).parent.parent / "docs" / "crane-statics-v5.13.schema.json"
         schema = json.loads(schema_path.read_text())
 
         validator = Draft202012Validator(schema)
@@ -1127,11 +1208,11 @@ class TestAuthoredSchemaPolicy:
 
     def test_documented_schema_matches_packaged_schema(self):
         documented_schema = (
-            Path(__file__).parent.parent / "docs" / "crane-statics-v5.12.schema.json"
+            Path(__file__).parent.parent / "docs" / "crane-statics-v5.13.schema.json"
         ).read_text(encoding="utf-8")
         packaged_schema = (
             resources.files("crane_statics.schemas")
-            .joinpath("crane-statics-v5.12.schema.json")
+            .joinpath("crane-statics-v5.13.schema.json")
             .read_text(encoding="utf-8")
         )
 
@@ -1144,7 +1225,7 @@ class TestAuthoredSchemaPolicy:
 
         saved = json.loads(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "5.12.0"
+        assert saved["schema"]["version"] == "5.13.0"
         assert "model_definition" in saved
         assert "boom" in saved["model_definition"]
         assert "rear_leg" in saved["model_definition"]
@@ -1159,7 +1240,9 @@ class TestAuthoredSchemaPolicy:
         assert "boom_hoist" in saved["model_definition"]
         assert "MH" in saved["model_definition"]["payload_hoists"]
         assert "support_node_id" in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "hook_travel" in saved["model_definition"]["payload_hoists"]["MH"]
+        assert "hook_travel" not in saved["model_definition"]["payload_hoists"]["MH"]
+        assert "rope_length_m" not in saved["model_definition"]["payload_hoists"]["MH"]
+        assert "hook_height_at_min_outreach_m" in saved["model_definition"]
         assert "hook_daf" in saved["model_definition"]["payload_hoists"]["MH"]
         assert "offlead_deg" in saved["model_definition"]["payload_hoists"]["MH"]
         assert "falls" in saved["model_definition"]["payload_hoists"]["MH"]
@@ -1203,18 +1286,14 @@ class TestSplitModeAutosetAndChart:
             pytest.skip("Example file not found")
         return load_document(example_path)
 
-    def test_calculator_reuses_identical_primitive_basis(self, monkeypatch):
+    def test_opposite_wind_directions_share_one_primitive_basis(self):
+        """Wind sign is applied by composition, so the sensitivities are identical.
+
+        Only the baseline differs between +X and -X: the primitive basis is built
+        from the wind magnitude alone.
+        """
         doc = self._example_doc()
         calc = CraneCalculator(doc)
-        original_builder = engine_module.build_directional_response_basis
-        build_count = 0
-
-        def counting_builder(*args, **kwargs):
-            nonlocal build_count
-            build_count += 1
-            return original_builder(*args, **kwargs)
-
-        monkeypatch.setattr(engine_module, "build_directional_response_basis", counting_builder)
 
         first = calc.compute_analysis_point(
             45.0, 0.0, "MH", wind_speed_m_s=15.1, wind_direction="+X"
@@ -1224,7 +1303,6 @@ class TestSplitModeAutosetAndChart:
         )
 
         assert first is not None and second is not None
-        assert build_count == 1
         assert first.baseline_reactions != second.baseline_reactions
         assert first.sensitivity_reactions == second.sensitivity_reactions
 
@@ -1245,7 +1323,7 @@ class TestSplitModeAutosetAndChart:
                     wind_speed_m_s=wind_speed,
                     wind_direction=case.wind_direction,
                     offlead_deg=0.0,
-                    side_lead_deg=0.0,
+                    sidelead_deg=0.0,
                 )
 
             legacy = calc.compute_analysis_point(
@@ -1255,7 +1333,7 @@ class TestSplitModeAutosetAndChart:
                 wind_speed_m_s=wind_speed,
                 wind_direction=case.wind_direction,
                 offlead_deg=case.offlead_deg,
-                side_lead_deg=case.side_lead_deg,
+                sidelead_deg=case.sidelead_deg,
             )
             composed = limit_auto_set_module._compose_lead_channel_point(
                 zero_lead_points[case.wind_direction],
@@ -1609,7 +1687,7 @@ class TestResponsiveLayoutRegression:
                 s["message"] for s in report["sections"] if not s["passed"]
             )
 
-    def test_explicit_lateral_unit_maps_compose_offlead_and_side_lead(self):
+    def test_explicit_lateral_unit_maps_compose_offlead_and_sidelead(self):
         example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
         doc = load_document(example_path)
         calc = CraneCalculator(doc)
@@ -1624,15 +1702,15 @@ class TestResponsiveLayoutRegression:
         }
 
         no_lead = calc.compute_analysis_point(
-            45.0, 0.0, "MH", offlead_deg=0.0, side_lead_deg=0.0, **common
+            45.0, 0.0, "MH", offlead_deg=0.0, sidelead_deg=0.0, **common
         )
         with_lead = calc.compute_analysis_point(
-            45.0, 0.0, "MH", offlead_deg=10.0, side_lead_deg=8.0, **common
+            45.0, 0.0, "MH", offlead_deg=10.0, sidelead_deg=8.0, **common
         )
 
         assert no_lead is not None and with_lead is not None
         assert no_lead.offlead_lateral_unit_reactions is not None
-        assert with_lead.side_lead_lateral_unit_reactions is not None
+        assert with_lead.sidelead_lateral_unit_reactions is not None
 
         offlead_unit_fx = no_lead.offlead_lateral_unit_reactions["heel_point"]["Fx"]
         observed_offlead_fx = (
@@ -1641,7 +1719,7 @@ class TestResponsiveLayoutRegression:
         )
         assert observed_offlead_fx == pytest.approx(math.sin(math.radians(10.0)) * offlead_unit_fx)
 
-        side_unit_fy = with_lead.side_lead_lateral_unit_reactions["platform_base"]["Fy"]
+        side_unit_fy = with_lead.sidelead_lateral_unit_reactions["platform_base"]["Fy"]
         observed_side_fy = (
             with_lead.sensitivity_reactions["platform_base"]["Fy"]
             - no_lead.sensitivity_reactions["platform_base"]["Fy"]
@@ -1784,6 +1862,7 @@ class TestResponsiveLayoutRegression:
 
         expected = [
             "Gravity",
+            "Rope weight",
             "Idle hook mass",
             "Hook load",
             "Wind",
@@ -2268,20 +2347,18 @@ class TestResponsiveLayoutRegression:
     def test_sceneview_boom_freebody_force_residual_is_small(self):
         doc = self._example_doc()
         hoist_id = doc.hoists[0].id
-        calc = CraneCalculator(doc)
-        pt = calc.compute_analysis_point(45.0, 0.0, hoist_id)
-        if pt is None:
-            pytest.skip("No analysis point available")
-
-        inputs = scene_inputs(
+        inputs = scene_inputs_at_drawn_tackle(
             doc,
             hoist_id,
-            analysis_point=pt,
             display={"selected_freebody": "boom"},
         )
-        positions = inputs.base_node_positions()
+        if inputs.analysis_point is None:
+            pytest.skip("No analysis point available")
+        positions = inputs.node_positions()
 
-        vectors = inputs.body_loads(positions).vectors(dl.GRAVITY, dl.ROPE_INTERFACE, dl.REACTIONS)
+        vectors = inputs.body_loads(positions).vectors(
+            dl.GRAVITY, dl.ROPE_WEIGHT, dl.ROPE_INTERFACE, dl.REACTIONS
+        )
 
         assert len(vectors) > 0
         sum_fx = float(sum(v.fx_kN for v in vectors))
@@ -2295,10 +2372,8 @@ class TestResponsiveLayoutRegression:
     def test_sceneview_all_freebodies_are_in_equilibrium_for_zeroed_environment_case(self):
         doc = self._example_doc()
         hoist_id = doc.hoists[0].id
-        calc = CraneCalculator(doc)
-        pt = calc.compute_analysis_point(
-            45.0,
-            0.0,
+        inputs = scene_inputs_at_drawn_tackle(
+            doc,
             hoist_id,
             wind_speed_m_s=0.0,
             wind_direction="+X",
@@ -2308,13 +2383,11 @@ class TestResponsiveLayoutRegression:
             pitch_accel_rad_s2=0.0,
             roll_accel_rad_s2=0.0,
             offlead_deg=0.0,
-            side_lead_deg=0.0,
+            sidelead_deg=0.0,
         )
-        if pt is None:
+        if inputs.analysis_point is None:
             pytest.skip("No analysis point available")
-
-        inputs = scene_inputs(doc, hoist_id, analysis_point=pt)
-        positions = inputs.base_node_positions()
+        positions = inputs.node_positions()
 
         refs = {
             "platform": "platform_base",
@@ -2325,7 +2398,9 @@ class TestResponsiveLayoutRegression:
 
         for body, ref_node in refs.items():
             loads = inputs.body_loads(positions, body)
-            vectors = loads.vectors(dl.GRAVITY, dl.IDLE_HOOK_MASS, dl.ROPE_INTERFACE, dl.REACTIONS)
+            vectors = loads.vectors(
+                dl.GRAVITY, dl.ROPE_WEIGHT, dl.IDLE_HOOK_MASS, dl.ROPE_INTERFACE, dl.REACTIONS
+            )
 
             assert len(vectors) > 0
             sum_fx = float(sum(v.fx_kN for v in vectors))
@@ -2437,8 +2512,9 @@ class TestResponsiveLayoutRegression:
         frame = build_scene_frame(inputs)
 
         axis_tips = [axis.label for axis in frame.boom_axes]
-        assert axis_tips.count("X") == 1
-        assert axis_tips.count("Z") == 1
+        # The boom's local axes are labelled U and W, not X and Z.
+        assert axis_tips.count("U") == 1
+        assert axis_tips.count("W") == 1
 
     def test_sceneview_rope_segment_engineering_tooltip_fields(self):
         doc = self._example_doc()

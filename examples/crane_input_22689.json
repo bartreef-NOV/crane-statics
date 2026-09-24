@@ -1,7 +1,7 @@
 {
   "schema": {
     "name": "crane-statics",
-    "version": "5.12.0"
+    "version": "5.13.0"
   },
   "metadata": {
     "name": "Crane Statics Example 22689 (Full Geometry)"
@@ -42,6 +42,7 @@
       "reference_x_m": 0.0,
       "reference_z_m": 0.0
     },
+    "hook_height_at_min_outreach_m": -53.0,
     "boom": {
       "mass_points": [
         {
@@ -325,7 +326,6 @@
         "support_node_id": "mh_boom_sheave_4",
         "hook_daf": 1.1,
         "offlead_deg": 1.0,
-        "side_lead_deg": 2.5,
         "falls": 20,
         "hook_mass_t": 102.0,
         "contractual_points": [
@@ -402,18 +402,13 @@
             "parts": 2
           }
         ],
-        "rope_length_m": 4300.0,
         "linear_mass_kg_m": 20.3,
-        "hook_travel": {
-          "min_m": 5.0,
-          "max_m": 197.0
-        }
+        "sidelead_deg": 2.5
       },
       "WH": {
         "support_node_id": "wh_boom_sheave_4",
         "hook_daf": 1.3,
         "offlead_deg": 2.0,
-        "side_lead_deg": 4.5,
         "falls": 4,
         "hook_mass_t": 13.77,
         "contractual_points": [
@@ -452,18 +447,13 @@
             "to": "wh_boom_sheave_4"
           }
         ],
-        "rope_length_m": 1000.0,
         "linear_mass_kg_m": 13.4,
-        "hook_travel": {
-          "min_m": 5.0,
-          "max_m": 80.0
-        }
+        "sidelead_deg": 4.5
       },
       "SH": {
         "support_node_id": "sh_boom_sheave_2",
         "hook_daf": 1.3,
         "offlead_deg": 4.0,
-        "side_lead_deg": 4.5,
         "falls": 1,
         "hook_mass_t": 1.632,
         "contractual_points": [
@@ -494,12 +484,8 @@
             "to": "sh_boom_sheave_2"
           }
         ],
-        "rope_length_m": 310.0,
         "linear_mass_kg_m": 4.6,
-        "hook_travel": {
-          "min_m": 5.0,
-          "max_m": 80.0
-        }
+        "sidelead_deg": 4.5
       }
     }
   }

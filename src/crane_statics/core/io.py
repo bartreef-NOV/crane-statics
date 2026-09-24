@@ -22,7 +22,7 @@ class DocumentIOError(Exception):
 
 
 _AUTHORED_SCHEMA_FILES = {
-    "5.12.0": "crane-statics-v5.12.schema.json",
+    "5.13.0": "crane-statics-v5.13.schema.json",
 }
 
 
@@ -40,9 +40,9 @@ def _validate_authored_schema(data: dict[str, Any]) -> None:
     if schema_obj.get("name") != "crane-statics":
         raise DocumentIOError("Only crane-statics authored input is supported")
     version = schema_obj.get("version")
-    schema_filename = _AUTHORED_SCHEMA_FILES.get(version)
+    schema_filename = _AUTHORED_SCHEMA_FILES.get(str(version))
     if not schema_filename:
-        raise DocumentIOError(f"Unsupported authored schema version {version!r}; expected '5.12.0'")
+        raise DocumentIOError(f"Unsupported authored schema version {version!r}; expected '5.13.0'")
     validator = _load_schema_validator(schema_filename)
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
     if not errors:
@@ -109,7 +109,7 @@ def create_default_document() -> CraneDocument:
     default_data = {
         "schema": {
             "name": "crane-statics",
-            "version": "5.12.0",
+            "version": "5.13.0",
         },
         "metadata": {
             "name": "New Crane Model",
@@ -164,10 +164,9 @@ def create_default_document() -> CraneDocument:
                 "MH": {
                     "rope_segments": [{"from": "boom_heel", "to": "mh_hook"}],
                     "support_node_id": "mh_hook",
-                    "hook_travel": {"min_m": 0.0, "max_m": 0.0},
                     "hook_daf": 1.0,
                     "offlead_deg": 0.0,
-                    "side_lead_deg": 0.0,
+                    "sidelead_deg": 0.0,
                     "falls": 1,
                     "hook_mass_t": 0.0,
                     "contractual_points": [{"outreach_m": 0.0, "load_t": 0.0}],

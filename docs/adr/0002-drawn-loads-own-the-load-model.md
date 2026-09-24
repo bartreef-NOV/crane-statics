@@ -45,7 +45,7 @@ Load Summary read the same values, through the same interface, as the arrows on
 screen.
 
 **Scope is the X/Z plane, stated in the interface.** Lateral acceleration
-(`accel_y_m_s2`), roll acceleration, side lead and Y-axis wind produce purely
+(`accel_y_m_s2`), roll acceleration, sidelead and Y-axis wind produce purely
 out-of-plane forces in the solver — `engine.py::_build_split_support_reactions`
 routes them into `fy` alone, never into X/Z equilibrium. They are therefore
 deliberately *absent* from `LoadConditions` rather than accepted and silently

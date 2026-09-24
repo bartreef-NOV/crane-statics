@@ -24,7 +24,7 @@ class DirectionalAnalysisCase:
 
     wind_direction: str
     offlead_deg: Optional[float]
-    side_lead_deg: Optional[float]
+    sidelead_deg: Optional[float]
 
 
 def _signed_candidates(value: float) -> tuple[float, ...]:
@@ -35,7 +35,7 @@ def _signed_candidates(value: float) -> tuple[float, ...]:
 
 
 def iter_wind_directional_cases(
-    hoist,
+    hoist: Any,
     wind_speed_m_s: float,
 ) -> Iterator[DirectionalAnalysisCase]:
     """Yield wind-direction-only cases for chart sweeps."""
@@ -44,21 +44,21 @@ def iter_wind_directional_cases(
 
 
 def iter_wind_lead_directional_cases(
-    hoist,
+    hoist: Any,
     wind_speed_m_s: float,
 ) -> Iterator[DirectionalAnalysisCase]:
     """Yield all wind and signed-lead combinations for Auto-Set worst-case evaluation."""
     offlead_values = _signed_candidates(getattr(hoist, "offlead_deg", 0.0))
-    side_lead_values = _signed_candidates(
-        getattr(hoist, "side_lead_deg", getattr(hoist, "offlead_deg", 0.0))
+    sidelead_values = _signed_candidates(
+        getattr(hoist, "sidelead_deg", getattr(hoist, "offlead_deg", 0.0))
     )
     for offlead_deg in offlead_values:
-        for side_lead_deg in side_lead_values:
+        for sidelead_deg in sidelead_values:
             for wind_direction in candidate_wind_directions(wind_speed_m_s):
-                yield DirectionalAnalysisCase(wind_direction, offlead_deg, side_lead_deg)
+                yield DirectionalAnalysisCase(wind_direction, offlead_deg, sidelead_deg)
 
 
-def _split_mode_overrides(hoist) -> dict[str, dict[str, float | int | str]]:
+def _split_mode_overrides(hoist: Any) -> dict[str, dict[str, float | int | str]]:
     split_hook_mass_t = float(getattr(hoist, "split_hook_mass_t", hoist.hook_mass_t))
     normal_hook_mass_t = float(hoist.hook_mass_t)
     payload: dict[str, float | int | str] = {
@@ -74,7 +74,7 @@ def _split_mode_overrides(hoist) -> dict[str, dict[str, float | int | str]]:
     return {str(hoist.id): payload}
 
 
-def _contractual_points(hoist, mode_name: str) -> list[Any]:
+def _contractual_points(hoist: Any, mode_name: str) -> list[Any]:
     if mode_name == "split":
         split_points = getattr(hoist, "split_contractual_points", None)
         if isinstance(split_points, list):
@@ -83,7 +83,7 @@ def _contractual_points(hoist, mode_name: str) -> list[Any]:
     return list(hoist.contractual_points)
 
 
-def iter_hoist_analysis_modes(hoist) -> tuple[HoistAnalysisMode, ...]:
+def iter_hoist_analysis_modes(hoist: Any) -> tuple[HoistAnalysisMode, ...]:
     """Return the valid normal and optional split modes for a hoist."""
     modes = [
         HoistAnalysisMode(
@@ -108,7 +108,7 @@ def iter_hoist_analysis_modes(hoist) -> tuple[HoistAnalysisMode, ...]:
     return tuple(modes)
 
 
-def analysis_mode_by_name(hoist, mode_name: str) -> HoistAnalysisMode:
+def analysis_mode_by_name(hoist: Any, mode_name: str) -> HoistAnalysisMode:
     """Return one effective mode, falling back to normal when unavailable."""
     for mode in iter_hoist_analysis_modes(hoist):
         if mode.name == mode_name:

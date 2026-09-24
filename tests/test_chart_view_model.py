@@ -274,5 +274,6 @@ class TestExport:
 
 def _splitable(vm: ChartViewModel, hoist_id: str) -> bool:
     doc = vm._model.document
+    assert doc is not None
     hoist = next((h for h in doc.hoists if h.id == hoist_id), None)
     return bool(hoist is not None and getattr(hoist, "splitable_block", False))

@@ -34,7 +34,7 @@ ApplicationWindow {
             }
 
             Text {
-                text: "All components use design tokens and automatically respond to light/dark theme changes and density mode."
+                text: "All components use design tokens and automatically respond to light/dark theme changes."
                 font.pixelSize: DesignTokens.typography.body
                 color: DesignTokens.colors.textSecondary
                 wrapMode: Text.Wrap

@@ -58,7 +58,7 @@ the pure `core/session_model.py::SessionModel`: document, path, dirty flag, sele
 hoist, per-hoist state, derived design limits, and a named change-event registry.
 
 **Scene state** — `SessionModel`'s `SceneState`: what the operator has dialled in for
-one hoist. Boom angle, hook load, tackle length, offlead, side lead, wind speed and
+one hoist. Boom angle, hook load, tackle length, offlead, sidelead, wind speed and
 direction, and the three linear plus two angular accelerations. This is the *input*
 to everything drawn and everything solved.
 
@@ -85,8 +85,8 @@ between them, and not every outreach is reachable.
 **Tackle length** — rope length from the sheave to the hook, i.e. how far the hook
 hangs. Bounded by the hoist's hook-travel limits.
 
-**Offlead / side lead** — the angle by which the hoist rope departs from vertical, in
-plane (offlead) and out of plane (side lead).
+**Offlead / sidelead** — the angle by which the hoist rope departs from vertical, in
+plane (offlead) and out of plane (sidelead).
 
 **Analysis point** — `calculation/engine.py::AnalysisPoint`: the full linear response
 of the crane at one boom angle and outreach. A baseline at zero hook load, plus
@@ -103,7 +103,7 @@ place rather than a divergence between two (see
 
 **Load conditions** — the in-plane subset of scene state that produces drawn loads:
 gravity, wind profile, and X/Z D'Alembert inertia. Lateral acceleration, roll
-acceleration, side lead and Y-axis wind are deliberately *absent*: they produce only
+acceleration, sidelead and Y-axis wind are deliberately *absent*: they produce only
 out-of-plane forces, so they have no drawable vector and no effect on in-plane
 equilibrium.
 

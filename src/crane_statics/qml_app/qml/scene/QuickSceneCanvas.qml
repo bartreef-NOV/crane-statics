@@ -34,6 +34,13 @@ Item {
     property real dragOriginY: 0
     property string activeDragKind: ""
     property string hoverDragKind: ""
+    property bool hoverPickable: false
+    //: The one open tooltip, as { key, text, x, y }, or null when none is pinned.
+    property var pinnedTip: null
+
+    // A new frame renumbers everything the pinned key refers to, and may have moved
+    // or removed that element outright, so the tooltip goes with the frame it named.
+    onFrameChanged: pinnedTip = null
 
     function mapSceneX(value) {
         return sceneLayer.x + value * effectiveScale
@@ -109,63 +116,64 @@ Item {
         return Math.abs(distance - moment.radius)
     }
 
-    function tooltipAt(itemX, itemY) {
+    // Which drawn element a point lands on, as { key, text }, or null for none.
+    // ``key`` identifies the element within the current frame, which is what lets a
+    // second click on the same element close its tooltip instead of re-pinning it.
+    // Only elements that carry information are pickable: the boom axes and the drag
+    // guides are gestures, not readouts, and they answer with a cursor instead.
+    function pickAt(itemX, itemY) {
         const point = scenePointAt(itemX, itemY)
         const groups = [
-            [frame && frame.nodes ? frame.nodes : [], 5],
-            [frame && frame.markers ? frame.markers : [], -1],
-            [frame && frame.ropeSegments ? frame.ropeSegments : [], 0],
-            [frame && frame.structuralSegments ? frame.structuralSegments : [], 0],
-            [frame && frame.forceArrows ? frame.forceArrows : [], 5]
+            ["nodes", frame && frame.nodes ? frame.nodes : [], 5],
+            ["markers", frame && frame.markers ? frame.markers : [], -1],
+            ["ropes", frame && frame.ropeSegments ? frame.ropeSegments : [], 0],
+            ["structure", frame && frame.structuralSegments ? frame.structuralSegments : [], 0],
+            ["forces", frame && frame.forceArrows ? frame.forceArrows : [], 5]
         ]
         for (let groupIndex = 0; groupIndex < groups.length; ++groupIndex) {
-            const items = groups[groupIndex][0]
+            const name = groups[groupIndex][0]
+            const items = groups[groupIndex][1]
+            const slack = groups[groupIndex][2]
             for (let index = items.length - 1; index >= 0; --index) {
                 const item = items[index]
-                if (item.radius !== undefined
-                        && Math.hypot(point.x - item.scene_x, point.y - item.scene_y) <= item.radius)
-                    return item.tooltip || ""
-                if (item.scene_x !== undefined
-                        && Math.hypot(point.x - item.scene_x, point.y - item.scene_y) <= groups[groupIndex][1])
-                    return item.tooltip || ""
-                if (item.start_x !== undefined
-                        && distanceToSegment(point, item.start_x, item.start_y, item.end_x, item.end_y)
-                            <= Math.max(4, (item.width || groups[groupIndex][1]) / 2 + 2))
-                    return item.tooltip || ""
-                if (item.origin_x !== undefined
-                        && distanceToSegment(point, item.origin_x, item.origin_y, item.tip_x, item.tip_y)
-                            <= groups[groupIndex][1])
-                    return item.tooltip || ""
+                let hit = false
+                if (item.radius !== undefined)
+                    hit = Math.hypot(point.x - item.scene_x, point.y - item.scene_y) <= item.radius
+                else if (item.scene_x !== undefined)
+                    hit = Math.hypot(point.x - item.scene_x, point.y - item.scene_y) <= slack
+                else if (item.start_x !== undefined)
+                    hit = distanceToSegment(point, item.start_x, item.start_y, item.end_x, item.end_y)
+                        <= Math.max(4, (item.width || slack) / 2 + 2)
+                else if (item.origin_x !== undefined)
+                    hit = distanceToSegment(point, item.origin_x, item.origin_y, item.tip_x, item.tip_y)
+                        <= slack
+                if (hit && item.tooltip)
+                    return { "key": `${name}:${index}`, "text": item.tooltip }
             }
         }
         const moments = frame && frame.moments ? frame.moments : []
         for (let index = moments.length - 1; index >= 0; --index) {
             const moment = moments[index]
-            if (distanceToArc(point, moment) <= 4
+            if ((distanceToArc(point, moment) <= 4
                     || Math.hypot(point.x - moment.arrow_tip_x, point.y - moment.arrow_tip_y) <= 8)
-                return moment.tooltip || ""
+                    && moment.tooltip)
+                return { "key": `moments:${index}`, "text": moment.tooltip }
         }
-        const axes = frame && frame.boomAxes ? frame.boomAxes : []
-        for (let index = axes.length - 1; index >= 0; --index) {
-            const axis = axes[index]
-            if (distanceToSegment(point, axis.start_x, axis.start_y, axis.end_x, axis.end_y) <= 5)
-                return qsTr("Drag to set boom angle")
+        return null
+    }
+
+    // Clicking an element pins its tooltip; clicking it again, or anywhere that
+    // carries nothing, closes it. Only one is ever open: it is one property.
+    function toggleTipAt(itemX, itemY) {
+        // A drag target owns its press, so it never opens a tooltip.
+        if (dragTargetAt(itemX, itemY).length > 0)
+            return
+        const pick = pickAt(itemX, itemY)
+        if (pick === null || (pinnedTip !== null && pinnedTip.key === pick.key)) {
+            pinnedTip = null
+            return
         }
-        const guides = frame && frame.guides ? frame.guides : []
-        for (let index = guides.length - 1; index >= 0; --index) {
-            const guide = guides[index]
-            if (guide.kind === "outreach" && Math.abs(point.x - guide.scene_x) <= 5)
-                return guide.label
-            if (guide.kind === "hook_height" && Math.abs(point.y - guide.scene_y) <= 5)
-                return guide.label
-        }
-        const labels = frame && frame.labels ? frame.labels : []
-        for (let index = labels.length - 1; index >= 0; --index) {
-            const label = labels[index]
-            if (Math.hypot(point.x - label.scene_x, point.y - label.scene_y) <= 12)
-                return label.text
-        }
-        return ""
+        pinnedTip = { "key": pick.key, "text": pick.text, "x": itemX, "y": itemY }
     }
 
     clip: true
@@ -485,33 +493,33 @@ Item {
         cursorShape: root.hoverDragKind === "outreach" ? Qt.SizeHorCursor
             : root.hoverDragKind === "tackle_length" ? Qt.SizeVerCursor
             : root.hoverDragKind === "boom_angle" ? Qt.OpenHandCursor
+            : root.hoverPickable ? Qt.PointingHandCursor
             : Qt.ArrowCursor
         onPointChanged: {
             root.hoverDragKind = root.dragTargetAt(point.position.x, point.position.y)
-            const tip = root.tooltipAt(point.position.x, point.position.y)
-            if (tip !== quickTooltip.text) {
-                quickTooltip.text = tip
-                quickTooltip.visible = tip.length > 0
-            }
-            quickTooltip.x = Math.max(
-                8,
-                Math.min(root.width - quickTooltip.width - 8, point.position.x + 16)
-            )
-            quickTooltip.y = Math.max(
-                8,
-                Math.min(root.height - quickTooltip.height - 8, point.position.y + 16)
-            )
+            root.hoverPickable = root.hoverDragKind.length === 0
+                && root.pickAt(point.position.x, point.position.y) !== null
         }
         onHoveredChanged: if (!hovered) {
             root.hoverDragKind = ""
-            quickTooltip.visible = false
+            root.hoverPickable = false
         }
     }
 
     ToolTip {
         id: quickTooltip
-        visible: false
-        delay: 300
+        objectName: "quickSceneTooltip"
+        // Pinned, not hovered: no delay to open and no timeout to close it.
+        delay: 0
+        timeout: -1
+        visible: root.pinnedTip !== null
+        text: root.pinnedTip ? root.pinnedTip.text : ""
+        x: root.pinnedTip
+            ? Math.max(8, Math.min(root.width - width - 8, root.pinnedTip.x + 16))
+            : 0
+        y: root.pinnedTip
+            ? Math.max(8, Math.min(root.height - height - 8, root.pinnedTip.y + 16))
+            : 0
     }
 
     WheelHandler {
@@ -566,7 +574,14 @@ Item {
 
     TapHandler {
         acceptedButtons: Qt.LeftButton
-        onDoubleTapped: root.fitView()
+        onSingleTapped: eventPoint => root.toggleTipAt(eventPoint.position.x, eventPoint.position.y)
+        // Fit-view keeps the empty canvas to itself, so double-clicking an element
+        // cannot reset the view out from under the tooltip it just opened.
+        onDoubleTapped: eventPoint => {
+            if (root.pickAt(eventPoint.position.x, eventPoint.position.y) === null
+                    && root.dragTargetAt(eventPoint.position.x, eventPoint.position.y).length === 0)
+                root.fitView()
+        }
     }
 
     TapHandler {
@@ -586,6 +601,7 @@ Item {
                 model: [
                     { key: "show_hook_forces", label: qsTr("Hook Force") },
                     { key: "show_gravity_forces", label: qsTr("Gravity Forces") },
+                    { key: "show_rope_weight_forces", label: qsTr("Rope Weight") },
                     { key: "show_wind_forces", label: qsTr("Wind Forces") },
                     { key: "show_inertia_forces", label: qsTr("Inertia Forces") },
                     { key: "show_reaction_forces", label: qsTr("Reactions") },

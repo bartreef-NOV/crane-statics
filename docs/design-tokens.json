@@ -313,7 +313,7 @@
       "easing": "InOutQuad"
     },
     "layout": {
-      "description": "Responsive breakpoints and density modes",
+      "description": "Responsive breakpoints",
       "breakpoints": {
         "compact": {
           "value": 1240,
@@ -326,23 +326,6 @@
         "ultraWide": {
           "value": 1800,
           "description": "Width ≥ 1800px → data-dense table layouts"
-        }
-      },
-      "densityModes": {
-        "relaxed": {
-          "rowHeightMultiplier": 1.15,
-          "spacingMultiplier": 1.25,
-          "usage": "Data entry forms, comfortable spacing"
-        },
-        "normal": {
-          "rowHeightMultiplier": 1.0,
-          "spacingMultiplier": 1.0,
-          "usage": "Balanced default mode"
-        },
-        "compact": {
-          "rowHeightMultiplier": 0.85,
-          "spacingMultiplier": 0.75,
-          "usage": "Data-heavy tables, efficient space usage"
         }
       }
     }

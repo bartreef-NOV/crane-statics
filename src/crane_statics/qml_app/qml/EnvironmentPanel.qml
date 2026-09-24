@@ -133,6 +133,18 @@ ColumnLayout {
 
     StyledGroupBox {
         Layout.fillWidth: true
+        title: qsTr("Design Duty")
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: root.layoutSpacing
+
+            EnvRow { label: qsTr("Hook Height at Min Outreach (m)"); fieldKey: "hook_height_at_min_outreach_m" }
+        }
+    }
+
+    StyledGroupBox {
+        Layout.fillWidth: true
         title: qsTr("Accelerations")
 
         ColumnLayout {

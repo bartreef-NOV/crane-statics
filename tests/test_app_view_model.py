@@ -161,43 +161,6 @@ class TestColorScheme:
             assert QGuiApplication.styleHints().colorScheme() == expected
 
 
-class TestDensity:
-    @pytest.fixture(autouse=True)
-    def _isolate_settings(self):
-        settings = QSettings("CraneStatics", "CraneStatics")
-        had_value = settings.contains("ui/density")
-        previous = settings.value("ui/density") if had_value else None
-        settings.remove("ui/density")
-        settings.sync()
-        yield
-        if had_value:
-            settings.setValue("ui/density", previous)
-        else:
-            settings.remove("ui/density")
-        settings.sync()
-
-    def test_defaults_to_normal_density(self):
-        assert AppViewModel(SessionState()).density == "normal"
-
-    @pytest.mark.parametrize("density", ["relaxed", "normal", "compact"])
-    def test_density_choice_persists_across_instances(self, density):
-        first = AppViewModel(SessionState())
-        first.setDensity(density)
-
-        assert first.density == density
-        assert AppViewModel(SessionState()).density == density
-
-    def test_unknown_density_is_ignored(self):
-        vm = AppViewModel(SessionState())
-        changes: list[int] = []
-        vm.densityChanged.connect(lambda: changes.append(1))
-
-        vm.setDensity("spacious")
-
-        assert vm.density == "normal"
-        assert changes == []
-
-
 class TestAccessibilityTokens:
     @pytest.mark.parametrize(
         "background",

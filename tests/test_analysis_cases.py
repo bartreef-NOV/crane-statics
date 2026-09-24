@@ -9,7 +9,6 @@ from crane_statics.core.analysis_cases import (
 )
 from crane_statics.core.io import load_document
 
-
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
 
 

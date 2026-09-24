@@ -94,8 +94,8 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Outreach (m):")
-                from: 0
-                to: 300
+                from: sceneVm.outreachMin
+                to: sceneVm.outreachMax
                 value: sceneVm.outreach
                 onCommitted: newValue => sceneVm.setOutreach(newValue)
             }
@@ -150,7 +150,7 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Off Lead (deg):")
+                label: qsTr("Offlead (deg):")
                 from: -90
                 to: 90
                 flippable: true
@@ -160,12 +160,12 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Side Lead (deg):")
+                label: qsTr("Sidelead (deg):")
                 from: -90
                 to: 90
                 flippable: true
-                value: sceneVm.sideLead
-                onCommitted: newValue => sceneVm.setSideLead(newValue)
+                value: sceneVm.sidelead
+                onCommitted: newValue => sceneVm.setSidelead(newValue)
             }
         }
     }

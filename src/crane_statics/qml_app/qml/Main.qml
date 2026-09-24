@@ -105,40 +105,8 @@ ApplicationWindow {
                     ActionGroup.group: appearanceGroup
                     onTriggered: appVm.setColorScheme("dark")
                 }
-                MenuSeparator {}
-                Menu {
-                    title: qsTr("&Density")
-                    ActionGroup { id: densityGroup }
-                    Action {
-                        text: qsTr("&Relaxed")
-                        checkable: true
-                        checked: appVm.density === "relaxed"
-                        ActionGroup.group: densityGroup
-                        onTriggered: appVm.setDensity("relaxed")
-                    }
-                    Action {
-                        text: qsTr("&Normal")
-                        checkable: true
-                        checked: appVm.density === "normal"
-                        ActionGroup.group: densityGroup
-                        onTriggered: appVm.setDensity("normal")
-                    }
-                    Action {
-                        text: qsTr("&Compact")
-                        checkable: true
-                        checked: appVm.density === "compact"
-                        ActionGroup.group: densityGroup
-                        onTriggered: appVm.setDensity("compact")
-                    }
-                }
             }
         }
-    }
-
-    Binding {
-        target: Design.DesignTokens.layout
-        property: "density"
-        value: appVm.density
     }
 
     Binding {

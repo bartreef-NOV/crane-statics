@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from crane_statics.core.io import create_default_document, load_document
+from crane_statics.data.models import is_solve_hoist
 from crane_statics.core.model_health import (
     collect_model_health_issues,
     format_issue_summary,
@@ -55,9 +56,9 @@ class TestHealthChecks:
 
         assert any("solve-mode boom hoist" in issue for issue in blocking)
 
-    def test_insufficient_rope_length_warns(self, document):
-        payload_hoist = next(h for h in document.hoists if h.rope_length_m is not None)
-        payload_hoist.rope_length_m = 0.0
+    def test_insufficient_boom_hoist_rope_length_warns(self, document):
+        boom_hoist = next(h for h in document.hoists if is_solve_hoist(document, h.id))
+        boom_hoist.rope_length_m = 0.0
 
         _blocking, warnings = collect_model_health_issues(document)
 
@@ -70,6 +71,32 @@ class TestHealthChecks:
         _blocking, warnings = collect_model_health_issues(document)
 
         assert not any("insufficient rope length" in issue for issue in warnings)
+
+    def test_short_payload_rope_length_is_not_a_warning_because_it_is_derived(self, document):
+        payload_hoist = next(h for h in document.hoists if not is_solve_hoist(document, h.id))
+        payload_hoist.rope_length_m = 0.0
+
+        _blocking, warnings = collect_model_health_issues(document)
+
+        assert not any("insufficient rope length" in issue for issue in warnings)
+
+    def test_failed_derivation_warns(self, document):
+        payload_hoist = next(h for h in document.hoists if not is_solve_hoist(document, h.id))
+        payload_hoist.rope_length_m = None
+        payload_hoist.max_hook_travel_m = None
+
+        _blocking, warnings = collect_model_health_issues(document)
+
+        assert any("could not be derived" in issue for issue in warnings)
+
+    def test_design_height_below_the_sheave_at_max_outreach_warns(self, document):
+        # The sheaves sit at ~162 m boomed up and ~30 m boomed out, so a design
+        # height of 40 m is reachable close in and unreachable far out.
+        document.hook_height_at_min_outreach_m = 40.0
+
+        _blocking, warnings = collect_model_health_issues(document)
+
+        assert any("cannot reach the design hook height" in issue for issue in warnings)
 
     def test_validation_error_is_prepended_as_blocking(self, document):
         severity, verdict, checks = health_status(document, "bad value")

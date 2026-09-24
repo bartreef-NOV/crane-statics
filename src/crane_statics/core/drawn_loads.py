@@ -6,7 +6,7 @@ projection and styling belong to the renderer, which applies them to what this
 module returns.
 
 Scope: this module models the **X/Z plane only**. Lateral acceleration
-(``accel_y_m_s2``), roll acceleration, side-lead and Y-axis wind produce purely
+(``accel_y_m_s2``), roll acceleration, sidelead and Y-axis wind produce purely
 out-of-plane (Y) forces -- see ``engine._build_split_support_reactions``, which
 routes them into ``fy`` alone -- so they have no drawable vector here and no
 effect on in-plane equilibrium. They are deliberately absent from
@@ -19,6 +19,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Mapping, Optional, Sequence
 
+from ..calculation.rope_mass import RopeNodeMass, rope_mass_at_nodes
 from ..presentation.formatters import node_display_name
 
 # Unified reaction semantics: a reaction's participating bodies and the node it
@@ -75,6 +76,7 @@ _SYNTHETIC_SUPPORT_BY_BODY = {
 }
 
 GRAVITY = "Gravity"
+ROPE_WEIGHT = "Rope weight"
 IDLE_HOOK_MASS = "Idle hook mass"
 HOOK_LOAD = "Hook load"
 WIND = "Wind"
@@ -85,6 +87,7 @@ REACTIONS = "Reactions"
 #: Report/overlay order. The Equilibrium Check renders categories in this order.
 CATEGORY_ORDER = (
     GRAVITY,
+    ROPE_WEIGHT,
     IDLE_HOOK_MASS,
     HOOK_LOAD,
     WIND,
@@ -157,7 +160,7 @@ class BodyLoads:
 class LoadConditions:
     """In-plane environmental and hoist state a load set is evaluated at.
 
-    Out-of-plane inputs (lateral/roll acceleration, side-lead, Y-wind) are
+    Out-of-plane inputs (lateral/roll acceleration, sidelead, Y-wind) are
     absent by design -- see the module docstring.
     """
 
@@ -438,6 +441,68 @@ class _LoadBuilder:
                         detail=f"Split block weight\nFz={fz:.1f} kN",
                     )
                 )
+        return tuple(vectors)
+
+    def rope_weight_node_masses(self) -> dict[str, RopeNodeMass]:
+        """Rope self-weight lumped per node, filtered to the selected free body."""
+        masses = rope_mass_at_nodes(
+            dict(self._doc),
+            self._positions,
+            effective_mult=lambda rope_id, segment, authored_mult: effective_segment_mult(
+                self._hoist,
+                segment,
+                authored_mult,
+                rope_id,
+                split_mode_active=self._c.split_mode_active,
+            ),
+        )
+        return {
+            node_id: entry
+            for node_id, entry in masses.items()
+            if node_id in self._positions
+            and entry.mass_t > 1e-9
+            and (not self._filter.is_free_body or self._filter.owns_node(node_id))
+        }
+
+    def rope_weight(self) -> tuple[LoadVector, ...]:
+        """One vector per node carrying rope: its weight and its inertia combined.
+
+        The falls and the winch drum are the same rope, so they are reported as
+        one arrow per node rather than split across the Gravity and Inertia
+        categories -- the detail text names the reeved and spooled shares.
+        """
+        g_kN_per_t = abs(float(self._env.get("gravity_m_s2", 9.81)))
+        vessel_motion = self._env.get("vessel_motion", {}) or {}
+        ref_x = float(vessel_motion.get("reference_x_m", 0.0))
+        ref_z = float(vessel_motion.get("reference_z_m", 0.0))
+        ax = float(self._c.accel_x_m_s2)
+        az = float(self._c.accel_z_m_s2)
+        pitch = float(self._c.pitch_accel_rad_s2)
+
+        vectors: list[LoadVector] = []
+        for node_id, entry in self.rope_weight_node_masses().items():
+            position = self._positions[node_id]
+            xw, zw = float(position["x"]), float(position["z"])
+            mass_t = float(entry.mass_t)
+            # Rope carries no wind area and no hook DAF: dead mass on a moving vessel.
+            fx = -mass_t * (ax + pitch * (zw - ref_z))
+            fz = -mass_t * (g_kN_per_t + az - pitch * (xw - ref_x))
+            name = node_display_name(node_id)
+            vectors.append(
+                LoadVector(
+                    world_x=xw,
+                    world_z=zw,
+                    fx_kN=fx,
+                    fz_kN=fz,
+                    category=ROPE_WEIGHT,
+                    label=f"Rope weight @ {name}: {mass_t:.1f} t",
+                    detail=(
+                        f"Rope weight @ {name} ({', '.join(entry.hoist_ids)})\n"
+                        f"reeved {entry.reeved_t:.1f} t + spooled {entry.spooled_t:.1f} t\n"
+                        f"Fx={fx:.1f} kN  Fz={fz:.1f} kN"
+                    ),
+                )
+            )
         return tuple(vectors)
 
     def wind(self) -> tuple[LoadVector, ...]:
@@ -756,6 +821,7 @@ class _LoadBuilder:
             (vector.world_x, vector.world_z, vector.fx_kN, vector.fz_kN)
             for vector in (
                 self.gravity()
+                + self.rope_weight()
                 + self.idle_hook_mass()
                 + self.hook_load()
                 + self.wind()
@@ -896,12 +962,15 @@ class _LoadBuilder:
             if abs(fx) >= 1e-3 or abs(fz) >= 1e-3:
                 loaded.add(str(node_id))
 
+        loaded.update(self.rope_weight_node_masses())
+
         return loaded
 
     def build(self) -> BodyLoads:
         return BodyLoads(
             categories=(
                 (GRAVITY, self.gravity()),
+                (ROPE_WEIGHT, self.rope_weight()),
                 (IDLE_HOOK_MASS, self.idle_hook_mass()),
                 (HOOK_LOAD, self.hook_load()),
                 (WIND, self.wind()),

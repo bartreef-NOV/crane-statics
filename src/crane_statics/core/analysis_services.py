@@ -16,6 +16,8 @@ from ..presentation.formatters import ConnectionFormatter, HoistFormatter, RopeF
 from .results import ResultRow
 
 if TYPE_CHECKING:
+    from ..calculation.engine import AllowableCapacity, AnalysisPoint
+    from ..data.models import CraneDocument, Hoist
     from .session_model import SessionModel
 
 _LOG = logging.getLogger(__name__)
@@ -28,7 +30,9 @@ class KinematicsService:
         self._session = session
         self._angle_bounds: dict[str, tuple[float, float]] = {}
         self._kin: Optional[KinematicsAdapter] = None
-        self._kin_doc = None  # identity-tracks which doc the cached adapter was built from
+        self._kin_doc: Optional[CraneDocument] = (
+            None  # identity-tracks which doc the cached adapter was built from
+        )
 
     @property
     def angle_bounds(self) -> dict[str, tuple[float, float]]:
@@ -51,7 +55,7 @@ class KinematicsService:
             self._kin_doc = doc
         return self._kin
 
-    def recompute_angle_bounds(self, doc) -> None:
+    def recompute_angle_bounds(self, doc: Optional[CraneDocument]) -> None:
         """Recompute angle bounds for all hoists from document geometry."""
         self._angle_bounds = {}
         if not doc:
@@ -97,7 +101,7 @@ class HoistStateService:
     def __init__(self, session: SessionModel):
         self._session = session
 
-    def contractual_points_for_hoist_mode(self, hoist) -> list:
+    def contractual_points_for_hoist_mode(self, hoist: Optional[Hoist]) -> list:
         """Get contractual load points for hoist's current mode."""
         if hoist is None:
             return []
@@ -129,7 +133,7 @@ class HoistStateService:
                 _LOG.debug("Invalid gravity value in document; falling back to default: %s", exc)
         return 9.81
 
-    def selected_hoist(self):
+    def selected_hoist(self) -> Optional[Hoist]:
         """Get currently selected hoist object."""
         hoist_id = self._session.selected_hoist_id
         return self._session.payload_hoist_by_id(hoist_id)
@@ -151,8 +155,9 @@ class HoistStateService:
         split_active = bool(state is not None and state.split_mode_active)
         splitable = bool(getattr(hoist, "splitable_block", False))
         if split_active and splitable:
-            if getattr(hoist, "split_falls", None) is not None:
-                falls = int(hoist.split_falls)
+            split_falls = getattr(hoist, "split_falls", None)
+            if split_falls is not None:
+                falls = int(split_falls)
             split_hook_mass_t = getattr(hoist, "split_hook_mass_t", None)
             if split_hook_mass_t is not None:
                 split_hook_mass_t = float(split_hook_mass_t)
@@ -225,7 +230,7 @@ class AnalysisCalculator:
         self._kinematics = kinematics_svc
         self._hoist = hoist_svc
 
-    def compute_analysis_point(self):
+    def compute_analysis_point(self) -> Optional[AnalysisPoint]:
         """Compute equilibrium check for current geometry and loads."""
         doc = self._session.document
         hoist_id = self._session.selected_hoist_id
@@ -249,12 +254,13 @@ class AnalysisCalculator:
             pitch_accel_rad_s2=sc.pitch_accel_rad_s2,
             roll_accel_rad_s2=sc.roll_accel_rad_s2,
             offlead_deg=sc.offlead_deg,
-            side_lead_deg=sc.side_lead_deg,
+            sidelead_deg=sc.sidelead_deg,
             hoist_runtime_overrides=overrides,
+            tackle_length_m=sc.tackle_length_m,
         )
 
     def compute_result_rows(
-        self, pt, hook_load_kN: float
+        self, pt: AnalysisPoint, hook_load_kN: float
     ) -> tuple[list[ResultRow], list[ResultRow]]:
         """Transform equilibrium check into result row objects for UI display."""
         active_limits = {
@@ -462,7 +468,7 @@ class AnalysisCalculator:
         rope_rows, conn_rows = self.compute_result_rows(pt, state.scene_state.hook_load_kN)
         return pt, rope_rows, conn_rows
 
-    def compute_auto_load(self):
+    def compute_auto_load(self) -> Optional[AllowableCapacity]:
         """Invert enabled limits to find allowable hook load; None when unavailable."""
         doc = self._session.document
         hoist_id = self._session.selected_hoist_id
@@ -493,11 +499,13 @@ class AnalysisCalculator:
             pitch_accel_rad_s2=sc.pitch_accel_rad_s2,
             roll_accel_rad_s2=sc.roll_accel_rad_s2,
             offlead_deg=abs(float(sc.offlead_deg)),
-            side_lead_deg=sc.side_lead_deg,
+            sidelead_deg=sc.sidelead_deg,
             hoist_runtime_overrides=self._hoist.active_hoist_runtime_overrides(),
         )
 
-    def resolve_row_demand(self, point, hook_load_kN: float, row_meta: dict) -> Optional[float]:
+    def resolve_row_demand(
+        self, point: AnalysisPoint, hook_load_kN: float, row_meta: dict
+    ) -> Optional[float]:
         """Extract demand value from analysis point for a specific result row."""
         kind = str(row_meta.get("kind") or "")
         entity_id = str(row_meta.get("entity_id") or "")

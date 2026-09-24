@@ -335,9 +335,8 @@ class TestModelViewModelEditing:
             "Split Falls",
             "Split Hook Mass (t)",
             "DAF",
-            "Off Lead (deg)",
-            "Side Lead (deg)",
-            "Min Hook Travel (m)",
+            "Offlead (deg)",
+            "Sidelead (deg)",
             "Max Hook Travel (m)",
         ):
             column = headers.index(payload_header)
@@ -357,6 +356,174 @@ class TestModelViewModelEditing:
             )
             == f"{float(boom_fields['linear_mass_kg_m']):.3f}"
         )
+
+
+class TestInlineCellEditing:
+    """Editing a cell in place, the way the table delegate does it.
+
+    Every commit goes back out through the same record builders the Add dialogs
+    use, so these tests are as much about what the tables refuse as about what
+    they write: a row that shares a table with another kind of record must not
+    accept fields it does not own, and a derived column must not accept anything.
+    """
+
+    @staticmethod
+    def _column(model, header: str) -> int:
+        headers = [
+            model.headerData(column, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole)
+            for column in range(model.columnCount())
+        ]
+        return headers.index(header)
+
+    @staticmethod
+    def _row_of(model, record_id: str) -> int:
+        return next(row for row in range(model.count) if model.record_at(row).id == record_id)
+
+    @staticmethod
+    def _role(model, name: bytes) -> int:
+        return int(
+            next(role for role, role_name in model.roleNames().items() if bytes(role_name) == name)
+        )
+
+    def _cell(self, model, row: int, column: int, name: bytes):
+        return model.data(model.index(row, column), self._role(model, name))
+
+    def test_editing_a_coordinate_cell_writes_through(self, model_vm, document):
+        model_vm.selectBody("platform")
+        model = model_vm.nodesModel
+        row = self._row_of(model, "mh_winch")
+        column = self._column(model, "X (m)")
+
+        assert model.commitCell(row, column, "12.500") is True
+
+        assert next(n for n in document.nodes if n.id == "mh_winch").x_m == pytest.approx(12.5)
+        assert model_vm._model.dirty is True
+        assert model.data(model.index(row, column), Qt.ItemDataRole.DisplayRole) == "12.500"
+
+    def test_invalid_value_reports_a_failure_and_changes_nothing(self, model_vm, document):
+        model_vm.selectBody("platform")
+        model = model_vm.nodesModel
+        row = self._row_of(model, "mh_winch")
+        column = self._column(model, "X (m)")
+        before = next(n for n in document.nodes if n.id == "mh_winch").x_m
+        failures: list[str] = []
+        model_vm.editFailed.connect(failures.append)
+
+        assert model.commitCell(row, column, "not a number") is False
+
+        assert failures
+        assert next(n for n in document.nodes if n.id == "mh_winch").x_m == pytest.approx(before)
+
+    def test_hoist_columns_follow_the_kind_of_hoist_in_the_row(self, model_vm):
+        model = model_vm.hoistsModel
+        boom_row = self._row_of(model, "BH")
+        payload_row = self._row_of(model, "MH")
+        rope_length = self._column(model, "Rope Length (m)")
+        falls = self._column(model, "Falls")
+        travel = self._column(model, "Max Hook Travel (m)")
+        linear_mass = self._column(model, "Linear Mass (kg/m)")
+
+        # The boom hoist authors its rope length; a payload hoist derives it.
+        assert model.isCellEditable(boom_row, rope_length) is True
+        assert model.isCellEditable(payload_row, rope_length) is False
+        # Payload-only fields, and the id every rope and hook is named after.
+        assert model.isCellEditable(boom_row, falls) is False
+        assert model.isCellEditable(payload_row, falls) is True
+        assert model.isCellEditable(payload_row, self._column(model, "ID")) is False
+        # Derived on every row.
+        assert model.isCellEditable(boom_row, travel) is False
+        assert model.isCellEditable(payload_row, travel) is False
+        # Rope weight applies to both.
+        assert model.isCellEditable(boom_row, linear_mass) is True
+        assert model.isCellEditable(payload_row, linear_mass) is True
+
+    def test_a_read_only_cell_refuses_a_commit(self, model_vm, document):
+        model = model_vm.hoistsModel
+        row = self._row_of(model, "MH")
+        column = self._column(model, "Max Hook Travel (m)")
+        before = next(h for h in document.hoists if h.id == "MH").max_hook_travel_m
+
+        assert model.commitCell(row, column, "99.0") is False
+
+        assert next(h for h in document.hoists if h.id == "MH").max_hook_travel_m == before
+        flags = model.flags(model.index(row, column))
+        assert not flags & Qt.ItemFlag.ItemIsEditable
+
+    def test_each_column_names_the_editor_the_delegate_should_open(self, model_vm):
+        hoists = model_vm.hoistsModel
+        row = self._row_of(hoists, "MH")
+
+        assert (
+            self._cell(hoists, row, self._column(hoists, "Support Node"), b"editorKind") == "node"
+        )
+        assert self._cell(hoists, row, self._column(hoists, "Splittable"), b"editorKind") == "bool"
+        assert self._cell(hoists, row, self._column(hoists, "Falls"), b"editorKind") == "int"
+        assert (
+            self._cell(hoists, row, self._column(hoists, "Hook Mass (t)"), b"editorKind")
+            == "number"
+        )
+        # A check box is seeded with the value, a text field with what the cell shows.
+        assert self._cell(hoists, row, self._column(hoists, "Splittable"), b"edit") is True
+        hoist = hoists.record_at(row)
+        assert self._cell(hoists, row, self._column(hoists, "Falls"), b"edit") == hoist.falls
+        assert self._cell(hoists, row, self._column(hoists, "Hook Mass (t)"), b"edit") == (
+            f"{hoist.hook_mass_t:.3f}"
+        )
+
+    def test_toggling_splittable_writes_the_boolean(self, model_vm, document):
+        model = model_vm.hoistsModel
+        row = self._row_of(model, "MH")
+        column = self._column(model, "Splittable")
+        assert next(h for h in document.hoists if h.id == "MH").splitable_block is True
+
+        assert model.commitCell(row, column, False) is True
+
+        assert next(h for h in document.hoists if h.id == "MH").splitable_block is False
+        assert model.isCellEditable(row, self._column(model, "Split Falls")) is False
+
+    def test_editing_a_segment_endpoint_moves_the_rope(self, model_vm, document):
+        model_vm.selectHoist("MH")
+        model = model_vm.ropeSegmentsModel
+        column = self._column(model, "From Node")
+        replacement = "mh_boom_sheave_3"
+        row = next(r for r in range(model.count) if model.record_at(r).from_node_id != replacement)
+        target = model.record_at(row).to_node_id
+
+        assert model.commitCell(row, column, replacement) is True
+
+        rope = next(r for r in document.ropes if r.id == "MH__rope")
+        assert any(
+            seg.from_node_id == replacement and seg.to_node_id == target for seg in rope.segments
+        )
+
+    def test_renaming_a_reeved_node_rewrites_references_and_still_solves(self, model_vm, document):
+        """A node id is a reference, so the rename has to follow it everywhere.
+
+        ``mh_boom_sheave_4`` is both reeved through the main hoist rope and the
+        hoist's support node, so a rename that only touched the node list would
+        leave two dangling references and the crane would no longer solve.
+        """
+        from crane_statics.calculation import CraneCalculator
+
+        model_vm.selectBody("boom")
+        model = model_vm.nodesModel
+        row = self._row_of(model, "mh_boom_sheave_4")
+
+        assert model.commitCell(row, self._column(model, "ID"), "mh_head_sheave") is True
+
+        assert next(h for h in document.hoists if h.id == "MH").support_node_id == "mh_head_sheave"
+        reeved = {
+            node_id
+            for rope in document.ropes
+            for segment in rope.segments
+            for node_id in (segment.from_node_id, segment.to_node_id)
+        }
+        assert "mh_head_sheave" in reeved
+        assert "mh_boom_sheave_4" not in reeved
+        assert not any(n.id == "mh_boom_sheave_4" for n in document.nodes)
+
+        point = CraneCalculator(document).compute_analysis_point(60.0, 0.0, "MH")
+        assert point is not None
 
 
 class TestEnvironmentEditing:

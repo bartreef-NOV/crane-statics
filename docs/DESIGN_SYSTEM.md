@@ -9,7 +9,7 @@ The Crane Statics Design System is a token-based, QML-native system designed for
 1. **Token-First**: All visual properties are defined as reusable tokens (colors, spacing, typography, sizing)
 2. **Fusion-Native**: Leverages Qt's Fusion style and SystemPalette for OS-aware light/dark themes
 3. **Minimal Customization**: Follows OS conventions; no hardcoded colors or custom theme machinery
-4. **Responsive**: Adapts layout and density based on window size and user preference
+4. **Responsive**: Adapts layout based on window size
 5. **Accessible**: Ensures WCAG AA contrast standards in both light and dark modes
 
 ---
@@ -134,8 +134,8 @@ Rectangle {
 | `sizing.inputHeight` | 32px | Text input, combo box, spinner |
 | `sizing.inputHeightSmall` | 24px | Compact input field |
 | `sizing.rowHeight` | 28px | Table/list row height |
-| `sizing.rowHeightCompact` | 24px | Compact table row (density mode) |
-| `sizing.rowHeightRelaxed` | 32px | Relaxed table row (density mode) |
+| `sizing.rowHeightCompact` | 24px | Compact table row |
+| `sizing.rowHeightRelaxed` | 32px | Relaxed table row |
 
 **Icon sizes:**
 - `sizing.iconSmall`: 16px (inline icons)
@@ -163,22 +163,17 @@ DropShadow {
 }
 ```
 
-#### 6. **Layout** (Responsive Breakpoints & Density)
+#### 6. **Layout** (Responsive Breakpoints)
 
 **Breakpoints:**
 - **Compact** (`< 1240px`): 1-column layout, stacked panels (narrow windows)
 - **Wide** (`≥ 1240px`): 2-column layout, side-by-side panels (standard windows)
 - **Ultra-Wide** (`≥ 1800px`): 3-column or data-dense table layouts (large monitors)
 
-**Density Modes** (settable from View menu):
-- **Relaxed**: Row height ×1.15, spacing ×1.25 (comfortable for data entry)
-- **Normal**: Row height ×1.0, spacing ×1.0 (balanced default)
-- **Compact**: Row height ×0.85, spacing ×0.75 (efficient for data-heavy tables)
-
-Access computed row height and spacing:
+Access the shared row height and spacing:
 ```qml
 TableView {
-    rowHeight: DesignTokens.layout.tableRowHeight  // Automatically adjusts with density mode
+    rowHeight: DesignTokens.layout.tableRowHeight
 }
 ```
 
@@ -205,7 +200,7 @@ Each component:
 | `Card.qml` | Container with elevation | Token padding, shadow, radius |
 | `Section.qml` | Titled collapsible group | Token spacing, typography hierarchy |
 | `Badge.qml` | Small indicators | Semantic colors (success, warning, error, info) |
-| `Table.qml` | Enhanced data table | Consistent header/row styling, density support |
+| `Table.qml` | Enhanced data table | Consistent header/row styling |
 | `StyledCheckBox.qml` / `StyledRadioButton.qml` | Selection controls | Semantic colors and keyboard focus states |
 | `StyledTabButton.qml` | Tab control | Token-aware tab styling |
 | `IconButton.qml` | Icon command control | Compact, accessible command affordance |
@@ -292,13 +287,13 @@ Item {
 
 **Existing:** [ModelWorkspace.qml](../../src/crane_statics/qml_app/qml/ModelWorkspace.qml#L10) already implements this pattern.
 
-### Adapting to Density Mode
+### Shared Row Height and Spacing
 
-All table rows, spacing, and control sizes automatically adapt:
+All table rows, spacing, and control sizes come from the tokens:
 
 ```qml
 TableView {
-    rowHeight: DesignTokens.layout.tableRowHeight  // Responds to density changes
+    rowHeight: DesignTokens.layout.tableRowHeight
 }
 
 ColumnLayout {
@@ -532,7 +527,7 @@ Rectangle {
 
 - [QUICKSTART.md](QUICKSTART.md) introduces the token singleton and common bindings.
 - [COMPONENT_USAGE.md](COMPONENT_USAGE.md) provides component APIs and usage patterns.
-- [THEME_VALIDATION_CHECKLIST.md](THEME_VALIDATION_CHECKLIST.md) covers theme, density, and accessibility checks.
+- [THEME_VALIDATION_CHECKLIST.md](THEME_VALIDATION_CHECKLIST.md) covers theme and accessibility checks.
 
 ---
 
@@ -566,11 +561,11 @@ typography.fontFamily     // Font family string
 // Sizing
 sizing.buttonHeight       // 32px
 sizing.inputHeight        // 32px
-sizing.rowHeight          // 28px (or density-adjusted)
+sizing.rowHeight          // 28px
 
 // Layout
 layout.breakpointCompact  // 1240px (switch to 1-column)
-layout.tableRowHeight     // Density-aware row height
+layout.tableRowHeight     // Shared table row height
 ```
 
 ### Never Use Hardcoded Values

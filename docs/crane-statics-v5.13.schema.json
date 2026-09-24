@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/schemas/crane-statics-v5.12.schema.json",
-  "title": "Crane Statics Authored Input v5.12",
+  "$id": "https://example.com/schemas/crane-statics-v5.13.schema.json",
+  "title": "Crane Statics Authored Input v5.13",
   "description": "Minimal authored input for a fixed-topology 2D crane. Coordinates are named objects; lengths are metres, masses are tonnes, and angles are degrees unless noted.",
   "type": "object",
   "additionalProperties": false,
@@ -13,7 +13,7 @@
       "required": ["name", "version"],
       "properties": {
         "name": { "const": "crane-statics" },
-        "version": { "const": "5.12.0" }
+        "version": { "const": "5.13.0" }
       }
     },
     "metadata": {
@@ -32,6 +32,7 @@
       "properties": {
         "environment": { "$ref": "#/$defs/Environment" },
         "vessel_motion": { "$ref": "#/$defs/VesselMotion", "default": {} },
+        "hook_height_at_min_outreach_m": { "type": "number", "description": "Absolute global Z the hook must reach at each payload hoist's minimum outreach. Every payload hoist's maximum hook travel and total rope length are derived from it. Omit to default to environment.mean_sealevel_z_m." },
         "boom_width_m": { "type": "number", "exclusiveMinimum": 0 },
         "slewing_bearing_diameter_m": { "type": "number", "exclusiveMinimum": 0 },
         "boom_heel": { "$ref": "#/$defs/GlobalPosition2D" },
@@ -244,18 +245,7 @@
       "properties": {
         "rope_segments": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/RopeSegment" } },
         "linear_mass_kg_m": { "type": "number", "minimum": 0, "default": 0 },
-        "rope_length_m": { "type": "number", "minimum": 0, "description": "Total rope length in metres; omit to assume the reeved length at max hook travel and 0 deg boom angle." }
-      }
-    },
-    "HookTravel": {
-      "type": "object",
-      "description": "Minimum and maximum active hook travel in metres. The minimum must not exceed the maximum.",
-      "examples": [{ "min_m": 5.0, "max_m": 80.0 }],
-      "additionalProperties": false,
-      "required": ["min_m", "max_m"],
-      "properties": {
-        "min_m": { "type": "number", "minimum": 0 },
-        "max_m": { "type": "number", "minimum": 0 }
+        "rope_length_m": { "type": "number", "minimum": 0, "description": "Total rope length in metres. Omit to leave the length on the drum unknown, in which case no spooled rope mass is reported for this hoist." }
       }
     },
     "PayloadHoistMode": {
@@ -274,15 +264,16 @@
       "examples": [{ "support_node_id": "mh_boom_sheave_4", "hook_daf": 1.1, "offlead_deg": 1.0, "falls": 20, "hook_mass_t": 102.0, "contractual_points": [{ "outreach_m": 50.0, "load_t": 1433.0 }], "rope_segments": [{ "from": "winch", "to": "sheave", "parts": 2 }] }],
       "additionalProperties": false,
       "required": ["rope_segments", "support_node_id", "hook_daf", "offlead_deg", "falls", "hook_mass_t", "contractual_points"],
+      "dependentRequired": { "drum_dead_turns": ["drum_diameter_m"] },
       "properties": {
         "rope_segments": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/RopeSegment" } },
         "linear_mass_kg_m": { "type": "number", "minimum": 0, "default": 0 },
-        "rope_length_m": { "type": "number", "minimum": 0, "description": "Total rope length in metres; omit to assume the reeved length at max hook travel and 0 deg boom angle." },
         "support_node_id": { "$ref": "#/$defs/IdName" },
         "hook_daf": { "type": "number", "minimum": 1 },
         "offlead_deg": { "type": "number", "minimum": 0 },
-        "side_lead_deg": { "type": "number", "minimum": 0, "default": 0 },
-        "hook_travel": { "$ref": "#/$defs/HookTravel" },
+        "sidelead_deg": { "type": "number", "minimum": 0, "default": 0 },
+        "drum_dead_turns": { "type": "integer", "minimum": 0, "default": 0, "description": "Turns of rope that must remain on the drum when the hook is at its lowest point. Requires drum_diameter_m." },
+        "drum_diameter_m": { "type": "number", "exclusiveMinimum": 0, "description": "Mean wrap diameter of the dead turns in metres. Dead rope length is drum_dead_turns * pi * drum_diameter_m and is added to the derived total rope length." },
         "falls": { "type": "integer", "minimum": 1 },
         "hook_mass_t": { "type": "number", "minimum": 0 },
         "contractual_points": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/ContractualPoint" } },

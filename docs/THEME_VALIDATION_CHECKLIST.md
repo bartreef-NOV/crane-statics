@@ -100,19 +100,6 @@ If your change affects layout:
 2. Verify layout adapts smoothly
 3. Check no text overflows or gets cut off
 
-### 📊 Density Mode Check
-
-If your change includes tables or spacing:
-
-- [ ] **Relaxed density:** Spacing is comfortable, rows are readable
-- [ ] **Normal density:** Spacing is balanced
-- [ ] **Compact density:** Rows are still readable (not cramped)
-
-**Test:**
-1. Run the app
-2. View > Appearance > Density Relaxed/Normal/Compact
-3. Verify table rows and spacing respond correctly
-
 ### ♿ Accessibility Checks
 
 - [ ] **Focus indicators:** All interactive controls have visible focus ring
@@ -135,7 +122,6 @@ For significant UI changes:
 
 - [ ] Take screenshot in light mode
 - [ ] Take screenshot in dark mode
-- [ ] Take screenshot in compact density mode
 - [ ] Compare with previous version (ask reviewer or keep a reference)
 - [ ] Verify no unintended visual changes
 
@@ -204,7 +190,7 @@ For significant UI changes:
 
 ### Adding a New Table/Data Grid
 
-- [ ] Row height uses `DesignTokens.layout.tableRowHeight` (responds to density)
+- [ ] Row height uses `DesignTokens.layout.tableRowHeight`
 - [ ] Rows alternate: `DesignTokens.colors.surface` and `DesignTokens.colors.surfaceAlt`
 - [ ] Header background uses `DesignTokens.colors.surfaceAlt`
 - [ ] Header text uses `DesignTokens.colors.textPrimary` with medium weight
@@ -215,7 +201,6 @@ For significant UI changes:
 - [ ] Selection text uses `DesignTokens.colors.textInverse`
 - [ ] Works in light mode (rows readable, alternating visible)
 - [ ] Works in dark mode (rows readable, alternating visible)
-- [ ] Works in compact density (rows still readable, not cramped)
 
 ### Adding a New Form/Panel
 
@@ -246,7 +231,6 @@ Stop and fix if you see:
 - [ ] ❌ Form fields same color as background (can't see where to type)
 - [ ] ❌ Error messages only shown in red (colorblind users won't notice)
 - [ ] ❌ Hover/pressed states not visually distinct
-- [ ] ❌ Component breaks in compact density mode
 - [ ] ❌ Tests failing or new warnings in test output
 
 ---
@@ -272,12 +256,11 @@ Stop and fix if you see:
 1. **Token review:** Audit all colors, spacing, fonts in your change
 2. **Light mode:** Load app, check readability and state clarity
 3. **Dark mode:** Switch modes, verify readability and state clarity
-4. **Compact density:** Set to compact, verify spacing and row heights
-5. **Responsive:** Resize window, verify layout reflows correctly
-6. **Keyboard nav:** Tab through all interactive elements
-7. **Tests:** Run full suite, verify no regressions
-8. **Screenshots:** Take light/dark/compact mode screenshots for review
-9. **Done!** Ready for PR review
+4. **Responsive:** Resize window, verify layout reflows correctly
+5. **Keyboard nav:** Tab through all interactive elements
+6. **Tests:** Run full suite, verify no regressions
+7. **Screenshots:** Take light/dark screenshots for review
+8. **Done!** Ready for PR review
 
 **Typical time:** 20–30 minutes for significant changes
 

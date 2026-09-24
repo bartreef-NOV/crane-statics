@@ -24,6 +24,9 @@ Item {
     property string emptyText: qsTr("No entries.")
     property bool editable: false
     property int currentRow: -1
+    property int currentColumn: 0
+    // Node ids offered by the cells that hold a node reference.
+    property var editorChoices: []
     activeFocusOnTab: true
     focus: true
 
@@ -31,7 +34,6 @@ Item {
     Accessible.name: root.title.length > 0 ? root.title : qsTr("Data table")
 
     signal addRequested()
-    signal editRequested(int row)
     signal deleteRequested(int row)
 
     Keys.onPressed: event => {
@@ -41,9 +43,14 @@ Item {
         } else if (event.key === Qt.Key_Down) {
             root.currentRow = Math.min(table.rows - 1, root.currentRow + 1)
             event.accepted = true
+        } else if (event.key === Qt.Key_Left) {
+            root.currentColumn = Math.max(0, root.currentColumn - 1)
+            event.accepted = true
+        } else if (event.key === Qt.Key_Right) {
+            root.currentColumn = Math.min(table.columns - 1, root.currentColumn + 1)
+            event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            if (root.editable && root.hasSelection)
-                root.editRequested(root.currentRow)
+            root.startEdit(root.currentRow, root.currentColumn)
             event.accepted = true
         } else if (event.key === Qt.Key_Delete) {
             if (root.editable && root.hasSelection)
@@ -53,6 +60,29 @@ Item {
     }
 
     readonly property bool hasSelection: currentRow >= 0 && currentRow < table.rows
+
+    /*  Editing happens in the cell, so the table asks the model which cells accept
+        it: one row holds records that share a table but not a set of authored
+        fields, and several columns are derived rather than authored. Asking also
+        keeps Qt quiet, since editing a read-only index warns. */
+    function canEdit(row, column) {
+        if (!root.editable || row < 0 || column < 0)
+            return false
+        if (!root.model || typeof root.model.isCellEditable !== "function")
+            return false
+        return root.model.isCellEditable(row, column)
+    }
+
+    function startEdit(row, column) {
+        if (!root.canEdit(row, column))
+            return
+        table.edit(table.index(row, column))
+    }
+
+    function commitCell(row, column, value) {
+        if (root.model && typeof root.model.commitCell === "function")
+            root.model.commitCell(row, column, value)
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -74,15 +104,6 @@ Item {
                 tooltipText: qsTr("Add")
                 visible: root.editable
                 onClicked: root.addRequested()
-            }
-
-            IconButton {
-                iconText: "\u270e"
-                tooltipText: qsTr("Edit")
-                semantic: "secondary"
-                visible: root.editable
-                enabled: root.hasSelection
-                onClicked: root.editRequested(root.currentRow)
             }
 
             IconButton {
@@ -159,6 +180,7 @@ Item {
                     columnSpacing: 0
                     rowSpacing: 0
                     boundsBehavior: Flickable.StopAtBounds
+                    editTriggers: TableView.DoubleTapped
 
                     onRowsChanged: if (root.currentRow >= rows) root.currentRow = -1
 
@@ -170,9 +192,15 @@ Item {
 
                         required property string display
                         required property bool numeric
+                        required property bool editable
+                        required property string editorKind
+                        required property var edit
                         required property int row
+                        required property int column
+                        required property bool editing
 
                         readonly property bool selected: row === root.currentRow
+                        readonly property bool current: selected && column === root.currentColumn
                         property bool hovered: false
 
                         implicitWidth: Math.max(80, cellText.implicitWidth + 2 * 8)
@@ -185,7 +213,9 @@ Item {
                                     ? root.surfaceColor
                                     : Design.DesignTokens.colors.surfaceAlt))
 
-                        border.color: root.gridColor
+                        border.color: cell.current && root.activeFocus
+                            ? Design.DesignTokens.colors.focusRing
+                            : root.gridColor
                         border.width: 1
 
                         Label {
@@ -199,22 +229,35 @@ Item {
                             elide: Text.ElideRight
                             verticalAlignment: Text.AlignVCenter
                             horizontalAlignment: cell.numeric ? Text.AlignRight : Text.AlignLeft
+                            visible: !cell.editing
                         }
 
                         TapHandler {
                             onSingleTapped: {
                                 root.currentRow = cell.row
+                                root.currentColumn = cell.column
                                 root.forceActiveFocus()
                             }
                             onDoubleTapped: {
                                 root.currentRow = cell.row
-                                if (root.editable)
-                                    root.editRequested(cell.row)
+                                root.currentColumn = cell.column
+                                root.startEdit(cell.row, cell.column)
                             }
                         }
 
                         HoverHandler {
+                            cursorShape: cell.editable && root.editable
+                                ? Qt.IBeamCursor
+                                : Qt.ArrowCursor
                             onHoveredChanged: cell.hovered = hovered
+                        }
+
+                        TableView.editDelegate: CellEditor {
+                            anchors.fill: parent
+                            kind: cell.editorKind
+                            initialValue: cell.edit
+                            choices: root.editorChoices
+                            onCommitRequested: root.commitCell(cell.row, cell.column, value)
                         }
                     }
                 }

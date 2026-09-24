@@ -21,7 +21,6 @@ _COLOR_SCHEMES = {
     "light": Qt.ColorScheme.Light,
     "dark": Qt.ColorScheme.Dark,
 }
-_DENSITY_MODES = {"relaxed", "normal", "compact"}
 
 
 class AppViewModel(QObject):
@@ -33,7 +32,6 @@ class AppViewModel(QObject):
     statusTextChanged = pyqtSignal()
     currentPathChanged = pyqtSignal()
     colorSchemeChanged = pyqtSignal()
-    densityChanged = pyqtSignal()
     documentChanged = pyqtSignal()
     layoutResetRequested = pyqtSignal()
     notification = pyqtSignal(str, str)
@@ -46,8 +44,6 @@ class AppViewModel(QObject):
         self._settings = QSettings("CraneStatics", "CraneStatics")
         stored = str(self._settings.value("ui/colorScheme", "system")).lower()
         self._color_scheme = stored if stored in _COLOR_SCHEMES else "system"
-        density = str(self._settings.value("ui/density", "normal")).lower()
-        self._density = density if density in _DENSITY_MODES else "normal"
         self.session.dirty_changed.connect(self._on_dirty_changed)
         self.session.notification.connect(self.notification)
 
@@ -86,10 +82,6 @@ class AppViewModel(QObject):
     def colorScheme(self) -> str:
         return self._color_scheme
 
-    @pyqtProperty(str, notify=densityChanged)
-    def density(self) -> str:
-        return self._density
-
     @pyqtSlot(str)
     def setColorScheme(self, scheme: str) -> None:
         normalized = str(scheme).lower()
@@ -107,16 +99,6 @@ class AppViewModel(QObject):
         hints = QGuiApplication.styleHints()
         if hints is not None:
             hints.setColorScheme(_COLOR_SCHEMES[self._color_scheme])
-
-    @pyqtSlot(str)
-    def setDensity(self, density: str) -> None:
-        normalized = str(density).lower()
-        if normalized not in _DENSITY_MODES or normalized == self._density:
-            return
-        self._density = normalized
-        self._settings.setValue("ui/density", normalized)
-        self._settings.sync()
-        self.densityChanged.emit()
 
     @pyqtSlot(str)
     def setStatusText(self, text: str) -> None:
@@ -177,8 +159,11 @@ class AppViewModel(QObject):
             self.layoutResetRequested.emit()
 
     def _write(self, path: Path) -> bool:
+        doc = self._model.document
+        if doc is None:
+            return False
         try:
-            save_document(self._model.document, path)
+            save_document(doc, path)
         except DocumentIOError as exc:
             self.notification.emit(str(exc), "error")
             return False
