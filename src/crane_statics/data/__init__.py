@@ -1,5 +1,6 @@
 """Data package initialization."""
 
+from .authored_models import AuthoredDocument
 from .models import (
     CraneDocument,
     Environment,
@@ -17,6 +18,7 @@ from .models import (
 )
 
 __all__ = [
+    "AuthoredDocument",
     "CraneDocument",
     "Environment",
     "Hoist",

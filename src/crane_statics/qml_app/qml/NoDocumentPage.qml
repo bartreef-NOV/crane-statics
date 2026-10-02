@@ -2,7 +2,6 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import BF.DesignSystem
-import "components"
 
 Item {
     id: root
@@ -41,7 +40,6 @@ Item {
 
             Button {
                 text: qsTr("New Model")
-                semantic: "secondary"
                 onClicked: root.newRequested()
             }
         }

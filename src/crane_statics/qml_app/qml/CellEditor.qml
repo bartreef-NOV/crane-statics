@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Fusion
 import BF.DesignSystem
-import "components" as Components
 
 /*!
     The editor a DataTable cell puts over itself while it is being edited.
@@ -17,10 +16,6 @@ import "components" as Components
     Escape and Return both end with the editor losing focus, so without the guard a
     cancelled edit would be indistinguishable from an accepted one, and an accepted
     one would be written twice.
-
-    The component library is imported qualified on purpose: it shadows \c ComboBox
-    and \c TextField, and the node editor needs the Fusion combo box, whose content
-    item an editable combo box replaces with a text input.
 */
 FocusScope {
     id: root
@@ -75,7 +70,7 @@ FocusScope {
 
     Component {
         id: textEditor
-        Components.TextField {
+        TextField {
             readonly property var cellValue: text
             focus: true
             text: root.initialText()
@@ -97,7 +92,7 @@ FocusScope {
 
     Component {
         id: intEditor
-        Components.TextField {
+        TextField {
             readonly property var cellValue: text
             focus: true
             text: root.initialText()
@@ -110,7 +105,7 @@ FocusScope {
 
     Component {
         id: boolEditor
-        Components.StyledCheckBox {
+        CheckBox {
             readonly property var cellValue: checked
             focus: true
             checked: root.initialValue === true

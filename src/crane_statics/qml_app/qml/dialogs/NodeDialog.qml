@@ -3,9 +3,8 @@ import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
 import BF.DesignSystem
-import "../components" as Components
 
-Components.Dialog {
+Dialog {
     id: root
 
     property string bodyId: ""
@@ -59,7 +58,7 @@ Components.Dialog {
             selectByMouse: true
         }
 
-        Components.StyledCheckBox {
+        CheckBox {
             id: hangingCheck
             Layout.columnSpan: 2
             text: qsTr("Hanging node")

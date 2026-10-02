@@ -2,7 +2,6 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import BF.DesignSystem
-import "components"
 
 ColumnLayout {
     id: root
@@ -13,7 +12,7 @@ ColumnLayout {
 
     spacing: root.layoutSpacing
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Active Hoist")
         topPadding: Metrics.spacing24
@@ -39,7 +38,7 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Hook Configuration")
         visible: sceneVm.splitable
@@ -70,7 +69,7 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Geometry")
         topPadding: Metrics.spacing24
@@ -111,7 +110,7 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Load")
         topPadding: Metrics.spacing24
@@ -140,7 +139,7 @@ ColumnLayout {
 
                 Item { Layout.fillWidth: true }
 
-                StyledCheckBox {
+                CheckBox {
                     Layout.preferredWidth: 96
                     text: qsTr("Auto")
                     checked: sceneVm.hookLoadAuto
@@ -170,7 +169,7 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Wind")
         topPadding: Metrics.spacing24
@@ -205,13 +204,13 @@ ColumnLayout {
                     Layout.preferredWidth: 96
                     spacing: Math.max(2, root.layoutSpacing - 4)
 
-                    StyledRadioButton {
+                    RadioButton {
                         text: qsTr("X")
                         checked: sceneVm.windAxis === "X"
                         onClicked: sceneVm.setWindAxis("X")
                     }
 
-                    StyledRadioButton {
+                    RadioButton {
                         text: qsTr("Y")
                         checked: sceneVm.windAxis === "Y"
                         onClicked: sceneVm.setWindAxis("Y")
@@ -221,7 +220,7 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Accelerations")
         topPadding: Metrics.spacing24

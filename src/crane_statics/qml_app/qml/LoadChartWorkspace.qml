@@ -4,7 +4,6 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import "dialogs"
 import BF.DesignSystem
-import "components"
 
 Item {
     id: root

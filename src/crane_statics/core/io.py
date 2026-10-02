@@ -1,17 +1,22 @@
 """File I/O utilities for Crane Statics documents."""
 
 import json
-from functools import lru_cache
-from importlib import resources
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator
+from pydantic import ValidationError
 
 from ..data import (
     CraneDocument,
     normalize_document,
     document_to_authored_form,
+)
+from ..data.authored_models import (
+    AuthoredDocument,
+    AUTHORED_SCHEMA_MAJOR_VERSION,
+    AUTHORED_SCHEMA_NAME,
+    authored_schema_major,
+    format_authored_validation_error,
 )
 
 
@@ -21,36 +26,22 @@ class DocumentIOError(Exception):
     pass
 
 
-_AUTHORED_SCHEMA_FILES = {
-    "5.13.0": "crane-statics-v5.13.schema.json",
-}
-
-
-@lru_cache(maxsize=8)
-def _load_schema_validator(schema_filename: str) -> Draft202012Validator:
-    schema_resource = resources.files("crane_statics.schemas").joinpath(schema_filename)
-    schema = json.loads(schema_resource.read_text(encoding="utf-8"))
-    return Draft202012Validator(schema)
-
-
 def _validate_authored_schema(data: dict[str, Any]) -> None:
     schema_obj = data.get("schema")
     if not isinstance(schema_obj, dict):
         raise DocumentIOError("Authored input must include a schema object")
-    if schema_obj.get("name") != "crane-statics":
+    if schema_obj.get("name") != AUTHORED_SCHEMA_NAME:
         raise DocumentIOError("Only crane-statics authored input is supported")
     version = schema_obj.get("version")
-    schema_filename = _AUTHORED_SCHEMA_FILES.get(str(version))
-    if not schema_filename:
-        raise DocumentIOError(f"Unsupported authored schema version {version!r}; expected '5.13.0'")
-    validator = _load_schema_validator(schema_filename)
-    errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
-    if not errors:
-        return
-    first = errors[0]
-    location = "/".join(str(p) for p in first.absolute_path)
-    location_msg = f" at {location}" if location else ""
-    raise DocumentIOError(f"Schema validation failed{location_msg}: {first.message}")
+    if authored_schema_major(version) != AUTHORED_SCHEMA_MAJOR_VERSION:
+        raise DocumentIOError(
+            f"Unsupported authored schema version {version!r}; expected major version "
+            f"{AUTHORED_SCHEMA_MAJOR_VERSION}"
+        )
+    try:
+        AuthoredDocument.model_validate(data)
+    except ValidationError as e:
+        raise DocumentIOError(format_authored_validation_error(e))
 
 
 def load_document(path: Path) -> CraneDocument:
@@ -105,7 +96,11 @@ def save_document(doc: CraneDocument, path: Path) -> None:
 
 
 def create_default_document() -> CraneDocument:
-    """Create a new default crane model from template."""
+    """Create a new default crane model from template.
+
+    Mirrors AuthoredDocument's root-level example (EXAMPLE_DOCUMENT in
+    crane_statics.data.authored_models) — keep both in sync.
+    """
     default_data = {
         "schema": {
             "name": "crane-statics",

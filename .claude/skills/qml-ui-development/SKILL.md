@@ -1,6 +1,6 @@
 ---
 name: qml-ui-development
-description: Rules and patterns for building the Crane Statics Qt Quick/QML front end — BF.DesignSystem theming (Theme/Metrics/Typography), the view-model/context-property bridge, QAbstractItemModel table models, the QQuickItem scene canvas, and keeping the Qt event loop unblocked. Use when editing anything under src/crane_statics/qml_app/ or any .qml file, adding a view model property or signal, wiring a new QML view, or debugging a frozen UI, a QML warning, or a binding loop.
+description: Rules and patterns for building the Crane Statics Qt Quick/QML front end — native Qt Quick Controls (Fusion) styling, Metrics/Typography spacing/font tokens, the view-model/context-property bridge, QAbstractItemModel table models, the QQuickItem scene canvas, and keeping the Qt event loop unblocked. Use when editing anything under src/crane_statics/qml_app/ or any .qml file, adding a view model property or signal, wiring a new QML view, or debugging a frozen UI, a QML warning, or a binding loop.
 ---
 
 # Crane Statics QML UI Development
@@ -22,34 +22,50 @@ point is `QGuiApplication` (not `QApplication`) in
 | `qml_app/adapters/scene_adapter.py` | `SceneStateAdapter` — a `SceneFrame` becomes plain dicts for QML |
 | `qml_app/items/quick_scene_canvas.py` | `QQuickItem` backing for the scene canvas |
 | `qml_app/scene/` | `scene_renderer.py` (shows the published frame) and `scene_drag.py` (the pointer gesture) |
-| `qml_app/qml/` | Views (`Main.qml`, the three workspaces, tables, dialogs, `components/`, `scene/`) |
-| `qml_app/design/BF/DesignSystem/` | `Theme`/`Metrics`/`Typography` singletons plus five reusable `Bf*` controls (`BfButton`, `BfTextField`, `BfCard`, `BfStatusBadge`, `BfPage`), exposed as module `BF.DesignSystem` |
+| `qml_app/qml/` | Views (`Main.qml`, the three workspaces, tables, dialogs, `scene/`) |
+| `qml_app/design/BF/DesignSystem/` | `Theme`/`Metrics`/`Typography` singletons, exposed as module `BF.DesignSystem` |
 
 ## Iron laws
 
-**Never hardcode a visual value in QML.** Every colour, spacing, font size and
-dimension comes from the `BF.DesignSystem` singletons:
+**Use plain, native `QtQuick.Controls` elements — don't hand-paint chrome.**
+There used to be a `qml/components/` wrapper library (`Button`, `TextField`,
+`ComboBox`, `Dialog`, `StyledCheckBox`, etc.) that repainted every control's
+`background:`/`contentItem:`/`palette.*` by hand. It has been deleted. Use the
+bare native control (`Button`, `TextField`, `ComboBox`, `CheckBox`,
+`RadioButton`, `GroupBox`, `TabButton`, `Dialog`, …) and let the app's Controls
+style (Fusion, see below) render it. Do not reintroduce a `background:`/
+`contentItem:` override or a `palette.*` color assignment on a native control
+unless there is no other way to express something the style genuinely can't —
+that's exactly the pattern that made the UI look custom-skinned before.
+
+**`Metrics`/`Typography` are still the source for spacing, sizing and font
+tokens** (`Metrics.spacing16`, `Metrics.controlHeight`, `Typography.body`, …) —
+those are layout-only and don't fight the native look:
 
 ```qml
 import BF.DesignSystem
 
-Rectangle {
-    color: Theme.surface
+Label {
     anchors.margins: Metrics.spacing16
     font.pixelSize: Typography.body
 }
 ```
 
-The app is light-mode only — there is no theme toggle and no `SystemPalette`
-binding. Tokens resolve to the fixed BF/NOV brand palette instead. A literal
-`#2b2b2b` still breaks consistency and silently fails the WCAG AA contrast
-commitment in [docs/DESIGN_SYSTEM.md](../../../docs/DESIGN_SYSTEM.md) — `Theme`
-computes contrast-safe text colors (`Theme.contrastText()`,
-`Theme.getOnSemanticColor()`) for exactly this reason, and hardcoding a color
-bypasses that. Read that doc and
-[docs/COMPONENT_USAGE.md](../../../docs/COMPONENT_USAGE.md) before adding a
-component; there is likely already one for the job in `qml/components/` or
-among the `Bf*` controls.
+**`Theme` is deliberately minimal now** — it only supplies colors for the two
+custom-painted (non-Controls) surfaces: the Load Chart canvas
+(`QuickChartPlot.qml`) and the 3D scene canvas (`scene/QuickSceneCanvas.qml`),
+plus the brand-accent utilization bar in `ResultRowDelegate.qml`. Don't reach
+for `Theme.*` to color a native control's background/border/text — that's a
+`SystemPalette` or default-style concern now.
+
+**Hand-rolled tables use `SystemPalette`, not `Theme`.** `DataTable.qml`,
+`ContractualTable.qml`, `DesignLimitsTable.qml`, `ResultsTable.qml`, and
+`ResultRowDelegate.qml` are bespoke `TableView`+`Rectangle`-delegate grids (no
+native "data grid" control exists to fall back to). They source their zebra-
+stripe/text/border/selection colors from a local `SystemPalette { id:
+sysPalette }` (`sysPalette.base`/`alternateBase`/`text`/`mid`/`highlight`/
+`highlightedText`) so they stay visually consistent with the native controls
+around them automatically.
 
 **Never block the Qt event loop.** Solver sweeps in `calculation/` can be slow. Long
 work goes off the GUI thread, or is chunked, or is cached — `calculation/cache.py`
@@ -133,9 +149,15 @@ antialiasing hacks to compensate for something that is actually a geometry bug.
 ## Controls style
 
 `configure_controls_style()` sets `QT_QUICK_CONTROLS_STYLE=Fusion` with a `Basic`
-fallback, before any control loads. Fusion is deliberate: the design system is
-Fusion-native and OS-palette-aware. Do not switch styles, and do not set the env var
-anywhere else — ordering matters, it must precede control instantiation.
+fallback, before any control loads. Fusion is the chosen style — Qt's own
+"Windows" and "FluentWinUI3" native styles were tried and are both broken in
+this environment (their style-impl plugin DLLs fail to load, a missing native
+dependency unrelated to this app's code). Fusion renders every native control
+without the custom repainting the old `qml/components/` wrapper library did.
+Don't switch styles, and don't set the env var anywhere else — ordering
+matters, it must precede control instantiation. The app forces
+`Qt.ColorScheme.Light` at startup (in `app.py`, right after constructing
+`QGuiApplication`) so it stays light-only regardless of the OS theme.
 
 ## Verifying a change
 

@@ -15,11 +15,6 @@ TextField {
     leftPadding: Metrics.spacing8
     rightPadding: Metrics.spacing8
     font.pixelSize: Typography.body
-    palette.text: enabled ? Theme.text : Theme.disabledText
-    palette.base: Theme.surface
-    palette.mid: activeFocus ? Theme.focusRing : Theme.border
-    palette.highlight: Theme.selection
-    palette.highlightedText: Theme.selectionText
 
     function setValue(newValue) {
         text = Number(newValue).toFixed(decimals)

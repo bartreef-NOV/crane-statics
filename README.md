@@ -114,11 +114,7 @@ Keep QML declarative and route state changes through the owning view model. Add 
 
 ## References
 
-- `docs/crane-statics-v5.12.schema.json` - Authored JSON schema (Draft 2020-12)
-- `docs/QUICKSTART.md` - Design token quick start
-- `docs/DESIGN_SYSTEM.md` - Design token reference
-- `docs/COMPONENT_USAGE.md` - QML component patterns
-- `docs/THEME_VALIDATION_CHECKLIST.md` - Theme and accessibility validation
+- `src/crane_statics/schemas/crane-statics-v5.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
 
 ## License
 

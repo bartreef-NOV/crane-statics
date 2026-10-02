@@ -3,7 +3,6 @@ import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import "scene"
 import BF.DesignSystem
-import "components"
 
 Item {
     id: root

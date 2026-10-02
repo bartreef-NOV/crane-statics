@@ -10,10 +10,6 @@ Frame {
     property var visibilityByKey: ({})
     signal toggleRequested(string key)
 
-    readonly property color surfaceColor: Theme.surface
-    readonly property color borderColor: Theme.border
-    readonly property color textColor: Theme.text
-    readonly property color mutedTextColor: Theme.textMuted
     readonly property int layoutSpacing: Math.round(
         Metrics.spacing8 * Metrics.spacingMultiplier
     )
@@ -26,12 +22,6 @@ Frame {
         return visibilityByKey[key] !== false
     }
 
-    background: Rectangle {
-        color: root.surfaceColor
-        border.color: root.borderColor
-        radius: 3
-    }
-
     ColumnLayout {
         anchors.fill: parent
         spacing: root.layoutSpacing
@@ -42,14 +32,13 @@ Frame {
             Label {
                 text: qsTr("Series")
                 font.bold: true
-                color: root.textColor
             }
 
             Label {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignRight
                 text: qsTr("%1 visible / %2").arg(root.items.filter(item => root.isVisible(item.id)).length).arg(root.items.length)
-                color: root.mutedTextColor
+                opacity: 0.75
                 font.pixelSize: 11
             }
         }
@@ -87,7 +76,6 @@ Frame {
                         Layout.fillWidth: true
                         text: modelData.label
                         elide: Text.ElideRight
-                        color: root.isVisible(modelData.id) ? root.textColor : root.mutedTextColor
                         opacity: root.isVisible(modelData.id) ? 1.0 : 0.75
                         ToolTip.visible: entry.hovered && truncated
                         ToolTip.text: modelData.label
@@ -96,7 +84,7 @@ Frame {
 
                     Label {
                         text: root.isVisible(modelData.id) ? qsTr("Shown") : qsTr("Hidden")
-                        color: root.mutedTextColor
+                        opacity: 0.75
                         font.pixelSize: 10
                     }
                 }

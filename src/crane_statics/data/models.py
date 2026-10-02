@@ -7,12 +7,19 @@ and normalization according to the handoff data contract.
 import math
 from typing import Any, Optional
 from enum import Enum
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from copy import deepcopy
 
+from .authored_models import (
+    AuthoredDocument,
+    AUTHORED_SCHEMA_MAJOR_VERSION,
+    AUTHORED_SCHEMA_NAME,
+    AUTHORED_SCHEMA_VERSION,
+    authored_schema_major,
+    format_authored_validation_error,
+)
+
 CANONICAL_BODIES = ["boom", "rear_leg", "front_leg", "platform"]
-AUTHORED_SCHEMA_NAME = "crane-statics"
-AUTHORED_SCHEMA_VERSION = "5.13.0"
 DEFAULT_GRAVITY_M_S2 = 9.81
 DEFAULT_AIR_DENSITY_KG_M3 = 1.225
 DEFAULT_VESSEL_MOTION = {
@@ -416,7 +423,7 @@ def _is_authored_document(doc_data: dict[str, Any]) -> bool:
         return False
     return (
         schema.get("name") == AUTHORED_SCHEMA_NAME
-        and schema.get("version") == AUTHORED_SCHEMA_VERSION
+        and authored_schema_major(schema.get("version")) == AUTHORED_SCHEMA_MAJOR_VERSION
     )
 
 
@@ -454,20 +461,17 @@ def _infer_solve_load_node_id(segments: list[dict[str, Any]], ctx: str) -> str:
 
 def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
     """Convert authored JSON into the normalized runtime document shape."""
-    # Structural key presence/unknown-key checks are owned by the JSON schema.
-    # Keep Python-side validation focused on semantic and cross-reference rules.
-    schema = doc_data.get("schema")
-    if not isinstance(schema, dict):
-        raise ValueError("schema must be an object")
-    if (
-        schema.get("name") != AUTHORED_SCHEMA_NAME
-        or schema.get("version") != AUTHORED_SCHEMA_VERSION
-    ):
-        raise ValueError("unsupported authored schema identifier")
+    # Structural key presence/unknown-key checks and cross-field business rules
+    # (e.g. split.falls <= falls) are owned by AuthoredDocument; this function
+    # focuses on cross-reference rules that span the whole document (node ids,
+    # topology synthesis) which aren't expressible as per-object validation.
+    try:
+        validated = AuthoredDocument.model_validate(doc_data)
+    except ValidationError as e:
+        raise ValueError(format_authored_validation_error(e)) from e
+    doc_data = validated.model_dump(mode="json", by_alias=True)
 
-    md = doc_data.get("model_definition")
-    if not isinstance(md, dict):
-        raise ValueError("model_definition must be an object")
+    md = doc_data["model_definition"]
 
     topology = md.get("topology")
     if topology is None:
@@ -642,31 +646,11 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                 f"model_definition.payload_hoists[{hoist_key}] is missing falls or hook_mass_t"
             )
         normal_falls = int(normal_falls_raw)
-        if normal_falls < 1:
-            raise ValueError(f"model_definition.payload_hoists[{hoist_key}].falls must be >= 1")
+        # falls >= 1, split.falls <= falls, and split.hook_mass_t <= hook_mass_t are
+        # enforced by AuthoredPayloadHoist's validators above; only derive here.
         split_falls = normal_falls
         if split_mode_obj is not None:
-            split_falls_raw = split_mode_obj.get("falls")
-            split_hook_mass_raw = split_mode_obj.get("hook_mass_t")
-            if split_falls_raw is None or split_hook_mass_raw is None:
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].split is missing falls "
-                    "or hook_mass_t"
-                )
-            split_falls = int(split_falls_raw)
-            if split_falls < 1:
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].split.falls must be >= 1"
-                )
-            if split_falls > normal_falls:
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].split.falls must be <= falls"
-                )
-            if float(split_hook_mass_raw) > float(normal_hook_mass_raw):
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].split.hook_mass_t must be "
-                    "<= hook_mass_t"
-                )
+            split_falls = int(split_mode_obj["falls"])
 
         managed_hook_node_id = _managed_hook_node_id(hoist_key)
         if managed_hook_node_id in nodes_with_primary and not _is_managed_hook_node_id(
@@ -1623,8 +1607,9 @@ def normalize_document(doc_data: dict[str, Any]) -> CraneDocument:
             found_name = schema.get("name")
             found_version = schema.get("version")
             raise ValueError(
-                f"Only crane-statics schema version {AUTHORED_SCHEMA_VERSION} is supported for "
-                f"authored input; found name={found_name!r}, version={found_version!r}"
+                f"Only crane-statics schema major version {AUTHORED_SCHEMA_MAJOR_VERSION} is "
+                f"supported for authored input; found name={found_name!r}, "
+                f"version={found_version!r}"
             )
 
     # Ensure required root fields exist

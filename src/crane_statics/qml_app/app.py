@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QCoreApplication, QEvent, QTimer, QUrl
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QTimer, QUrl
 from PyQt6.QtGui import QGuiApplication, QSurfaceFormat
 from PyQt6.QtQml import QQmlApplicationEngine
 
@@ -46,6 +46,11 @@ def main(argv: list[str] | None = None) -> int:
     configure_controls_style()
     configure_surface_format()
     app = QGuiApplication(args)
+    # The app has a single, light-only appearance; force it regardless of the
+    # OS color scheme so the native style's chrome doesn't follow a dark OS theme.
+    hints = app.styleHints()
+    if hints is not None:
+        hints.setColorScheme(Qt.ColorScheme.Light)
 
     session = SessionState()
     engine = QQmlApplicationEngine(app)

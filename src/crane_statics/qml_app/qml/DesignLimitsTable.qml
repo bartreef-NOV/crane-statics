@@ -2,17 +2,18 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import BF.DesignSystem
-import "components"
 
 Item {
     id: root
 
-    readonly property color surfaceColor: Theme.surface
-    readonly property color borderColor: Theme.border
-    readonly property color headerColor: Theme.surfaceSubtle
-    readonly property color headerTextColor: Theme.text
-    readonly property color textColor: Theme.text
-    readonly property color gridColor: Theme.border
+    SystemPalette { id: sysPalette }
+
+    readonly property color surfaceColor: sysPalette.base
+    readonly property color borderColor: sysPalette.mid
+    readonly property color headerColor: sysPalette.alternateBase
+    readonly property color headerTextColor: sysPalette.text
+    readonly property color textColor: sysPalette.text
+    readonly property color gridColor: sysPalette.mid
     readonly property int tableRowHeight: Metrics.tableRowHeight
     readonly property int layoutSpacing: Math.round(
         Metrics.spacing8 * Metrics.spacingMultiplier
@@ -98,7 +99,7 @@ Item {
                         Rectangle {
                             anchors.fill: parent
                             color: limitRow.index % 2 === 0
-                                ? "transparent" : Theme.surfaceSubtle
+                                ? "transparent" : sysPalette.alternateBase
                             border.color: root.gridColor
                             border.width: Metrics.borderWidth
                         }
@@ -153,7 +154,7 @@ Item {
                                 width: root.width * 0.15
                                 height: parent.height
 
-                                StyledCheckBox {
+                                CheckBox {
                                     anchors.centerIn: parent
                                     checked: limitRow.limitEnabled
                                     onToggled: chartVm.setLimitEnabled(limitRow.limitId, checked)
@@ -164,7 +165,6 @@ Item {
                                 width: root.width * 0.15
                                 height: parent.height
                                 text: qsTr("Auto")
-                                semantic: "secondary"
                                 onClicked: chartVm.autoSetLimit(limitRow.limitId)
                             }
                         }

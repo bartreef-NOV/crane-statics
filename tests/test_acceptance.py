@@ -23,6 +23,7 @@ from crane_statics.core.limit_auto_set import (
 )
 from crane_statics.core.analysis_cases import iter_wind_lead_directional_cases
 from crane_statics.core import drawn_loads as dl
+from crane_statics.schemas.generate_schema import SCHEMA_FILENAME
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
 from crane_statics.core.session_model import SessionModel
 from crane_statics.qml_app.session import SessionState
@@ -677,19 +678,25 @@ class TestAuthoredSchemaPolicy:
             },
         }
 
-    def test_unsupported_version_is_rejected_by_normalizer(self):
+    def test_unsupported_major_version_is_rejected_by_normalizer(self):
         data = self._minimal_v5()
         data["schema"]["version"] = "3.2.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema version 5.13.0 is supported"
+            ValueError, match="Only crane-statics schema major version 5 is supported"
         ):
             normalize_document(data)
 
-    def test_v5_1_authored_is_rejected_by_normalizer(self):
+    def test_v5_minor_version_bump_is_accepted_by_normalizer(self):
         data = self._minimal_v5()
         data["schema"]["version"] = "5.1.0"
+        doc = normalize_document(data)
+        assert doc is not None
+
+    def test_v6_authored_is_rejected_by_normalizer(self):
+        data = self._minimal_v5()
+        data["schema"]["version"] = "6.0.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema version 5.13.0 is supported"
+            ValueError, match="Only crane-statics schema major version 5 is supported"
         ):
             normalize_document(data)
 
@@ -1063,7 +1070,7 @@ class TestAuthoredSchemaPolicy:
         data["model_definition"]["payload_hoists"]["MH"]["split"] = {
             "falls": 3,
             "hook_mass_t": 1.0,
-            "contractual_points": [[50.0, 80.0]],
+            "contractual_points": [{"outreach_m": 50.0, "load_t": 80.0}],
         }
 
         with pytest.raises(ValueError, match="split.falls must be <= falls"):
@@ -1222,24 +1229,15 @@ class TestAuthoredSchemaPolicy:
         save_document(doc, out_path)
 
         saved = json.loads(out_path.read_text())
-        schema_path = Path(__file__).parent.parent / "docs" / "crane-statics-v5.13.schema.json"
-        schema = json.loads(schema_path.read_text())
+        schema = json.loads(
+            resources.files("crane_statics.schemas")
+            .joinpath(SCHEMA_FILENAME)
+            .read_text(encoding="utf-8")
+        )
 
         validator = Draft202012Validator(schema)
         errors = sorted(validator.iter_errors(saved), key=lambda e: list(e.absolute_path))
         assert not errors, f"Schema validation errors: {[e.message for e in errors]}"
-
-    def test_documented_schema_matches_packaged_schema(self):
-        documented_schema = (
-            Path(__file__).parent.parent / "docs" / "crane-statics-v5.13.schema.json"
-        ).read_text(encoding="utf-8")
-        packaged_schema = (
-            resources.files("crane_statics.schemas")
-            .joinpath("crane-statics-v5.13.schema.json")
-            .read_text(encoding="utf-8")
-        )
-
-        assert documented_schema == packaged_schema
 
     def test_save_outputs_compact_v5_schema(self, tmp_path):
         doc = create_default_document()

@@ -2,7 +2,6 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Dialogs
 import QtQuick.Layouts
-import "components"
 
 ApplicationWindow {
     id: window
@@ -87,9 +86,9 @@ ApplicationWindow {
         objectName: "workspaceTabs"
         visible: appVm.hasDocument
 
-        StyledTabButton { text: qsTr("Scene"); fillWidth: true }
-        StyledTabButton { text: qsTr("Load Chart"); fillWidth: true }
-        StyledTabButton { text: qsTr("Model"); fillWidth: true }
+        TabButton { text: qsTr("Scene"); Layout.fillWidth: true }
+        TabButton { text: qsTr("Load Chart"); Layout.fillWidth: true }
+        TabButton { text: qsTr("Model"); Layout.fillWidth: true }
     }
 
     StackLayout {

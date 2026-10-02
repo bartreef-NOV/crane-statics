@@ -2,12 +2,13 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import BF.DesignSystem
-import "components" as Components
 
-Components.Dialog {
+Dialog {
     id: root
 
     property var overview: ({})
+
+    SystemPalette { id: sysPalette }
 
     function showOverview(newOverview) {
         overview = newOverview
@@ -56,7 +57,7 @@ Components.Dialog {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: Theme.borderSubtle
+            color: sysPalette.mid
         }
 
         RowLayout {

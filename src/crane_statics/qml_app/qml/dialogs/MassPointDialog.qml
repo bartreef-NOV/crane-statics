@@ -3,9 +3,8 @@ import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
 import BF.DesignSystem
-import "../components" as Components
 
-Components.Dialog {
+Dialog {
     id: root
 
     property string bodyId: ""

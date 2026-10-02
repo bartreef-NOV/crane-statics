@@ -4,7 +4,7 @@
     "version": "5.13.0"
   },
   "metadata": {
-    "name": "Crane Statics Example 22689 (Full Geometry)"
+    "name": "Crane Statics Example GT283"
   },
   "model_definition": {
     "environment": {
@@ -117,18 +117,6 @@
         "ah_boom_sheave_4": {
           "u_m": 113.5,
           "w_m": -6.0
-        },
-        "sh_winch": {
-          "u_m": 77.8,
-          "w_m": 0.0
-        },
-        "sh_boom_sheave_1": {
-          "u_m": 155.6,
-          "w_m": 3.1
-        },
-        "sh_boom_sheave_2": {
-          "u_m": 160.8,
-          "w_m": -8.33
         },
         "trolley_boom_sheave_1": {
           "u_m": 15.0,

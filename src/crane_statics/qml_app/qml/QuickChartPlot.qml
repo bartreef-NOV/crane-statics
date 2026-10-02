@@ -1,5 +1,5 @@
 import QtQuick
-import "../design" as Design
+import BF.DesignSystem
 
 Item {
     id: root
@@ -21,7 +21,7 @@ Item {
     readonly property real plotBottom: 50
     readonly property real plotWidth: Math.max(1, width - plotLeft - plotRight)
     readonly property real plotHeight: Math.max(1, height - plotTop - plotBottom)
-    readonly property color plotBackgroundColor: Design.DesignTokens.colors.chartPlotBackground
+    readonly property color plotBackgroundColor: Theme.chartPlotBackground
 
     function seriesKeyVisible(key) {
         return visibilityByKey[key] !== false
@@ -47,12 +47,12 @@ Item {
 
     function chartSeriesColor(series) {
         if (series.id === "capacity")
-            return Design.DesignTokens.colors.primary
+            return Theme.primary
         if (series.id === "contractual")
-            return Design.DesignTokens.colors.chartContractual
+            return Theme.chartContractual
         if (!series.color)
-            return Design.DesignTokens.colors.chartSeriesFallback
-        return Design.DesignTokens.colorScheme === "dark" ? Qt.lighter(series.color, 1.45) : series.color
+            return Theme.chartSeriesFallback
+        return series.color
     }
 
     function collectSeries() {
@@ -63,15 +63,15 @@ Item {
                 series.push(Object.assign({}, limits[i], { color: chartSeriesColor(limits[i]) }))
         }
         if (seriesKeyVisible("capacity"))
-            series.push({ id: "capacity", label: qsTr("Capacity"), color: Design.DesignTokens.colors.primary, points: chartVm.curvePoints || [] })
+            series.push({ id: "capacity", label: qsTr("Capacity"), color: Theme.primary, points: chartVm.curvePoints || [] })
         return series
     }
 
     function collectLegendSeries() {
         const series = []
         const limits = chartVm.limitSeries || []
-        series.push({ id: "capacity", label: qsTr("Capacity"), color: Design.DesignTokens.colors.primary, points: chartVm.curvePoints || [] })
-        series.push({ id: "contractual", label: qsTr("Contractual"), color: Design.DesignTokens.colors.chartContractual, points: chartVm.markers || [] })
+        series.push({ id: "capacity", label: qsTr("Capacity"), color: Theme.primary, points: chartVm.curvePoints || [] })
+        series.push({ id: "contractual", label: qsTr("Contractual"), color: Theme.chartContractual, points: chartVm.markers || [] })
         for (let i = 0; i < limits.length; ++i)
             series.push(Object.assign({}, limits[i], { color: chartSeriesColor(limits[i]) }))
         return series
@@ -172,7 +172,7 @@ Item {
                 const py = mapY(points[i][1], ranges, plotTop, plotHeight)
                 candidates.push({
                     x: px, y: py, outreach: points[i][0], load: points[i][1],
-                    label: series[s].label, color: series[s].color || Design.DesignTokens.colors.chartSeriesFallback,
+                    label: series[s].label, color: series[s].color || Theme.chartSeriesFallback,
                     distance: Math.hypot(px - x, py - y)
                 })
             }
@@ -185,7 +185,7 @@ Item {
                 candidates.push({
                     x: px, y: py, outreach: markers[i].outreach, load: markers[i].load,
                     label: qsTr("Contractual (%1)").arg(markers[i].status),
-                    color: markers[i].status === "pass" ? Design.DesignTokens.colors.chartPass : (markers[i].status === "fail" ? Design.DesignTokens.colors.chartFail : Design.DesignTokens.colors.chartPending),
+                    color: markers[i].status === "pass" ? Theme.chartPass : (markers[i].status === "fail" ? Theme.chartFail : Theme.chartPending),
                     distance: Math.hypot(px - x, py - y)
                 })
             }
@@ -213,13 +213,13 @@ Item {
 
     function drawMarker(context, marker, ranges, left, top, plotWidth, plotHeight) {
         const colors = {
-            pass: Design.DesignTokens.colors.chartPass,
-            fail: Design.DesignTokens.colors.chartFail,
-            pending: Design.DesignTokens.colors.chartPending
+            pass: Theme.chartPass,
+            fail: Theme.chartFail,
+            pending: Theme.chartPending
         }
         const x = mapX(marker.outreach, ranges, left, plotWidth)
         const y = mapY(marker.load, ranges, top, plotHeight)
-        context.fillStyle = colors[marker.status] || Design.DesignTokens.colors.chartSeriesFallback
+        context.fillStyle = colors[marker.status] || Theme.chartSeriesFallback
         context.beginPath()
         context.arc(x, y, 5, 0, 2 * Math.PI)
         context.fill()
@@ -240,7 +240,7 @@ Item {
             const plotHeight = root.plotHeight
 
             context.reset()
-            context.fillStyle = Design.DesignTokens.colors.chartCanvasBackground
+            context.fillStyle = Theme.chartCanvasBackground
             context.fillRect(0, 0, width, height)
             context.fillStyle = root.plotBackgroundColor
             context.fillRect(left, top, plotWidth, plotHeight)
@@ -248,8 +248,8 @@ Item {
             const yStep = niceStep(ranges.yMax - ranges.yMin, Math.max(4, Math.floor(plotHeight / 55)))
             const xTicks = majorTicks(ranges.xMin, ranges.xMax, Math.max(4, Math.floor(plotWidth / 110)))
             const yTicks = majorTicks(ranges.yMin, ranges.yMax, Math.max(4, Math.floor(plotHeight / 55)))
-            context.strokeStyle = Design.DesignTokens.colors.chartGrid
-            context.fillStyle = Design.DesignTokens.colors.chartAxisText
+            context.strokeStyle = Theme.chartGrid
+            context.fillStyle = Theme.chartAxisText
             context.font = "11px sans-serif"
             context.textBaseline = "top"
             context.textAlign = "center"
@@ -271,7 +271,7 @@ Item {
                 context.stroke()
                 context.fillText(formatTick(yTicks[i], yStep), left - 8, y)
             }
-            context.strokeStyle = Design.DesignTokens.colors.chartAxisBorder
+            context.strokeStyle = Theme.chartAxisBorder
             context.lineWidth = 1
             context.strokeRect(left, top, plotWidth, plotHeight)
 
@@ -290,7 +290,7 @@ Item {
 
             const series = root.collectSeries()
             for (let i = 0; i < series.length; ++i) {
-                context.strokeStyle = series[i].color || Design.DesignTokens.colors.chartSeriesFallback
+                context.strokeStyle = series[i].color || Theme.chartSeriesFallback
                 context.lineWidth = series[i].id === "capacity" ? 2.5 : 1.25
                 root.drawLineSeries(context, series[i].points, ranges, left, top, plotWidth, plotHeight)
             }
@@ -304,7 +304,7 @@ Item {
 
             const inspected = root.pinnedPoint || root.hoveredPoint
             if (inspected) {
-                context.strokeStyle = Design.DesignTokens.colors.chartCrosshair
+                context.strokeStyle = Theme.chartCrosshair
                 context.lineWidth = 1
                 context.setLineDash([4, 4])
                 context.beginPath()
@@ -319,7 +319,7 @@ Item {
                 context.beginPath()
                 context.arc(inspected.x, inspected.y, root.pinnedPoint ? 6 : 5, 0, 2 * Math.PI)
                 context.fill()
-                context.strokeStyle = Design.DesignTokens.colors.chartPlotBackground
+                context.strokeStyle = Theme.chartPlotBackground
                 context.lineWidth = 2
                 context.stroke()
 
@@ -330,12 +330,12 @@ Item {
                     ? left + 8 : left + plotWidth - boxWidth - 8
                 const boxY = inspected.y < top + boxHeight + 8
                     ? top + plotHeight - boxHeight - 8 : top + 8
-                context.fillStyle = Design.DesignTokens.colors.chartTooltipBackground
-                context.strokeStyle = Design.DesignTokens.colors.chartTooltipBorder
+                context.fillStyle = Theme.chartTooltipBackground
+                context.strokeStyle = Theme.chartTooltipBorder
                 context.lineWidth = 1
                 context.fillRect(boxX, boxY, boxWidth, boxHeight)
                 context.strokeRect(boxX, boxY, boxWidth, boxHeight)
-                context.fillStyle = Design.DesignTokens.colors.chartTooltipText
+                context.fillStyle = Theme.chartTooltipText
                 context.font = "11px sans-serif"
                 context.textAlign = "left"
                 context.textBaseline = "top"

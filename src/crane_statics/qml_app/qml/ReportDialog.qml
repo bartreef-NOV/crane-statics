@@ -1,13 +1,13 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
-import QtQuick.Layouts
 import BF.DesignSystem
-import "components" as Components
 
-Components.Dialog {
+Dialog {
     id: root
 
     property alias model: reportList.model
+
+    SystemPalette { id: sysPalette }
 
     modal: true
     anchors.centerIn: Overlay.overlay
@@ -18,8 +18,7 @@ Components.Dialog {
     ListView {
         id: reportList
         objectName: "reportList"
-        Layout.fillWidth: true
-        Layout.preferredHeight: 480
+        anchors.fill: parent
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
@@ -37,8 +36,8 @@ Components.Dialog {
                     required property int index
                     width: index === 0 ? reportList.width * 0.34 : reportList.width * 0.11
                     height: Metrics.tableRowHeight
-                    color: Theme.surfaceSubtle
-                    border.color: Theme.border
+                    color: sysPalette.alternateBase
+                    border.color: sysPalette.mid
                     border.width: 1
                     Label {
                         anchors.fill: parent
@@ -75,11 +74,11 @@ Components.Dialog {
             Rectangle {
                 anchors.fill: parent
                 color: reportRow.section
-                    ? Theme.surfaceSubtle
+                    ? sysPalette.alternateBase
                     : (reportRow.index % 2 === 0
-                        ? Theme.surface
-                        : Theme.surfaceSubtle)
-                border.color: Theme.border
+                        ? sysPalette.base
+                        : sysPalette.alternateBase)
+                border.color: sysPalette.mid
                 border.width: 1
             }
 
@@ -100,7 +99,7 @@ Components.Dialog {
                         anchors.bottom: parent.bottom
                         anchors.right: parent.right
                         width: 1
-                        color: Theme.border
+                        color: sysPalette.mid
                     }
                 }
 
@@ -122,7 +121,7 @@ Components.Dialog {
                             anchors.bottom: parent.bottom
                             anchors.right: parent.right
                             width: 1
-                            color: Theme.border
+                            color: sysPalette.mid
                         }
                     }
                 }

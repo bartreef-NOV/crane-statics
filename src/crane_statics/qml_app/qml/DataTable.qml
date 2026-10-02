@@ -2,18 +2,19 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import BF.DesignSystem
-import "components"
 
 Item {
     id: root
 
-    readonly property color surfaceColor: Theme.surface
-    readonly property color headerColor: Theme.surfaceSubtle
-    readonly property color headerTextColor: Theme.text
-    readonly property color textColor: Theme.text
-    readonly property color selectedColor: Theme.selection
-    readonly property color selectedTextColor: Theme.selectionText
-    readonly property color gridColor: Theme.border
+    SystemPalette { id: sysPalette }
+
+    readonly property color surfaceColor: sysPalette.base
+    readonly property color headerColor: sysPalette.alternateBase
+    readonly property color headerTextColor: sysPalette.text
+    readonly property color textColor: sysPalette.text
+    readonly property color selectedColor: sysPalette.highlight
+    readonly property color selectedTextColor: sysPalette.highlightedText
+    readonly property color gridColor: sysPalette.mid
     readonly property int tableRowHeight: Metrics.tableRowHeight
     readonly property int layoutSpacing: Math.round(
         Metrics.spacing8 * Metrics.spacingMultiplier
@@ -99,17 +100,24 @@ Item {
                 font.bold: true
             }
 
-            IconButton {
-                iconText: "+"
-                tooltipText: qsTr("Add")
+            Button {
+                text: "+"
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Add")
+                implicitWidth: Metrics.controlHeight
+                implicitHeight: Metrics.controlHeight
+                padding: 0
                 visible: root.editable
                 onClicked: root.addRequested()
             }
 
-            IconButton {
-                iconText: "\u00d7"
-                tooltipText: qsTr("Delete")
-                semantic: "danger"
+            Button {
+                text: "\u00d7"
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Delete")
+                implicitWidth: Metrics.controlHeight
+                implicitHeight: Metrics.controlHeight
+                padding: 0
                 visible: root.editable
                 enabled: root.hasSelection
                 onClicked: root.deleteRequested(root.currentRow)
@@ -208,13 +216,13 @@ Item {
                         color: cell.selected
                             ? root.selectedColor
                             : (cell.hovered
-                                ? Theme.surfaceSubtle
+                                ? sysPalette.alternateBase
                                 : (cell.row % 2 === 0
                                     ? root.surfaceColor
-                                    : Theme.surfaceSubtle))
+                                    : sysPalette.alternateBase))
 
                         border.color: cell.current && root.activeFocus
-                            ? Theme.focusRing
+                            ? sysPalette.highlight
                             : root.gridColor
                         border.width: Metrics.borderWidth
 

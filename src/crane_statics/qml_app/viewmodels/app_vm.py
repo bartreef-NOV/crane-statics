@@ -5,8 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import QObject, QSettings, Qt, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
 from crane_statics.core.io import (
     DocumentIOError,
@@ -15,12 +14,6 @@ from crane_statics.core.io import (
     save_document,
 )
 from crane_statics.qml_app.session import SessionState
-
-_COLOR_SCHEMES = {
-    "system": Qt.ColorScheme.Unknown,
-    "light": Qt.ColorScheme.Light,
-    "dark": Qt.ColorScheme.Dark,
-}
 
 
 class AppViewModel(QObject):
@@ -31,7 +24,6 @@ class AppViewModel(QObject):
     hasDocumentChanged = pyqtSignal()
     statusTextChanged = pyqtSignal()
     currentPathChanged = pyqtSignal()
-    colorSchemeChanged = pyqtSignal()
     documentChanged = pyqtSignal()
     layoutResetRequested = pyqtSignal()
     notification = pyqtSignal(str, str)
@@ -41,9 +33,6 @@ class AppViewModel(QObject):
         self.session = session if session is not None else SessionState()
         self._model = self.session.model
         self._status_text = "No document loaded"
-        self._settings = QSettings("CraneStatics", "CraneStatics")
-        stored = str(self._settings.value("ui/colorScheme", "system")).lower()
-        self._color_scheme = stored if stored in _COLOR_SCHEMES else "system"
         self.session.dirty_changed.connect(self._on_dirty_changed)
         self.session.notification.connect(self.notification)
 
@@ -77,28 +66,6 @@ class AppViewModel(QObject):
     @pyqtProperty(str, notify=statusTextChanged)
     def statusText(self) -> str:
         return self._status_text
-
-    @pyqtProperty(str, notify=colorSchemeChanged)
-    def colorScheme(self) -> str:
-        return self._color_scheme
-
-    @pyqtSlot(str)
-    def setColorScheme(self, scheme: str) -> None:
-        normalized = str(scheme).lower()
-        if normalized not in _COLOR_SCHEMES or normalized == self._color_scheme:
-            return
-        self._color_scheme = normalized
-        self._settings.setValue("ui/colorScheme", normalized)
-        self._settings.sync()
-        self.applyColorScheme()
-        self.colorSchemeChanged.emit()
-
-    @pyqtSlot()
-    def applyColorScheme(self) -> None:
-        """Push the stored preference into Qt; a no-op on platforms without scheme support."""
-        hints = QGuiApplication.styleHints()
-        if hints is not None:
-            hints.setColorScheme(_COLOR_SCHEMES[self._color_scheme])
 
     @pyqtSlot(str)
     def setStatusText(self, text: str) -> None:

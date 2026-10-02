@@ -20,11 +20,13 @@ Item {
 
     property real nameWidth: 120
 
+    SystemPalette { id: sysPalette }
+
     readonly property color barColor: Theme.primary
     readonly property color barTrackColor: Theme.borderSubtle
-    readonly property color surfaceColor: Theme.surface
-    readonly property color alternateSurfaceColor: Theme.surfaceSubtle
-    readonly property color textColor: Theme.text
+    readonly property color surfaceColor: sysPalette.base
+    readonly property color alternateSurfaceColor: sysPalette.alternateBase
+    readonly property color textColor: sysPalette.text
 
     readonly property real cellWidth: (width - nameWidth) / 5
 

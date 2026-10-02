@@ -77,8 +77,9 @@ theme, scene rendering, chart shape — or when the user asked to see it.
 - **One application object per process.** `tests/conftest.py` supplies a
   session-scoped `QGuiApplication`; never construct a second one.
 - **Controls style is set before any control loads.** `configure_controls_style()`
-  sets `QT_QUICK_CONTROLS_STYLE=Fusion`. Don't override it — the design system is
-  Fusion/`SystemPalette`-native.
+  sets `QT_QUICK_CONTROLS_STYLE=Fusion` (Qt's "Windows"/"FluentWinUI3" native styles
+  are broken in this environment — missing native plugin dependencies). Don't
+  override it. The app is light-only (`Qt.ColorScheme.Light` is forced at startup).
 - **The scene canvas is bound after `Main.qml` loads**, via
   `scene_vm.bindCanvas(QuickSceneCanvasBacking(engine))`. Skip it and the Scene
   workspace comes up empty.

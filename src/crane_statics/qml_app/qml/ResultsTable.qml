@@ -6,12 +6,14 @@ import BF.DesignSystem
 Item {
     id: root
 
-    readonly property color surfaceColor: Theme.surface
-    readonly property color borderColor: Theme.border
-    readonly property color headerColor: Theme.surfaceSubtle
-    readonly property color headerTextColor: Theme.text
-    readonly property color textColor: Theme.text
-    readonly property color gridColor: Theme.border
+    SystemPalette { id: sysPalette }
+
+    readonly property color surfaceColor: sysPalette.base
+    readonly property color borderColor: sysPalette.mid
+    readonly property color headerColor: sysPalette.alternateBase
+    readonly property color headerTextColor: sysPalette.text
+    readonly property color textColor: sysPalette.text
+    readonly property color gridColor: sysPalette.mid
     readonly property int tableRowHeight: Metrics.tableRowHeight
     readonly property int layoutSpacing: Math.round(
         Metrics.spacing8 * Metrics.spacingMultiplier

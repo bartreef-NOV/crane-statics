@@ -4,7 +4,6 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import "dialogs"
 import BF.DesignSystem
-import "components"
 
 Item {
     id: root
@@ -52,10 +51,10 @@ Item {
                     id: sectionTabs
                     Layout.fillWidth: true
 
-                    StyledTabButton { text: qsTr("Components") }
-                    StyledTabButton { text: qsTr("Hoists") }
-                    StyledTabButton { text: qsTr("Ropes") }
-                    StyledTabButton { text: qsTr("Load Charts") }
+                    TabButton { text: qsTr("Components"); Layout.fillWidth: true }
+                    TabButton { text: qsTr("Hoists"); Layout.fillWidth: true }
+                    TabButton { text: qsTr("Ropes"); Layout.fillWidth: true }
+                    TabButton { text: qsTr("Load Charts"); Layout.fillWidth: true }
                 }
 
                 Label {
@@ -88,9 +87,10 @@ Item {
 
                         Repeater {
                             model: modelVm.bodyLabels
-                            StyledTabButton {
+                            TabButton {
                                 required property string modelData
                                 text: modelData
+                                Layout.fillWidth: true
                             }
                         }
                     }

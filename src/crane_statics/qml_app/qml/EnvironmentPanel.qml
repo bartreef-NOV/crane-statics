@@ -2,7 +2,6 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import BF.DesignSystem
-import "components"
 
 ColumnLayout {
     id: root
@@ -69,7 +68,7 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Primary Structure")
 
@@ -124,7 +123,7 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Support Widths")
 
@@ -141,7 +140,7 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Environment")
 
@@ -158,7 +157,7 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Design Duty")
 
@@ -170,7 +169,7 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Accelerations")
 

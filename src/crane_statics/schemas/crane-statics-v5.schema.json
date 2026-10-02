@@ -1,0 +1,1020 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/crane-statics-v5.schema.json",
+  "title": "AuthoredDocument",
+  "$defs": {
+    "AuthoredBoomBody": {
+      "additionalProperties": false,
+      "description": "Optional boom mass, wind, and named boom-local nodes. Rope-referenced\nnode IDs must be present.",
+      "properties": {
+        "mass_points": {
+          "items": {
+            "$ref": "#/$defs/AuthoredMassPointBoom"
+          },
+          "title": "Mass Points",
+          "type": "array"
+        },
+        "wind_areas": {
+          "items": {
+            "$ref": "#/$defs/AuthoredWindAreaBoom"
+          },
+          "title": "Wind Areas",
+          "type": "array"
+        },
+        "nodes": {
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9_-]*$": {
+              "$ref": "#/$defs/AuthoredBoomPosition2D"
+            }
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Nodes",
+          "type": "object"
+        }
+      },
+      "title": "AuthoredBoomBody",
+      "type": "object"
+    },
+    "AuthoredBoomHoist": {
+      "additionalProperties": false,
+      "properties": {
+        "rope_segments": {
+          "items": {
+            "$ref": "#/$defs/AuthoredRopeSegment"
+          },
+          "minItems": 1,
+          "title": "Rope Segments",
+          "type": "array"
+        },
+        "linear_mass_kg_m": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Linear Mass Kg M",
+          "type": "number"
+        },
+        "rope_length_m": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Total rope length in metres. Omit to leave the length on the drum unknown, in which case no spooled rope mass is reported for this hoist.",
+          "title": "Rope Length M"
+        }
+      },
+      "required": [
+        "rope_segments"
+      ],
+      "title": "AuthoredBoomHoist",
+      "type": "object"
+    },
+    "AuthoredBoomPosition2D": {
+      "additionalProperties": false,
+      "description": "Boom-local U/W position in metres.",
+      "examples": [
+        {
+          "u_m": 155.0,
+          "w_m": -6.05
+        }
+      ],
+      "properties": {
+        "u_m": {
+          "description": "Boom-local longitudinal coordinate in metres.",
+          "title": "U M",
+          "type": "number"
+        },
+        "w_m": {
+          "description": "Boom-local vertical coordinate in metres.",
+          "title": "W M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "u_m",
+        "w_m"
+      ],
+      "title": "AuthoredBoomPosition2D",
+      "type": "object"
+    },
+    "AuthoredBoomPosition3D": {
+      "additionalProperties": false,
+      "description": "Boom-local U/V/W position in metres.",
+      "examples": [
+        {
+          "u_m": 87.0,
+          "v_m": 0.0,
+          "w_m": -0.4
+        }
+      ],
+      "properties": {
+        "u_m": {
+          "description": "Boom-local longitudinal coordinate in metres.",
+          "title": "U M",
+          "type": "number"
+        },
+        "v_m": {
+          "description": "Boom-local transverse coordinate in metres.",
+          "title": "V M",
+          "type": "number"
+        },
+        "w_m": {
+          "description": "Boom-local vertical coordinate in metres.",
+          "title": "W M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "u_m",
+        "v_m",
+        "w_m"
+      ],
+      "title": "AuthoredBoomPosition3D",
+      "type": "object"
+    },
+    "AuthoredContractualPoint": {
+      "additionalProperties": false,
+      "description": "A rated operating point on the hoist capacity curve.",
+      "examples": [
+        {
+          "load_t": 1433.0,
+          "outreach_m": 50.0
+        }
+      ],
+      "properties": {
+        "outreach_m": {
+          "description": "Horizontal outreach in metres.",
+          "minimum": 0,
+          "title": "Outreach M",
+          "type": "number"
+        },
+        "load_t": {
+          "description": "Permitted payload in tonnes.",
+          "minimum": 0,
+          "title": "Load T",
+          "type": "number"
+        }
+      },
+      "required": [
+        "outreach_m",
+        "load_t"
+      ],
+      "title": "AuthoredContractualPoint",
+      "type": "object"
+    },
+    "AuthoredEnvironment": {
+      "additionalProperties": false,
+      "description": "Environmental constants. Gravity and air density have defaults; wind\nprofile and sea-level reference values are required.",
+      "properties": {
+        "gravity_m_s2": {
+          "default": 9.81,
+          "description": "Gravity magnitude in m/s\u00b2; the runtime uses it as negative Z gravity.",
+          "exclusiveMinimum": 0,
+          "title": "Gravity M S2",
+          "type": "number"
+        },
+        "max_wind_speed_m_s": {
+          "description": "Positive maximum wind speed in m/s.",
+          "exclusiveMinimum": 0,
+          "title": "Max Wind Speed M S",
+          "type": "number"
+        },
+        "air_density_kg_m3": {
+          "default": 1.225,
+          "exclusiveMinimum": 0,
+          "title": "Air Density Kg M3",
+          "type": "number"
+        },
+        "wind_profile_exponent": {
+          "description": "Power-law wind profile exponent.",
+          "exclusiveMinimum": 0,
+          "title": "Wind Profile Exponent",
+          "type": "number"
+        },
+        "wind_reference_height_m_asl": {
+          "description": "Reference height above mean sea level in metres.",
+          "exclusiveMinimum": 0,
+          "title": "Wind Reference Height M Asl",
+          "type": "number"
+        },
+        "mean_sealevel_z_m": {
+          "description": "Mean sea-level elevation in global Z metres.",
+          "title": "Mean Sealevel Z M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "max_wind_speed_m_s",
+        "wind_profile_exponent",
+        "wind_reference_height_m_asl",
+        "mean_sealevel_z_m"
+      ],
+      "title": "AuthoredEnvironment",
+      "type": "object"
+    },
+    "AuthoredGlobalBody": {
+      "additionalProperties": false,
+      "description": "Optional fixed-body mass, wind, and named global nodes. Rope-referenced\nnode IDs must be present.",
+      "properties": {
+        "mass_points": {
+          "items": {
+            "$ref": "#/$defs/AuthoredMassPointGlobal"
+          },
+          "title": "Mass Points",
+          "type": "array"
+        },
+        "wind_areas": {
+          "items": {
+            "$ref": "#/$defs/AuthoredWindAreaGlobal"
+          },
+          "title": "Wind Areas",
+          "type": "array"
+        },
+        "nodes": {
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9_-]*$": {
+              "$ref": "#/$defs/AuthoredGlobalPosition2D"
+            }
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Nodes",
+          "type": "object"
+        }
+      },
+      "title": "AuthoredGlobalBody",
+      "type": "object"
+    },
+    "AuthoredGlobalPosition2D": {
+      "additionalProperties": false,
+      "description": "Global X/Z position in metres.",
+      "examples": [
+        {
+          "x_m": 0.0,
+          "z_m": 7.7
+        }
+      ],
+      "properties": {
+        "x_m": {
+          "description": "Global horizontal coordinate in metres.",
+          "title": "X M",
+          "type": "number"
+        },
+        "z_m": {
+          "description": "Global vertical coordinate in metres.",
+          "title": "Z M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x_m",
+        "z_m"
+      ],
+      "title": "AuthoredGlobalPosition2D",
+      "type": "object"
+    },
+    "AuthoredGlobalPosition3D": {
+      "additionalProperties": false,
+      "description": "Global X/Y/Z position in metres.",
+      "examples": [
+        {
+          "x_m": 0.0,
+          "y_m": 0.0,
+          "z_m": 4.0
+        }
+      ],
+      "properties": {
+        "x_m": {
+          "description": "Global horizontal coordinate in metres.",
+          "title": "X M",
+          "type": "number"
+        },
+        "y_m": {
+          "description": "Global transverse coordinate in metres.",
+          "title": "Y M",
+          "type": "number"
+        },
+        "z_m": {
+          "description": "Global vertical coordinate in metres.",
+          "title": "Z M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x_m",
+        "y_m",
+        "z_m"
+      ],
+      "title": "AuthoredGlobalPosition3D",
+      "type": "object"
+    },
+    "AuthoredMassPointBoom": {
+      "additionalProperties": false,
+      "description": "Boom structural mass located in boom-local U/V/W coordinates.",
+      "examples": [
+        {
+          "id": "boom_structure",
+          "mass_t": 759.1,
+          "position": {
+            "u_m": 87.0,
+            "v_m": 0.0,
+            "w_m": -0.4
+          }
+        }
+      ],
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "mass_t": {
+          "exclusiveMinimum": 0,
+          "title": "Mass T",
+          "type": "number"
+        },
+        "position": {
+          "$ref": "#/$defs/AuthoredBoomPosition3D"
+        }
+      },
+      "required": [
+        "id",
+        "mass_t",
+        "position"
+      ],
+      "title": "AuthoredMassPointBoom",
+      "type": "object"
+    },
+    "AuthoredMassPointGlobal": {
+      "additionalProperties": false,
+      "description": "Fixed-body mass located in global X/Y/Z coordinates.",
+      "examples": [
+        {
+          "id": "platform_structure",
+          "mass_t": 615.0,
+          "position": {
+            "x_m": -0.49,
+            "y_m": 0.23,
+            "z_m": 4.24
+          }
+        }
+      ],
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "mass_t": {
+          "exclusiveMinimum": 0,
+          "title": "Mass T",
+          "type": "number"
+        },
+        "position": {
+          "$ref": "#/$defs/AuthoredGlobalPosition3D"
+        }
+      },
+      "required": [
+        "id",
+        "mass_t",
+        "position"
+      ],
+      "title": "AuthoredMassPointGlobal",
+      "type": "object"
+    },
+    "AuthoredMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "AuthoredMetadata",
+      "type": "object"
+    },
+    "AuthoredModelDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "environment": {
+          "$ref": "#/$defs/AuthoredEnvironment"
+        },
+        "vessel_motion": {
+          "$ref": "#/$defs/AuthoredVesselMotion"
+        },
+        "hook_height_at_min_outreach_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Absolute global Z the hook must reach at each payload hoist's minimum outreach. Every payload hoist's maximum hook travel and total rope length are derived from it. Omit to default to environment.mean_sealevel_z_m.",
+          "title": "Hook Height At Min Outreach M"
+        },
+        "boom_width_m": {
+          "description": "Boom structural width in metres, used for platform-base bearing line load checks.",
+          "exclusiveMinimum": 0,
+          "title": "Boom Width M",
+          "type": "number"
+        },
+        "slewing_bearing_diameter_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Slewing bearing diameter. Omit to skip platform-base bearing line load checks.",
+          "title": "Slewing Bearing Diameter M"
+        },
+        "boom_heel": {
+          "$ref": "#/$defs/AuthoredGlobalPosition2D",
+          "description": "Global position of the boom's heel (foot) pivot."
+        },
+        "upper_hinge": {
+          "$ref": "#/$defs/AuthoredGlobalPosition2D",
+          "description": "Global position of the upper structure hinge the boom is suspended from."
+        },
+        "rear_hinge": {
+          "$ref": "#/$defs/AuthoredGlobalPosition2D",
+          "description": "Global position of the rear leg's upper hinge."
+        },
+        "front_hinge": {
+          "$ref": "#/$defs/AuthoredGlobalPosition2D",
+          "description": "Global position of the front leg's upper hinge."
+        },
+        "boom": {
+          "$ref": "#/$defs/AuthoredBoomBody",
+          "description": "The boom body: its structural mass, wind areas, and boom-local nodes."
+        },
+        "rear_leg": {
+          "$ref": "#/$defs/AuthoredGlobalBody",
+          "description": "The rear leg body supporting the upper structure, in global coordinates."
+        },
+        "front_leg": {
+          "$ref": "#/$defs/AuthoredGlobalBody",
+          "description": "The front leg body supporting the upper structure, in global coordinates."
+        },
+        "platform": {
+          "$ref": "#/$defs/AuthoredGlobalBody",
+          "description": "The fixed platform/base body, in global coordinates."
+        },
+        "boom_hoist": {
+          "$ref": "#/$defs/AuthoredBoomHoist",
+          "description": "The rope system that raises and lowers the boom."
+        },
+        "payload_hoists": {
+          "description": "Named payload hoists, each attached to a support node on the boom.",
+          "minProperties": 1,
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9_-]*$": {
+              "$ref": "#/$defs/AuthoredPayloadHoist"
+            }
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Payload Hoists",
+          "type": "object"
+        }
+      },
+      "required": [
+        "environment",
+        "boom_width_m",
+        "boom_heel",
+        "upper_hinge",
+        "rear_hinge",
+        "front_hinge",
+        "boom",
+        "rear_leg",
+        "front_leg",
+        "platform",
+        "boom_hoist",
+        "payload_hoists"
+      ],
+      "title": "AuthoredModelDefinition",
+      "type": "object"
+    },
+    "AuthoredPayloadHoist": {
+      "additionalProperties": false,
+      "description": "Payload hoist attached to a named support node. The application creates\nthe managed hook node automatically.",
+      "examples": [
+        {
+          "contractual_points": [
+            {
+              "load_t": 1433.0,
+              "outreach_m": 50.0
+            }
+          ],
+          "falls": 20,
+          "hook_daf": 1.1,
+          "hook_mass_t": 102.0,
+          "offlead_deg": 1.0,
+          "rope_segments": [
+            {
+              "from": "winch",
+              "parts": 2,
+              "to": "sheave"
+            }
+          ],
+          "support_node_id": "mh_boom_sheave_4"
+        }
+      ],
+      "properties": {
+        "rope_segments": {
+          "items": {
+            "$ref": "#/$defs/AuthoredRopeSegment"
+          },
+          "minItems": 1,
+          "title": "Rope Segments",
+          "type": "array"
+        },
+        "linear_mass_kg_m": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Linear Mass Kg M",
+          "type": "number"
+        },
+        "support_node_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Support Node Id",
+          "type": "string"
+        },
+        "hook_daf": {
+          "minimum": 1,
+          "title": "Hook Daf",
+          "type": "number"
+        },
+        "offlead_deg": {
+          "minimum": 0,
+          "title": "Offlead Deg",
+          "type": "number"
+        },
+        "sidelead_deg": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Sidelead Deg",
+          "type": "number"
+        },
+        "drum_dead_turns": {
+          "default": 0,
+          "description": "Turns of rope that must remain on the drum when the hook is at its lowest point. Requires drum_diameter_m.",
+          "minimum": 0,
+          "title": "Drum Dead Turns",
+          "type": "integer"
+        },
+        "drum_diameter_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mean wrap diameter of the dead turns in metres. Dead rope length is drum_dead_turns * pi * drum_diameter_m and is added to the derived total rope length.",
+          "title": "Drum Diameter M"
+        },
+        "falls": {
+          "minimum": 1,
+          "title": "Falls",
+          "type": "integer"
+        },
+        "hook_mass_t": {
+          "minimum": 0,
+          "title": "Hook Mass T",
+          "type": "number"
+        },
+        "contractual_points": {
+          "items": {
+            "$ref": "#/$defs/AuthoredContractualPoint"
+          },
+          "minItems": 1,
+          "title": "Contractual Points",
+          "type": "array"
+        },
+        "split": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuthoredPayloadHoistMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "rope_segments",
+        "support_node_id",
+        "hook_daf",
+        "offlead_deg",
+        "falls",
+        "hook_mass_t",
+        "contractual_points"
+      ],
+      "title": "AuthoredPayloadHoist",
+      "type": "object"
+    },
+    "AuthoredPayloadHoistMode": {
+      "additionalProperties": false,
+      "properties": {
+        "falls": {
+          "minimum": 1,
+          "title": "Falls",
+          "type": "integer"
+        },
+        "hook_mass_t": {
+          "minimum": 0,
+          "title": "Hook Mass T",
+          "type": "number"
+        },
+        "contractual_points": {
+          "items": {
+            "$ref": "#/$defs/AuthoredContractualPoint"
+          },
+          "minItems": 1,
+          "title": "Contractual Points",
+          "type": "array"
+        }
+      },
+      "required": [
+        "falls",
+        "hook_mass_t",
+        "contractual_points"
+      ],
+      "title": "AuthoredPayloadHoistMode",
+      "type": "object"
+    },
+    "AuthoredRopeSegment": {
+      "additionalProperties": false,
+      "description": "One connected rope path segment. Node IDs must refer to nodes in the model.",
+      "examples": [
+        {
+          "from": "winch",
+          "parts": 2,
+          "to": "sheave"
+        }
+      ],
+      "properties": {
+        "from": {
+          "description": "Starting node ID.",
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "description": "Ending node ID.",
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "To",
+          "type": "string"
+        },
+        "parts": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Parts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "AuthoredRopeSegment",
+      "type": "object"
+    },
+    "AuthoredSchemaBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "const": "crane-statics",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^5\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "AuthoredSchemaBlock",
+      "type": "object"
+    },
+    "AuthoredVesselMotion": {
+      "additionalProperties": false,
+      "description": "Optional vessel accelerations and rotation reference. Omitted values default to zero.",
+      "properties": {
+        "accel_x_m_s2": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Accel X M S2",
+          "type": "number"
+        },
+        "accel_y_m_s2": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Accel Y M S2",
+          "type": "number"
+        },
+        "accel_z_m_s2": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Accel Z M S2",
+          "type": "number"
+        },
+        "pitch_angular_accel_rad_s2": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Pitch Angular Accel Rad S2",
+          "type": "number"
+        },
+        "roll_angular_accel_rad_s2": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Roll Angular Accel Rad S2",
+          "type": "number"
+        },
+        "reference_x_m": {
+          "default": 0.0,
+          "title": "Reference X M",
+          "type": "number"
+        },
+        "reference_z_m": {
+          "default": 0.0,
+          "title": "Reference Z M",
+          "type": "number"
+        }
+      },
+      "title": "AuthoredVesselMotion",
+      "type": "object"
+    },
+    "AuthoredWindAreaBoom": {
+      "additionalProperties": false,
+      "description": "Boom wind area using boom-local U/W centroid coordinates.",
+      "examples": [
+        {
+          "area_v_m2": 485.7,
+          "area_w_m2": 540.3,
+          "cd": 1.25,
+          "id": "boom_lattice",
+          "position": {
+            "u_m": 82.4,
+            "w_m": 0.0
+          }
+        }
+      ],
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "area_w_m2": {
+          "minimum": 0,
+          "title": "Area W M2",
+          "type": "number"
+        },
+        "area_v_m2": {
+          "minimum": 0,
+          "title": "Area V M2",
+          "type": "number"
+        },
+        "cd": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Cd",
+          "type": "number"
+        },
+        "position": {
+          "$ref": "#/$defs/AuthoredBoomPosition2D"
+        }
+      },
+      "required": [
+        "id",
+        "area_w_m2",
+        "area_v_m2",
+        "position"
+      ],
+      "title": "AuthoredWindAreaBoom",
+      "type": "object"
+    },
+    "AuthoredWindAreaGlobal": {
+      "additionalProperties": false,
+      "description": "Fixed-body wind area using global X/Z centroid coordinates.",
+      "examples": [
+        {
+          "area_x_m2": 156.5,
+          "area_y_m2": 0.0,
+          "cd": 1.0,
+          "id": "platform_wind_x",
+          "position": {
+            "x_m": 0.0,
+            "z_m": 3.4
+          }
+        }
+      ],
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "area_x_m2": {
+          "minimum": 0,
+          "title": "Area X M2",
+          "type": "number"
+        },
+        "area_y_m2": {
+          "minimum": 0,
+          "title": "Area Y M2",
+          "type": "number"
+        },
+        "cd": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Cd",
+          "type": "number"
+        },
+        "position": {
+          "$ref": "#/$defs/AuthoredGlobalPosition2D"
+        }
+      },
+      "required": [
+        "id",
+        "area_x_m2",
+        "area_y_m2",
+        "position"
+      ],
+      "title": "AuthoredWindAreaGlobal",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Minimal authored input for a fixed-topology 2D crane. Coordinates are\nnamed objects; lengths are metres, masses are tonnes, and angles are\ndegrees unless noted.",
+  "examples": [
+    {
+      "metadata": {
+        "name": "New Crane Model"
+      },
+      "model_definition": {
+        "boom": {
+          "mass_points": [],
+          "nodes": {
+            "mh_hook": {
+              "u_m": 0.0,
+              "w_m": 0.0
+            }
+          },
+          "wind_areas": []
+        },
+        "boom_heel": {
+          "x_m": 0.0,
+          "z_m": 0.0
+        },
+        "boom_hoist": {
+          "rope_segments": [
+            {
+              "from": "boom_heel",
+              "parts": 2,
+              "to": "rear_top"
+            }
+          ]
+        },
+        "boom_width_m": 1.0,
+        "environment": {
+          "air_density_kg_m3": 1.225,
+          "gravity_m_s2": 9.81,
+          "max_wind_speed_m_s": 20.0,
+          "mean_sealevel_z_m": -35.0,
+          "wind_profile_exponent": 0.143,
+          "wind_reference_height_m_asl": 10.0
+        },
+        "front_hinge": {
+          "x_m": 0.0,
+          "z_m": 0.0
+        },
+        "front_leg": {
+          "mass_points": [],
+          "nodes": {},
+          "wind_areas": []
+        },
+        "payload_hoists": {
+          "MH": {
+            "contractual_points": [
+              {
+                "load_t": 0.0,
+                "outreach_m": 0.0
+              }
+            ],
+            "falls": 1,
+            "hook_daf": 1.0,
+            "hook_mass_t": 0.0,
+            "offlead_deg": 0.0,
+            "rope_segments": [
+              {
+                "from": "boom_heel",
+                "to": "mh_hook"
+              }
+            ],
+            "sidelead_deg": 0.0,
+            "support_node_id": "mh_hook"
+          }
+        },
+        "platform": {
+          "mass_points": [],
+          "nodes": {},
+          "wind_areas": []
+        },
+        "rear_hinge": {
+          "x_m": 0.0,
+          "z_m": 0.0
+        },
+        "rear_leg": {
+          "mass_points": [],
+          "nodes": {},
+          "wind_areas": []
+        },
+        "slewing_bearing_diameter_m": 1.0,
+        "upper_hinge": {
+          "x_m": 0.0,
+          "z_m": 0.0
+        },
+        "vessel_motion": {
+          "accel_x_m_s2": 0.0,
+          "accel_y_m_s2": 0.0,
+          "accel_z_m_s2": 0.0,
+          "pitch_angular_accel_rad_s2": 0.0,
+          "reference_x_m": 0.0,
+          "reference_z_m": 0.0,
+          "roll_angular_accel_rad_s2": 0.0
+        }
+      },
+      "schema": {
+        "name": "crane-statics",
+        "version": "5.13.0"
+      }
+    }
+  ],
+  "properties": {
+    "schema": {
+      "$ref": "#/$defs/AuthoredSchemaBlock"
+    },
+    "metadata": {
+      "$ref": "#/$defs/AuthoredMetadata"
+    },
+    "model_definition": {
+      "$ref": "#/$defs/AuthoredModelDefinition"
+    }
+  },
+  "required": [
+    "schema",
+    "metadata",
+    "model_definition"
+  ],
+  "type": "object"
+}

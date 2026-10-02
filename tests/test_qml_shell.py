@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import QObject, QCoreApplication, QUrl
+from PyQt6.QtCore import QObject, QUrl
 from PyQt6.QtTest import QTest
 from PyQt6.QtQml import (
     QJSValue,
@@ -16,7 +16,7 @@ from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtQuick import QQuickItem
 
 from crane_statics.qml_app.session import SessionState
-from crane_statics.qml_app.app import QML_DIR
+from crane_statics.qml_app.app import DESIGN_DIR, QML_DIR
 from crane_statics.qml_app.viewmodels.app_vm import AppViewModel
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
@@ -29,6 +29,7 @@ EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
 def qml_engine():
     engine = QQmlApplicationEngine()
     engine.addImportPath(str(QML_DIR))
+    engine.addImportPath(str(DESIGN_DIR))
 
     # Parent the view models to the engine so QML objects are torn down first.
     session = SessionState()
@@ -59,84 +60,6 @@ def test_main_qml_loads_without_warnings(qml_engine):
     engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
 
     assert engine.rootObjects(), "Main.qml failed to instantiate"
-    assert warnings == []
-
-
-def test_theme_menu_tracks_color_scheme_preference(qml_engine):
-    engine, app_vm, _model_vm, warnings = qml_engine
-    app_vm.setColorScheme("system")
-    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
-
-    root = engine.rootObjects()[-1]
-    actions = {
-        item.property("text").replace("&", ""): item
-        for item in root.findChildren(QObject)
-        if isinstance(item.property("text"), str) and item.property("text")
-    }
-    assert {"Follow System", "Light", "Dark"} <= set(actions)
-
-    app_vm.setColorScheme("dark")
-    QTest.qWait(50)
-    assert app_vm.colorScheme == "dark"
-    source = (QML_DIR / "Main.qml").read_text(encoding="utf-8")
-    assert 'checked: appVm.colorScheme === "dark"' in source
-    assert 'checked: appVm.colorScheme === "light"' in source
-    assert warnings == []
-
-
-def test_theme_override_changes_rendered_design_tokens(qml_engine):
-    engine, _app_vm, _model_vm, warnings = qml_engine
-    component = QQmlComponent(engine)
-    component.setData(
-        b"""import QtQuick
-import "../design" as Design
-Item {
-    id: root
-    property string scheme: "light"
-    property color surface: Design.DesignTokens.colors.surface
-    property color background: Design.DesignTokens.colors.background
-    property color text: Design.DesignTokens.colors.textPrimary
-    property color chartCanvas: Design.DesignTokens.colors.chartCanvasBackground
-    property color chartPlot: Design.DesignTokens.colors.chartPlotBackground
-    property color chartTooltip: Design.DesignTokens.colors.chartTooltipBackground
-    property color chartText: Design.DesignTokens.colors.chartAxisText
-    Binding { target: Design.DesignTokens; property: "colorScheme"; value: root.scheme }
-}""",
-        QUrl.fromLocalFile(str(QML_DIR / "theme_probe.qml")),
-    )
-    probe = component.create()
-
-    assert probe is not None
-    light = tuple(
-        probe.property(name).name()
-        for name in (
-            "surface",
-            "background",
-            "text",
-            "chartCanvas",
-            "chartPlot",
-            "chartTooltip",
-            "chartText",
-        )
-    )
-    probe.setProperty("scheme", "dark")
-    QCoreApplication.processEvents()
-    dark = tuple(
-        probe.property(name).name()
-        for name in (
-            "surface",
-            "background",
-            "text",
-            "chartCanvas",
-            "chartPlot",
-            "chartTooltip",
-            "chartText",
-        )
-    )
-
-    assert light == ("#ffffff", "#f7f8fa", "#202428", "#f7f8fa", "#ffffff", "#ffffff", "#4b5563")
-    assert dark == ("#24282d", "#1b1e22", "#f1f3f5", "#1b1e22", "#15181c", "#24282d", "#c4cdd6")
-    assert light != dark
     assert warnings == []
 
 
@@ -207,11 +130,6 @@ def test_chart_legend_handles_long_labels_and_toggles_visibility(qml_engine):
         "dialogs/HoistDialog.qml",
         "dialogs/SegmentDialog.qml",
         "dialogs/ContractualPointDialog.qml",
-        "DesignSystemTokensDemo.qml",
-        "ComponentLibraryShowcase.qml",
-        "components/StyledCheckBox.qml",
-        "components/StyledRadioButton.qml",
-        "components/IconButton.qml",
     ],
 )
 def test_component_loads_without_warnings(qml_engine, qml_file):
@@ -650,84 +568,6 @@ def test_live_tables_use_the_shared_row_height_token(qml_engine):
     assert warnings == []
 
 
-def test_combo_popup_has_visible_row_height(qml_engine):
-    _engine, _app_vm, _model_vm, warnings = qml_engine
-    source = (QML_DIR / "components/ComboBox.qml").read_text(encoding="utf-8")
-
-    assert "root.count" in source
-    assert "DesignTokens.sizing.rowHeight" in source
-    assert "Math.min(" in source
-    assert warnings == []
-
-
-def _find_combo_list_view(item):
-    if item.property("objectName") == "comboPopupList":
-        return item
-    for child in item.children():
-        found = _find_combo_list_view(child)
-        if found is not None:
-            return found
-    return None
-
-
-def test_combo_popup_keeps_items_after_close_without_selecting(qml_engine):
-    engine, _app_vm, _model_vm, warnings = qml_engine
-    component = QQmlComponent(engine)
-    component.setData(
-        b"""
-        import QtQuick
-        import "components" as Components
-
-        Item {
-            id: probe
-            property alias combo: box
-            property int listViewCount: -1
-
-            Components.ComboBox {
-                id: box
-                model: ["Alpha", "Beta", "Gamma"]
-            }
-
-            function findListView(item) {
-                if (item.objectName === "comboPopupList")
-                    return item
-                for (var i = 0; i < item.children.length; i++) {
-                    var found = findListView(item.children[i])
-                    if (found)
-                        return found
-                }
-                return null
-            }
-
-            function refreshCount() {
-                var lv = box.popup.contentItem ? findListView(box.popup.contentItem) : null
-                listViewCount = lv ? lv.count : -1
-            }
-
-            function openPopup() { box.popup.open() }
-            function closePopup() { box.popup.close() }
-        }
-        """,
-        QUrl.fromLocalFile(str(QML_DIR / "_combo_probe.qml")),
-    )
-    probe = component.create()
-    assert probe is not None, component.errorString()
-
-    probe.openPopup()
-    QTest.qWait(50)
-    probe.refreshCount()
-    assert probe.property("listViewCount") == 3
-
-    probe.closePopup()
-    QTest.qWait(50)
-    probe.openPopup()
-    QTest.qWait(50)
-    probe.refreshCount()
-
-    assert probe.property("listViewCount") == 3
-    assert warnings == []
-
-
 @pytest.mark.parametrize(
     ("qml_file", "minimum_height"),
     [
@@ -738,10 +578,33 @@ def test_combo_popup_keeps_items_after_close_without_selecting(qml_engine):
 )
 def test_data_entry_dialog_height_follows_content(qml_engine, qml_file, minimum_height):
     engine, _app_vm, _model_vm, warnings = qml_engine
-    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / qml_file)))
+    # Native Dialog only resolves Overlay.overlay (and therefore counts header/footer
+    # height) once it actually has a window ancestor to open into, matching how the
+    # app always instantiates dialogs as children of the ApplicationWindow.
+    dialog_url = QUrl.fromLocalFile(str(QML_DIR / qml_file)).toString()
+    component = QQmlComponent(engine)
+    component.setData(
+        f"""import QtQuick
+import QtQuick.Controls
+ApplicationWindow {{
+    visible: true
+    width: 800
+    height: 800
+    property var dialog: loader.item
+    Loader {{ id: loader; source: "{dialog_url}" }}
+}}""".encode(
+            "utf-8"
+        ),
+        QUrl.fromLocalFile(str(QML_DIR / "_dialog_height_probe.qml")),
+    )
 
     assert component.status() == QQmlComponent.Status.Ready, component.errorString()
-    dialog = component.create()
+    window = component.create()
+    assert window is not None
+    dialog = window.property("dialog")
     assert dialog is not None
+
+    dialog.open()
+    QTest.qWait(20)
     assert dialog.property("height") >= minimum_height
     assert warnings == []

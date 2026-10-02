@@ -3,8 +3,7 @@
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import QSettings, QUrl, Qt
-from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtCore import QUrl
 
 from crane_statics.qml_app.session import SessionState
 from crane_statics.core.accessibility import contrast_ratio
@@ -104,61 +103,6 @@ class TestLayoutReset:
         app_vm.resetLayout()
 
         assert requested == [1]
-
-
-class TestColorScheme:
-    @pytest.fixture(autouse=True)
-    def _isolate_settings(self):
-        settings = QSettings("CraneStatics", "CraneStatics")
-        had_value = settings.contains("ui/colorScheme")
-        previous = settings.value("ui/colorScheme") if had_value else None
-        settings.remove("ui/colorScheme")
-        settings.sync()
-        yield
-        if had_value:
-            settings.setValue("ui/colorScheme", previous)
-        else:
-            settings.remove("ui/colorScheme")
-        settings.sync()
-
-    def test_defaults_to_following_the_system(self):
-        assert AppViewModel(SessionState()).colorScheme == "system"
-
-    @pytest.mark.parametrize("scheme", ["light", "dark", "system"])
-    def test_choice_persists_across_instances(self, scheme):
-        first = AppViewModel(SessionState())
-        first.setColorScheme("dark" if scheme != "dark" else "light")
-        first.setColorScheme(scheme)
-
-        assert first.colorScheme == scheme
-        assert AppViewModel(SessionState()).colorScheme == scheme
-
-    def test_unknown_scheme_is_ignored(self):
-        vm = AppViewModel(SessionState())
-        vm.setColorScheme("light")
-        changes: list[int] = []
-        vm.colorSchemeChanged.connect(lambda: changes.append(1))
-
-        vm.setColorScheme("solarized")
-
-        assert vm.colorScheme == "light"
-        assert changes == []
-
-        @pytest.mark.parametrize("scheme", ["light", "dark", "system"])
-        def test_restored_scheme_can_be_applied_to_qt(self, scheme):
-            first = AppViewModel(SessionState())
-            first.setColorScheme(scheme)
-
-            restored = AppViewModel(SessionState())
-            restored.applyColorScheme()
-
-            expected = {
-                "light": Qt.ColorScheme.Light,
-                "dark": Qt.ColorScheme.Dark,
-                "system": Qt.ColorScheme.Unknown,
-            }[scheme]
-            assert restored.colorScheme == scheme
-            assert QGuiApplication.styleHints().colorScheme() == expected
 
 
 class TestAccessibilityTokens:
