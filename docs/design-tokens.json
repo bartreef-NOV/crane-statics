@@ -1,333 +1,190 @@
 {
-  "version": "1.0.0",
-  "lastUpdated": "2026-08-14",
-  "description": "Design tokens for Crane Statics QML application. All color tokens are semantic (bind to SystemPalette) and automatically adapt to light/dark theme.",
+  "version": "2.0.0",
+  "lastUpdated": "2026-09-24",
+  "description": "Design tokens for the Crane Statics QML application, sourced from the BF.DesignSystem module (src/crane_statics/qml_app/design/BF/DesignSystem/). The app is light-mode only: there is no dark variant and no SystemPalette binding. Colors come from the fixed BF/NOV brand palette in Theme.qml; spacing/sizing/radii/breakpoints come from Metrics.qml; font tokens come from Typography.qml.",
   "metadata": {
-    "colorSystem": "Fusion SystemPalette (light/dark theme aware)",
-    "baseUnit": "4px",
-    "fontMetrics": "system-dependent scaling",
-    "themeSupport": "Automatic via Qt's ColorScheme (Light/Dark/Follow System)"
+    "colorSystem": "Fixed BF/NOV brand palette (light-mode only, no theme switching)",
+    "module": "BF.DesignSystem",
+    "singletons": ["Theme", "Metrics", "Typography"],
+    "controls": ["BfButton", "BfTextField", "BfCard", "BfStatusBadge", "BfPage"],
+    "fontMetrics": "system-dependent scaling"
   },
-  "tokens": {
+  "theme": {
+    "description": "Tokens and helper functions from Theme.qml. Values marked \"computed\": true are derived at runtime via Qt.lighter()/Qt.darker()/Theme.contrastText() rather than being a literal hex value; the \"expression\" field shows exactly how.",
+    "rawPalette": {
+      "novYellow50Tint": "#FFE592",
+      "novOrange": "#DC9575",
+      "novOrange50Tint": "#F6CDB3",
+      "novYellow": "#FFCD00",
+      "novPurple50Tint": "#CCC1D4",
+      "novRed": "#DA291C",
+      "novGrey": "#78757B",
+      "novGreen": "#A9C47F",
+      "novTeal": "#00A499",
+      "novBlue": "#007096",
+      "novBrown": "#C6A992",
+      "novDarkRed": "#A6093D",
+      "novGreen50Tint": "#D4E0BD",
+      "novTeal50Tint": "#82CEC9",
+      "novBlue50Tint": "#82B4C9",
+      "novBrown50Tint": "#E3D2C6",
+      "novDarkRed50Tint": "#D18488",
+      "novPurple": "#A192B2",
+      "black": "#000000",
+      "white": "#FFFFFF"
+    },
     "colors": {
-      "description": "Semantic color roles. All bind to SystemPalette for automatic light/dark support.",
-      "surface": {
-        "description": "Primary surface for tables, inputs, cards (systemPalette.base)",
-        "light": "#ffffff",
-        "dark": "#2d2d2d"
-      },
-      "surfaceAlt": {
-        "description": "Secondary surface for panels, groups (systemPalette.button)",
-        "light": "#f0f0f0",
-        "dark": "#383838"
-      },
-      "background": {
-        "description": "App background (systemPalette.window)",
-        "light": "#f3f3f3",
-        "dark": "#1e1e1e"
-      },
-      "overlay": {
-        "description": "Modal/dialog overlay (dark semi-transparent)",
-        "value": "rgba(0, 0, 0, 0.5)"
-      },
-      "textPrimary": {
-        "description": "Main text (systemPalette.text)",
-        "light": "#000000",
-        "dark": "#ffffff"
-      },
-      "textSecondary": {
-        "description": "Supporting text, labels (systemPalette.mid)",
-        "light": "#777777",
-        "dark": "#b0b0b0"
-      },
-      "textDisabled": {
-        "description": "Disabled state text (systemPalette.midlight)",
-        "light": "#999999",
-        "dark": "#666666"
-      },
-      "textInverse": {
-        "description": "Text on highlighted/active backgrounds (systemPalette.highlightedText)",
-        "light": "#ffffff",
-        "dark": "#000000"
-      },
-      "primary": {
-        "description": "Active selection, primary actions (systemPalette.highlight)",
-        "light": "#0078d4",
-        "dark": "#4fa3ff"
-      },
-      "primaryHover": {
-        "description": "Hover state (darker variant of primary)",
-        "light": "#005a9e",
-        "dark": "#2e7dd4"
-      },
-      "primaryPressed": {
-        "description": "Pressed state (even darker variant)",
-        "light": "#003d6b",
-        "dark": "#0f5a8f"
-      },
-      "primaryDisabled": {
-        "description": "Disabled primary state (systemPalette.midlight)",
-        "light": "#cccccc",
-        "dark": "#444444"
-      },
-      "success": {
-        "description": "Success, valid state (semantic green)",
-        "value": "#4caf50"
-      },
-      "successAlt": {
-        "description": "Light success (hover/focus variant)",
-        "value": "#81c784"
-      },
-      "warning": {
-        "description": "Warning, caution state (semantic orange)",
-        "value": "#ff9800"
-      },
-      "warningAlt": {
-        "description": "Light warning (hover/focus variant)",
-        "value": "#ffb74d"
-      },
-      "error": {
-        "description": "Error, invalid state (semantic red)",
-        "value": "#f44336"
-      },
-      "errorAlt": {
-        "description": "Light error (hover/focus variant)",
-        "value": "#ef5350"
-      },
-      "info": {
-        "description": "Information state (semantic blue)",
-        "value": "#2196f3"
-      },
-      "infoAlt": {
-        "description": "Light info (hover/focus variant)",
-        "value": "#64b5f6"
-      },
-      "border": {
-        "description": "Standard border, divider (systemPalette.mid)",
-        "light": "#cccccc",
-        "dark": "#444444"
-      },
-      "borderLight": {
-        "description": "Subtle border (systemPalette.midlight)",
-        "light": "#e0e0e0",
-        "dark": "#333333"
-      },
-      "divider": {
-        "description": "Row/column separator (systemPalette.midlight)",
-        "light": "#e0e0e0",
-        "dark": "#333333"
-      },
-      "focusRing": {
-        "description": "Keyboard focus indicator (systemPalette.highlight)",
-        "light": "#0078d4",
-        "dark": "#4fa3ff"
-      },
-      "selection": {
-        "description": "Text/item selection (systemPalette.highlight)",
-        "light": "#0078d4",
-        "dark": "#4fa3ff"
-      },
-      "selectionText": {
-        "description": "Text color on selection (systemPalette.highlightedText)",
-        "light": "#ffffff",
-        "dark": "#000000"
-      }
+      "primary": { "value": "#007096", "description": "= novBlue. Active selection, primary actions." },
+      "primaryHover": { "computed": true, "expression": "Qt.lighter(novBlue, 112)", "description": "Hover state." },
+      "primaryPressed": { "computed": true, "expression": "Qt.darker(novBlue, 115)", "description": "Pressed state." },
+      "primaryDisabled": { "computed": true, "expression": "Qt.lighter(novBlue, 170)", "description": "Disabled primary state." },
+      "onPrimary": { "value": "#FFFFFF", "description": "= white. Text/icons on a primary fill." },
+      "accent": { "value": "#FFCD00", "description": "= novYellow." },
+      "accentHover": { "computed": true, "expression": "Qt.lighter(novYellow, 108)" },
+      "accentPressed": { "computed": true, "expression": "Qt.darker(novYellow, 110)" },
+      "onAccent": { "value": "#000000", "description": "= black. Text/icons on an accent fill." },
+      "pageBackground": { "value": "#FFFFFF", "description": "= white. App/page background." },
+      "surface": { "value": "#FFFFFF", "description": "= white. Tables, inputs, cards." },
+      "surfaceSubtle": { "value": "#CCC1D4", "description": "= novPurple50Tint. Panels, groups, alternate backgrounds." },
+      "border": { "value": "#78757B", "description": "= novGrey. Standard border/divider." },
+      "borderSubtle": { "value": "#CCC1D4", "description": "= novPurple50Tint. Low-emphasis divider." },
+      "text": { "value": "#000000", "description": "= black. Main text." },
+      "textMuted": { "value": "#78757B", "description": "= novGrey. Supporting text/labels." },
+      "textOnDark": { "value": "#FFFFFF", "description": "= white. Fallback inverse text." },
+      "disabledSurface": { "computed": true, "expression": "Qt.lighter(novGrey, 155)" },
+      "disabledText": { "computed": true, "expression": "Qt.lighter(novGrey, 120)" },
+      "success": { "value": "#A9C47F", "description": "= novGreen." },
+      "successSurface": { "value": "#D4E0BD", "description": "= novGreen50Tint. Pastel success fill." },
+      "warning": { "value": "#DC9575", "description": "= novOrange." },
+      "warningSurface": { "value": "#F6CDB3", "description": "= novOrange50Tint. Pastel warning fill." },
+      "error": { "value": "#DA291C", "description": "= novRed." },
+      "errorSurface": { "value": "#D18488", "description": "= novDarkRed50Tint. Pastel error fill." },
+      "info": { "value": "#00A499", "description": "= novTeal." },
+      "infoSurface": { "value": "#82CEC9", "description": "= novTeal50Tint. Pastel info fill." },
+      "onSuccess": { "computed": true, "expression": "contrastText(success)", "description": "Whichever of black/white has higher contrast against success." },
+      "onWarning": { "computed": true, "expression": "contrastText(warning)" },
+      "onError": { "computed": true, "expression": "contrastText(error)" },
+      "onInfo": { "computed": true, "expression": "contrastText(info)" },
+      "focusRing": { "value": "#007096", "description": "= novBlue. Keyboard focus indicator." },
+      "selection": { "value": "#82B4C9", "description": "= novBlue50Tint. Light tint, not a solid fill." },
+      "selectionText": { "value": "#000000", "description": "= text (black). Selected text stays the normal dark color since selection is a tint, not an inverse fill." },
+      "overlay": { "value": "rgba(0, 0, 0, 0.5)", "description": "Modal/dialog dimming." },
+      "shadowColor": { "value": "rgba(0, 0, 0, 0.15)", "description": "Tint for MultiEffect/drop-shadow elevation." }
     },
-    "typography": {
-      "description": "Font families, sizes, weights, and line-height ratios",
-      "fontFamily": {
-        "sans": "Segoe UI, Ubuntu, 'Liberation Sans', sans-serif",
-        "mono": "'Consolas', 'Monaco', 'Courier New', monospace"
-      },
-      "weights": {
-        "light": 300,
-        "regular": 400,
-        "medium": 500,
-        "semiBold": 600,
-        "bold": 700
-      },
-      "sizes": {
-        "caption": {
-          "value": 11,
-          "description": "Small labels, help text",
-          "usage": "Form hints, table captions"
-        },
-        "body": {
-          "value": 13,
-          "description": "Body text, default",
-          "usage": "Standard paragraph text, table cells, inputs"
-        },
-        "bodyLarge": {
-          "value": 14,
-          "description": "Larger body text",
-          "usage": "Important body text, data summary"
-        },
-        "subtitle": {
-          "value": 14,
-          "description": "Subtitles, secondary headings",
-          "usage": "Subsection titles, group labels"
-        },
-        "heading": {
-          "value": 16,
-          "description": "Section headings",
-          "usage": "Dialog titles, panel headers"
-        },
-        "headingLarge": {
-          "value": 18,
-          "description": "Major headings, titles",
-          "usage": "Workspace titles, major section headers"
-        },
-        "display": {
-          "value": 22,
-          "description": "Large display titles",
-          "usage": "Application title"
-        }
-      },
-      "lineHeight": {
-        "tight": 1.2,
-        "normal": 1.5,
-        "relaxed": 1.8
-      },
-      "letterSpacing": {
-        "normal": 0,
-        "wide": 0.5
-      }
+    "chart": {
+      "description": "Chart/scene-canvas semantic colors.",
+      "chartCanvasBackground": { "value": "#FFFFFF", "description": "= pageBackground" },
+      "chartPlotBackground": { "value": "#FFFFFF", "description": "= surface" },
+      "chartGrid": { "computed": true, "expression": "Qt.lighter(novGrey, 160)" },
+      "chartAxisText": { "value": "#78757B", "description": "= textMuted" },
+      "chartAxisBorder": { "value": "#78757B", "description": "= border" },
+      "chartCrosshair": { "value": "#78757B", "description": "= textMuted" },
+      "chartTooltipBackground": { "value": "#FFFFFF", "description": "= surface" },
+      "chartTooltipBorder": { "value": "#78757B", "description": "= border" },
+      "chartTooltipText": { "value": "#000000", "description": "= text" },
+      "chartSeriesFallback": { "value": "#78757B", "description": "= textMuted" },
+      "chartPass": { "value": "#A9C47F", "description": "= success" },
+      "chartFail": { "value": "#DA291C", "description": "= error" },
+      "chartPending": { "value": "#DC9575", "description": "= warning" },
+      "chartContractual": { "value": "#A9C47F", "description": "= success" }
     },
+    "functions": {
+      "colorWithAlpha(color, alpha)": "Returns color with the given alpha channel.",
+      "relativeLuminance(color)": "WCAG relative luminance of a color.",
+      "contrastText(background)": "Returns black or white, whichever has higher WCAG contrast against background.",
+      "getSemanticColor(semantic)": "Maps \"success\"|\"warning\"|\"error\"|\"info\"|\"primary\" to its Theme color (default: text).",
+      "getOnSemanticColor(semantic)": "Maps \"success\"|\"warning\"|\"error\"|\"info\"|\"primary\" to its contrast-safe on-color (default: textOnDark).",
+      "getStatusColor(level)": "Numeric 0.0-1.0 stress level -> success (<0.4) | warning (<0.7) | error (>=0.7)."
+    }
+  },
+  "metrics": {
+    "description": "Tokens from Metrics.qml. Flat numeric scale; there are no grouped/semantic aliases like the old spacing.md or spacing.panelPadding.",
     "spacing": {
-      "description": "Consistent scale for margins, padding, gaps. Base unit: 4px",
-      "scale": {
-        "xs": {
-          "value": 4,
-          "usage": "Tight spacing (borders, minimal gaps)"
-        },
-        "sm": {
-          "value": 8,
-          "usage": "Small spacing (compact form fields, tight rows)"
-        },
-        "md": {
-          "value": 16,
-          "usage": "Medium spacing (standard margins, panel padding)"
-        },
-        "lg": {
-          "value": 24,
-          "usage": "Large spacing (section gaps, major layout)"
-        },
-        "xl": {
-          "value": 32,
-          "usage": "Extra large spacing (workspace separation)"
-        },
-        "xxl": {
-          "value": 48,
-          "usage": "Double extra large (major page sections)"
-        }
-      },
-      "grouped": {
-        "controlGap": 8,
-        "rowGap": 8,
-        "sectionGap": 16,
-        "panelPadding": 12,
-        "dialogPadding": 16
-      }
+      "spacing2": 2,
+      "spacing4": 4,
+      "spacing6": 6,
+      "spacing8": 8,
+      "spacing12": 12,
+      "spacing16": 16,
+      "spacing24": 24,
+      "spacing32": 32,
+      "spacing48": 48
     },
-    "sizing": {
-      "description": "Dimensions for common control types",
-      "controls": {
-        "buttonHeight": 32,
-        "buttonHeightSmall": 24,
-        "inputHeight": 32,
-        "inputHeightSmall": 24,
-        "rowHeight": 28,
-        "rowHeightCompact": 24,
-        "rowHeightRelaxed": 32
-      },
-      "widths": {
-        "minInputWidth": 60,
-        "maxInputWidth": 200,
-        "minButtonWidth": 80
-      },
-      "icons": {
-        "small": 16,
-        "normal": 24,
-        "large": 32,
-        "xLarge": 48
-      },
-      "borders": {
-        "thin": 1,
-        "normal": 2,
-        "thick": 3
-      },
-      "radius": {
-        "none": 0,
-        "small": 2,
-        "normal": 4,
-        "large": 8
-      }
+    "controls": {
+      "controlHeight": 36,
+      "compactControlHeight": 30,
+      "buttonMinWidth": 96,
+      "fieldMinWidth": 160,
+      "minInputWidth": 60,
+      "maxInputWidth": 200,
+      "dialogWidth": 480
     },
-    "shadows": {
-      "description": "Elevation levels for visual hierarchy (offsets for DropShadow)",
-      "elevation1": {
-        "description": "Subtle shadow (hover states, subtle elevation)",
-        "offsetX": 0,
-        "offsetY": 1,
-        "blur": 3,
-        "opacity": 0.12
-      },
-      "elevation2": {
-        "description": "Medium shadow (cards, popovers)",
-        "offsetX": 0,
-        "offsetY": 2,
-        "blur": 6,
-        "opacity": 0.15
-      },
-      "elevation3": {
-        "description": "Strong shadow (modals, tooltips)",
-        "offsetX": 0,
-        "offsetY": 4,
-        "blur": 12,
-        "opacity": 0.20
-      },
-      "shadowColor": "rgba(0, 0, 0, 0.15)"
+    "rows": {
+      "tableRowHeight": 28,
+      "compactRowHeight": 24
     },
-    "border": {
-      "description": "Border and corner radius tokens",
-      "widths": {
-        "thin": 1,
-        "normal": 2
-      },
-      "radius": {
-        "none": 0,
-        "small": 2,
-        "normal": 4,
-        "large": 8,
-        "round": 20
-      }
+    "icons": {
+      "iconSmall": 16,
+      "iconNormal": 24,
+      "iconLarge": 32,
+      "iconXLarge": 48
+    },
+    "bordersAndRadii": {
+      "radiusSmall": 3,
+      "radiusMedium": 5,
+      "radiusLarge": 8,
+      "borderWidth": 1,
+      "borderWidthNormal": 2,
+      "focusWidth": 2
+    },
+    "controlFontSizes": {
+      "description": "Internal font-size scale used by the Bf* controls' own chrome (distinct from the Typography singleton's general-purpose scale).",
+      "fontSizeSmall": 12,
+      "fontSizeBody": 14,
+      "fontSizeSubtitle": 16,
+      "fontSizeTitle": 22
     },
     "transitions": {
-      "description": "Animation durations for interactions and theme changes (milliseconds)",
-      "durations": {
-        "fast": 100,
-        "normal": 200,
-        "slow": 300,
-        "theme": 400
-      },
-      "easing": "InOutQuad"
+      "transitionFast": 100,
+      "transitionNormal": 200,
+      "transitionSlow": 300
     },
-    "layout": {
-      "description": "Responsive breakpoints",
-      "breakpoints": {
-        "compact": {
-          "value": 1240,
-          "description": "Width < 1240px → 1-column layout (stacked panels)"
-        },
-        "wide": {
-          "value": 1240,
-          "description": "Width ≥ 1240px → 2-column layout (side-by-side)"
-        },
-        "ultraWide": {
-          "value": 1800,
-          "description": "Width ≥ 1800px → data-dense table layouts"
-        }
-      }
+    "breakpoints": {
+      "breakpointCompact": { "value": 1240, "description": "Width < 1240px -> 1-column layout (stacked panels)" },
+      "breakpointUltraWide": { "value": 1800, "description": "Width >= 1800px -> data-dense table layouts" }
+    },
+    "spacingMultiplier": 1.0
+  },
+  "typography": {
+    "description": "Tokens from Typography.qml. This is the general-purpose type scale for app content (distinct from Metrics.controlFontSizes, which the Bf* controls use for their own internal chrome).",
+    "fontFamily": {
+      "sans": "Segoe UI, Ubuntu, 'Liberation Sans', sans-serif",
+      "mono": "'Consolas', 'Monaco', 'Courier New', monospace"
+    },
+    "weights": {
+      "weightLight": 300,
+      "weightRegular": 400,
+      "weightMedium": 500,
+      "weightSemiBold": 600,
+      "weightBold": 700
+    },
+    "sizes": {
+      "caption": { "value": 11, "description": "Small labels, help text", "usage": "Form hints, table captions" },
+      "body": { "value": 13, "description": "Body text, default", "usage": "Standard paragraph text, table cells, inputs" },
+      "bodyLarge": { "value": 14, "description": "Larger body text", "usage": "Important body text, data summary" },
+      "subtitle": { "value": 14, "description": "Subtitles, secondary headings", "usage": "Subsection titles, group labels" },
+      "heading": { "value": 16, "description": "Section headings", "usage": "Dialog titles, panel headers" },
+      "headingLarge": { "value": 18, "description": "Major headings, titles", "usage": "Workspace titles, major section headers" },
+      "display": { "value": 22, "description": "Large display titles", "usage": "Application title" }
+    },
+    "lineHeight": {
+      "lineHeightTight": 1.2,
+      "lineHeightNormal": 1.5,
+      "lineHeightRelaxed": 1.8
+    },
+    "letterSpacing": {
+      "letterSpacingNormal": 0,
+      "letterSpacingWide": 0.5
     }
   },
   "semanticColorGuide": {
@@ -337,13 +194,13 @@
     "warning": "Caution states, non-critical alerts. Use for warnings that require user attention but are not errors.",
     "error": "Errors, invalid states. Use for form errors, failed operations, critical alerts.",
     "info": "Informational messages, hints. Use for tooltips, help text, information alerts.",
-    "textSecondary": "Supporting text, less important information. Use for form labels, captions, sub-text.",
-    "textDisabled": "Disabled controls. Use for inactive buttons, disabled form fields, unavailable actions."
+    "textMuted": "Supporting text, less important information. Use for form labels, captions, sub-text.",
+    "disabledText": "Disabled controls. Use for inactive buttons, disabled form fields, unavailable actions."
   },
   "craneEngineeringColorScale": {
-    "description": "Color scale for crane loading analysis (maps numeric stress levels 0-1 to visual feedback)",
-    "0.0_to_0.4": "#4caf50 (Green/Success) - Safe operating range",
-    "0.4_to_0.7": "#ff9800 (Orange/Warning) - Caution range, approaching limits",
-    "0.7_to_1.0": "#f44336 (Red/Error) - Overload/critical range"
+    "description": "Color scale for crane loading analysis (maps numeric stress levels 0-1 to visual feedback), via Theme.getStatusColor(level)",
+    "0.0_to_0.4": "#A9C47F (novGreen/Success) - Safe operating range",
+    "0.4_to_0.7": "#DC9575 (novOrange/Warning) - Caution range, approaching limits",
+    "0.7_to_1.0": "#DA291C (novRed/Error) - Overload/critical range"
   }
 }

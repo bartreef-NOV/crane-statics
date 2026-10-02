@@ -1,23 +1,23 @@
 import QtQuick
 import QtQuick.Controls.Fusion
-import "../../design"
+import BF.DesignSystem
 
 GroupBox {
     id: root
 
     background: Rectangle {
-        color: DesignTokens.colors.surface
-        border.color: DesignTokens.colors.border
-        border.width: DesignTokens.sizing.borderThin
-        radius: DesignTokens.sizing.radiusSmall
+        color: Theme.surface
+        border.color: Theme.border
+        border.width: Metrics.borderWidth
+        radius: Metrics.radiusSmall
     }
 
     label: Label {
         text: root.title
-        color: DesignTokens.colors.textPrimary
-        font.pixelSize: DesignTokens.typography.body
-        font.weight: DesignTokens.typography.weightSemiBold
-        leftPadding: DesignTokens.spacing.sm
-        rightPadding: DesignTokens.spacing.sm
+        color: Theme.text
+        font.pixelSize: Typography.body
+        font.weight: Typography.weightSemiBold
+        leftPadding: Metrics.spacing8
+        rightPadding: Metrics.spacing8
     }
 }

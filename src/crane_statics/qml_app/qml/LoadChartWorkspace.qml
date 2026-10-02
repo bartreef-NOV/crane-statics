@@ -3,15 +3,15 @@ import QtQuick.Controls.Fusion
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import "dialogs"
-import "../design" as Design
+import BF.DesignSystem
 import "components"
 
 Item {
     id: root
 
-    readonly property bool compact: width > 0 && width < Design.DesignTokens.layout.breakpointCompact
+    readonly property bool compact: width > 0 && width < Metrics.breakpointCompact
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.controlGap * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     GridLayout {

@@ -1,14 +1,14 @@
 import QtQuick
 import QtQuick.Controls.Fusion
-import "../../design"
+import BF.DesignSystem
 
 CheckBox {
     id: root
 
-    implicitHeight: DesignTokens.sizing.inputHeight
+    implicitHeight: Metrics.controlHeight
     implicitWidth: indicator.implicitWidth + spacing + label.implicitWidth
-    spacing: DesignTokens.spacing.sm
-    leftPadding: DesignTokens.sizing.iconNormal + DesignTokens.spacing.sm
+    spacing: Metrics.spacing8
+    leftPadding: Metrics.iconNormal + Metrics.spacing8
     rightPadding: 0
 
     background: Item {}
@@ -18,28 +18,28 @@ CheckBox {
 
     indicator: Rectangle {
         id: indicator
-        implicitWidth: DesignTokens.sizing.iconNormal
-        implicitHeight: DesignTokens.sizing.iconNormal
+        implicitWidth: Metrics.iconNormal
+        implicitHeight: Metrics.iconNormal
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        radius: DesignTokens.sizing.radiusSmall
-        color: root.checked ? DesignTokens.colors.primary : DesignTokens.colors.surface
-        border.width: root.activeFocus ? DesignTokens.sizing.borderNormal : DesignTokens.sizing.borderThin
+        radius: Metrics.radiusSmall
+        color: root.checked ? Theme.primary : Theme.surface
+        border.width: root.activeFocus ? Metrics.borderWidthNormal : Metrics.borderWidth
         border.color: root.activeFocus
-            ? DesignTokens.colors.focusRing
-            : (root.enabled ? DesignTokens.colors.border : DesignTokens.colors.borderLight)
+            ? Theme.focusRing
+            : (root.enabled ? Theme.border : Theme.borderSubtle)
 
         Text {
             anchors.centerIn: parent
             text: "\u2713"
-            font.pixelSize: DesignTokens.typography.bodyLarge
-            font.weight: DesignTokens.typography.weightBold
-            color: DesignTokens.colors.textInverse
+            font.pixelSize: Typography.bodyLarge
+            font.weight: Typography.weightBold
+            color: Theme.textOnDark
             visible: root.checked
         }
 
         Behavior on color {
-            ColorAnimation { duration: DesignTokens.transitions.fast }
+            ColorAnimation { duration: Metrics.transitionFast }
         }
     }
 
@@ -47,7 +47,7 @@ CheckBox {
         id: label
         text: root.text
         font: root.font
-        color: root.enabled ? DesignTokens.colors.textPrimary : DesignTokens.colors.textDisabled
+        color: root.enabled ? Theme.text : Theme.disabledText
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }

@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../../design"
+import BF.DesignSystem
 
 /**
  * Badge Component
@@ -32,11 +32,11 @@ Rectangle {
     property string semantic: "primary"
     property alias text: label.text
 
-    implicitWidth: label.implicitWidth + 2 * DesignTokens.spacing.sm
-    implicitHeight: DesignTokens.sizing.buttonHeightSmall
+    implicitWidth: label.implicitWidth + 2 * Metrics.spacing8
+    implicitHeight: Metrics.spacing24
 
-    color: DesignTokens.getSemanticColor(semantic)
-    radius: DesignTokens.border.radiusRound
+    color: Theme.getSemanticColor(semantic)
+    radius: height / 2
 
     Accessible.role: Accessible.StaticText
     Accessible.name: label.text
@@ -46,8 +46,8 @@ Rectangle {
         id: label
 
         anchors.centerIn: parent
-        font.pixelSize: DesignTokens.typography.caption
-        font.weight: DesignTokens.typography.weightMedium
-        color: DesignTokens.colors.textInverse
+        font.pixelSize: Typography.caption
+        font.weight: Typography.weightMedium
+        color: Theme.textOnDark
     }
 }

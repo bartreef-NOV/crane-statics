@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Fusion
-import "../../design"
+import BF.DesignSystem
 
 /**
  * TextField Component
@@ -14,7 +14,7 @@ import "../../design"
  *       placeholderText: "Enter name..."
  *       onAccepted: vm.name = text
  *   }
- *   
+ *
  *   TextField {
  *       isError: !validator.isValid(text)
  *       errorText: "Invalid format"
@@ -34,37 +34,37 @@ TextField {
     property bool isError: false
     property string errorText: ""
 
-    implicitHeight: DesignTokens.sizing.inputHeight
-    implicitWidth: DesignTokens.sizing.maxInputWidth
+    implicitHeight: Metrics.controlHeight
+    implicitWidth: Metrics.maxInputWidth
 
-    palette.text: enabled ? DesignTokens.colors.textPrimary : DesignTokens.colors.textDisabled
-    palette.base: DesignTokens.colors.surface
-    palette.mid: isError ? DesignTokens.colors.error : DesignTokens.colors.border
-    palette.highlight: DesignTokens.colors.selection
-    palette.highlightedText: DesignTokens.colors.selectionText
+    palette.text: enabled ? Theme.text : Theme.disabledText
+    palette.base: Theme.surface
+    palette.mid: isError ? Theme.error : Theme.border
+    palette.highlight: Theme.selection
+    palette.highlightedText: Theme.selectionText
 
-    font.pixelSize: DesignTokens.typography.body
-    font.family: DesignTokens.typography.fontFamily
+    font.pixelSize: Typography.body
+    font.family: Typography.fontFamily
 
     selectByMouse: true
-    padding: DesignTokens.spacing.sm
+    padding: Metrics.spacing8
 
     Accessible.role: Accessible.EditableText
     Accessible.name: placeholderText
     Accessible.description: errorText
 
     background: Rectangle {
-        color: DesignTokens.colors.surface
+        color: Theme.surface
         border.color: root.isError
-            ? DesignTokens.colors.error
-            : (root.activeFocus ? DesignTokens.colors.focusRing : DesignTokens.colors.border)
+            ? Theme.error
+            : (root.activeFocus ? Theme.focusRing : Theme.border)
         border.width: root.isError || root.activeFocus
-            ? DesignTokens.sizing.borderNormal
-            : DesignTokens.sizing.borderThin
-        radius: DesignTokens.sizing.radiusSmall
+            ? Metrics.borderWidthNormal
+            : Metrics.borderWidth
+        radius: Metrics.radiusSmall
 
         Behavior on border.color {
-            ColorAnimation { duration: DesignTokens.transitions.fast }
+            ColorAnimation { duration: Metrics.transitionFast }
         }
     }
 }

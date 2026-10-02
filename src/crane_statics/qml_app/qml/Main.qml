@@ -2,7 +2,6 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Dialogs
 import QtQuick.Layouts
-import "../design" as Design
 import "components"
 
 ApplicationWindow {
@@ -80,39 +79,7 @@ ApplicationWindow {
                 enabled: appVm.hasDocument
                 onTriggered: appVm.resetLayout()
             }
-            MenuSeparator {}
-            Menu {
-                title: qsTr("&Appearance")
-                ActionGroup { id: appearanceGroup }
-                Action {
-                    text: qsTr("Follow &System")
-                    checkable: true
-                    checked: appVm.colorScheme === "system"
-                    ActionGroup.group: appearanceGroup
-                    onTriggered: appVm.setColorScheme("system")
-                }
-                Action {
-                    text: qsTr("&Light")
-                    checkable: true
-                    checked: appVm.colorScheme === "light"
-                    ActionGroup.group: appearanceGroup
-                    onTriggered: appVm.setColorScheme("light")
-                }
-                Action {
-                    text: qsTr("&Dark")
-                    checkable: true
-                    checked: appVm.colorScheme === "dark"
-                    ActionGroup.group: appearanceGroup
-                    onTriggered: appVm.setColorScheme("dark")
-                }
-            }
         }
-    }
-
-    Binding {
-        target: Design.DesignTokens
-        property: "colorScheme"
-        value: appVm.colorScheme
     }
 
     header: TabBar {

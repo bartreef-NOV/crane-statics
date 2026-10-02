@@ -22,6 +22,7 @@ from .viewmodels.scene_vm import SceneViewModel
 _LOG = logging.getLogger(__name__)
 
 QML_DIR = Path(__file__).parent / "qml"
+DESIGN_DIR = Path(__file__).parent / "design"
 QML_MODULE = "CraneStatics"
 
 
@@ -49,7 +50,6 @@ def main(argv: list[str] | None = None) -> int:
     session = SessionState()
     engine = QQmlApplicationEngine(app)
     app_vm = AppViewModel(session, engine)
-    app_vm.applyColorScheme()
     model_vm = ModelViewModel(session, engine)
     scene_vm = SceneViewModel(session, engine)
     chart_vm = ChartViewModel(session, engine)
@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
 
     app.aboutToQuit.connect(cleanup)
     engine.addImportPath(str(QML_DIR))
+    engine.addImportPath(str(DESIGN_DIR))
     context = engine.rootContext()
     context.setContextProperty("appVm", app_vm)
     context.setContextProperty("modelVm", model_vm)

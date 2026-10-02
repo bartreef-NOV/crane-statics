@@ -3,7 +3,7 @@ import QtQuick.Controls.Fusion
 import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Dialogs
-import "../../design"
+import BF.DesignSystem
 import "."
 
 /**
@@ -35,10 +35,10 @@ Dialog {
     property string message: ""
     default property alias dialogContentData: contentColumn.data
 
-    readonly property int viewportMargin: DesignTokens.spacing.lg
+    readonly property int viewportMargin: Metrics.spacing24
     readonly property real availableDialogWidth: Overlay.overlay
         ? Math.max(0, Overlay.overlay.width - 2 * viewportMargin)
-        : DesignTokens.sizing.dialogWidth
+        : Metrics.dialogWidth
     readonly property real availableDialogHeight: Overlay.overlay
         ? Math.max(0, Overlay.overlay.height - 2 * viewportMargin)
         : 1000000
@@ -47,29 +47,29 @@ Dialog {
     width: Math.min(
         availableDialogWidth,
         Math.max(
-            DesignTokens.sizing.dialogWidth,
-            contentColumn.implicitWidth + 2 * DesignTokens.spacing.dialogPadding
+            Metrics.dialogWidth,
+            contentColumn.implicitWidth + 2 * Metrics.spacing16
         )
     )
     height: Math.min(
         availableDialogHeight,
         Math.max(
-            DesignTokens.sizing.buttonHeight * 3,
+            Metrics.controlHeight * 3,
             header.implicitHeight + contentScroll.implicitHeight + footer.implicitHeight
         )
     )
 
     // Styling
     background: Rectangle {
-        color: DesignTokens.colors.background
-        border.color: DesignTokens.colors.border
-        border.width: DesignTokens.sizing.borderNormal
-        radius: DesignTokens.sizing.radiusNormal
+        color: Theme.pageBackground
+        border.color: Theme.border
+        border.width: Metrics.borderWidthNormal
+        radius: Metrics.radiusMedium
 
         layer.enabled: true
         layer.effect: MultiEffect {
             shadowEnabled: true
-            shadowColor: DesignTokens.shadows.getShadowColor()
+            shadowColor: Theme.shadowColor
             shadowBlur: 0.5
             shadowVerticalOffset: 4
         }
@@ -77,23 +77,23 @@ Dialog {
 
     // Dialog overlay (semi-transparent background)
     Overlay.modal: Rectangle {
-        color: DesignTokens.colors.overlay
+        color: Theme.overlay
     }
 
     // Header with title
     header: Rectangle {
-        color: DesignTokens.colors.surfaceAlt
-        implicitHeight: DesignTokens.sizing.buttonHeight + 2 * DesignTokens.spacing.md
+        color: Theme.surfaceSubtle
+        implicitHeight: Metrics.controlHeight + 2 * Metrics.spacing16
         border.width: 0
 
         Text {
             anchors.fill: parent
-            anchors.leftMargin: DesignTokens.spacing.dialogPadding
-            anchors.rightMargin: DesignTokens.spacing.dialogPadding
+            anchors.leftMargin: Metrics.spacing16
+            anchors.rightMargin: Metrics.spacing16
             text: root.title
-            font.pixelSize: DesignTokens.typography.heading
-            font.weight: DesignTokens.typography.weightSemiBold
-            color: DesignTokens.colors.textPrimary
+            font.pixelSize: Typography.heading
+            font.weight: Typography.weightSemiBold
+            color: Theme.text
             verticalAlignment: Text.AlignVCenter
         }
 
@@ -101,8 +101,8 @@ Dialog {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: DesignTokens.sizing.borderThin
-            color: DesignTokens.colors.divider
+            height: Metrics.borderWidth
+            color: Theme.borderSubtle
         }
     }
 
@@ -113,23 +113,23 @@ Dialog {
         implicitHeight: contentColumn.implicitHeight
             + topPadding + bottomPadding + 12
         contentWidth: availableWidth
-        leftPadding: DesignTokens.spacing.dialogPadding
-        rightPadding: DesignTokens.spacing.dialogPadding
-        topPadding: DesignTokens.spacing.dialogPadding
-        bottomPadding: DesignTokens.spacing.dialogPadding
+        leftPadding: Metrics.spacing16
+        rightPadding: Metrics.spacing16
+        topPadding: Metrics.spacing16
+        bottomPadding: Metrics.spacing16
 
         ColumnLayout {
             id: contentColumn
             width: contentScroll.width - contentScroll.leftPadding - contentScroll.rightPadding
             height: implicitHeight
-            spacing: DesignTokens.spacing.sm
+            spacing: Metrics.spacing8
 
             Text {
                 Layout.fillWidth: true
                 text: root.message
                 visible: root.message.length > 0
-                font.pixelSize: DesignTokens.typography.body
-                color: DesignTokens.colors.textPrimary
+                font.pixelSize: Typography.body
+                color: Theme.text
                 wrapMode: Text.Wrap
             }
         }
@@ -147,26 +147,26 @@ Dialog {
     // Footer with buttons
     footer: DialogButtonBox {
         background: Rectangle {
-            color: DesignTokens.colors.surfaceAlt
+            color: Theme.surfaceSubtle
             border.width: 0
 
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: DesignTokens.sizing.borderThin
-                color: DesignTokens.colors.divider
+                height: Metrics.borderWidth
+                color: Theme.borderSubtle
             }
         }
 
         // Style all buttons in footer
         delegate: Button {
-            implicitHeight: DesignTokens.sizing.buttonHeight
+            implicitHeight: Metrics.controlHeight
             semantic: DialogButtonBox.buttonRole === DialogButtonBox.AcceptRole
                 ? "primary" : "secondary"
         }
 
-        padding: DesignTokens.spacing.md
-        spacing: DesignTokens.spacing.controlGap
+        padding: Metrics.spacing16
+        spacing: Metrics.spacing8
     }
 }

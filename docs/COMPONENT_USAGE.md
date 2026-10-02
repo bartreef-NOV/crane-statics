@@ -4,11 +4,13 @@ Quick reference for using and creating components with design tokens.
 
 ## Import & Usage
 
-### Import DesignTokens
+### Import the Design System
 
 ```qml
-import Crane.DesignTokens 1.0
+import BF.DesignSystem
 ```
+
+This gives you `Theme` (colors + helper functions), `Metrics` (spacing/sizing/radii), and `Typography` (font family/weights/sizes), plus five ready-made controls: `BfButton`, `BfTextField`, `BfCard`, `BfStatusBadge`, `BfPage`. Reach for one of those before hand-rolling the equivalent pattern below — the patterns in this doc are for cases the `Bf*` controls don't cover, or for extending `qml/components/`.
 
 ### Basic Component Template
 
@@ -17,44 +19,44 @@ All reusable components should follow this pattern:
 ```qml
 import QtQuick
 import QtQuick.Controls.Fusion
-import Crane.DesignTokens 1.0
+import BF.DesignSystem
 
 Control {
     id: root
-    
+
     // Expose customizable properties
     property string placeholder: ""
     property bool isError: false
-    
-    implicitHeight: DesignTokens.sizing.inputHeight
-    implicitWidth: DesignTokens.sizing.minInputWidth
-    
-    palette.text: DesignTokens.colors.textPrimary
-    palette.base: DesignTokens.colors.surface
-    palette.mid: isError ? DesignTokens.colors.error : DesignTokens.colors.border
-    
+
+    implicitHeight: Metrics.controlHeight
+    implicitWidth: Metrics.minInputWidth
+
+    palette.text: Theme.text
+    palette.base: Theme.surface
+    palette.mid: isError ? Theme.error : Theme.border
+
     background: Rectangle {
-        color: DesignTokens.colors.surface
-        border.color: DesignTokens.colors.border
-        border.width: DesignTokens.sizing.borderNormal
-        radius: DesignTokens.sizing.radiusSmall
+        color: Theme.surface
+        border.color: Theme.border
+        border.width: Metrics.borderWidth
+        radius: Metrics.radiusSmall
     }
-    
+
     // All focus/hover/error states should use design tokens
     states: [
         State {
             name: "focused"
             PropertyChanges {
                 target: background
-                border.color: DesignTokens.colors.focusRing
-                border.width: DesignTokens.sizing.borderThick
+                border.color: Theme.focusRing
+                border.width: Metrics.focusWidth
             }
         },
         State {
             name: "error"
             PropertyChanges {
                 target: background
-                border.color: DesignTokens.colors.error
+                border.color: Theme.error
             }
         }
     ]
@@ -75,26 +77,28 @@ Control {
 - `isLoading`: Show loading spinner (bool)
 - `semantic`: Button type: "primary" | "secondary" | "danger" (string)
 
+`BfButton` already implements exactly this pattern (`variant`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"`, with hover/pressed/disabled states) — prefer it over the hand-rolled version below unless you need something it doesn't support.
+
 **Example:**
 ```qml
-import Crane.DesignTokens 1.0
+import BF.DesignSystem
 import QtQuick.Controls.Fusion
 
 Button {
     text: "Save"
-    implicitHeight: DesignTokens.sizing.buttonHeight
-    implicitWidth: Math.max(DesignTokens.sizing.minButtonWidth, contentWidth + 2 * DesignTokens.spacing.md)
-    
-    palette.button: enabled 
-        ? DesignTokens.colors.primary 
-        : DesignTokens.colors.primaryDisabled
-    palette.buttonText: DesignTokens.colors.textInverse
-    
+    implicitHeight: Metrics.controlHeight
+    implicitWidth: Math.max(Metrics.buttonMinWidth, contentWidth + 2 * Metrics.spacing16)
+
+    palette.button: enabled
+        ? Theme.primary
+        : Theme.primaryDisabled
+    palette.buttonText: Theme.onPrimary
+
     background: Rectangle {
-        color: parent.pressed 
-            ? DesignTokens.colors.primaryPressed 
-            : (parent.hovered ? DesignTokens.colors.primaryHover : DesignTokens.colors.primary)
-        radius: DesignTokens.sizing.radiusSmall
+        color: parent.pressed
+            ? Theme.primaryPressed
+            : (parent.hovered ? Theme.primaryHover : Theme.primary)
+        radius: Metrics.radiusSmall
     }
 }
 ```
@@ -112,24 +116,26 @@ Button {
 - `errorText`: Error message below field (string)
 - `decimals`: For numeric fields, decimal places (int)
 
+`BfTextField` ships this `isError`/`errorText` pattern directly — prefer it over the hand-rolled version below.
+
 **Example:**
 ```qml
 TextField {
     id: field
-    
-    implicitHeight: DesignTokens.sizing.inputHeight
-    implicitWidth: DesignTokens.sizing.maxInputWidth
-    
-    palette.text: DesignTokens.colors.textPrimary
-    palette.base: DesignTokens.colors.surface
-    
+
+    implicitHeight: Metrics.controlHeight
+    implicitWidth: Metrics.maxInputWidth
+
+    palette.text: Theme.text
+    palette.base: Theme.surface
+
     background: Rectangle {
-        color: DesignTokens.colors.surface
-        border.color: isError 
-            ? DesignTokens.colors.error 
-            : DesignTokens.colors.border
-        border.width: DesignTokens.sizing.borderNormal
-        radius: DesignTokens.sizing.radiusSmall
+        color: Theme.surface
+        border.color: isError
+            ? Theme.error
+            : Theme.border
+        border.width: Metrics.borderWidthNormal
+        radius: Metrics.radiusSmall
     }
 }
 
@@ -137,8 +143,8 @@ TextField {
 Text {
     visible: isError
     text: errorText
-    font.pixelSize: DesignTokens.typography.caption
-    color: DesignTokens.colors.error
+    font.pixelSize: Typography.caption
+    color: Theme.error
 }
 ```
 
@@ -156,27 +162,27 @@ Text {
 **Example:**
 ```qml
 ComboBox {
-    implicitHeight: DesignTokens.sizing.inputHeight
-    implicitWidth: DesignTokens.sizing.minInputWidth
-    
-    palette.text: DesignTokens.colors.textPrimary
-    palette.base: DesignTokens.colors.surface
-    palette.mid: DesignTokens.colors.border
-    
+    implicitHeight: Metrics.controlHeight
+    implicitWidth: Metrics.minInputWidth
+
+    palette.text: Theme.text
+    palette.base: Theme.surface
+    palette.mid: Theme.border
+
     background: Rectangle {
-        color: DesignTokens.colors.surface
-        border.color: DesignTokens.colors.border
-        border.width: DesignTokens.sizing.borderNormal
-        radius: DesignTokens.sizing.radiusSmall
+        color: Theme.surface
+        border.color: Theme.border
+        border.width: Metrics.borderWidthNormal
+        radius: Metrics.radiusSmall
     }
-    
+
     delegate: ItemDelegate {
-        implicitHeight: DesignTokens.sizing.rowHeight
+        implicitHeight: Metrics.tableRowHeight
         background: Rectangle {
-            color: highlighted ? DesignTokens.colors.primary : "transparent"
+            color: highlighted ? Theme.primary : "transparent"
         }
         text: modelData
-        palette.text: highlighted ? DesignTokens.colors.textInverse : DesignTokens.colors.textPrimary
+        palette.text: highlighted ? Theme.onPrimary : Theme.text
     }
 }
 ```
@@ -196,45 +202,46 @@ ComboBox {
 ```qml
 Dialog {
     id: dialog
-    
+
     title: "Confirm Delete"
-    
+    width: Metrics.dialogWidth
+
     background: Rectangle {
-        color: DesignTokens.colors.background
-        border.color: DesignTokens.colors.border
-        border.width: DesignTokens.sizing.borderNormal
-        radius: DesignTokens.sizing.radiusNormal
+        color: Theme.pageBackground
+        border.color: Theme.border
+        border.width: Metrics.borderWidthNormal
+        radius: Metrics.radiusMedium
     }
-    
+
     header: Rectangle {
-        color: DesignTokens.colors.surfaceAlt
-        height: DesignTokens.sizing.buttonHeight + 2 * DesignTokens.spacing.md
-        
+        color: Theme.surfaceSubtle
+        height: Metrics.controlHeight + 2 * Metrics.spacing16
+
         Text {
-            anchors.margins: DesignTokens.spacing.md
+            anchors.margins: Metrics.spacing16
             text: dialog.title
-            font.pixelSize: DesignTokens.typography.heading
-            color: DesignTokens.colors.textPrimary
+            font.pixelSize: Typography.heading
+            color: Theme.text
         }
     }
-    
+
     contentItem: Text {
-        anchors.margins: DesignTokens.spacing.dialogPadding
+        anchors.margins: Metrics.spacing16
         text: "Are you sure?"
-        font.pixelSize: DesignTokens.typography.body
-        color: DesignTokens.colors.textPrimary
+        font.pixelSize: Typography.body
+        color: Theme.text
     }
-    
+
     footer: DialogButtonBox {
         Button {
             text: "Delete"
-            palette.button: DesignTokens.colors.error
-            palette.buttonText: DesignTokens.colors.textInverse
+            palette.button: Theme.error
+            palette.buttonText: Theme.onPrimary
         }
         Button {
             text: "Cancel"
-            palette.button: DesignTokens.colors.surfaceAlt
-            palette.buttonText: DesignTokens.colors.textPrimary
+            palette.button: Theme.surfaceSubtle
+            palette.buttonText: Theme.text
         }
     }
 }
@@ -250,36 +257,39 @@ Dialog {
 - `title`: Card title (string)
 - `elevation`: Shadow level 1-3 (int)
 
+`BfCard` already implements this pattern (default property alias `content`, `MultiEffect`-based shadow) — prefer it over the hand-rolled version below.
+
 **Example:**
 ```qml
+import QtQuick.Effects
+
 Rectangle {
     id: card
-    
-    color: DesignTokens.colors.surface
-    radius: DesignTokens.sizing.radiusNormal
-    border.color: DesignTokens.colors.border
-    border.width: DesignTokens.sizing.borderThin
-    
+
+    color: Theme.surface
+    radius: Metrics.radiusLarge
+    border.color: Theme.border
+    border.width: Metrics.borderWidth
+
     layer.enabled: true
-    layer.effect: DropShadow {
-        xOffset: 0
-        yOffset: 2
-        blur: 6
-        color: DesignTokens.shadows.getShadowColor()
-        opacity: 0.15
+    layer.effect: MultiEffect {
+        shadowEnabled: true
+        shadowColor: Theme.shadowColor
+        shadowBlur: 0.35
+        shadowVerticalOffset: 2
     }
-    
+
     ColumnLayout {
-        anchors.margins: DesignTokens.spacing.panelPadding
-        spacing: DesignTokens.spacing.md
-        
+        anchors.margins: Metrics.spacing12
+        spacing: Metrics.spacing16
+
         Text {
             text: "Card Title"
-            font.pixelSize: DesignTokens.typography.heading
-            font.weight: DesignTokens.typography.weightSemiBold
-            color: DesignTokens.colors.textPrimary
+            font.pixelSize: Typography.heading
+            font.weight: Typography.weightSemiBold
+            color: Theme.text
         }
-        
+
         // Card content goes here
     }
 }
@@ -295,22 +305,22 @@ Rectangle {
 ```qml
 TableView {
     id: table
-    
-    rowHeight: DesignTokens.layout.tableRowHeight
-    
+
+    rowHeight: Metrics.tableRowHeight
+
     delegate: ItemDelegate {
-        implicitHeight: DesignTokens.layout.tableRowHeight
-        
+        implicitHeight: Metrics.tableRowHeight
+
         background: Rectangle {
-            color: row % 2 === 0 ? DesignTokens.colors.surface : DesignTokens.colors.surfaceAlt
+            color: row % 2 === 0 ? Theme.surface : Theme.surfaceSubtle
         }
-        
+
         contentItem: Text {
             text: display
-            font.pixelSize: DesignTokens.typography.body
-            color: DesignTokens.colors.textPrimary
+            font.pixelSize: Typography.body
+            color: Theme.text
             verticalAlignment: Text.AlignVCenter
-            leftPadding: DesignTokens.spacing.sm
+            leftPadding: Metrics.spacing8
         }
     }
 }
@@ -326,26 +336,28 @@ TableView {
 - `status`: "success" | "warning" | "error" | "info" (string)
 - `text`: Badge label (string)
 
+`BfStatusBadge` implements exactly this — prefer `BfStatusBadge { text: "Success"; status: "success" }` over the hand-rolled version below. Note it uses `Theme.contrastText()` (via `Theme.getOnSemanticColor()`) rather than a fixed inverse text color, since the nov palette's pastel-adjacent solid tones don't all clear WCAG AA against a single fixed color.
+
 **Example:**
 ```qml
 Rectangle {
     id: badge
-    
+
     property string status: "success"  // "success", "warning", "error", "info"
-    
-    implicitWidth: text.width + 2 * DesignTokens.spacing.sm
-    implicitHeight: DesignTokens.sizing.buttonHeightSmall
-    
-    color: DesignTokens.getSemanticColor(status)
-    radius: DesignTokens.sizing.radiusRound
-    
+
+    implicitWidth: text.width + 2 * Metrics.spacing8
+    implicitHeight: Metrics.spacing24
+    radius: height / 2
+
+    color: Theme.getSemanticColor(status)
+
     Text {
         id: text
         anchors.centerIn: parent
         text: "Success"
-        font.pixelSize: DesignTokens.typography.caption
-        font.weight: DesignTokens.typography.weightMedium
-        color: DesignTokens.colors.textInverse
+        font.pixelSize: Metrics.fontSizeSmall
+        font.weight: Typography.weightMedium
+        color: Theme.getOnSemanticColor(status)
     }
 }
 ```
@@ -362,12 +374,12 @@ For form inputs with validation errors:
 TextField {
     property bool isError: false
     property string errorMessage: ""
-    
-    palette.mid: isError ? DesignTokens.colors.error : DesignTokens.colors.border
-    
+
+    palette.mid: isError ? Theme.error : Theme.border
+
     background: Rectangle {
-        border.color: isError ? DesignTokens.colors.error : DesignTokens.colors.border
-        border.width: isError ? DesignTokens.sizing.borderThick : DesignTokens.sizing.borderNormal
+        border.color: isError ? Theme.error : Theme.border
+        border.width: isError ? Metrics.borderWidthNormal : Metrics.borderWidth
     }
 }
 
@@ -375,8 +387,8 @@ TextField {
 Text {
     visible: parent.isError
     text: parent.errorMessage
-    color: DesignTokens.colors.error
-    font.pixelSize: DesignTokens.typography.caption
+    color: Theme.error
+    font.pixelSize: Typography.caption
 }
 ```
 
@@ -387,11 +399,11 @@ For async operations:
 ```qml
 Button {
     property bool isLoading: false
-    
+
     text: isLoading ? "Loading..." : "Save"
     enabled: !isLoading
     opacity: isLoading ? 0.7 : 1.0
-    
+
     BusyIndicator {
         visible: isLoading
         running: isLoading
@@ -406,10 +418,10 @@ For unavailable controls:
 ```qml
 Control {
     property bool isDisabled: true
-    
+
     enabled: !isDisabled
     opacity: isDisabled ? 0.5 : 1.0
-    palette.text: isDisabled ? DesignTokens.colors.textDisabled : DesignTokens.colors.textPrimary
+    palette.text: isDisabled ? Theme.disabledText : Theme.text
 }
 ```
 
@@ -420,19 +432,19 @@ For interactive feedback:
 ```qml
 Rectangle {
     id: item
-    
+
     MouseArea {
         id: mouseArea
         anchors.fill: parent
         hoverEnabled: true
     }
-    
-    color: mouseArea.containsMouse 
-        ? DesignTokens.colors.surfaceAlt 
-        : DesignTokens.colors.surface
-    
+
+    color: mouseArea.containsMouse
+        ? Theme.surfaceSubtle
+        : Theme.surface
+
     Behavior on color {
-        ColorAnimation { duration: DesignTokens.transitions.fast }
+        ColorAnimation { duration: Metrics.transitionFast }
     }
 }
 ```
@@ -446,17 +458,17 @@ Rectangle {
 ```qml
 ColumnLayout {
     id: root
-    readonly property bool compact: width < DesignTokens.layout.breakpointCompact
-    
-    anchors.margins: DesignTokens.spacing.lg
-    spacing: DesignTokens.spacing.md
-    
+    readonly property bool compact: width < Metrics.breakpointCompact
+
+    anchors.margins: Metrics.spacing24
+    spacing: Metrics.spacing16
+
     GridLayout {
         Layout.fillWidth: true
         columns: root.compact ? 1 : 2
-        columnSpacing: DesignTokens.spacing.md
-        rowSpacing: DesignTokens.spacing.md
-        
+        columnSpacing: Metrics.spacing16
+        rowSpacing: Metrics.spacing16
+
         // Form fields in each column
     }
 }
@@ -468,7 +480,7 @@ ColumnLayout {
 Item {
     anchors {
         fill: parent
-        margins: DesignTokens.spacing.md  // Use tokens instead of magic numbers
+        margins: Metrics.spacing16  // Use tokens instead of magic numbers
     }
 }
 ```
@@ -477,15 +489,15 @@ Item {
 
 ```qml
 RowLayout {
-    spacing: DesignTokens.spacing.controlGap  // 8px
-    
+    spacing: Metrics.spacing8  // Gap between inline controls
+
     Button { text: "OK" }
     Button { text: "Cancel" }
 }
 
 ColumnLayout {
-    spacing: DesignTokens.spacing.rowGap  // 8px
-    
+    spacing: Metrics.spacing8  // Gap between form rows
+
     TextField { }
     TextField { }
 }
@@ -501,7 +513,7 @@ When creating a new component, verify:
 - [ ] **Color Contrast:** Text meets WCAG AA minimum (4.5:1 for body, 3:1 for large text)
 - [ ] **Keyboard Navigation:** Tab through all interactive elements
 - [ ] **State Indication:** Enabled/disabled/error states clearly visible
-- [ ] **Semantic Tokens:** No hardcoded colors (use `DesignTokens.colors.*`)
+- [ ] **Semantic Tokens:** No hardcoded colors (use `Theme.*`)
 - [ ] **Text Sizing:** Use typography tokens (don't hardcode px values)
 - [ ] **Accessible Name:** Components have `Accessible.name` for screen readers
 
@@ -512,27 +524,18 @@ When creating a new component, verify:
 4. Arrow keys to navigate lists/tables
 
 **Color Test:**
-1. View component in light mode → is text readable?
-2. View component in dark mode → is text readable?
-3. Run OS high-contrast mode → any issues?
+1. View the component → is text readable against its background?
+2. Run OS high-contrast mode → any issues?
 
 ---
 
-## Theme Testing
+## Visual Validation
 
 When adding new UI or modifying existing components:
 
-1. **Light Mode:** Settings > Personalization > Colors > Light
-   - Check text readability
-   - Check border/divider visibility
-   - Check form field distinction from background
+1. **Readability:** Check text readability, border/divider visibility, and form field distinction from background.
 
-2. **Dark Mode:** Settings > Personalization > Colors > Dark
-   - Check text readability
-   - Check border/divider visibility
-   - Check form field distinction from background
-
-3. **High Contrast:** Settings > Ease of Access > High Contrast
+2. **High Contrast:** Settings > Ease of Access > High Contrast
    - Ensure all UI elements remain visible
    - Check focus indicators are prominent
 
@@ -543,15 +546,15 @@ When adding new UI or modifying existing components:
 ❌ **Hardcoding colors:**
 ```qml
 // WRONG
-Rectangle { color: "#0078d4" }
+Rectangle { color: "#007096" }
 Text { color: "#ffffff" }
 ```
 
 ✅ **Using design tokens:**
 ```qml
 // RIGHT
-Rectangle { color: DesignTokens.colors.primary }
-Text { color: DesignTokens.colors.textInverse }
+Rectangle { color: Theme.primary }
+Text { color: Theme.onPrimary }
 ```
 
 ---
@@ -567,9 +570,9 @@ padding: 12
 ✅ **Using spacing tokens:**
 ```qml
 // RIGHT
-anchors.margins: DesignTokens.spacing.md
-columnSpacing: DesignTokens.spacing.controlGap
-padding: DesignTokens.spacing.panelPadding
+anchors.margins: Metrics.spacing16
+columnSpacing: Metrics.spacing8
+padding: Metrics.spacing12
 ```
 
 ---
@@ -583,23 +586,7 @@ font.pixelSize: 14
 ✅ **Using typography tokens:**
 ```qml
 // RIGHT
-font.pixelSize: DesignTokens.typography.body
-```
-
----
-
-❌ **Not testing in both themes:**
-```qml
-// WRONG: Component looks good in light mode only
-Rectangle { color: "#ffffff" }
-Text { color: "#000000" }
-```
-
-✅ **Testing in both themes:**
-```qml
-// RIGHT: Works in light and dark modes
-Rectangle { color: DesignTokens.colors.surface }
-Text { color: DesignTokens.colors.textPrimary }
+font.pixelSize: Typography.body
 ```
 
 ---
@@ -609,9 +596,9 @@ Text { color: DesignTokens.colors.textPrimary }
 Refer to:
 - [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) — Comprehensive token reference
 - [design-tokens.json](./design-tokens.json) — Token values and metadata
-- [DesignTokens.qml](../../src/crane_statics/qml_app/design/DesignTokens.qml) — Implementation
+- [Theme.qml](../../src/crane_statics/qml_app/design/BF/DesignSystem/Theme.qml), [Metrics.qml](../../src/crane_statics/qml_app/design/BF/DesignSystem/Metrics.qml), [Typography.qml](../../src/crane_statics/qml_app/design/BF/DesignSystem/Typography.qml) — Implementation
 
 ---
 
-**Last Updated:** 2026-08-14  
-**Design System Version:** 1.0.0
+**Last Updated:** 2026-09-24
+**Design System Version:** 2.0.0

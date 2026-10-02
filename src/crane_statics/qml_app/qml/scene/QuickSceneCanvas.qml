@@ -2,13 +2,13 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Shapes
 import ".."
-import "../../design" as Design
+import BF.DesignSystem
 
 Item {
     id: root
 
     property var frame: sceneVm.sceneFrame
-    property color backgroundColor: Design.DesignTokens.colors.surface
+    property color backgroundColor: Theme.surface
     readonly property var fitRect: frame && frame.fitRect
         ? frame.fitRect : { "x": 0, "y": 0, "width": 1, "height": 1 }
     readonly property real sceneScale: Math.min(
@@ -22,7 +22,7 @@ Item {
         ? `MSL  z = ${waterline.z_msl.toFixed(1)} m` : ""
     readonly property int mslLabelY: waterline && waterline.scene_y !== undefined
         ? Math.round(mapSceneY(waterline.scene_y)) : 0
-    readonly property color mslLabelColor: Design.DesignTokens.colors.info
+    readonly property color mslLabelColor: Theme.info
 
     Component.onDestruction: {
     }
@@ -193,7 +193,7 @@ Item {
         y: root.waterline ? root.mapSceneY(root.waterline.scene_y) : 0
         width: root.width
         height: Math.max(0, root.height - y)
-        color: Design.DesignTokens.colorWithAlpha(Design.DesignTokens.colors.info, 0.19)
+        color: Theme.colorWithAlpha(Theme.info, 0.19)
         z: -2
     }
 
@@ -203,7 +203,7 @@ Item {
         y: root.waterline ? root.mapSceneY(root.waterline.scene_y) : 0
         width: root.width
         height: 2
-        color: Design.DesignTokens.colors.info
+        color: Theme.info
         z: -1
     }
 
@@ -315,7 +315,7 @@ Item {
                 height: Math.max(0, guideLabel.y - y)
 
                 ShapePath {
-                    strokeColor: Design.DesignTokens.colors.textSecondary
+                    strokeColor: Theme.textMuted
                     strokeWidth: 1
                     strokeStyle: ShapePath.DashLine
                     dashPattern: [4, 3]
@@ -334,7 +334,7 @@ Item {
                 height: 2
 
                 ShapePath {
-                    strokeColor: Design.DesignTokens.colors.textSecondary
+                    strokeColor: Theme.textMuted
                     strokeWidth: 1
                     strokeStyle: ShapePath.DashLine
                     dashPattern: [4, 3]
@@ -359,15 +359,15 @@ Item {
                 width: guideText.implicitWidth + paddingX * 2
                 height: guideText.implicitHeight + paddingY * 2
                 radius: 4
-                color: Design.DesignTokens.colors.surfaceAlt
-                border.color: Design.DesignTokens.colors.border
+                color: Theme.surfaceSubtle
+                border.color: Theme.border
                 border.width: 1
 
                 Text {
                     id: guideText
                     anchors.centerIn: parent
                     text: parent.parent.modelData.label
-                    color: Design.DesignTokens.colors.textPrimary
+                    color: Theme.text
                     font.bold: true
                     font.pixelSize: 12
                 }
@@ -393,7 +393,7 @@ Item {
         y: root.waterline ? root.mapSceneY(root.waterline.scene_y) - height - 2 : 0
         text: root.waterline ? root.waterline.label : ""
         visible: text.length > 0
-        color: Design.DesignTokens.colors.info
+        color: Theme.info
         padding: 2
     }
 
@@ -414,8 +414,8 @@ Item {
         width: winchSpoolContent.implicitWidth + paddingX * 2
         height: winchSpoolContent.implicitHeight + paddingY * 2
         radius: 4
-        color: Design.DesignTokens.colors.surfaceAlt
-        border.color: Design.DesignTokens.colors.border
+        color: Theme.surfaceSubtle
+        border.color: Theme.border
         border.width: 1
 
         // Widest value string, so the value column can be right-aligned without
@@ -442,7 +442,7 @@ Item {
 
             Text {
                 text: qsTr("Rope on winches")
-                color: Design.DesignTokens.colors.textPrimary
+                color: Theme.text
                 font.bold: true
                 font.pixelSize: 12
             }
@@ -457,7 +457,7 @@ Item {
                         delegate: Text {
                             required property var modelData
                             text: modelData.hoist_id
-                            color: Design.DesignTokens.colors.textSecondary
+                            color: Theme.textMuted
                             font.pixelSize: 12
                         }
                     }
@@ -472,7 +472,7 @@ Item {
                         delegate: Text {
                             required property var modelData
                             text: modelData.value_text
-                            color: Design.DesignTokens.colors.textPrimary
+                            color: Theme.text
                             font.pixelSize: 12
                             width: Math.max(winchSpoolValueMetrics.width, implicitWidth)
                             horizontalAlignment: Text.AlignRight

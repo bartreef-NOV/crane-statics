@@ -7,173 +7,212 @@ The Crane Statics Design System is a token-based, QML-native system designed for
 ### Key Principles
 
 1. **Token-First**: All visual properties are defined as reusable tokens (colors, spacing, typography, sizing)
-2. **Fusion-Native**: Leverages Qt's Fusion style and SystemPalette for OS-aware light/dark themes
-3. **Minimal Customization**: Follows OS conventions; no hardcoded colors or custom theme machinery
+2. **Brand-Native**: Built from the fixed BF/NOV color palette; Qt's Fusion style renders the controls
+3. **Minimal Customization**: No hardcoded colors or custom theme machinery — every value comes from `Theme`, `Metrics`, or `Typography`
 4. **Responsive**: Adapts layout based on window size
-5. **Accessible**: Ensures WCAG AA contrast standards in both light and dark modes
+5. **Accessible**: Ensures WCAG AA contrast; pastel semantic tones use `Theme.contrastText()`/`Theme.getOnSemanticColor()` to pick a legible text color automatically
 
 ---
 
 ## Token System
 
-All design tokens are defined in the **`DesignTokens.qml`** singleton. Import it in any QML file:
+All design tokens are defined in three singletons under the **`BF.DesignSystem`** module: `Theme` (colors + helper functions), `Metrics` (spacing/sizing/radii/breakpoints), and `Typography` (font family/weights/sizes). Import the module in any QML file:
 
 ```qml
-import Crane.DesignTokens 1.0
+import BF.DesignSystem
 
 Rectangle {
-    color: DesignTokens.colors.surface
-    anchors.margins: DesignTokens.spacing.md
-    font.pixelSize: DesignTokens.typography.body
+    color: Theme.surface
+    anchors.margins: Metrics.spacing16
+    font.pixelSize: Typography.body
 }
 ```
 
+The module also ships five ready-made controls that already apply these tokens — `BfButton`, `BfTextField`, `BfCard`, `BfStatusBadge`, `BfPage` — see [Component Catalog](#component-catalog) below. It resolves via `engine.addImportPath()` pointed at the `design/` folder in `app.py`; there is no CMake build step in this app.
+
 ### Token Categories
 
-#### 1. **Colors** (Semantic Roles)
+#### 1. **Colors** (Semantic Roles, `Theme`)
 
-All color tokens automatically adapt to light/dark theme via SystemPalette:
+The app is light-mode only. All color tokens resolve to fixed values built from the BF/NOV brand palette — there is no `SystemPalette` binding and no dark variant.
 
-| Token | Role | Light Mode | Dark Mode | Usage |
-|-------|------|-----------|----------|-------|
-| `colors.surface` | Primary surface | #ffffff | #2d2d2d | Tables, inputs, cards, default background |
-| `colors.surfaceAlt` | Secondary surface | #f0f0f0 | #383838 | Panels, section groups, alternate backgrounds |
-| `colors.background` | App background | #f3f3f3 | #1e1e1e | Window background |
-| `colors.textPrimary` | Main text | #000000 | #ffffff | Body text, labels, primary information |
-| `colors.textSecondary` | Supporting text | #777777 | #b0b0b0 | Form labels, hints, secondary information |
-| `colors.textDisabled` | Disabled text | #999999 | #666666 | Disabled controls, inactive state |
-| `colors.primary` | Primary action | #0078d4 | #4fa3ff | Buttons, links, active selection |
-| `colors.success` | Success state | #4caf50 | #4caf50 | Checkmarks, valid indicators, success alerts |
-| `colors.warning` | Warning state | #ff9800 | #ff9800 | Caution alerts, non-critical warnings |
-| `colors.error` | Error state | #f44336 | #f44336 | Invalid inputs, error messages, failures |
-| `colors.info` | Information | #2196f3 | #2196f3 | Tooltips, help text, information alerts |
-| `colors.border` | Borders & dividers | #cccccc | #444444 | Table borders, input borders, rule lines |
+| Token | Role | Value | Usage |
+|-------|------|-------|-------|
+| `Theme.surface` | Primary surface | `white` (`#FFFFFF`) | Tables, inputs, cards, default background |
+| `Theme.surfaceSubtle` | Secondary surface | `novPurple50Tint` (`#CCC1D4`) | Panels, section groups, alternate backgrounds |
+| `Theme.pageBackground` | App background | `white` (`#FFFFFF`) | Window / page background |
+| `Theme.text` | Main text | `black` (`#000000`) | Body text, labels, primary information |
+| `Theme.textMuted` | Supporting text | `novGrey` (`#78757B`) | Form labels, hints, secondary information |
+| `Theme.disabledText` | Disabled text | `Qt.lighter(novGrey, 120)` | Disabled controls, inactive state |
+| `Theme.disabledSurface` | Disabled fill | `Qt.lighter(novGrey, 155)` | Disabled control backgrounds |
+| `Theme.textOnDark` | Text on dark/solid fills | `white` (`#FFFFFF`) | Fallback inverse text |
+| `Theme.primary` | Primary action | `novBlue` (`#007096`) | Buttons, links, active selection |
+| `Theme.primaryHover` | Primary hover | `Qt.lighter(novBlue, 112)` | Hover feedback |
+| `Theme.primaryPressed` | Primary pressed | `Qt.darker(novBlue, 115)` | Pressed feedback |
+| `Theme.primaryDisabled` | Primary disabled | `Qt.lighter(novBlue, 170)` | Disabled primary buttons |
+| `Theme.onPrimary` | Text on `primary` | `white` | Button labels on a primary fill |
+| `Theme.accent` | Accent action | `novYellow` (`#FFCD00`) | Secondary emphasis |
+| `Theme.onAccent` | Text on `accent` | `black` | Labels on an accent fill |
+| `Theme.success` | Success state | `novGreen` (`#A9C47F`) | Checkmarks, valid indicators, success alerts |
+| `Theme.warning` | Warning state | `novOrange` (`#DC9575`) | Caution alerts, non-critical warnings |
+| `Theme.error` | Error state | `novRed` (`#DA291C`) | Invalid inputs, error messages, failures |
+| `Theme.info` | Information | `novTeal` (`#00A499`) | Tooltips, help text, information alerts |
+| `Theme.successSurface`/`warningSurface`/`errorSurface`/`infoSurface` | Pastel status fills | `novGreen50Tint`/`novOrange50Tint`/`novDarkRed50Tint`/`novTeal50Tint` | Badge/pill backgrounds, subtle status callouts |
+| `Theme.onSuccess`/`onWarning`/`onError`/`onInfo` | Contrast-safe text | computed by `Theme.contrastText()` | Text/icons placed on top of a solid status tone |
+| `Theme.border` | Borders & dividers | `novGrey` (`#78757B`) | Table borders, input borders, rule lines |
+| `Theme.borderSubtle` | Subtle border | `novPurple50Tint` (`#CCC1D4`) | Low-emphasis dividers |
+| `Theme.focusRing` | Keyboard focus | `novBlue` (`#007096`) | Focus outlines |
+| `Theme.selection` | Selection fill | `novBlue50Tint` (`#82B4C9`) | Selected rows/text — a light tint, not a solid fill |
+| `Theme.selectionText` | Text on selection | `Theme.text` (dark) | Selected text stays the normal dark color since the fill is a light tint |
+| `Theme.overlay` | Modal/dialog overlay | `rgba(0, 0, 0, 0.5)` | Dimming behind dialogs |
+| `Theme.shadowColor` | Shadow tint | `rgba(0, 0, 0, 0.15)` | `MultiEffect`/drop-shadow color for elevated surfaces |
+
+All raw BF/NOV palette swatches (`novBlue`, `novYellow`, `novPurple`, `novTeal`, etc.) are also exposed directly on `Theme` for one-off brand accents; prefer the semantic names above for anything that isn't a deliberate brand callout.
 
 **When to use semantic colors instead of hardcoding:**
 
-- ❌ **Don't:** `Rectangle { color: "#0078d4" }`
-- ✅ **Do:** `Rectangle { color: DesignTokens.colors.primary }`
+- ❌ **Don't:** `Rectangle { color: "#007096" }`
+- ✅ **Do:** `Rectangle { color: Theme.primary }`
 
-This ensures automatic theme adaptation and consistency across all views.
+This ensures consistency across all views and keeps contrast guarantees centralized in `Theme`.
 
-#### 2. **Typography** (Font Sizes, Families, Weights)
+#### 2. **Typography** (Font Sizes, Families, Weights, `Typography`)
 
 Font sizes are in logical pixels (scale with system DPI):
 
 | Token | Size | Usage | Example |
 |-------|------|-------|---------|
-| `typography.caption` | 11px | Small labels, help text | Form hints, table captions |
-| `typography.body` | 13px | Default text | Table cells, input text, paragraph text |
-| `typography.bodyLarge` | 14px | Larger body text | Important body, data summaries |
-| `typography.subtitle` | 14px | Subtitles, secondary headings | Subsection titles, group labels |
-| `typography.heading` | 16px | Section headings | Dialog titles, panel headers |
-| `typography.headingLarge` | 18px | Major headings | Workspace titles, main section headers |
-| `typography.display` | 22px | Large titles | Application title |
+| `Typography.caption` | 11px | Small labels, help text | Form hints, table captions |
+| `Typography.body` | 13px | Default text | Table cells, input text, paragraph text |
+| `Typography.bodyLarge` | 14px | Larger body text | Important body, data summaries |
+| `Typography.subtitle` | 14px | Subtitles, secondary headings | Subsection titles, group labels |
+| `Typography.heading` | 16px | Section headings | Dialog titles, panel headers |
+| `Typography.headingLarge` | 18px | Major headings | Workspace titles, main section headers |
+| `Typography.display` | 22px | Large titles | Application title |
 
 **Font families:**
-- `typography.fontFamily`: "Segoe UI, Ubuntu, 'Liberation Sans', sans-serif"
-- `typography.monoFamily`: "'Consolas', 'Monaco', 'Courier New', monospace"
+- `Typography.fontFamily`: "Segoe UI, Ubuntu, 'Liberation Sans', sans-serif"
+- `Typography.monoFamily`: "'Consolas', 'Monaco', 'Courier New', monospace"
 
 **Font weights:**
-- `typography.weightLight`: 300
-- `typography.weightRegular`: 400 (default)
-- `typography.weightMedium`: 500
-- `typography.weightSemiBold`: 600
-- `typography.weightBold`: 700
+- `Typography.weightLight`: 300
+- `Typography.weightRegular`: 400 (default)
+- `Typography.weightMedium`: 500
+- `Typography.weightSemiBold`: 600
+- `Typography.weightBold`: 700
 
 **Example:**
 ```qml
 Text {
     text: "Form Field Label"
-    font.family: DesignTokens.typography.fontFamily
-    font.pixelSize: DesignTokens.typography.body
-    font.weight: DesignTokens.typography.weightMedium
+    font.family: Typography.fontFamily
+    font.pixelSize: Typography.body
+    font.weight: Typography.weightMedium
 }
 ```
 
-#### 3. **Spacing** (Margins, Padding, Gaps)
+Note: `Metrics` also defines its own small internal font-size scale
+(`fontSizeSmall`/`fontSizeBody`/`fontSizeSubtitle`/`fontSizeTitle` — 12/14/16/22px)
+used by the `Bf*` controls for their own chrome (e.g. `BfButton` labels use
+`Metrics.fontSizeBody`, `BfStatusBadge` uses `Metrics.fontSizeSmall`). For your
+own QML, prefer the `Typography.*` scale above; it's the general-purpose scale
+this document and `COMPONENT_USAGE.md` build examples around.
 
-Base unit is **4px**. Scale: xs=4, sm=8, md=16, lg=24, xl=32, xxl=48
+#### 3. **Spacing** (Margins, Padding, Gaps, `Metrics`)
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `spacing.xs` | 4px | Tight spacing, borders, minimal gaps |
-| `spacing.sm` | 8px | Small spacing, compact form fields |
-| `spacing.md` | 16px | Medium spacing, standard margins, panel padding |
-| `spacing.lg` | 24px | Large spacing, section gaps |
-| `spacing.xl` | 32px | Extra large spacing, workspace separation |
-| `spacing.xxl` | 48px | Double extra large, major page sections |
+The spacing scale is a flat, numerically-named set (no semantic aliases like `xs`/`md` anymore — pick the value that matches the gap you need):
 
-**Grouped spacings:**
-- `spacing.controlGap`: 8px (gap between inline controls)
-- `spacing.rowGap`: 8px (gap between form rows)
-- `spacing.sectionGap`: 16px (gap between major sections)
-- `spacing.panelPadding`: 12px (padding inside panels/cards)
-- `spacing.dialogPadding`: 16px (padding inside dialogs)
+| Token | Value |
+|-------|-------|
+| `Metrics.spacing2` | 2px |
+| `Metrics.spacing4` | 4px |
+| `Metrics.spacing6` | 6px |
+| `Metrics.spacing8` | 8px |
+| `Metrics.spacing12` | 12px |
+| `Metrics.spacing16` | 16px |
+| `Metrics.spacing24` | 24px |
+| `Metrics.spacing32` | 32px |
+| `Metrics.spacing48` | 48px |
+
+There is no `controlGap`/`rowGap`/`sectionGap`/`panelPadding`/`dialogPadding` grouping anymore. If you're porting old code that used one of those, use the `spacingN` token with the matching value (e.g. old `panelPadding` was 12px → `Metrics.spacing12`; old `sectionGap`/`dialogPadding` were 16px → `Metrics.spacing16`).
 
 **Example:**
 ```qml
 ColumnLayout {
-    spacing: DesignTokens.spacing.rowGap
-    
+    spacing: Metrics.spacing8
+
     Button { text: "Save" }
     Button { text: "Cancel" }
 }
 
 Rectangle {
-    anchors.margins: DesignTokens.spacing.md
+    anchors.margins: Metrics.spacing16
 }
 ```
 
-#### 4. **Sizing** (Control Dimensions)
+#### 4. **Sizing** (Control Dimensions, `Metrics`)
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `sizing.buttonHeight` | 32px | Standard button height |
-| `sizing.buttonHeightSmall` | 24px | Compact button height |
-| `sizing.inputHeight` | 32px | Text input, combo box, spinner |
-| `sizing.inputHeightSmall` | 24px | Compact input field |
-| `sizing.rowHeight` | 28px | Table/list row height |
-| `sizing.rowHeightCompact` | 24px | Compact table row |
-| `sizing.rowHeightRelaxed` | 32px | Relaxed table row |
+| `Metrics.controlHeight` | 36px | Standard button/input height |
+| `Metrics.compactControlHeight` | 30px | Compact button/input height |
+| `Metrics.buttonMinWidth` | 96px | Minimum button width |
+| `Metrics.fieldMinWidth` | 160px | Minimum input field width |
+| `Metrics.minInputWidth` | 60px | Smallest allowed input width |
+| `Metrics.maxInputWidth` | 200px | Largest allowed input width |
+| `Metrics.dialogWidth` | 480px | Default dialog width |
+| `Metrics.tableRowHeight` | 28px | Table/list row height |
+| `Metrics.compactRowHeight` | 24px | Compact table row |
+
+There's no separate `buttonHeight` vs. `inputHeight` anymore — both use `controlHeight`/`compactControlHeight`. There's also no "relaxed" row height variant.
 
 **Icon sizes:**
-- `sizing.iconSmall`: 16px (inline icons)
-- `sizing.iconNormal`: 24px (standard icons)
-- `sizing.iconLarge`: 32px (large standalone icons)
+- `Metrics.iconSmall`: 16px (inline icons)
+- `Metrics.iconNormal`: 24px (standard icons)
+- `Metrics.iconLarge`: 32px (large standalone icons)
+- `Metrics.iconXLarge`: 48px (hero/empty-state icons)
 
-**Border radii:**
-- `sizing.radiusNone`: 0px
-- `sizing.radiusSmall`: 2px (subtle curves)
-- `sizing.radiusNormal`: 4px (standard corners)
-- `sizing.radiusLarge`: 8px (pronounced curves)
+**Border widths & radii:**
+- `Metrics.borderWidth`: 1px (standard hairline border)
+- `Metrics.borderWidthNormal`: 2px (emphasized border, e.g. error state)
+- `Metrics.focusWidth`: 2px (focus ring width)
+- `Metrics.radiusSmall`: 3px (subtle curves)
+- `Metrics.radiusMedium`: 5px (standard corners)
+- `Metrics.radiusLarge`: 8px (pronounced curves)
 
-#### 5. **Shadows** (Elevation Levels)
+There's no `radiusNone` (use the literal `0`) and no dedicated 3px "thick" border width — use `borderWidthNormal` or `focusWidth` for emphasis.
 
-Elevation shadows provide visual hierarchy for modals, popovers, and floating elements:
+#### 5. **Shadows**
+
+There's no `elevation1`/`elevation2`/`elevation3` preset table anymore. Elevated
+surfaces provide their own offset/blur and tint with `Theme.shadowColor`
+(`rgba(0, 0, 0, 0.15)`), the way `BfCard.qml` does it:
 
 ```qml
-DropShadow {
-    // elevation1: subtle shadow for hover states
-    xOffset: 0
-    yOffset: 1
-    blur: 3
-    color: DesignTokens.shadows.getShadowColor()
-    opacity: 0.12
+layer.enabled: true
+layer.effect: MultiEffect {
+    shadowEnabled: true
+    shadowColor: Theme.shadowColor
+    shadowBlur: 0.35
+    shadowVerticalOffset: 2
 }
 ```
 
-#### 6. **Layout** (Responsive Breakpoints)
+Note this uses `QtQuick.Effects`' `MultiEffect`, not the old `DropShadow` type — `shadowBlur` is a normalized `0..1` value, not a pixel radius.
+
+#### 6. **Layout** (Responsive Breakpoints, `Metrics`)
 
 **Breakpoints:**
 - **Compact** (`< 1240px`): 1-column layout, stacked panels (narrow windows)
 - **Wide** (`≥ 1240px`): 2-column layout, side-by-side panels (standard windows)
 - **Ultra-Wide** (`≥ 1800px`): 3-column or data-dense table layouts (large monitors)
 
-Access the shared row height and spacing:
+There's a single `Metrics.breakpointCompact` (1240) and `Metrics.breakpointUltraWide` (1800) — "wide" is simply "not compact," so there's no separate `breakpointWide` constant.
+
+Access the shared row height and spacing multiplier:
 ```qml
 TableView {
-    rowHeight: DesignTokens.layout.tableRowHeight
+    rowHeight: Metrics.tableRowHeight
 }
 ```
 
@@ -205,19 +244,33 @@ Each component:
 | `StyledTabButton.qml` | Tab control | Token-aware tab styling |
 | `IconButton.qml` | Icon command control | Compact, accessible command affordance |
 
+### The `BF.DesignSystem` controls
+
+Alongside the components above, `BF.DesignSystem` ships five controls that already apply `Theme`/`Metrics`/`Typography` internally, for the most common cases:
+
+| Control | Purpose | Notes |
+|---------|---------|-------|
+| `BfButton.qml` | Standard button | `variant`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"` |
+| `BfTextField.qml` | Text input | `isError`/`errorText` built in |
+| `BfCard.qml` | Elevated container | Default property alias `content`; shadow via `MultiEffect` |
+| `BfStatusBadge.qml` | Status pill | `status`: `"success"` \| `"warning"` \| `"error"` \| `"info"` \| `"neutral"`; contrast-safe text via `Theme.contrastText()` |
+| `BfPage.qml` | Themed root container | `padding` property, default property alias `content` |
+
+Reach for a `Bf*` control before hand-rolling the equivalent pattern with a raw Fusion control plus tokens.
+
 ### Using Existing Components
 
 Use Qt Controls with token bindings when an available wrapper does not fit the required interaction:
 
 ```qml
 import QtQuick.Controls.Fusion
-import Crane.DesignTokens 1.0
+import BF.DesignSystem
 
 Button {
     text: "Save"
-    implicitHeight: DesignTokens.sizing.buttonHeight
-    palette.buttonText: DesignTokens.colors.textInverse
-    palette.button: DesignTokens.colors.primary
+    implicitHeight: Metrics.controlHeight
+    palette.buttonText: Theme.onPrimary
+    palette.button: Theme.primary
 }
 ```
 
@@ -230,8 +283,8 @@ Button {
 Use for buttons, links, and active selections:
 ```qml
 Button {
-    palette.button: DesignTokens.colors.primary
-    palette.buttonText: DesignTokens.colors.textInverse
+    palette.button: Theme.primary
+    palette.buttonText: Theme.onPrimary
 }
 ```
 
@@ -241,10 +294,10 @@ Use for validation feedback and state indicators:
 
 | Semantic | Color | Usage |
 |----------|-------|-------|
-| **Success** | Green (#4caf50) | Valid inputs, confirmation, successful operations |
-| **Warning** | Orange (#ff9800) | Non-critical alerts, caution states |
-| **Error** | Red (#f44336) | Invalid inputs, errors, failed operations |
-| **Info** | Blue (#2196f3) | Help text, tooltips, informational messages |
+| **Success** | NOV green (`#A9C47F`) | Valid inputs, confirmation, successful operations |
+| **Warning** | NOV orange (`#DC9575`) | Non-critical alerts, caution states |
+| **Error** | NOV red (`#DA291C`) | Invalid inputs, errors, failed operations |
+| **Info** | NOV teal (`#00A499`) | Help text, tooltips, informational messages |
 
 ### Engineering Data Visualization
 
@@ -253,16 +306,16 @@ For crane loading analysis (stress levels, capacity usage):
 **Numeric Level to Color Mapping** (0.0 = safe, 1.0 = critical):
 ```qml
 // 0.0–0.4: Safe (Green)
-color: DesignTokens.colors.success
+color: Theme.success
 
 // 0.4–0.7: Caution (Orange)
-color: DesignTokens.colors.warning
+color: Theme.warning
 
 // 0.7–1.0: Critical/Overload (Red)
-color: DesignTokens.colors.error
+color: Theme.error
 
 // Programmatic:
-color: DesignTokens.getStatusColor(stressLevel)  // stressLevel: 0.0–1.0
+color: Theme.getStatusColor(stressLevel)  // stressLevel: 0.0–1.0
 ```
 
 ---
@@ -275,12 +328,12 @@ Check breakpoint to adjust layout:
 
 ```qml
 Item {
-    readonly property bool compact: width < DesignTokens.layout.breakpointCompact
-    
+    readonly property bool compact: width < Metrics.breakpointCompact
+
     GridLayout {
         columns: root.compact ? 1 : 2
-        columnSpacing: DesignTokens.spacing.md
-        rowSpacing: DesignTokens.spacing.md
+        columnSpacing: Metrics.spacing16
+        rowSpacing: Metrics.spacing16
     }
 }
 ```
@@ -293,11 +346,11 @@ All table rows, spacing, and control sizes come from the tokens:
 
 ```qml
 TableView {
-    rowHeight: DesignTokens.layout.tableRowHeight
+    rowHeight: Metrics.tableRowHeight
 }
 
 ColumnLayout {
-    spacing: Math.round(DesignTokens.spacing.md * DesignTokens.layout.spacingMultiplier)
+    spacing: Math.round(Metrics.spacing16 * Metrics.spacingMultiplier)
 }
 ```
 
@@ -313,9 +366,8 @@ All color combinations must meet minimum contrast ratios:
 - **UI controls on background**: 3:1 (minimum)
 
 **Current Status:**
-- Light mode: All text meets WCAG AA (verified via SystemPalette bindings)
-- Dark mode: All text meets WCAG AA (verified via SystemPalette bindings)
-- Fusion's built-in palettes are designed to meet accessibility standards
+- All text meets WCAG AA against its documented background
+- The nov palette's semantic tones (`success`/`warning`/`error`/`info`) are pastel, so `Theme.onSuccess`/`onWarning`/`onError`/`onInfo` (backed by `Theme.contrastText()`) pick whichever of black/white actually clears 4.5:1 against that tone — don't assume a fixed inverse text color is safe on a status fill
 
 ### Focus Indicators
 
@@ -323,7 +375,7 @@ All interactive controls must show a focus ring on keyboard navigation:
 
 ```qml
 Control {
-    focusRectangle.border.color: DesignTokens.colors.focusRing
+    focusRectangle.border.color: Theme.focusRing
     focusRectangle.border.width: 2
 }
 ```
@@ -342,51 +394,6 @@ All controls must be keyboard accessible:
 - Enter/Space activates buttons
 - Arrow keys navigate in lists/tables
 - Escape closes modals
-
----
-
-## Dark / Light Mode
-
-### How Theming Works
-
-1. **OS Level**: Windows Settings > Personalization > Colors → App follows automatically
-2. **App Level**: View > Appearance menu allows manual override (Light / Dark / Follow System)
-3. **Technical**: `QGuiApplication.styleHints().setColorScheme()` sets the theme
-4. **Automatic**: SystemPalette reflects the chosen theme; all token colors update instantly
-
-### Theme-Aware Colors
-
-All semantic color tokens automatically adapt:
-
-```qml
-// This works in both light and dark modes without extra code:
-Rectangle {
-    color: DesignTokens.colors.surface  // #ffffff in light, #2d2d2d in dark
-}
-
-Text {
-    color: DesignTokens.colors.textPrimary  // #000000 in light, #ffffff in dark
-}
-```
-
-### Verification Checklist
-
-When adding new UI elements, verify in both light and dark modes:
-
-- [ ] Text is readable (contrast ≥ 4.5:1 for body text)
-- [ ] Colors use semantic tokens (not hardcoded RGB values)
-- [ ] Borders/dividers are visible in both modes
-- [ ] Form fields are distinguishable from background
-- [ ] Disabled states are clearly indicated
-- [ ] Error/success/warning states are legible
-- [ ] Charts/plots have sufficient color contrast
-
-### Testing Theme Switch
-
-1. Open the app in light mode
-2. Switch to dark mode: View > Appearance > Dark
-3. Visually inspect all panels, tables, dialogs, charts
-4. Run test suite (should pass with no visual regression)
 
 ---
 
@@ -417,22 +424,22 @@ Caption (11px) — Form hints, table captions
 // Section heading
 Text {
     text: "Model Parameters"
-    font.pixelSize: DesignTokens.typography.heading
-    font.weight: DesignTokens.typography.weightSemiBold  // 600
+    font.pixelSize: Typography.heading
+    font.weight: Typography.weightSemiBold  // 600
 }
 
 // Form label
 Text {
     text: "Hoist Load (kg):"
-    font.pixelSize: DesignTokens.typography.body
-    font.weight: DesignTokens.typography.weightMedium    // 500
+    font.pixelSize: Typography.body
+    font.weight: Typography.weightMedium    // 500
 }
 
 // Body text
 Text {
     text: "This is a description..."
-    font.pixelSize: DesignTokens.typography.body
-    font.weight: DesignTokens.typography.weightRegular   // 400
+    font.pixelSize: Typography.body
+    font.weight: Typography.weightRegular   // 400
 }
 ```
 
@@ -445,8 +452,8 @@ Text {
 ```qml
 Text {
     text: "Help text..."
-    font.pixelSize: DesignTokens.typography.caption
-    lineHeight: DesignTokens.typography.lineHeightRelaxed  // 1.8
+    font.pixelSize: Typography.caption
+    lineHeight: Typography.lineHeightRelaxed  // 1.8
 }
 ```
 
@@ -458,20 +465,20 @@ Text {
 
 ```qml
 ColumnLayout {
-    spacing: DesignTokens.spacing.sm
-    
+    spacing: Metrics.spacing8
+
     Text {
         text: "Field Label"
-        font.pixelSize: DesignTokens.typography.body
-        font.weight: DesignTokens.typography.weightMedium
-        color: DesignTokens.colors.textPrimary
+        font.pixelSize: Typography.body
+        font.weight: Typography.weightMedium
+        color: Theme.text
     }
-    
+
     TextField {
-        implicitHeight: DesignTokens.sizing.inputHeight
-        palette.text: DesignTokens.colors.textPrimary
-        palette.base: DesignTokens.colors.surface
-        palette.mid: DesignTokens.colors.border
+        implicitHeight: Metrics.controlHeight
+        palette.text: Theme.text
+        palette.base: Theme.surface
+        palette.mid: Theme.border
     }
 }
 ```
@@ -482,11 +489,11 @@ ColumnLayout {
 DataTable {
     title: "Results"
     model: resultsModel
-    
+
     delegate: ItemDelegate {
-        implicitHeight: DesignTokens.layout.tableRowHeight
+        implicitHeight: Metrics.tableRowHeight
         background: Rectangle {
-            color: hovered ? DesignTokens.colors.surfaceAlt : DesignTokens.colors.surface
+            color: hovered ? Theme.surfaceSubtle : Theme.surface
         }
     }
 }
@@ -498,13 +505,13 @@ DataTable {
 Dialog {
     title: "Confirm Action"
     standardButtons: Dialog.Ok | Dialog.Cancel
-    
+
     footer: DialogButtonBox {
         Button {
             text: "OK"
-            implicitHeight: DesignTokens.sizing.buttonHeight
-            palette.button: DesignTokens.colors.primary
-            palette.buttonText: DesignTokens.colors.textInverse
+            implicitHeight: Metrics.controlHeight
+            palette.button: Theme.primary
+            palette.buttonText: Theme.onPrimary
         }
     }
 }
@@ -514,66 +521,66 @@ Dialog {
 
 ```qml
 Rectangle {
-    width: DesignTokens.sizing.iconNormal
-    height: DesignTokens.sizing.iconNormal
-    radius: DesignTokens.sizing.radiusRound
-    color: DesignTokens.getStatusColor(stressLevel)  // 0.0–1.0
+    width: Metrics.iconNormal
+    height: Metrics.iconNormal
+    radius: height / 2
+    color: Theme.getStatusColor(stressLevel)  // 0.0–1.0
 }
 ```
+
+Or simply use `BfStatusBadge { status: "success"; text: "OK" }` for the labeled-pill version.
 
 ---
 
 ## Related Guides
 
-- [QUICKSTART.md](QUICKSTART.md) introduces the token singleton and common bindings.
+- [QUICKSTART.md](QUICKSTART.md) introduces the token singletons and common bindings.
 - [COMPONENT_USAGE.md](COMPONENT_USAGE.md) provides component APIs and usage patterns.
-- [THEME_VALIDATION_CHECKLIST.md](THEME_VALIDATION_CHECKLIST.md) covers theme and accessibility checks.
+- [THEME_VALIDATION_CHECKLIST.md](THEME_VALIDATION_CHECKLIST.md) covers token and accessibility checks.
 
 ---
 
 ## Developer Quick Reference
 
-### Import DesignTokens in Your QML
+### Import the Design System in Your QML
 
 ```qml
-import Crane.DesignTokens 1.0
+import BF.DesignSystem
 ```
 
 ### Common Token Shortcuts
 
 ```qml
-// Colors
-colors.surface          // Primary background for tables, inputs
-colors.textPrimary      // Main text color
-colors.primary          // Primary action (buttons, links)
-colors.success/warning/error/info  // Semantic status colors
+// Colors (Theme)
+Theme.surface          // Primary background for tables, inputs
+Theme.text              // Main text color
+Theme.primary           // Primary action (buttons, links)
+Theme.success/warning/error/info  // Semantic status colors
 
-// Spacing
-spacing.sm  // 8px
-spacing.md  // 16px
-spacing.lg  // 24px
+// Spacing (Metrics)
+Metrics.spacing8   // 8px
+Metrics.spacing16  // 16px
+Metrics.spacing24  // 24px
 
 // Typography
-typography.body           // 13px default text
-typography.heading        // 16px section heading
-typography.fontFamily     // Font family string
+Typography.body           // 13px default text
+Typography.heading        // 16px section heading
+Typography.fontFamily     // Font family string
 
-// Sizing
-sizing.buttonHeight       // 32px
-sizing.inputHeight        // 32px
-sizing.rowHeight          // 28px
+// Sizing (Metrics)
+Metrics.controlHeight     // 36px, buttons & inputs
+Metrics.tableRowHeight    // 28px
 
-// Layout
-layout.breakpointCompact  // 1240px (switch to 1-column)
-layout.tableRowHeight     // Shared table row height
+// Breakpoints (Metrics)
+Metrics.breakpointCompact  // 1240px (switch to 1-column)
 ```
 
 ### Never Use Hardcoded Values
 
-- ❌ `color: "#0078d4"` → ✅ `color: DesignTokens.colors.primary`
-- ❌ `anchors.margins: 16` → ✅ `anchors.margins: DesignTokens.spacing.md`
-- ❌ `implicitHeight: 32` → ✅ `implicitHeight: DesignTokens.sizing.buttonHeight`
-- ❌ `font.pixelSize: 13` → ✅ `font.pixelSize: DesignTokens.typography.body`
+- ❌ `color: "#007096"` → ✅ `color: Theme.primary`
+- ❌ `anchors.margins: 16` → ✅ `anchors.margins: Metrics.spacing16`
+- ❌ `implicitHeight: 32` → ✅ `implicitHeight: Metrics.controlHeight`
+- ❌ `font.pixelSize: 13` → ✅ `font.pixelSize: Typography.body`
 
 ---
 
@@ -588,7 +595,7 @@ For design system questions or to propose new tokens/components:
 
 ---
 
-**Last Updated:** 2026-08-14  
-**Design System Version:** 1.0.0  
-**Platform:** Qt 6.x, PyQt6, QML  
-**Style:** Fusion (OS-aware light/dark theming)
+**Last Updated:** 2026-09-24
+**Design System Version:** 2.0.0
+**Platform:** Qt 6.x, PyQt6, QML
+**Style:** Fusion, light-mode only (BF/NOV brand palette)

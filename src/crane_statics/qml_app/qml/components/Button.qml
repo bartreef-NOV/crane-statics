@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Fusion
-import "../../design"
+import BF.DesignSystem
 
 /**
  * Button Component
@@ -28,8 +28,8 @@ Button {
     // Semantic button type: "primary" | "secondary" | "danger"
     property string semantic: "primary"
 
-    implicitHeight: DesignTokens.sizing.buttonHeight
-    implicitWidth: Math.max(DesignTokens.sizing.minButtonWidth, implicitContentWidth + 2 * DesignTokens.spacing.md)
+    implicitHeight: Metrics.controlHeight
+    implicitWidth: Math.max(Metrics.buttonMinWidth, implicitContentWidth + 2 * Metrics.spacing16)
 
     Accessible.role: Accessible.Button
     Accessible.name: text
@@ -37,39 +37,39 @@ Button {
 
     // Apply semantic colors based on button type and state
     palette.button: {
-        if (!enabled) return DesignTokens.colors.primaryDisabled
-        if (checked) return pressed ? DesignTokens.colors.primaryPressed : DesignTokens.colors.primary
+        if (!enabled) return Theme.primaryDisabled
+        if (checked) return pressed ? Theme.primaryPressed : Theme.primary
         if (checkable)
-            return hovered ? DesignTokens.colors.surface : DesignTokens.colors.surfaceAlt
+            return hovered ? Theme.surface : Theme.surfaceSubtle
         switch (semantic) {
             case "danger":
-                return pressed ? DesignTokens.colors.error : (hovered ? Qt.darker(DesignTokens.colors.error, 1.15) : DesignTokens.colors.error)
+                return pressed ? Theme.error : (hovered ? Qt.darker(Theme.error, 1.15) : Theme.error)
             case "secondary":
                 return hovered || pressed
-                    ? DesignTokens.colors.surfaceAlt
-                    : DesignTokens.colors.surface
+                    ? Theme.surfaceSubtle
+                    : Theme.surface
             case "primary":
             default:
-                return pressed ? DesignTokens.colors.primaryPressed : (hovered ? DesignTokens.colors.primaryHover : DesignTokens.colors.primary)
+                return pressed ? Theme.primaryPressed : (hovered ? Theme.primaryHover : Theme.primary)
         }
     }
 
     palette.buttonText: checked || (!checkable && semantic !== "secondary")
-        ? DesignTokens.colors.textInverse : DesignTokens.colors.textPrimary
+        ? Theme.textOnDark : Theme.text
 
     background: Rectangle {
-        implicitHeight: DesignTokens.sizing.buttonHeight
+        implicitHeight: Metrics.controlHeight
         color: root.palette.button
-        radius: DesignTokens.sizing.radiusSmall
+        radius: Metrics.radiusSmall
         border.color: root.activeFocus || root.checked
-            ? DesignTokens.colors.focusRing
+            ? Theme.focusRing
             : (root.semantic === "secondary" || root.checkable
-                ? DesignTokens.colors.border : "transparent")
+                ? Theme.border : "transparent")
         border.width: root.activeFocus || root.checked || root.semantic === "secondary" || root.checkable
-            ? DesignTokens.sizing.borderThin : 0
+            ? Metrics.borderWidth : 0
 
         Behavior on color {
-            ColorAnimation { duration: DesignTokens.transitions.fast }
+            ColorAnimation { duration: Metrics.transitionFast }
         }
     }
 

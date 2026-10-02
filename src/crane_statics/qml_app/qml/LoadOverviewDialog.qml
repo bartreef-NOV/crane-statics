@@ -1,7 +1,7 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
+import BF.DesignSystem
 import "components" as Components
 
 Components.Dialog {
@@ -17,13 +17,13 @@ Components.Dialog {
     title: overview.title !== undefined ? overview.title : qsTr("Load Contribution Overview")
     modal: true
     anchors.centerIn: Overlay.overlay
-    width: Design.DesignTokens.sizing.dialogWidth
+    width: Metrics.dialogWidth
     standardButtons: Dialog.Close
 
     ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        spacing: Design.DesignTokens.spacing.sm
+        spacing: Metrics.spacing8
 
         Label {
             Layout.fillWidth: true
@@ -56,7 +56,7 @@ Components.Dialog {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: Design.DesignTokens.colors.divider
+            color: Theme.borderSubtle
         }
 
         RowLayout {

@@ -1,6 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
-import "../design" as Design
+import BF.DesignSystem
 
 TextField {
     id: field
@@ -10,16 +10,16 @@ TextField {
     readonly property real value: parseFloat(text) || 0
     signal flipDirectionRequested()
 
-    implicitHeight: Design.DesignTokens.sizing.inputHeight
-    implicitWidth: Design.DesignTokens.sizing.maxInputWidth
-    leftPadding: Design.DesignTokens.spacing.sm
-    rightPadding: Design.DesignTokens.spacing.sm
-    font.pixelSize: Design.DesignTokens.typography.body
-    palette.text: enabled ? Design.DesignTokens.colors.textPrimary : Design.DesignTokens.colors.textDisabled
-    palette.base: Design.DesignTokens.colors.surface
-    palette.mid: activeFocus ? Design.DesignTokens.colors.focusRing : Design.DesignTokens.colors.border
-    palette.highlight: Design.DesignTokens.colors.selection
-    palette.highlightedText: Design.DesignTokens.colors.selectionText
+    implicitHeight: Metrics.controlHeight
+    implicitWidth: Metrics.maxInputWidth
+    leftPadding: Metrics.spacing8
+    rightPadding: Metrics.spacing8
+    font.pixelSize: Typography.body
+    palette.text: enabled ? Theme.text : Theme.disabledText
+    palette.base: Theme.surface
+    palette.mid: activeFocus ? Theme.focusRing : Theme.border
+    palette.highlight: Theme.selection
+    palette.highlightedText: Theme.selectionText
 
     function setValue(newValue) {
         text = Number(newValue).toFixed(decimals)

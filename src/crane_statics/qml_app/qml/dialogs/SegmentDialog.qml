@@ -2,7 +2,7 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
-import "../../design" as Design
+import BF.DesignSystem
 import "../components" as Components
 
 Components.Dialog {
@@ -34,17 +34,17 @@ Components.Dialog {
 
     GridLayout {
         columns: 2
-        columnSpacing: Math.round(Design.DesignTokens.spacing.controlGap * Design.DesignTokens.layout.spacingMultiplier)
-        rowSpacing: Math.round(Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier)
+        columnSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
+        rowSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
 
         Label { text: qsTr("From Node:") }
-        ComboBox { id: fromCombo; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; editable: true; model: root.nodeIds }
+        ComboBox { id: fromCombo; Layout.preferredWidth: Metrics.maxInputWidth; editable: true; model: root.nodeIds }
 
         Label { text: qsTr("To Node:") }
-        ComboBox { id: toCombo; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; editable: true; model: root.nodeIds }
+        ComboBox { id: toCombo; Layout.preferredWidth: Metrics.maxInputWidth; editable: true; model: root.nodeIds }
 
         Label { text: qsTr("Mult:") }
-        SpinBox { id: multSpin; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; from: 1; to: 99; value: 1 }
+        SpinBox { id: multSpin; Layout.preferredWidth: Metrics.maxInputWidth; from: 1; to: 99; value: 1 }
     }
 }
 

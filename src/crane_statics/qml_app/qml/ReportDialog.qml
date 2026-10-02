@@ -1,7 +1,7 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
+import BF.DesignSystem
 import "components" as Components
 
 Components.Dialog {
@@ -27,7 +27,7 @@ Components.Dialog {
 
         header: Row {
             width: reportList.width
-            height: Design.DesignTokens.layout.tableRowHeight
+            height: Metrics.tableRowHeight
 
             Repeater {
                 model: [qsTr("Item"), qsTr("Fx"), qsTr("Fz"), qsTr("|F|"), qsTr("X"), qsTr("Z"), qsTr("M")]
@@ -36,9 +36,9 @@ Components.Dialog {
                     required property string modelData
                     required property int index
                     width: index === 0 ? reportList.width * 0.34 : reportList.width * 0.11
-                    height: Design.DesignTokens.layout.tableRowHeight
-                    color: Design.DesignTokens.colors.surfaceAlt
-                    border.color: Design.DesignTokens.colors.border
+                    height: Metrics.tableRowHeight
+                    color: Theme.surfaceSubtle
+                    border.color: Theme.border
                     border.width: 1
                     Label {
                         anchors.fill: parent
@@ -69,17 +69,17 @@ Components.Dialog {
             required property int index
 
             width: reportList.width
-            height: Design.DesignTokens.layout.tableRowHeight
+            height: Metrics.tableRowHeight
 
             readonly property bool section: kind === "section"
             Rectangle {
                 anchors.fill: parent
                 color: reportRow.section
-                    ? Design.DesignTokens.colors.surfaceAlt
+                    ? Theme.surfaceSubtle
                     : (reportRow.index % 2 === 0
-                        ? Design.DesignTokens.colors.surface
-                        : Design.DesignTokens.colors.surfaceAlt)
-                border.color: Design.DesignTokens.colors.border
+                        ? Theme.surface
+                        : Theme.surfaceSubtle)
+                border.color: Theme.border
                 border.width: 1
             }
 
@@ -100,7 +100,7 @@ Components.Dialog {
                         anchors.bottom: parent.bottom
                         anchors.right: parent.right
                         width: 1
-                        color: Design.DesignTokens.colors.border
+                        color: Theme.border
                     }
                 }
 
@@ -111,7 +111,7 @@ Components.Dialog {
                     Label {
                         required property string modelData
                         width: reportList.width * 0.11
-                        height: Design.DesignTokens.layout.tableRowHeight
+                        height: Metrics.tableRowHeight
                         rightPadding: 6
                         text: modelData
                         horizontalAlignment: Text.AlignRight
@@ -122,7 +122,7 @@ Components.Dialog {
                             anchors.bottom: parent.bottom
                             anchors.right: parent.right
                             width: 1
-                            color: Design.DesignTokens.colors.border
+                            color: Theme.border
                         }
                     }
                 }

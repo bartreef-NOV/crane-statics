@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../../design"
+import BF.DesignSystem
 
 /**
  * Section Component
@@ -31,11 +31,11 @@ ColumnLayout {
 
     // Section title text
     property string title: ""
-    
+
     // Content to embed in the section
     property Component contentItem: null
 
-    spacing: DesignTokens.spacing.md
+    spacing: Metrics.spacing16
 
     Accessible.role: Accessible.Section
     Accessible.name: title
@@ -44,9 +44,9 @@ ColumnLayout {
     Text {
         visible: root.title.length > 0
         text: root.title
-        font.pixelSize: DesignTokens.typography.heading
-        font.weight: DesignTokens.typography.weightSemiBold
-        color: DesignTokens.colors.textPrimary
+        font.pixelSize: Typography.heading
+        font.weight: Typography.weightSemiBold
+        color: Theme.text
 
         Layout.fillWidth: true
     }
@@ -55,8 +55,8 @@ ColumnLayout {
     Rectangle {
         visible: root.title.length > 0
         Layout.fillWidth: true
-        implicitHeight: DesignTokens.sizing.borderThin
-        color: DesignTokens.colors.border
+        implicitHeight: Metrics.borderWidth
+        color: Theme.border
     }
 
     // Content

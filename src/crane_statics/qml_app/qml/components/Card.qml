@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Effects
 import QtQuick.Layouts
-import "../../design"
+import BF.DesignSystem
 
 /**
  * Card Component
@@ -33,16 +33,16 @@ Rectangle {
     // Optional content to embed in the card
     property Component contentItem: null
 
-    color: DesignTokens.colors.surface
-    radius: DesignTokens.sizing.radiusNormal
-    border.color: DesignTokens.colors.border
-    border.width: DesignTokens.sizing.borderThin
+    color: Theme.surface
+    radius: Metrics.radiusMedium
+    border.color: Theme.border
+    border.width: Metrics.borderWidth
 
     // Elevation shadow (optional, can be disabled)
     layer.enabled: true
     layer.effect: MultiEffect {
         shadowEnabled: true
-        shadowColor: DesignTokens.shadows.getShadowColor()
+        shadowColor: Theme.shadowColor
         shadowBlur: 0.35
         shadowVerticalOffset: 2
     }
@@ -56,7 +56,7 @@ Rectangle {
     Loader {
         visible: root.contentItem !== null
         anchors.fill: parent
-        anchors.margins: DesignTokens.spacing.panelPadding
+        anchors.margins: Metrics.spacing12
         sourceComponent: root.contentItem
     }
 }

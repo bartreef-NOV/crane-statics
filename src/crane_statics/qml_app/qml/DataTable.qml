@@ -1,22 +1,22 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
+import BF.DesignSystem
 import "components"
 
 Item {
     id: root
 
-    readonly property color surfaceColor: Design.DesignTokens.colors.surface
-    readonly property color headerColor: Design.DesignTokens.colors.surfaceAlt
-    readonly property color headerTextColor: Design.DesignTokens.colors.textPrimary
-    readonly property color textColor: Design.DesignTokens.colors.textPrimary
-    readonly property color selectedColor: Design.DesignTokens.colors.selection
-    readonly property color selectedTextColor: Design.DesignTokens.colors.selectionText
-    readonly property color gridColor: Design.DesignTokens.colors.border
-    readonly property int tableRowHeight: Design.DesignTokens.layout.tableRowHeight
+    readonly property color surfaceColor: Theme.surface
+    readonly property color headerColor: Theme.surfaceSubtle
+    readonly property color headerTextColor: Theme.text
+    readonly property color textColor: Theme.text
+    readonly property color selectedColor: Theme.selection
+    readonly property color selectedTextColor: Theme.selectionText
+    readonly property color gridColor: Theme.border
+    readonly property int tableRowHeight: Metrics.tableRowHeight
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     property alias model: table.model
@@ -123,11 +123,11 @@ Item {
             implicitHeight: root.tableRowHeight * 8
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: Design.DesignTokens.sizing.borderThin
+            border.width: Metrics.borderWidth
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: Design.DesignTokens.sizing.borderThin
+                anchors.margins: Metrics.borderWidth
                 spacing: 0
 
                 HorizontalHeaderView {
@@ -144,16 +144,16 @@ Item {
                         implicitHeight: root.tableRowHeight
                         color: root.headerColor
                         border.color: root.gridColor
-                        border.width: Design.DesignTokens.sizing.borderThin
+                        border.width: Metrics.borderWidth
 
                         Label {
                             anchors.fill: parent
-                            anchors.leftMargin: Design.DesignTokens.spacing.sm
-                            anchors.rightMargin: Design.DesignTokens.spacing.sm
-                            anchors.bottomMargin: Design.DesignTokens.spacing.hairline
+                            anchors.leftMargin: Metrics.spacing8
+                            anchors.rightMargin: Metrics.spacing8
+                            anchors.bottomMargin: Metrics.spacing2
                             text: headerCell.display
                             color: root.headerTextColor
-                            font.pixelSize: Design.DesignTokens.typography.caption
+                            font.pixelSize: Typography.caption
                             font.bold: true
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
@@ -203,29 +203,29 @@ Item {
                         readonly property bool current: selected && column === root.currentColumn
                         property bool hovered: false
 
-                        implicitWidth: Math.max(80, cellText.implicitWidth + 2 * Design.DesignTokens.spacing.sm)
+                        implicitWidth: Math.max(80, cellText.implicitWidth + 2 * Metrics.spacing8)
                         implicitHeight: root.tableRowHeight
                         color: cell.selected
                             ? root.selectedColor
                             : (cell.hovered
-                                ? Design.DesignTokens.colors.surfaceAlt
+                                ? Theme.surfaceSubtle
                                 : (cell.row % 2 === 0
                                     ? root.surfaceColor
-                                    : Design.DesignTokens.colors.surfaceAlt))
+                                    : Theme.surfaceSubtle))
 
                         border.color: cell.current && root.activeFocus
-                            ? Design.DesignTokens.colors.focusRing
+                            ? Theme.focusRing
                             : root.gridColor
-                        border.width: Design.DesignTokens.sizing.borderThin
+                        border.width: Metrics.borderWidth
 
                         Label {
                             id: cellText
                             anchors.fill: parent
-                            anchors.leftMargin: Design.DesignTokens.spacing.sm
-                            anchors.rightMargin: Design.DesignTokens.spacing.sm
+                            anchors.leftMargin: Metrics.spacing8
+                            anchors.rightMargin: Metrics.spacing8
                             text: cell.display
                             color: cell.selected ? root.selectedTextColor : root.textColor
-                            font.pixelSize: Design.DesignTokens.typography.body
+                            font.pixelSize: Typography.body
                             elide: Text.ElideRight
                             verticalAlignment: Text.AlignVCenter
                             horizontalAlignment: cell.numeric ? Text.AlignRight : Text.AlignLeft

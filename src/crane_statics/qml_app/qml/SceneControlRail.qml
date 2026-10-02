@@ -1,14 +1,14 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
+import BF.DesignSystem
 import "components"
 
 ColumnLayout {
     id: root
 
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     spacing: root.layoutSpacing
@@ -16,10 +16,10 @@ ColumnLayout {
     StyledGroupBox {
         Layout.fillWidth: true
         title: qsTr("Active Hoist")
-        topPadding: Design.DesignTokens.spacing.lg
-        bottomPadding: Design.DesignTokens.spacing.compact
-        leftPadding: Design.DesignTokens.spacing.compact
-        rightPadding: Design.DesignTokens.spacing.compact
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         Flow {
             anchors.fill: parent
@@ -43,10 +43,10 @@ ColumnLayout {
         Layout.fillWidth: true
         title: qsTr("Hook Configuration")
         visible: sceneVm.splitable
-        topPadding: Design.DesignTokens.spacing.lg
-        bottomPadding: Design.DesignTokens.spacing.compact
-        leftPadding: Design.DesignTokens.spacing.compact
-        rightPadding: Design.DesignTokens.spacing.compact
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         RowLayout {
             anchors.fill: parent
@@ -73,10 +73,10 @@ ColumnLayout {
     StyledGroupBox {
         Layout.fillWidth: true
         title: qsTr("Geometry")
-        topPadding: Design.DesignTokens.spacing.lg
-        bottomPadding: Design.DesignTokens.spacing.compact
-        leftPadding: Design.DesignTokens.spacing.compact
-        rightPadding: Design.DesignTokens.spacing.compact
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         ColumnLayout {
             anchors.fill: parent
@@ -114,10 +114,10 @@ ColumnLayout {
     StyledGroupBox {
         Layout.fillWidth: true
         title: qsTr("Load")
-        topPadding: Design.DesignTokens.spacing.lg
-        bottomPadding: Design.DesignTokens.spacing.compact
-        leftPadding: Design.DesignTokens.spacing.compact
-        rightPadding: Design.DesignTokens.spacing.compact
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         ColumnLayout {
             anchors.fill: parent
@@ -173,10 +173,10 @@ ColumnLayout {
     StyledGroupBox {
         Layout.fillWidth: true
         title: qsTr("Wind")
-        topPadding: Design.DesignTokens.spacing.lg
-        bottomPadding: Design.DesignTokens.spacing.compact
-        leftPadding: Design.DesignTokens.spacing.compact
-        rightPadding: Design.DesignTokens.spacing.compact
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         ColumnLayout {
             anchors.fill: parent
@@ -224,10 +224,10 @@ ColumnLayout {
     StyledGroupBox {
         Layout.fillWidth: true
         title: qsTr("Accelerations")
-        topPadding: Design.DesignTokens.spacing.lg
-        bottomPadding: Design.DesignTokens.spacing.compact
-        leftPadding: Design.DesignTokens.spacing.compact
-        rightPadding: Design.DesignTokens.spacing.compact
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         ColumnLayout {
             anchors.fill: parent

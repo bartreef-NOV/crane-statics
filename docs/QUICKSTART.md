@@ -7,10 +7,10 @@ Use this guide to apply the shared QML design tokens in a component.
 ## Import
 
 ```qml
-import Crane.DesignTokens 1.0
+import BF.DesignSystem
 ```
 
-That's it. Now you have access to all tokens.
+That's it. Now you have access to `Theme`, `Metrics`, and `Typography`.
 
 ---
 
@@ -21,31 +21,37 @@ That's it. Now you have access to all tokens.
 ```qml
 Button {
     text: "Save"
-    implicitHeight: DesignTokens.sizing.buttonHeight
-    palette.button: DesignTokens.colors.primary
-    palette.buttonText: DesignTokens.colors.textInverse
+    implicitHeight: Metrics.controlHeight
+    palette.button: Theme.primary
+    palette.buttonText: Theme.onPrimary
 }
 ```
+
+Prefer `BfButton { text: "Save" }` directly — it already wires up hover,
+pressed, and disabled states for the `primary` / `secondary` / `ghost` /
+`danger` variants.
 
 ### Text Input
 
 ```qml
 TextField {
-    implicitHeight: DesignTokens.sizing.inputHeight
-    palette.base: DesignTokens.colors.surface
-    palette.text: DesignTokens.colors.textPrimary
+    implicitHeight: Metrics.controlHeight
+    palette.base: Theme.surface
+    palette.text: Theme.text
 }
 ```
+
+Or use `BfTextField`, which wraps this plus an `isError`/`errorText` pattern.
 
 ### Container with Padding
 
 ```qml
 Rectangle {
-    color: DesignTokens.colors.surface
-    anchors.margins: DesignTokens.spacing.md  // 16px
-    
+    color: Theme.surface
+    anchors.margins: Metrics.spacing16  // 16px
+
     ColumnLayout {
-        spacing: DesignTokens.spacing.sm  // 8px
+        spacing: Metrics.spacing8  // 8px
     }
 }
 ```
@@ -55,9 +61,9 @@ Rectangle {
 ```qml
 Text {
     text: "Label"
-    font.pixelSize: DesignTokens.typography.body  // 13px
-    font.weight: DesignTokens.typography.weightMedium  // 500
-    color: DesignTokens.colors.textPrimary
+    font.pixelSize: Typography.body  // 13px
+    font.weight: Typography.weightMedium  // 500
+    color: Theme.text
 }
 ```
 
@@ -65,14 +71,14 @@ Text {
 
 ```qml
 Rectangle {
-    border.color: DesignTokens.colors.error
-    color: DesignTokens.colors.surface
+    border.color: Theme.error
+    color: Theme.surface
 }
 
 Text {
     text: "This field is required"
-    color: DesignTokens.colors.error
-    font.pixelSize: DesignTokens.typography.caption
+    color: Theme.error
+    font.pixelSize: Typography.caption
 }
 ```
 
@@ -80,19 +86,22 @@ Text {
 
 ```qml
 Rectangle {
-    color: DesignTokens.colors.success  // Green
+    color: Theme.success  // NOV green
     // or use getStatusColor() for numeric levels (0-1)
-    color: DesignTokens.getStatusColor(0.3)  // Green for 0.3
-    color: DesignTokens.getStatusColor(0.7)  // Red for 0.7
+    color: Theme.getStatusColor(0.3)  // Green for 0.3
+    color: Theme.getStatusColor(0.7)  // Red for 0.7
 }
 ```
+
+Or use `BfStatusBadge { text: "Ready"; status: "success" }` directly — it
+already picks a contrast-safe text color via `Theme.contrastText()`.
 
 ### Responsive Layout
 
 ```qml
 Item {
-    readonly property bool compact: width < DesignTokens.layout.breakpointCompact
-    
+    readonly property bool compact: width < Metrics.breakpointCompact
+
     GridLayout {
         columns: compact ? 1 : 2
     }
@@ -103,7 +112,7 @@ Item {
 
 ```qml
 TableView {
-    rowHeight: DesignTokens.layout.tableRowHeight
+    rowHeight: Metrics.tableRowHeight
 }
 ```
 
@@ -111,41 +120,48 @@ TableView {
 
 ## Token Cheat Sheet
 
-### Colors
+### Colors (`Theme`)
 ```
-primary, primaryHover, primaryPressed, primaryDisabled  → Action states
-success, warning, error, info                           → Status colors
-surface, surfaceAlt, background                         → Backgrounds
-textPrimary, textSecondary, textDisabled, textInverse  → Text
-border, borderLight, divider, focusRing                 → Boundaries
-```
-
-### Spacing (use instead of magic numbers)
-```
-xs=4px, sm=8px, md=16px, lg=24px, xl=32px, xxl=48px
-controlGap, rowGap, sectionGap, panelPadding, dialogPadding
+primary, primaryHover, primaryPressed, primaryDisabled, onPrimary  → Action states
+accent, accentHover, accentPressed, onAccent                       → Accent actions
+success, warning, error, info                                      → Status colors
+successSurface, warningSurface, errorSurface, infoSurface          → Pastel status fills
+onSuccess, onWarning, onError, onInfo                               → Contrast-safe text on the above
+pageBackground, surface, surfaceSubtle                              → Backgrounds
+text, textMuted, textOnDark, disabledText, disabledSurface          → Text & disabled fills
+border, borderSubtle, focusRing                                     → Boundaries
+selection, selectionText, overlay, shadowColor                      → Misc
 ```
 
-### Typography
+### Spacing (`Metrics`, use instead of magic numbers)
+```
+spacing2=2px, spacing4=4px, spacing6=6px, spacing8=8px, spacing12=12px
+spacing16=16px, spacing24=24px, spacing32=32px, spacing48=48px
+```
+
+There are no grouped names like `controlGap`/`panelPadding` anymore — pick the
+`spacingN` token whose value matches the gap you need (e.g. a 12px panel
+padding is `Metrics.spacing12`).
+
+### Typography (`Typography`)
 ```
 display (22px), headingLarge (18px), heading (16px)
 subtitle (14px), bodyLarge (14px), body (13px), caption (11px)
 fontFamily, monoFamily, weightLight–weightBold
 ```
 
-### Sizing
+### Sizing (`Metrics`)
 ```
-buttonHeight=32px, inputHeight=32px, rowHeight=28px
-iconSmall=16px, iconNormal=24px, iconLarge=32px
-radiusNone, radiusSmall, radiusNormal, radiusLarge
+controlHeight=36px, compactControlHeight=30px            → buttons & inputs
+tableRowHeight=28px, compactRowHeight=24px
+iconSmall=16px, iconNormal=24px, iconLarge=32px, iconXLarge=48px
+radiusSmall=3px, radiusMedium=5px, radiusLarge=8px
 ```
 
-### Layout
+### Breakpoints (`Metrics`)
 ```
-breakpointCompact = 1240px    → 1-column layout
-breakpointWide = 1240px       → 2-column layout
-breakpointUltraWide = 1800px  → data-dense layout
-tableRowHeight                → Shared table row height
+breakpointCompact = 1240px      → 1-column layout
+breakpointUltraWide = 1800px    → data-dense layout
 ```
 
 ---
@@ -153,10 +169,10 @@ tableRowHeight                → Shared table row height
 ## Rules
 
 **DO:**
-- ✅ `color: DesignTokens.colors.primary`
-- ✅ `anchors.margins: DesignTokens.spacing.md`
-- ✅ `font.pixelSize: DesignTokens.typography.body`
-- ✅ `implicitHeight: DesignTokens.sizing.buttonHeight`
+- ✅ `color: Theme.primary`
+- ✅ `anchors.margins: Metrics.spacing16`
+- ✅ `font.pixelSize: Typography.body`
+- ✅ `implicitHeight: Metrics.controlHeight`
 
 **DON'T:**
 - ❌ `color: "#0078d4"`
@@ -168,15 +184,13 @@ tableRowHeight                → Shared table row height
 
 ## Testing
 
-### Light Mode
-1. Windows: Settings > Personalization > Colors > Light
-2. Relaunch app
-3. Is text readable? Are form fields distinct from background?
+1. Launch the app.
+2. Is text readable? Are form fields distinct from the background?
+3. Do borders/dividers, disabled states, and error/success/warning states all
+   read clearly?
 
-### Dark Mode
-1. Windows: Settings > Personalization > Colors > Dark
-2. Relaunch app
-3. Is text readable? Are form fields distinct from background?
+The app is light-mode only — there is no theme toggle to check, and no dark
+mode pass is needed.
 
 ---
 
@@ -188,8 +202,7 @@ tableRowHeight                → Shared table row height
 | Code examples & patterns | [COMPONENT_USAGE.md](./COMPONENT_USAGE.md) |
 | Pre-commit checklist | [THEME_VALIDATION_CHECKLIST.md](./THEME_VALIDATION_CHECKLIST.md) |
 | JSON token export | [design-tokens.json](./design-tokens.json) |
-| Token implementation | [DesignTokens.qml](../src/crane_statics/qml_app/design/DesignTokens.qml) |
-| Visual demo | [DesignSystemTokensDemo.qml](../src/crane_statics/qml_app/qml/DesignSystemTokensDemo.qml) |
+| Token implementation | [Theme.qml](../src/crane_statics/qml_app/design/BF/DesignSystem/Theme.qml), [Metrics.qml](../src/crane_statics/qml_app/design/BF/DesignSystem/Metrics.qml), [Typography.qml](../src/crane_statics/qml_app/design/BF/DesignSystem/Typography.qml) |
 
 ---
 

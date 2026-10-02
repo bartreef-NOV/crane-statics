@@ -2,7 +2,7 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
-import "../../design" as Design
+import BF.DesignSystem
 import "../components" as Components
 
 Components.Dialog {
@@ -48,32 +48,32 @@ Components.Dialog {
 
     GridLayout {
         columns: 2
-        columnSpacing: Math.round(Design.DesignTokens.spacing.controlGap * Design.DesignTokens.layout.spacingMultiplier)
-        rowSpacing: Math.round(Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier)
+        columnSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
+        rowSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
 
         Label { text: qsTr("ID:") }
-        TextField { id: idField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; selectByMouse: true }
+        TextField { id: idField; Layout.preferredWidth: Metrics.maxInputWidth; selectByMouse: true }
 
         Label { text: qsTr("Mass (t):") }
-        NumberField { id: massField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth }
+        NumberField { id: massField; Layout.preferredWidth: Metrics.maxInputWidth }
 
         Label { text: qsTr("X (m):"); visible: !root.boomBody }
-        NumberField { id: xField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.boomBody }
+        NumberField { id: xField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.boomBody }
 
         Label { text: qsTr("Y (m):"); visible: !root.boomBody }
-        NumberField { id: yField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.boomBody }
+        NumberField { id: yField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.boomBody }
 
         Label { text: qsTr("Z (m):"); visible: !root.boomBody }
-        NumberField { id: zField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.boomBody }
+        NumberField { id: zField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.boomBody }
 
         Label { text: qsTr("Local U (m):"); visible: root.boomBody }
-        NumberField { id: uField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: root.boomBody }
+        NumberField { id: uField; Layout.preferredWidth: Metrics.maxInputWidth; visible: root.boomBody }
 
         Label { text: qsTr("Local V (m):"); visible: root.boomBody }
-        NumberField { id: vField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: root.boomBody }
+        NumberField { id: vField; Layout.preferredWidth: Metrics.maxInputWidth; visible: root.boomBody }
 
         Label { text: qsTr("Local W (m):"); visible: root.boomBody }
-        NumberField { id: wField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: root.boomBody }
+        NumberField { id: wField; Layout.preferredWidth: Metrics.maxInputWidth; visible: root.boomBody }
     }
 }
 

@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Fusion
-import "../../design"
+import BF.DesignSystem
 import "."
 
 Button {
@@ -9,8 +9,8 @@ Button {
     property string iconText: ""
     property string tooltipText: ""
 
-    implicitWidth: DesignTokens.sizing.buttonHeight
-    implicitHeight: DesignTokens.sizing.buttonHeight
+    implicitWidth: Metrics.controlHeight
+    implicitHeight: Metrics.controlHeight
     padding: 0
 
     Accessible.name: tooltipText
@@ -21,8 +21,8 @@ Button {
 
     contentItem: Text {
         text: root.iconText
-        font.pixelSize: DesignTokens.typography.bodyLarge
-        font.weight: DesignTokens.typography.weightMedium
+        font.pixelSize: Typography.bodyLarge
+        font.weight: Typography.weightMedium
         color: root.palette.buttonText
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter

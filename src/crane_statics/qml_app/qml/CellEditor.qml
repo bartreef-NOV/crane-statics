@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Fusion
-import "../design" as Design
+import BF.DesignSystem
 import "components" as Components
 
 /*!
@@ -125,7 +125,7 @@ FocusScope {
             focus: true
             editable: true
             model: root.choices
-            font.pixelSize: Design.DesignTokens.typography.body
+            font.pixelSize: Typography.body
             Component.onCompleted: {
                 const index = model ? model.indexOf(root.initialText()) : -1
                 if (index >= 0)

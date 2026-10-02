@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Fusion
-import "../../design"
+import BF.DesignSystem
 
 /**
  * ComboBox Component
@@ -26,33 +26,33 @@ import "../../design"
 ComboBox {
     id: root
 
-    implicitHeight: DesignTokens.sizing.inputHeight
-    implicitWidth: DesignTokens.sizing.minInputWidth
+    implicitHeight: Metrics.controlHeight
+    implicitWidth: Metrics.minInputWidth
 
-    palette.text: enabled ? DesignTokens.colors.textPrimary : DesignTokens.colors.textDisabled
-    palette.base: DesignTokens.colors.surface
-    palette.mid: DesignTokens.colors.border
-    palette.button: DesignTokens.colors.surfaceAlt
-    palette.highlight: DesignTokens.colors.primary
-    palette.highlightedText: DesignTokens.colors.textInverse
+    palette.text: enabled ? Theme.text : Theme.disabledText
+    palette.base: Theme.surface
+    palette.mid: Theme.border
+    palette.button: Theme.surfaceSubtle
+    palette.highlight: Theme.primary
+    palette.highlightedText: Theme.textOnDark
 
-    font.pixelSize: DesignTokens.typography.body
-    font.family: DesignTokens.typography.fontFamily
+    font.pixelSize: Typography.body
+    font.family: Typography.fontFamily
 
     Accessible.role: Accessible.ComboBox
     Accessible.name: currentText
     Accessible.description: "Dropdown selector"
 
     background: Rectangle {
-        color: DesignTokens.colors.surface
-        border.color: root.activeFocus ? DesignTokens.colors.focusRing : DesignTokens.colors.border
+        color: Theme.surface
+        border.color: root.activeFocus ? Theme.focusRing : Theme.border
         border.width: root.activeFocus
-            ? DesignTokens.sizing.borderNormal
-            : DesignTokens.sizing.borderThin
-        radius: DesignTokens.sizing.radiusSmall
+            ? Metrics.borderWidthNormal
+            : Metrics.borderWidth
+        radius: Metrics.radiusSmall
 
         Behavior on border.color {
-            ColorAnimation { duration: DesignTokens.transitions.fast }
+            ColorAnimation { duration: Metrics.transitionFast }
         }
     }
 
@@ -62,16 +62,16 @@ ComboBox {
         color: root.palette.text
         horizontalAlignment: Text.AlignLeft
         verticalAlignment: Text.AlignVCenter
-        leftPadding: DesignTokens.spacing.sm
+        leftPadding: Metrics.spacing8
         elide: Text.ElideRight
     }
 
     popup: Popup {
-        y: root.height - DesignTokens.sizing.borderNormal
+        y: root.height - Metrics.borderWidthNormal
         width: root.width
         implicitHeight: Math.min(
-            Math.max(1, root.count) * DesignTokens.sizing.rowHeight,
-            DesignTokens.sizing.rowHeight * 8
+            Math.max(1, root.count) * Metrics.tableRowHeight,
+            Metrics.tableRowHeight * 8
         )
 
         contentItem: ListView {
@@ -85,19 +85,19 @@ ComboBox {
 
             delegate: ItemDelegate {
                 width: parent.width
-                implicitHeight: DesignTokens.sizing.rowHeight
-                padding: DesignTokens.spacing.sm
+                implicitHeight: Metrics.tableRowHeight
+                padding: Metrics.spacing8
                 hoverEnabled: true
                 highlighted: hovered
 
                 background: Rectangle {
-                    color: highlighted ? DesignTokens.colors.primary : "transparent"
+                    color: highlighted ? Theme.primary : "transparent"
                 }
 
                 contentItem: Text {
                     text: modelData
                     font: root.font
-                    color: highlighted ? DesignTokens.colors.textInverse : DesignTokens.colors.textPrimary
+                    color: highlighted ? Theme.textOnDark : Theme.text
                     verticalAlignment: Text.AlignVCenter
                 }
 
@@ -112,10 +112,10 @@ ComboBox {
         }
 
         background: Rectangle {
-            color: DesignTokens.colors.surface
-            border.color: DesignTokens.colors.border
-            border.width: DesignTokens.sizing.borderThin
-            radius: DesignTokens.sizing.radiusSmall
+            color: Theme.surface
+            border.color: Theme.border
+            border.width: Metrics.borderWidth
+            radius: Metrics.radiusSmall
         }
     }
 }

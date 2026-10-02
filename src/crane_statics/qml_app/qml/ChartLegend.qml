@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
+import BF.DesignSystem
 
 Frame {
     id: root
@@ -10,12 +10,12 @@ Frame {
     property var visibilityByKey: ({})
     signal toggleRequested(string key)
 
-    readonly property color surfaceColor: Design.DesignTokens.colors.surface
-    readonly property color borderColor: Design.DesignTokens.colors.border
-    readonly property color textColor: Design.DesignTokens.colors.textPrimary
-    readonly property color mutedTextColor: Design.DesignTokens.colors.textSecondary
+    readonly property color surfaceColor: Theme.surface
+    readonly property color borderColor: Theme.border
+    readonly property color textColor: Theme.text
+    readonly property color mutedTextColor: Theme.textMuted
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     padding: 8

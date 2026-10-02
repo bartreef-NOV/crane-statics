@@ -1,21 +1,21 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
+import BF.DesignSystem
 import "components"
 
 Item {
     id: root
 
-    readonly property color surfaceColor: Design.DesignTokens.colors.surface
-    readonly property color borderColor: Design.DesignTokens.colors.border
-    readonly property color headerColor: Design.DesignTokens.colors.surfaceAlt
-    readonly property color headerTextColor: Design.DesignTokens.colors.textPrimary
-    readonly property color textColor: Design.DesignTokens.colors.textPrimary
-    readonly property color gridColor: Design.DesignTokens.colors.border
-    readonly property int tableRowHeight: Design.DesignTokens.layout.tableRowHeight
+    readonly property color surfaceColor: Theme.surface
+    readonly property color borderColor: Theme.border
+    readonly property color headerColor: Theme.surfaceSubtle
+    readonly property color headerTextColor: Theme.text
+    readonly property color textColor: Theme.text
+    readonly property color gridColor: Theme.border
+    readonly property int tableRowHeight: Metrics.tableRowHeight
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     property alias model: limitsList.model
@@ -35,11 +35,11 @@ Item {
             Layout.fillHeight: true
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: Design.DesignTokens.sizing.borderThin
+            border.width: Metrics.borderWidth
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: Design.DesignTokens.sizing.borderThin
+                anchors.margins: Metrics.borderWidth
                 spacing: 0
 
                 Row {
@@ -56,12 +56,12 @@ Item {
                             height: root.tableRowHeight
                             color: root.headerColor
                             border.color: root.gridColor
-                            border.width: Design.DesignTokens.sizing.borderThin
+                            border.width: Metrics.borderWidth
                             Label {
                                 anchors.fill: parent
-                                leftPadding: Design.DesignTokens.spacing.compact
-                                rightPadding: Design.DesignTokens.spacing.compact
-                                bottomPadding: Design.DesignTokens.spacing.hairline
+                                leftPadding: Metrics.spacing6
+                                rightPadding: Metrics.spacing6
+                                bottomPadding: Metrics.spacing2
                                 text: parent.modelData
                                 color: root.headerTextColor
                                 font.bold: true
@@ -98,9 +98,9 @@ Item {
                         Rectangle {
                             anchors.fill: parent
                             color: limitRow.index % 2 === 0
-                                ? "transparent" : Design.DesignTokens.colors.surfaceAlt
+                                ? "transparent" : Theme.surfaceSubtle
                             border.color: root.gridColor
-                            border.width: Design.DesignTokens.sizing.borderThin
+                            border.width: Metrics.borderWidth
                         }
 
                         Row {
@@ -109,7 +109,7 @@ Item {
                             Label {
                                 width: root.width * 0.38
                                 height: parent.height
-                                leftPadding: Design.DesignTokens.spacing.compact
+                                leftPadding: Metrics.spacing6
                                 text: limitRow.name
                                 verticalAlignment: Text.AlignVCenter
                                 elide: Text.ElideRight
@@ -118,7 +118,7 @@ Item {
                                     anchors.top: parent.top
                                     anchors.bottom: parent.bottom
                                     anchors.right: parent.right
-                                    width: Design.DesignTokens.sizing.borderThin
+                                    width: Metrics.borderWidth
                                     color: root.gridColor
                                 }
                             }
@@ -126,7 +126,7 @@ Item {
                             Label {
                                 width: root.width * 0.15
                                 height: parent.height
-                                leftPadding: Design.DesignTokens.spacing.compact
+                                leftPadding: Metrics.spacing6
                                 text: limitRow.unit
                                 verticalAlignment: Text.AlignVCenter
 
@@ -134,7 +134,7 @@ Item {
                                     anchors.top: parent.top
                                     anchors.bottom: parent.bottom
                                     anchors.right: parent.right
-                                    width: Design.DesignTokens.sizing.borderThin
+                                    width: Metrics.borderWidth
                                     color: root.gridColor
                                 }
                             }

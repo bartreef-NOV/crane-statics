@@ -1,6 +1,6 @@
 # Theme Validation Checklist
 
-Developer checklist for adding or modifying UI elements. Ensures consistency, accessibility, and proper theme support across light/dark modes.
+Developer checklist for adding or modifying UI elements. Ensures consistency and accessibility, and that every visual value comes from `Theme`/`Metrics`/`Typography`. The app is light-mode only — there is no dark mode or theme toggle to validate against.
 
 ## Before Committing Any UI Changes
 
@@ -8,29 +8,28 @@ Use this checklist to validate your work before opening a pull request.
 
 ### ✅ Token Compliance
 
-- [ ] **No hardcoded colors** — All colors use `DesignTokens.colors.*` (not RGB hex values)
-  - ❌ `Rectangle { color: "#0078d4" }`
-  - ✅ `Rectangle { color: DesignTokens.colors.primary }`
+- [ ] **No hardcoded colors** — All colors use `Theme.*` (not RGB hex values)
+  - ❌ `Rectangle { color: "#007096" }`
+  - ✅ `Rectangle { color: Theme.primary }`
 
-- [ ] **No magic number spacing** — All spacing uses `DesignTokens.spacing.*`
+- [ ] **No magic number spacing** — All spacing uses `Metrics.spacing*`
   - ❌ `anchors.margins: 16`
-  - ✅ `anchors.margins: DesignTokens.spacing.md`
+  - ✅ `anchors.margins: Metrics.spacing16`
 
-- [ ] **No hardcoded font sizes** — All text sizes use `DesignTokens.typography.*`
+- [ ] **No hardcoded font sizes** — All text sizes use `Typography.*`
   - ❌ `font.pixelSize: 14`
-  - ✅ `font.pixelSize: DesignTokens.typography.body`
+  - ✅ `font.pixelSize: Typography.body`
 
-- [ ] **No hardcoded control heights** — All button/input heights use `DesignTokens.sizing.*`
+- [ ] **No hardcoded control heights** — All button/input heights use `Metrics.*`
   - ❌ `implicitHeight: 32`
-  - ✅ `implicitHeight: DesignTokens.sizing.buttonHeight`
+  - ✅ `implicitHeight: Metrics.controlHeight`
 
-### 🎨 Light Mode Validation
+### 🎨 Visual / Readability Validation
 
-1. **Start the app in light mode:**
+1. **Start the app:**
    ```bash
    python -m crane_statics path/to/model.json
    ```
-   (Windows automatically defaults to your Settings > Personalization > Colors preference)
 
 2. **Check your modified UI:**
    - [ ] Text is readable against background (no low-contrast issues)
@@ -39,35 +38,12 @@ Use this checklist to validate your work before opening a pull request.
    - [ ] Error/warning/success indicators are clear
    - [ ] Disabled controls look inactive
    - [ ] Hover states provide visual feedback
+   - [ ] No "tofu boxes" (missing font rendering)
 
 3. **Keyboard navigation:**
    - [ ] Tab through interactive elements
    - [ ] Focus ring is visible on all focusable controls
    - [ ] Focus ring color contrasts against background
-
-### 🌙 Dark Mode Validation
-
-1. **Switch to dark mode:**
-   - Windows: Settings > Personalization > Colors > Dark
-   - Or in-app: View > Appearance > Dark
-
-2. **Relaunch the app** (Qt reloads theme on startup):
-   ```bash
-   python -m crane_statics path/to/model.json
-   ```
-
-3. **Check your modified UI:**
-   - [ ] Text is readable against background
-   - [ ] Form fields are clearly distinguishable from background
-   - [ ] Borders and dividers are visible
-   - [ ] Error/warning/success indicators are clear
-   - [ ] Disabled controls look inactive
-   - [ ] Hover states provide visual feedback
-   - [ ] No "tofu boxes" (missing font rendering)
-
-4. **Keyboard navigation:**
-   - [ ] Tab through interactive elements
-   - [ ] Focus ring is visible and contrasts against background
 
 ### 📋 Contrast Ratio Verification
 
@@ -76,24 +52,23 @@ Text must meet WCAG AA minimum:
 - **Large text (18px+):** 3:1 contrast ratio
 - **UI controls:** 3:1 contrast ratio
 
-**For semantic status colors**, verify in both light and dark modes:
-- [ ] Error red (#f44336) text is readable on light/dark background
-- [ ] Success green (#4caf50) text is readable on light/dark background
-- [ ] Warning orange (#ff9800) text is readable on light/dark background
+**For semantic status colors**, verify readability against their typical background:
+- [ ] Error red (`Theme.error`, `#DA291C`) text is readable
+- [ ] Success green (`Theme.success`, `#A9C47F`) text is readable
+- [ ] Warning orange (`Theme.warning`, `#DC9575`) text is readable
 
 **Quick verification (no tool required):**
-1. Look at error text in light mode → readable?
-2. Look at same error text in dark mode → readable?
-3. Repeat for warning and success colors
-4. If ANY are hard to read, use `DesignTokens.getStatusColor()` helper instead of hardcoding
+1. Look at error text → readable?
+2. Repeat for warning and success colors
+3. If placing text *on top of* a solid status fill (a badge/pill), use `Theme.getOnSemanticColor()`/`Theme.contrastText()` instead of a fixed inverse color — the nov palette's tones don't all clear WCAG AA against the same fixed text color
 
 ### 🎯 Responsive Breakpoint Check
 
 If your change affects layout:
 
-- [ ] **Compact mode** (`width < 1240px`): Layout reflows to 1-column correctly
+- [ ] **Compact mode** (`width < Metrics.breakpointCompact` / 1240px): Layout reflows to 1-column correctly
 - [ ] **Wide mode** (`width ≥ 1240px`): Layout uses 2-column or intended layout
-- [ ] **Ultra-wide mode** (`width ≥ 1800px`): Data-dense tables work (if applicable)
+- [ ] **Ultra-wide mode** (`width ≥ Metrics.breakpointUltraWide` / 1800px): Data-dense tables work (if applicable)
 
 **Test:**
 1. Resize window narrower/wider
@@ -120,8 +95,7 @@ If your change affects layout:
 
 For significant UI changes:
 
-- [ ] Take screenshot in light mode
-- [ ] Take screenshot in dark mode
+- [ ] Take a screenshot of the change
 - [ ] Compare with previous version (ask reviewer or keep a reference)
 - [ ] Verify no unintended visual changes
 
@@ -138,9 +112,9 @@ For significant UI changes:
    *   MyNewComponent { ... }
    *
    * Design tokens used:
-   * - colors.primary (for button state)
-   * - spacing.md (for padding)
-   * - typography.body (for text)
+   * - Theme.primary (for button state)
+   * - Metrics.spacing16 (for padding)
+   * - Typography.body (for text)
    */
   ```
 
@@ -153,67 +127,62 @@ For significant UI changes:
 
 ### Adding a New Button
 
-- [ ] Uses `DesignTokens.sizing.buttonHeight` for implicitHeight
-- [ ] Uses `DesignTokens.colors.primary` for button background (or appropriate semantic color)
-- [ ] Uses `DesignTokens.colors.textInverse` for button text
-- [ ] Hover state uses `DesignTokens.colors.primaryHover`
-- [ ] Pressed state uses `DesignTokens.colors.primaryPressed`
-- [ ] Disabled state uses `DesignTokens.colors.primaryDisabled`
-- [ ] Focus ring uses `DesignTokens.colors.focusRing`
-- [ ] Works in light mode (readable text, clear states)
-- [ ] Works in dark mode (readable text, clear states)
+- [ ] Uses `Metrics.controlHeight` for implicitHeight
+- [ ] Uses `Theme.primary` for button background (or appropriate semantic color)
+- [ ] Uses `Theme.onPrimary` for button text
+- [ ] Hover state uses `Theme.primaryHover`
+- [ ] Pressed state uses `Theme.primaryPressed`
+- [ ] Disabled state uses `Theme.primaryDisabled`
+- [ ] Focus ring uses `Theme.focusRing`
+- [ ] Text is readable and states are clear (or use `BfButton` directly, which already covers all of the above)
 
 ### Adding a New Text Input
 
-- [ ] Uses `DesignTokens.sizing.inputHeight` for implicitHeight
-- [ ] Uses `DesignTokens.colors.surface` for background
-- [ ] Uses `DesignTokens.colors.textPrimary` for text
-- [ ] Border uses `DesignTokens.colors.border`
-- [ ] Error state uses `DesignTokens.colors.error` (red border + error message)
-- [ ] Focus ring uses `DesignTokens.colors.focusRing`
-- [ ] Disabled text uses `DesignTokens.colors.textDisabled`
-- [ ] Works in light mode (field visible against background)
-- [ ] Works in dark mode (field visible against background)
+- [ ] Uses `Metrics.controlHeight` for implicitHeight
+- [ ] Uses `Theme.surface` for background
+- [ ] Uses `Theme.text` for text
+- [ ] Border uses `Theme.border`
+- [ ] Error state uses `Theme.error` (red border + error message)
+- [ ] Focus ring uses `Theme.focusRing`
+- [ ] Disabled text uses `Theme.disabledText`
+- [ ] Field is visible against background and states are clear (or use `BfTextField` directly)
 
 ### Adding a New Dialog
 
-- [ ] Title uses `DesignTokens.typography.heading` (16px)
-- [ ] Body text uses `DesignTokens.typography.body` (13px)
-- [ ] Padding uses `DesignTokens.spacing.dialogPadding` (16px)
-- [ ] Buttons use `DesignTokens.sizing.buttonHeight`
-- [ ] Dialog background uses `DesignTokens.colors.background`
-- [ ] Header background uses `DesignTokens.colors.surfaceAlt`
-- [ ] Dialog overlay is semi-transparent (DesignTokens.colors.overlay)
+- [ ] Title uses `Typography.heading` (16px)
+- [ ] Body text uses `Typography.body` (13px)
+- [ ] Padding uses `Metrics.spacing16` (there's no dedicated `dialogPadding` token anymore — 16px is the equivalent value)
+- [ ] Buttons use `Metrics.controlHeight`
+- [ ] Dialog background uses `Theme.pageBackground`
+- [ ] Header background uses `Theme.surfaceSubtle`
+- [ ] Dialog overlay uses `Theme.overlay`
 - [ ] Button colors use appropriate semantic colors (primary, error, etc.)
-- [ ] Works in light mode (readable, clear button states)
-- [ ] Works in dark mode (readable, clear button states)
+- [ ] Readable with clear button states
 
 ### Adding a New Table/Data Grid
 
-- [ ] Row height uses `DesignTokens.layout.tableRowHeight`
-- [ ] Rows alternate: `DesignTokens.colors.surface` and `DesignTokens.colors.surfaceAlt`
-- [ ] Header background uses `DesignTokens.colors.surfaceAlt`
-- [ ] Header text uses `DesignTokens.colors.textPrimary` with medium weight
-- [ ] Body text uses `DesignTokens.colors.textPrimary`
-- [ ] Borders use `DesignTokens.colors.border`
+- [ ] Row height uses `Metrics.tableRowHeight`
+- [ ] Rows alternate: `Theme.surface` and `Theme.surfaceSubtle`
+- [ ] Header background uses `Theme.surfaceSubtle`
+- [ ] Header text uses `Theme.text` with medium weight (`Typography.weightMedium`)
+- [ ] Body text uses `Theme.text`
+- [ ] Borders use `Theme.border`
 - [ ] Hover state uses different background (slight contrast)
-- [ ] Selection uses `DesignTokens.colors.primary` background
-- [ ] Selection text uses `DesignTokens.colors.textInverse`
-- [ ] Works in light mode (rows readable, alternating visible)
-- [ ] Works in dark mode (rows readable, alternating visible)
+- [ ] Selection uses `Theme.selection` background
+  - Note: `Theme.selection` is a light tint (`novBlue50Tint`), not a solid fill, so selected text stays `Theme.selectionText` (which equals `Theme.text`, the normal dark text) rather than an inverse/white color — don't pair `Theme.selection` with `Theme.onPrimary`.
+- [ ] Rows readable, alternating visible
 
 ### Adding a New Form/Panel
 
-- [ ] Labels use `DesignTokens.typography.body` with medium weight
-- [ ] Text inputs use `DesignTokens.sizing.inputHeight`
-- [ ] Row gaps use `DesignTokens.spacing.rowGap` (8px)
-- [ ] Section gaps use `DesignTokens.spacing.sectionGap` (16px)
-- [ ] Panel background uses `DesignTokens.colors.surface` or `DesignTokens.colors.surfaceAlt`
-- [ ] Panel padding uses `DesignTokens.spacing.panelPadding` (12px)
-- [ ] Error messages use `DesignTokens.colors.error`
-- [ ] Success messages use `DesignTokens.colors.success`
-- [ ] Works in light mode (form fields clear, labels readable)
-- [ ] Works in dark mode (form fields clear, labels readable)
+- [ ] Labels use `Typography.body` with medium weight
+- [ ] Text inputs use `Metrics.controlHeight`
+- [ ] Row gaps use `Metrics.spacing8` (there's no dedicated `rowGap` token anymore — 8px is the equivalent value)
+- [ ] Section gaps use `Metrics.spacing16` (there's no dedicated `sectionGap` token anymore — 16px is the equivalent value)
+- [ ] Panel background uses `Theme.surface` or `Theme.surfaceSubtle`
+- [ ] Panel padding uses `Metrics.spacing12` (there's no dedicated `panelPadding` token anymore — 12px is the equivalent value)
+- [ ] Error messages use `Theme.error`
+- [ ] Success messages use `Theme.success`
+- [ ] Form fields clear, labels readable
 
 ---
 
@@ -221,13 +190,12 @@ For significant UI changes:
 
 Stop and fix if you see:
 
-- [ ] ❌ Hardcoded color: `color: "#0078d4"`
+- [ ] ❌ Hardcoded color: `color: "#007096"`
 - [ ] ❌ Hardcoded spacing: `anchors.margins: 16` or `spacing: 8`
 - [ ] ❌ Hardcoded font size: `font.pixelSize: 14`
 - [ ] ❌ Hardcoded control height: `implicitHeight: 32`
 - [ ] ❌ No focus ring on interactive controls
-- [ ] ❌ Text unreadable in dark mode
-- [ ] ❌ Text unreadable in light mode
+- [ ] ❌ Text unreadable against its background
 - [ ] ❌ Form fields same color as background (can't see where to type)
 - [ ] ❌ Error messages only shown in red (colorblind users won't notice)
 - [ ] ❌ Hover/pressed states not visually distinct
@@ -240,10 +208,9 @@ Stop and fix if you see:
 **Fast path for small changes:**
 
 1. **Token check:** Grep for hardcoded colors/spacing/sizes → replace with tokens
-2. **Light mode:** Load app in light mode, verify change looks good
-3. **Dark mode:** Switch to dark mode, reload app, verify change looks good
-4. **Tests:** Run `pytest tests/ -v` → all pass
-5. **Done!** Ready to commit
+2. **Visual check:** Load the app, verify the change looks good
+3. **Tests:** Run `pytest tests/ -v` → all pass
+4. **Done!** Ready to commit
 
 **Typical time:** 5–10 minutes for small UI tweaks
 
@@ -254,13 +221,12 @@ Stop and fix if you see:
 **For major layout/component additions:**
 
 1. **Token review:** Audit all colors, spacing, fonts in your change
-2. **Light mode:** Load app, check readability and state clarity
-3. **Dark mode:** Switch modes, verify readability and state clarity
-4. **Responsive:** Resize window, verify layout reflows correctly
-5. **Keyboard nav:** Tab through all interactive elements
-6. **Tests:** Run full suite, verify no regressions
-7. **Screenshots:** Take light/dark screenshots for review
-8. **Done!** Ready for PR review
+2. **Visual check:** Load the app, check readability and state clarity
+3. **Responsive:** Resize window, verify layout reflows correctly
+4. **Keyboard nav:** Tab through all interactive elements
+5. **Tests:** Run full suite, verify no regressions
+6. **Screenshots:** Take a screenshot for review
+7. **Done!** Ready for PR review
 
 **Typical time:** 20–30 minutes for significant changes
 
@@ -272,9 +238,9 @@ Stop and fix if you see:
 2. **Spacing:** Check [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md#spacing-margins-padding-gaps) for spacing scale
 3. **Typography:** Check [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md#typography-scale--usage) for font sizes
 4. **Components:** Check [COMPONENT_USAGE.md](./COMPONENT_USAGE.md) for code examples
-5. **DesignTokens.qml:** Check [implementation](../../src/crane_statics/qml_app/design/DesignTokens.qml) for available properties
+5. **Implementation:** Check [Theme.qml](../../src/crane_statics/qml_app/design/BF/DesignSystem/Theme.qml), [Metrics.qml](../../src/crane_statics/qml_app/design/BF/DesignSystem/Metrics.qml), [Typography.qml](../../src/crane_statics/qml_app/design/BF/DesignSystem/Typography.qml) for available properties
 
 ---
 
-**Last Updated:** 2026-08-14  
-**Design System Version:** 1.0.0
+**Last Updated:** 2026-09-24
+**Design System Version:** 2.0.0

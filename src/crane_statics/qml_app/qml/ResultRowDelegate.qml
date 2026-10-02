@@ -1,6 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
-import "../design" as Design
+import BF.DesignSystem
 
 Item {
     id: delegateRoot
@@ -20,32 +20,32 @@ Item {
 
     property real nameWidth: 120
 
-    readonly property color barColor: Design.DesignTokens.colors.primary
-    readonly property color barTrackColor: Design.DesignTokens.colors.borderLight
-    readonly property color surfaceColor: Design.DesignTokens.colors.surface
-    readonly property color alternateSurfaceColor: Design.DesignTokens.colors.surfaceAlt
-    readonly property color textColor: Design.DesignTokens.colors.textPrimary
+    readonly property color barColor: Theme.primary
+    readonly property color barTrackColor: Theme.borderSubtle
+    readonly property color surfaceColor: Theme.surface
+    readonly property color alternateSurfaceColor: Theme.surfaceSubtle
+    readonly property color textColor: Theme.text
 
     readonly property real cellWidth: (width - nameWidth) / 5
 
     signal barClicked()
 
-    implicitHeight: Design.DesignTokens.sizing.rowHeightCompact
-    height: Design.DesignTokens.sizing.rowHeightCompact
+    implicitHeight: Metrics.compactRowHeight
+    height: Metrics.compactRowHeight
 
     Rectangle {
         anchors.fill: parent
         color: delegateRoot.index % 2 === 0
             ? delegateRoot.surfaceColor : delegateRoot.alternateSurfaceColor
         border.color: delegateRoot.barTrackColor
-        border.width: Design.DesignTokens.sizing.borderThin
+        border.width: Metrics.borderWidth
         visible: !delegateRoot.isGroupHeader
     }
 
     Label {
         visible: delegateRoot.isGroupHeader
         anchors.fill: parent
-        anchors.leftMargin: Design.DesignTokens.spacing.compact + (delegateRoot.nested ? Design.DesignTokens.spacing.sm : 0)
+        anchors.leftMargin: Metrics.spacing6 + (delegateRoot.nested ? Metrics.spacing8 : 0)
         text: delegateRoot.name
         color: delegateRoot.textColor
         font.bold: true
@@ -62,7 +62,7 @@ Item {
         Label {
             width: delegateRoot.nameWidth
             height: parent.height
-            leftPadding: Design.DesignTokens.spacing.compact
+            leftPadding: Metrics.spacing6
             text: delegateRoot.name
             color: delegateRoot.textColor
             verticalAlignment: Text.AlignVCenter
@@ -76,7 +76,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: Design.DesignTokens.sizing.borderThin
+                width: Metrics.borderWidth
                 color: delegateRoot.barTrackColor
             }
         }
@@ -84,7 +84,7 @@ Item {
         Label {
             width: delegateRoot.cellWidth
             height: parent.height
-            leftPadding: Design.DesignTokens.spacing.compact
+            leftPadding: Metrics.spacing6
             text: delegateRoot.unit
             color: delegateRoot.textColor
             verticalAlignment: Text.AlignVCenter
@@ -94,7 +94,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: Design.DesignTokens.sizing.borderThin
+                width: Metrics.borderWidth
                 color: delegateRoot.barTrackColor
             }
         }
@@ -102,7 +102,7 @@ Item {
         Label {
             width: delegateRoot.cellWidth
             height: parent.height
-            rightPadding: Design.DesignTokens.spacing.compact
+            rightPadding: Metrics.spacing6
             text: delegateRoot.demand
             color: delegateRoot.textColor
             horizontalAlignment: Text.AlignRight
@@ -112,7 +112,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: Design.DesignTokens.sizing.borderThin
+                width: Metrics.borderWidth
                 color: delegateRoot.barTrackColor
             }
         }
@@ -120,7 +120,7 @@ Item {
         Label {
             width: delegateRoot.cellWidth
             height: parent.height
-            rightPadding: Design.DesignTokens.spacing.compact
+            rightPadding: Metrics.spacing6
             text: delegateRoot.limit
             color: delegateRoot.textColor
             horizontalAlignment: Text.AlignRight
@@ -130,7 +130,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: Design.DesignTokens.sizing.borderThin
+                width: Metrics.borderWidth
                 color: delegateRoot.barTrackColor
             }
         }
@@ -138,7 +138,7 @@ Item {
         Label {
             width: delegateRoot.cellWidth
             height: parent.height
-            rightPadding: Design.DesignTokens.spacing.compact
+            rightPadding: Metrics.spacing6
             text: delegateRoot.utilization
             color: delegateRoot.textColor
             horizontalAlignment: Text.AlignRight
@@ -148,7 +148,7 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: Design.DesignTokens.sizing.borderThin
+                width: Metrics.borderWidth
                 color: delegateRoot.barTrackColor
             }
         }
@@ -162,17 +162,17 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin: Design.DesignTokens.spacing.compact
-                anchors.rightMargin: Design.DesignTokens.spacing.compact
+                anchors.leftMargin: Metrics.spacing6
+                anchors.rightMargin: Metrics.spacing6
                 height: 10
-                radius: Design.DesignTokens.sizing.radiusNormal
-                border.width: Design.DesignTokens.sizing.borderThin
+                radius: Metrics.radiusMedium
+                border.width: Metrics.borderWidth
                 border.color: delegateRoot.barTrackColor
 
                 Rectangle {
                     height: parent.height
                     width: parent.width * Math.max(0, Math.min(100, delegateRoot.utilizationValue)) / 100
-                    radius: Design.DesignTokens.sizing.radiusNormal
+                    radius: Metrics.radiusMedium
                     color: delegateRoot.barColor
                 }
 

@@ -2,7 +2,7 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
-import "../../design" as Design
+import BF.DesignSystem
 import "../components" as Components
 
 Components.Dialog {
@@ -66,31 +66,31 @@ Components.Dialog {
 
     GridLayout {
         columns: 2
-        columnSpacing: Math.round(Design.DesignTokens.spacing.controlGap * Design.DesignTokens.layout.spacingMultiplier)
-        rowSpacing: Math.round(Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier)
+        columnSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
+        rowSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
 
         Label { text: qsTr("ID:") }
         TextField {
             id: idField
-            Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth
+            Layout.preferredWidth: Metrics.maxInputWidth
             selectByMouse: true
             ToolTip.visible: hovered && readOnly
             ToolTip.text: qsTr("Hoist ID is immutable after creation")
         }
 
         Label { text: qsTr("Support Node:"); visible: !root.isBoomHoist }
-        ComboBox { id: nodeCombo; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; editable: true; model: root.nodeIds; visible: !root.isBoomHoist }
+        ComboBox { id: nodeCombo; Layout.preferredWidth: Metrics.maxInputWidth; editable: true; model: root.nodeIds; visible: !root.isBoomHoist }
 
         Label { text: qsTr("Falls:"); visible: !root.isBoomHoist }
-        SpinBox { id: fallsSpin; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; from: 1; to: 99; value: 1; visible: !root.isBoomHoist }
+        SpinBox { id: fallsSpin; Layout.preferredWidth: Metrics.maxInputWidth; from: 1; to: 99; value: 1; visible: !root.isBoomHoist }
 
         Label { text: qsTr("Hook Mass (t):"); visible: !root.isBoomHoist }
-        NumberField { id: hookMassField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist }
+        NumberField { id: hookMassField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.isBoomHoist }
 
         Label { text: qsTr("Linear Mass (kg/m):") }
         NumberField {
             id: linearMassField
-            Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth
+            Layout.preferredWidth: Metrics.maxInputWidth
             validator: DoubleValidator { bottom: 0; notation: DoubleValidator.StandardNotation }
         }
 
@@ -99,7 +99,7 @@ Components.Dialog {
         Label { text: qsTr("Rope Length (m):"); visible: root.isBoomHoist }
         NumberField {
             id: ropeLengthField
-            Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth
+            Layout.preferredWidth: Metrics.maxInputWidth
             visible: root.isBoomHoist
             validator: DoubleValidator { bottom: 0; notation: DoubleValidator.StandardNotation }
         }
@@ -114,7 +114,7 @@ Components.Dialog {
         Label { text: qsTr("Split Falls:"); visible: !root.isBoomHoist && splitableCheck.checked }
         SpinBox {
             id: splitFallsSpin
-            Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth
+            Layout.preferredWidth: Metrics.maxInputWidth
             visible: !root.isBoomHoist && splitableCheck.checked
             from: 1
             to: fallsSpin.value
@@ -122,24 +122,24 @@ Components.Dialog {
         }
 
         Label { text: qsTr("Split Hook Mass (t):"); visible: !root.isBoomHoist && splitableCheck.checked }
-        NumberField { id: splitHookMassField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist && splitableCheck.checked }
+        NumberField { id: splitHookMassField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.isBoomHoist && splitableCheck.checked }
 
         Label { text: qsTr("DAF:"); visible: !root.isBoomHoist }
-        NumberField { id: dafField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist }
+        NumberField { id: dafField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.isBoomHoist }
 
         Label { text: qsTr("Offlead (deg):"); visible: !root.isBoomHoist }
-        NumberField { id: offleadField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist }
+        NumberField { id: offleadField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.isBoomHoist }
 
         Label { text: qsTr("Sidelead (deg):"); visible: !root.isBoomHoist }
-        NumberField { id: sideleadField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; visible: !root.isBoomHoist }
+        NumberField { id: sideleadField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.isBoomHoist }
 
         Label { text: qsTr("Drum Dead Turns:"); visible: !root.isBoomHoist }
-        SpinBox { id: deadTurnsSpin; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth; from: 0; to: 999; value: 0; visible: !root.isBoomHoist }
+        SpinBox { id: deadTurnsSpin; Layout.preferredWidth: Metrics.maxInputWidth; from: 0; to: 999; value: 0; visible: !root.isBoomHoist }
 
         Label { text: qsTr("Drum Diameter (m):"); visible: !root.isBoomHoist }
         NumberField {
             id: drumDiameterField
-            Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth
+            Layout.preferredWidth: Metrics.maxInputWidth
             visible: !root.isBoomHoist
             placeholderText: qsTr("required for dead turns")
             validator: DoubleValidator { bottom: 0; notation: DoubleValidator.StandardNotation }

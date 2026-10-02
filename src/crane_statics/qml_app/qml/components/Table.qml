@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../../design"
+import BF.DesignSystem
 import "."
 
 /**
@@ -40,10 +40,10 @@ Rectangle {
     signal editRequested(int row)
     signal deleteRequested(int row)
 
-    color: DesignTokens.colors.surface
-    border.color: DesignTokens.colors.border
-    border.width: DesignTokens.sizing.borderThin
-    radius: DesignTokens.sizing.radiusSmall
+    color: Theme.surface
+    border.color: Theme.border
+    border.width: Metrics.borderWidth
+    radius: Metrics.radiusSmall
 
     Accessible.role: Accessible.Table
     Accessible.name: root.title.length > 0 ? root.title : qsTr("Data table")
@@ -52,21 +52,21 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: DesignTokens.spacing.md
-        spacing: DesignTokens.spacing.md
+        anchors.margins: Metrics.spacing16
+        spacing: Metrics.spacing16
 
         // Title bar with toolbar
         RowLayout {
             Layout.fillWidth: true
-            spacing: DesignTokens.spacing.controlGap
+            spacing: Metrics.spacing8
             visible: root.title.length > 0 || root.editable
 
             Text {
                 Layout.fillWidth: true
                 text: root.title
-                font.pixelSize: DesignTokens.typography.bodyLarge
-                font.weight: DesignTokens.typography.weightSemiBold
-                color: DesignTokens.colors.textPrimary
+                font.pixelSize: Typography.bodyLarge
+                font.weight: Typography.weightSemiBold
+                color: Theme.text
                 visible: root.title.length > 0
             }
 
@@ -74,7 +74,7 @@ Rectangle {
                 iconText: "+"
                 tooltipText: qsTr("Add")
                 visible: root.editable
-                implicitHeight: DesignTokens.sizing.buttonHeightSmall
+                implicitHeight: Metrics.compactControlHeight
                 onClicked: root.addRequested()
             }
 
@@ -84,7 +84,7 @@ Rectangle {
                 semantic: "secondary"
                 visible: root.editable
                 enabled: root.hasSelection
-                implicitHeight: DesignTokens.sizing.buttonHeightSmall
+                implicitHeight: Metrics.compactControlHeight
                 onClicked: root.editRequested(root.currentRow)
             }
 
@@ -94,7 +94,7 @@ Rectangle {
                 visible: root.editable
                 enabled: root.hasSelection
                 semantic: "danger"
-                implicitHeight: DesignTokens.sizing.buttonHeightSmall
+                implicitHeight: Metrics.compactControlHeight
                 onClicked: root.deleteRequested(root.currentRow)
             }
         }
@@ -110,16 +110,16 @@ Rectangle {
 
                 columnSpacing: 0
                 rowSpacing: 0
-                rowHeight: DesignTokens.layout.tableRowHeight
+                rowHeight: Metrics.tableRowHeight
 
                 delegate: Rectangle {
-                    implicitHeight: DesignTokens.layout.tableRowHeight
+                    implicitHeight: Metrics.tableRowHeight
                     color: {
-                        if (root.currentRow === row) return DesignTokens.colors.primary
-                        return row % 2 === 0 ? DesignTokens.colors.surface : DesignTokens.colors.surfaceAlt
+                        if (root.currentRow === row) return Theme.primary
+                        return row % 2 === 0 ? Theme.surface : Theme.surfaceSubtle
                     }
-                    border.color: DesignTokens.colors.border
-                    border.width: DesignTokens.sizing.borderThin
+                    border.color: Theme.border
+                    border.width: Metrics.borderWidth
 
                     MouseArea {
                         anchors.fill: parent
@@ -128,10 +128,10 @@ Rectangle {
 
                     Text {
                         anchors.fill: parent
-                        anchors.margins: DesignTokens.spacing.sm
+                        anchors.margins: Metrics.spacing8
                         text: display || ""
-                        font.pixelSize: DesignTokens.typography.body
-                        color: root.currentRow === row ? DesignTokens.colors.textInverse : DesignTokens.colors.textPrimary
+                        font.pixelSize: Typography.body
+                        color: root.currentRow === row ? Theme.textOnDark : Theme.text
                         verticalAlignment: Text.AlignVCenter
                         horizontalAlignment: Text.AlignLeft
                         elide: Text.ElideRight
@@ -145,8 +145,8 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             text: root.emptyText
-            font.pixelSize: DesignTokens.typography.body
-            color: DesignTokens.colors.textSecondary
+            font.pixelSize: Typography.body
+            color: Theme.textMuted
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             visible: !table.model || table.model.rowCount === 0 || table.model.length === 0
