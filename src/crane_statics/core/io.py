@@ -1,6 +1,7 @@
 """File I/O utilities for Crane Statics documents."""
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,30 @@ def _format_for_suffix(suffix: str) -> str:
     raise DocumentIOError(f"Unsupported file extension {suffix!r}; expected .json, .yaml, or .yml")
 
 
+class _StrictIntSafeLoader(yaml.SafeLoader):
+    """SafeLoader without YAML 1.1's ambiguous octal/sexagesimal int forms.
+
+    PyYAML's default int resolver reads a bare leading-zero number like
+    ``020`` as octal (16) and a colon-separated number like ``1:20`` as
+    sexagesimal (80). Authored crane input has no use for either notation,
+    and silently resolving one as the other would turn a typo into a wrong
+    engineering value with no error. Dropping those two forms leaves such
+    input as a string, which pydantic then parses as plain decimal (e.g.
+    ``int("020") == 20``) or rejects outright (e.g. ``"1:20"``).
+    """
+
+
+_StrictIntSafeLoader.yaml_implicit_resolvers = {
+    first_char: [(tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:int"]
+    for first_char, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_StrictIntSafeLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:int",
+    re.compile(r"^[-+]?(?:0|[1-9][0-9_]*|0x[0-9a-fA-F_]+|0b[0-1_]+)$"),
+    list("-+0123456789"),
+)
+
+
 def _validate_authored_schema(data: dict[str, Any]) -> None:
     schema_obj = data.get("schema")
     if not isinstance(schema_obj, dict):
@@ -74,8 +99,8 @@ def load_document(path: Path) -> CraneDocument:
     fmt = _format_for_suffix(path.suffix)
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
-            data = json.load(f) if fmt == "json" else yaml.safe_load(f)
-    except (IOError, json.JSONDecodeError, yaml.YAMLError) as e:
+            data = json.load(f) if fmt == "json" else yaml.load(f, Loader=_StrictIntSafeLoader)
+    except (IOError, UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError) as e:
         raise DocumentIOError(f"Failed to read file: {e}")
 
     if not isinstance(data, dict):

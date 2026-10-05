@@ -145,3 +145,39 @@ def test_save_then_reload_preserves_a_yaml_document(tmp_path):
     reloaded = load_document(path)
 
     assert reloaded.metadata.name == doc.metadata.name
+
+
+def test_load_document_does_not_misread_leading_zero_as_octal(tmp_path):
+    """YAML 1.1's safe_load reads bare `020` as octal 16; a hand-edited crane
+    file meaning twenty falls must not silently become sixteen."""
+    data = _minimal_v5()
+    yaml_text = yaml.safe_dump(data).replace("falls: 1\n", "falls: 020\n", 1)
+    assert "falls: 020\n" in yaml_text
+    path = tmp_path / "model.yaml"
+    path.write_text(yaml_text, encoding="utf-8")
+
+    doc = load_document(path)
+
+    hoist = next(h for h in doc.hoists if h.id == "MH")
+    assert hoist.falls == 20
+
+
+def test_load_document_rejects_sexagesimal_looking_int(tmp_path):
+    """YAML 1.1's safe_load reads `1:20` as sexagesimal (80); such ambiguous
+    input must fail validation rather than silently resolve to a number."""
+    data = _minimal_v5()
+    yaml_text = yaml.safe_dump(data).replace("falls: 1\n", "falls: 1:20\n", 1)
+    assert "falls: 1:20\n" in yaml_text
+    path = tmp_path / "model.yaml"
+    path.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(DocumentIOError):
+        load_document(path)
+
+
+def test_load_document_reports_invalid_encoding_as_document_io_error(tmp_path):
+    path = tmp_path / "model.yaml"
+    path.write_bytes(b"\xff\xfe\x00\x01invalid utf-8")
+
+    with pytest.raises(DocumentIOError, match="Failed to read file"):
+        load_document(path)
