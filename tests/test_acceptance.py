@@ -154,7 +154,7 @@ class SceneHarness:
         inputs = self.inputs
         document_dict = inputs.document_dict
         assert document_dict is not None
-        return self.vm._presenter.build_drawn_load_sections(
+        return self.vm._presenter.build_drawn_load_sections(  # type: ignore[no-any-return]
             document_dict=document_dict,
             analysis_point=inputs.analysis_point,
             node_positions=inputs.node_positions(),
@@ -172,7 +172,7 @@ class TestA1ExampleFileLoads:
 
     def test_loads_without_error(self):
         """Example file should load through normal path."""
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -182,7 +182,7 @@ class TestA1ExampleFileLoads:
 
     def test_creates_scene_context(self):
         """Loaded document should have hoists for scene context."""
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -382,7 +382,7 @@ class TestA8WindDirectionContract:
 
     def test_omnidirectional_capacity_matches_worst_direction(self):
 
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -445,7 +445,7 @@ class TestA8WindDirectionContract:
             payload_t → (payload + hook_mass) * gravity * daf → hook_force_kN
                     → hook_force / daf / gravity - hook_mass → payload_t (recovered)
         """
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -506,7 +506,7 @@ class TestA8WindDirectionContract:
             assert cap.max_allowable_load_t < cp.load_t
 
     def test_scene_wind_overlay_hidden_for_y_directions_in_xz_canvas(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -547,7 +547,7 @@ class TestA9InactiveHoistRopeRows:
         return str(hoist.rope_id)
 
     def test_inactive_hoists_with_hook_mass_have_rope_tension_rows(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -570,7 +570,7 @@ class TestA9InactiveHoistRopeRows:
             assert row_map[hoist.id] == pytest.approx(pt.baseline_rope_tensions[channel])
 
     def test_inactive_hoist_with_zero_hook_mass_still_shows_zero_row(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -874,7 +874,7 @@ class TestAuthoredSchemaPolicy:
         assert rear_position == pytest.approx({"x_m": 1.0, "y_m": -3.25, "z_m": 9.5})
 
     def test_mass_point_y_offset_influences_split_support_results(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -927,7 +927,7 @@ class TestAuthoredSchemaPolicy:
         assert abs(offset_platform_mx - base_platform_mx) > 1e-6
 
     def test_lateral_acceleration_splits_every_support_group_left_of_right(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -962,7 +962,7 @@ class TestAuthoredSchemaPolicy:
             assert differential > 1e-6, f"{left_entity}/{right_entity} split evenly"
 
     def test_directional_wind_areas_follow_wind_axis(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -1160,7 +1160,7 @@ class TestAuthoredSchemaPolicy:
         ] == pytest.approx(3.1)
 
     def test_v5_boom_hoist_linear_mass_reaches_runtime_hoist(self):
-        doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.json")
+        doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml")
         boom_hoist = next(hoist for hoist in doc.hoists if hoist.id == "BH")
         boom_rope = next(rope for rope in doc.ropes if rope.id == boom_hoist.rope_id)
 
@@ -1286,7 +1286,7 @@ class TestAuthoredSchemaPolicy:
         assert isinstance(mh_seg0, dict)
 
     def test_save_emits_split_mode_without_legacy_splitable_flag(self, tmp_path):
-        doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.json")
+        doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml")
         out_path = tmp_path / "saved_v5_split.json"
         save_document(doc, out_path)
 
@@ -1302,7 +1302,7 @@ class TestSplitModeAutosetAndChart:
     """Targeted tests for split-mode autoset and chart mode behavior."""
 
     def _example_doc(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
         return load_document(example_path)
@@ -1627,7 +1627,7 @@ class TestResponsiveLayoutRegression:
     """Targeted UI regression tests for responsive sizing behavior."""
 
     def _example_doc(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
         return load_document(example_path)
@@ -1709,7 +1709,7 @@ class TestResponsiveLayoutRegression:
             )
 
     def test_explicit_lateral_unit_maps_compose_offlead_and_sidelead(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         doc = load_document(example_path)
         calc = CraneCalculator(doc)
         common = {
