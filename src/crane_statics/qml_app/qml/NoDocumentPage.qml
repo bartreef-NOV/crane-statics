@@ -24,7 +24,7 @@ Item {
 
         Label {
             Layout.fillWidth: true
-            text: qsTr("Open a crane_input.json file to begin analysis")
+            text: qsTr("Open a crane_input.json or .yaml file to begin analysis")
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
         }

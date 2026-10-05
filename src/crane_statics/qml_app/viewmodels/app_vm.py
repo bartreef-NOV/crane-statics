@@ -111,7 +111,7 @@ class AppViewModel(QObject):
             return False
         path = Path(url.toLocalFile() if url.isLocalFile() else url.toString())
         if not path.suffix:
-            path = path.with_suffix(".json")
+            path = path.with_suffix(".yaml")
         return self._write(path)
 
     @pyqtSlot()

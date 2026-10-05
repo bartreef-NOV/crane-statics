@@ -1,0 +1,228 @@
+schema:
+  name: crane-statics
+  version: 5.13.0
+metadata:
+  name: Crane Statics Example GT283
+model_definition:
+  environment:
+    gravity_m_s2: 9.81
+    air_density_kg_m3: 1.226
+    wind_profile_exponent: 0.12
+    wind_reference_height_m_asl: 10.0
+    mean_sealevel_z_m: -57.0
+    max_wind_speed_m_s: 0.01
+  boom_width_m: 10.0
+  slewing_bearing_diameter_m: 15.0
+  boom_heel:
+    x_m: 2.5
+    z_m: 6.742
+  upper_hinge:
+    x_m: -9.385
+    z_m: 40.222
+  rear_hinge:
+    x_m: -4.19
+    z_m: 6.042
+  front_hinge:
+    x_m: 4.19
+    z_m: 6.042
+  vessel_motion:
+    accel_x_m_s2: 0.0
+    accel_y_m_s2: 0.0
+    accel_z_m_s2: 0.0
+    pitch_angular_accel_rad_s2: 0.0
+    roll_angular_accel_rad_s2: 0.0
+    reference_x_m: 0.0
+    reference_z_m: 0.0
+  hook_height_at_min_outreach_m: -53.0
+  boom:
+    mass_points:
+    - id: boom
+      mass_t: 280.5
+      position:
+        u_m: 58.022
+        v_m: 0.032
+        w_m: -0.594
+    wind_areas:
+    - id: boom_lattice
+      cd: 1.4
+      position:
+        u_m: 61.0
+        w_m: 0.0
+      area_w_m2: 200.0
+      area_v_m2: 200.0
+    - id: boom_jib
+      cd: 1.2
+      position:
+        u_m: 106.5
+        w_m: -2.5
+      area_w_m2: 23.0
+      area_v_m2: 23.0
+    - id: boom_tip
+      cd: 1.5
+      position:
+        u_m: 113.0
+        w_m: -4.5
+      area_w_m2: 10.0
+      area_v_m2: 10.0
+    - id: boom_insert
+      cd: 1.4
+      position:
+        u_m: 18.507
+        w_m: -0.785
+      area_w_m2: 86.0
+      area_v_m2: 86.0
+    nodes:
+      mh_boom_sheave_3:
+        u_m: 103.9
+        w_m: 1.6
+      mh_boom_sheave_4:
+        u_m: 109.0
+        w_m: -4.25
+      bh_boom_sheave_3:
+        u_m: 106.0
+        w_m: 3.75
+      ah_boom_sheave_3:
+        u_m: 103.5
+        w_m: 0.3
+      ah_boom_sheave_4:
+        u_m: 113.5
+        w_m: -6.0
+      trolley_boom_sheave_1:
+        u_m: 15.0
+        w_m: -2.0
+      trolley_boom_sheave_2:
+        u_m: 90.0
+        w_m: -2.0
+  rear_leg:
+    mass_points: []
+    wind_areas: []
+    nodes:
+      bh_aframe_sheave_1:
+        x_m: -9.385
+        z_m: 40.222
+      mh_aframe_sheave_1:
+        x_m: -6.235
+        z_m: 38.612
+      ah_aframe_sheave_1:
+        x_m: -7.325
+        z_m: 39.502
+      trolley_aframe_sheave_1:
+        x_m: -6.235
+        z_m: 38.612
+      trolley_aframe_sheave_2:
+        x_m: 2.5
+        z_m: 6.742
+  front_leg:
+    mass_points: []
+    wind_areas: []
+    nodes: {}
+  platform:
+    mass_points:
+    - id: platform
+      mass_t: 490.0
+      position:
+        x_m: -2.1
+        y_m: 0.0
+        z_m: 19.64
+    wind_areas:
+    - id: platform_wind_x
+      cd: 1.2
+      position:
+        x_m: -2.0
+        z_m: 30.0
+      area_x_m2: 264.5
+      area_y_m2: 0.0
+    - id: platform_wind_y
+      cd: 1.2
+      position:
+        x_m: -2.0
+        z_m: 30.0
+      area_x_m2: 0.0
+      area_y_m2: 264.5
+    nodes:
+      bh_winch:
+        x_m: -1.81
+        z_m: 3.99
+      mh_winch:
+        x_m: 1.81
+        z_m: 3.99
+      ah_winch:
+        x_m: -1.449
+        z_m: 7.042
+      trolley_winch:
+        x_m: -1.349
+        z_m: 8.542
+  boom_hoist:
+    rope_segments:
+    - from: bh_winch
+      to: bh_aframe_sheave_1
+      parts: 2
+    - from: bh_aframe_sheave_1
+      to: bh_boom_sheave_3
+      parts: 28
+    rope_length_m: 3560.0
+    linear_mass_kg_m: 20.3
+  payload_hoists:
+    MH:
+      support_node_id: mh_boom_sheave_4
+      hook_daf: 1.1
+      offlead_deg: 1.0
+      falls: 20
+      hook_mass_t: 50.0
+      contractual_points:
+      - outreach_m: 16.0
+        load_t: 1000.0
+      - outreach_m: 25.0
+        load_t: 1000.0
+      rope_segments:
+      - from: mh_winch
+        to: mh_aframe_sheave_1
+        parts: 2
+      - from: mh_aframe_sheave_1
+        to: mh_boom_sheave_3
+        parts: 2
+      - from: mh_boom_sheave_3
+        to: mh_boom_sheave_4
+        parts: 2
+      linear_mass_kg_m: 9.17
+      sidelead_deg: 2.5
+    AH:
+      support_node_id: ah_boom_sheave_4
+      hook_daf: 1.3
+      offlead_deg: 2.0
+      falls: 6
+      hook_mass_t: 7.0
+      contractual_points:
+      - outreach_m: 23.0
+        load_t: 160.0
+      - outreach_m: 70.0
+        load_t: 160.0
+      rope_segments:
+      - from: ah_winch
+        to: ah_aframe_sheave_1
+      - from: ah_aframe_sheave_1
+        to: ah_boom_sheave_3
+      - from: ah_boom_sheave_3
+        to: ah_boom_sheave_4
+      linear_mass_kg_m: 5.83
+      sidelead_deg: 4.5
+    trolley:
+      support_node_id: trolley_boom_sheave_2
+      hook_daf: 1.3
+      offlead_deg: 4.0
+      falls: 1
+      hook_mass_t: 7.7
+      contractual_points:
+      - outreach_m: 72.5
+        load_t: 25.0
+      rope_segments:
+      - from: trolley_winch
+        to: trolley_aframe_sheave_1
+      - from: trolley_aframe_sheave_1
+        to: trolley_aframe_sheave_2
+      - from: trolley_aframe_sheave_2
+        to: trolley_boom_sheave_1
+      - from: trolley_boom_sheave_1
+        to: trolley_boom_sheave_2
+      linear_mass_kg_m: 4.96
+      sidelead_deg: 4.5

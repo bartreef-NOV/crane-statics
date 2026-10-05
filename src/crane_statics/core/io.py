@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import yaml
 from pydantic import ValidationError
 
 from ..data import (
@@ -24,6 +25,19 @@ class DocumentIOError(Exception):
     """Raised when document I/O fails."""
 
     pass
+
+
+_YAML_SUFFIXES = {".yaml", ".yml"}
+_JSON_SUFFIXES = {".json"}
+
+
+def _format_for_suffix(suffix: str) -> str:
+    suffix = suffix.lower()
+    if suffix in _JSON_SUFFIXES:
+        return "json"
+    if suffix in _YAML_SUFFIXES:
+        return "yaml"
+    raise DocumentIOError(f"Unsupported file extension {suffix!r}; expected .json, .yaml, or .yml")
 
 
 def _validate_authored_schema(data: dict[str, Any]) -> None:
@@ -57,11 +71,15 @@ def load_document(path: Path) -> CraneDocument:
     Raises:
         DocumentIOError: If load or validation fails
     """
+    fmt = _format_for_suffix(path.suffix)
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
-            data = json.load(f)
-    except (IOError, json.JSONDecodeError) as e:
+            data = json.load(f) if fmt == "json" else yaml.safe_load(f)
+    except (IOError, json.JSONDecodeError, yaml.YAMLError) as e:
         raise DocumentIOError(f"Failed to read file: {e}")
+
+    if not isinstance(data, dict):
+        raise DocumentIOError("Document root must be a mapping/object")
 
     try:
         _validate_authored_schema(data)
@@ -84,13 +102,25 @@ def save_document(doc: CraneDocument, path: Path) -> None:
     Raises:
         DocumentIOError: If save fails
     """
+    fmt = _format_for_suffix(path.suffix)
     try:
         # Convert to authored form (remove derived fields, connections)
         authored_data = document_to_authored_form(doc)
         _validate_authored_schema(authored_data)
 
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(authored_data, f, indent=2)
+            if fmt == "json":
+                json.dump(authored_data, f, indent=2)
+            else:
+                yaml.safe_dump(
+                    authored_data,
+                    f,
+                    sort_keys=False,
+                    default_flow_style=False,
+                    allow_unicode=True,
+                )
+    except DocumentIOError:
+        raise
     except Exception as e:
         raise DocumentIOError(f"Failed to save document: {e}")
 

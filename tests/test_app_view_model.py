@@ -66,14 +66,14 @@ class TestSaveGuards:
         assert app_vm.save() is False
         assert app_vm.currentPath == ""
 
-    def test_save_as_appends_the_json_suffix(self, app_vm, tmp_path):
+    def test_save_as_appends_the_yaml_suffix(self, app_vm, tmp_path):
         app_vm.newDocument()
         target = tmp_path / "model_without_suffix"
 
         assert app_vm.saveAs(QUrl.fromLocalFile(str(target))) is True
 
-        assert target.with_suffix(".json").exists()
-        assert app_vm.currentPath.endswith(".json")
+        assert target.with_suffix(".yaml").exists()
+        assert app_vm.currentPath.endswith(".yaml")
         assert app_vm.dirty is False
 
     def test_save_after_save_as_reuses_the_path(self, app_vm, tmp_path):
