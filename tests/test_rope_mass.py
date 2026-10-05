@@ -18,7 +18,7 @@ from crane_statics.calculation.rope_mass import (
 from crane_statics.calculation.solver.kinematics import KinematicsAdapter
 from crane_statics.core.io import load_document
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
 
 @pytest.fixture

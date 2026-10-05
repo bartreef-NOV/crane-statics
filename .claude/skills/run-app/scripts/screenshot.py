@@ -41,7 +41,7 @@ from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel  # noqa: E4
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-DEFAULT_MODEL = REPO_ROOT / "examples" / "crane_input_22689.json"
+DEFAULT_MODEL = REPO_ROOT / "examples" / "crane_input_22689.yaml"
 WORKSPACE_INDEX = {"scene": 0, "chart": 1, "model": 2}
 
 

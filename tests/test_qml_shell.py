@@ -22,7 +22,7 @@ from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
 
 @pytest.fixture

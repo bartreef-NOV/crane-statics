@@ -13,7 +13,7 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.scene.scene_renderer import CraneSceneRenderer
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
 
 def _hook_guide_anchor(renderer):

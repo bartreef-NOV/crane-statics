@@ -9,7 +9,7 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.core.accessibility import contrast_ratio
 from crane_statics.qml_app.viewmodels.app_vm import AppViewModel
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
 
 @pytest.fixture

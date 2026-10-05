@@ -20,7 +20,7 @@ from crane_statics.core.session_model import SessionModel
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
 
 @pytest.fixture

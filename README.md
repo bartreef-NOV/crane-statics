@@ -96,7 +96,7 @@ For comparing floating-point results against reference outputs, a tolerance of *
 
 ## Example Model
 
-An example crane model is provided at `examples/crane_input_22689.json` with:
+An example crane model is provided at `examples/crane_input_22689.yaml` with:
 - 4 hoists (MH, AH, SH, BH)
 - Multiple contractual points
 - Full environment and structural definition

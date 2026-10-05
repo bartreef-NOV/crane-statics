@@ -10,7 +10,7 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
 
 @pytest.fixture

@@ -21,7 +21,7 @@ from crane_statics.core.limit_factory import DesignLimitFactory
 from crane_statics.core.session_model import SessionModel
 from crane_statics.data.models import SupportWidths
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
 
 @pytest.fixture

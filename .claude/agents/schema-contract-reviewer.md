@@ -24,7 +24,7 @@ You do not edit code. You report findings.
 | `src/crane_statics/schemas/crane-statics-v<major>.schema.json` | The checked-in generated artifact — must equal `generate_schema.py`'s current output byte-for-byte. There is no separate `docs/` copy anymore. |
 | `src/crane_statics/core/io.py` | `_validate_authored_schema` parses the document's major version and validates via `AuthoredDocument.model_validate(...)`, not jsonschema. |
 | `src/crane_statics/data/models.py` → `_normalize_authored_document` | Also calls `AuthoredDocument.model_validate(...)` directly (so `normalize_document()` is self-validating even when called without going through `io.py`), then converts the validated shape into the runtime `CraneDocument` model. |
-| `examples/crane_input_22689.json` | The fixture the acceptance tests and `test_qml_shell.py` load. |
+| `examples/crane_input_22689.yaml` | The fixture the acceptance tests and `test_qml_shell.py` load. |
 
 ## Checks
 

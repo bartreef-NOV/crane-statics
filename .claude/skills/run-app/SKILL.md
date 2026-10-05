@@ -7,13 +7,13 @@ description: Launch the Crane Statics QML desktop app, or capture a screenshot o
 
 The app needs a model file to show anything — with no argument it opens on
 `NoDocumentPage`. The bundled fixture is
-[examples/crane_input_22689.json](../../../examples/crane_input_22689.json), the same
+[examples/crane_input_22689.yaml](../../../examples/crane_input_22689.yaml), the same
 one the acceptance and QML shell tests use.
 
 ## Interactive run (hands the window to the user)
 
 ```bash
-.venv/Scripts/python.exe -m crane_statics examples/crane_input_22689.json
+.venv/Scripts/python.exe -m crane_statics examples/crane_input_22689.yaml
 ```
 
 The `crane-statics` console script is equivalent. This blocks until the user closes
