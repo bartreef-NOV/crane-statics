@@ -139,6 +139,13 @@ Item {
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
+
+                Label {
+                    visible: text.length > 0
+                    text: chartVm.conditionText
+                    font.bold: true
+                    elide: Text.ElideLeft
+                }
             }
 
             ContractualTable {

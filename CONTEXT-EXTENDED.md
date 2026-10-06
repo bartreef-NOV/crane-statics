@@ -107,6 +107,22 @@ acceleration, sidelead and Y-axis wind are deliberately *absent*: they produce o
 out-of-plane forces, so they have no drawable vector and no effect on in-plane
 equilibrium.
 
+**Vessel attitude** — the static heel (+ starboard down) and trim (+ bow down) of the
+vessel, in `environment.vessel_motion`. *Vessel heel* is unrelated to `boom_heel`, the
+boom's pivot node, or to the renderer's `heel_world`.
+
+**Slew** — the crane's rotation on the vessel, in degrees from the bow, + toward
+starboard (`SceneState.slew_deg`). It only matters when the vessel is not level.
+
+**Crane-frame gravity** — `vessel_attitude.CraneFrameGravity`: the unit gravity
+direction the slewed crane sees. `lateral_x` lies in the luffing plane, `lateral_y`
+across it, and `vertical` is the rest. An analysis point records the gravity it was
+composed at.
+
+**Slew envelope** — the slew samples a load chart is the worst case over
+(`envelope_slew_angles`). Charts, contractual verdicts and auto-set use it; the Scene
+shows one slew (see [ADR-0003](docs/adr/0003-vessel-attitude-and-slew-envelope.md)).
+
 **Free body** — one body isolated with the loads acting on it, including the
 reactions from its neighbours: `platform`, `boom`, `front_leg`, `rear_leg`, or
 `none` for the whole crane. Selecting one filters both what the scene draws and what

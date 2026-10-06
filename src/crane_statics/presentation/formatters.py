@@ -488,6 +488,14 @@ class VesselAttitudeFormatter:
         return f"Heel {float(heel_deg):+.2f}°, trim {float(trim_deg):+.2f}°"
 
     @staticmethod
+    def chart_condition_text(heel_deg: float, trim_deg: float) -> str:
+        """What a load chart on this vessel is rated for; empty when level."""
+        if float(heel_deg) == 0.0 and float(trim_deg) == 0.0:
+            return ""
+        attitude = f"heel {float(heel_deg):+.1f}°, trim {float(trim_deg):+.1f}°"
+        return f"Worst case over 360° slew · {attitude}"
+
+    @staticmethod
     def _tilt_text(tilt_deg: float, positive: str, negative: str) -> str:
         magnitude = f"{abs(float(tilt_deg)):.2f}°"
         if magnitude == "0.00°":

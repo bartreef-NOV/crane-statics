@@ -13,6 +13,7 @@ from crane_statics.presentation.formatters import (
     ConnectionFormatter,
     HoistFormatter,
     RopeFormatter,
+    VesselAttitudeFormatter,
 )
 from crane_statics.core.document_edit import DocumentEditor, build_contractual_point
 from crane_statics.core.limit_auto_set import (
@@ -101,6 +102,7 @@ class ChartViewModel(QObject):
         self._outreach_step = 1.0
         self._worker: Optional[_SweepWorker] = None
         self._last_result: dict[str, Any] = {}
+        self._condition_text = ""
         self._generation = 0
 
         self._curve_points: list[list[float]] = []
@@ -483,6 +485,8 @@ class ChartViewModel(QObject):
             self._set_stale(True)
             return
         self._last_result = result or {}
+        # The generation matches, so the document still holds the attitude swept at.
+        self._condition_text = self._chart_condition_text()
         self._set_stale(False)
         by_mode = self._last_result.get("n_points_by_mode") or {}
         if by_mode:
@@ -554,6 +558,18 @@ class ChartViewModel(QObject):
     @pyqtProperty("QVariantList", notify=chartUpdated)
     def curvePoints(self) -> list:
         return self._curve_points
+
+    @pyqtProperty(str, notify=chartUpdated)
+    def conditionText(self) -> str:
+        """What the drawn chart is rated for, e.g. the slew envelope on a tilted vessel."""
+        return self._condition_text
+
+    def _chart_condition_text(self) -> str:
+        doc = self._model.document
+        if doc is None:
+            return ""
+        motion = doc.environment.vessel_motion
+        return VesselAttitudeFormatter.chart_condition_text(motion.heel_deg, motion.trim_deg)
 
     @pyqtProperty("QVariantList", notify=chartUpdated)
     def limitSeries(self) -> list:

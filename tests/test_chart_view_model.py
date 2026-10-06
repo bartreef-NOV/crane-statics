@@ -313,3 +313,21 @@ class TestVesselAttitude:
         assert any(
             y != pytest.approx(level_y) for (_x, y), (_lx, level_y) in zip(expected, level_curve)
         )
+
+    def test_condition_text_names_the_slew_envelope_on_a_tilted_vessel(self):
+        if not EXAMPLE.exists():
+            pytest.skip("Example file not found")
+        doc = load_document(EXAMPLE)
+        doc.environment.vessel_motion.heel_deg = 3.0
+        doc.environment.vessel_motion.trim_deg = -1.0
+        session = SessionState()
+        chart_vm = ChartViewModel(session)
+        session.model.set_document(doc)
+
+        chart_vm.drawBlocking()
+        chart_vm.shutdown()
+
+        assert chart_vm.conditionText == "Worst case over 360° slew · heel +3.0°, trim -1.0°"
+
+    def test_condition_text_is_empty_for_a_level_vessel(self, rendered_chart_vm):
+        assert rendered_chart_vm.conditionText == ""

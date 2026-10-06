@@ -52,6 +52,12 @@ deliberately *absent* from `LoadConditions` rather than accepted and silently
 dropped. A caller passing them would be making an error the type system should
 catch, not a request the module should ignore.
 
+*Amended by [ADR-0003](0003-vessel-attitude-and-slew-envelope.md):* on a heeled or
+trimmed vessel, the in-plane part of tilted gravity is drawn here. Every weight gains
+an X component and a reduced Z component. `LoadConditions.slew_deg` orients the crane,
+and the analysis point's `crane_gravity` takes precedence when there is one. The
+out-of-plane part (`lateral_y`) stays in the support split, like sidelead.
+
 ## Consequences
 
 - An equilibrium mismatch is a bug in one module. The class of defect where the
