@@ -20,7 +20,9 @@ def chart_vm():
     session = SessionState()
     vm = ChartViewModel(session)
     session.model.set_document(load_document(EXAMPLE))
-    return vm
+    yield vm
+    # Edits start a debounced background sweep; stop it before the next test runs.
+    vm.shutdown()
 
 
 @pytest.fixture(scope="class")
@@ -31,7 +33,8 @@ def rendered_chart_vm():
     vm = ChartViewModel(session)
     session.model.set_document(load_document(EXAMPLE))
     vm.drawBlocking()
-    return vm
+    yield vm
+    vm.shutdown()
 
 
 class TestDesignLimits:
@@ -277,3 +280,36 @@ def _splitable(vm: ChartViewModel, hoist_id: str) -> bool:
     assert doc is not None
     hoist = next((h for h in doc.hoists if h.id == hoist_id), None)
     return bool(hoist is not None and getattr(hoist, "splitable_block", False))
+
+
+class TestVesselAttitude:
+    def test_heel_edited_in_the_model_workspace_reaches_the_chart(self):
+        from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
+
+        if not EXAMPLE.exists():
+            pytest.skip("Example file not found")
+        session = SessionState()
+        chart_vm = ChartViewModel(session)
+        model_vm = ModelViewModel(session)
+        session.model.set_document(load_document(EXAMPLE))
+        chart_vm.drawBlocking()
+        level_curve = list(chart_vm.curvePoints)
+
+        model_vm.setEnvironmentValue("heel_deg", 3.0)
+        chart_vm.drawBlocking()
+        chart_vm.shutdown()
+
+        expected = run_capacity_sweep(
+            session.model.document,
+            chart_vm.selectedHoistId,
+            chart_vm._enabled_limits(),
+            chart_vm.outreachStep,
+            chart_vm._limit_display_names(),
+        )["modes"]["normal"]["curve_data"]
+        assert len(chart_vm.curvePoints) == len(expected)
+        for (x, y), (ex, ey) in zip(chart_vm.curvePoints, expected):
+            assert x == pytest.approx(ex)
+            assert y == pytest.approx(ey)
+        assert any(
+            y != pytest.approx(level_y) for (_x, y), (_lx, level_y) in zip(expected, level_curve)
+        )

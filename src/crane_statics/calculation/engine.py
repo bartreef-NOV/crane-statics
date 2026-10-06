@@ -15,14 +15,21 @@ import math
 from ..data.models import CraneDocument
 from .point_composition import with_crane_gravity
 from .solver.kinematics import KinematicsAdapter
-from .vessel_attitude import PLUMB, CraneFrameGravity, VesselAttitude, crane_frame_gravity
+from .vessel_attitude import (
+    ENVELOPE_SLEW_STEP_DEG,
+    PLUMB,
+    CraneFrameGravity,
+    VesselAttitude,
+    crane_frame_gravity,
+    envelope_slew_angles,
+)
 from .solver.crane_solver import (
     build_solver_static_context,
     build_directional_response_basis,
     compose_unit_basis_point,
     compose_scalar_envelope_unit_basis_point,
 )
-from .capacity import solve_capacity_limit_kN, solve_radial_capacity_kN
+from .capacity import solve_bearing_line_load_capacity_kN, solve_radial_capacity_kN
 
 _LOG = logging.getLogger(__name__)
 
@@ -293,6 +300,8 @@ class AllowableCapacity:
     governing_wind_direction: Optional[str] = None
     margin_kN: Optional[float] = None
     margin_t: Optional[float] = None
+    # Slew of the governing point on a heeled/trimmed vessel; None when level.
+    governing_slew_deg: Optional[float] = None
 
 
 class CraneCalculator:
@@ -825,6 +834,21 @@ class CraneCalculator:
             angle_rad = math.radians(boom_angle_deg)
             return 100.0 + 50.0 * math.cos(angle_rad)
 
+    def slew_envelope_points(
+        self, point: AnalysisPoint, step_deg: float = ENVELOPE_SLEW_STEP_DEG
+    ) -> list[AnalysisPoint]:
+        """The point recomposed at every slew a worst-case-over-slew envelope samples.
+
+        A level vessel's response does not depend on slew, so it is the point itself.
+        """
+        attitude = VesselAttitude.from_environment(self._doc_dict.get("environment"))
+        if attitude.is_level:
+            return [point]
+        return [
+            with_crane_gravity(point, crane_frame_gravity(attitude, slew), slew_deg=slew)
+            for slew in envelope_slew_angles(attitude, step_deg)
+        ]
+
     def compute_limit_capacities_kN(
         self,
         point: AnalysisPoint,
@@ -924,17 +948,15 @@ class CraneCalculator:
                     diameter = float(
                         getattr(self.doc.support_widths, "slewing_bearing_diameter_m", 1.0)
                     )
-                    return solve_capacity_limit_kN(
+                    return solve_bearing_line_load_capacity_kN(
                         limit_kN,
-                        lambda hook_kN: compute_platform_base_max_bearing_line_load_kN_per_m(
-                            fz_kN=float(base_map.get("Fz", 0.0))
-                            + float(sens_map.get("Fz", 0.0)) * hook_kN,
-                            mx_kNm=float(base_map.get("Mx", 0.0))
-                            + float(sens_map.get("Mx", 0.0)) * hook_kN,
-                            my_kNm=float(base_map.get("My", base_map.get("M", 0.0)))
-                            + float(sens_map.get("My", sens_map.get("M", 0.0))) * hook_kN,
-                            slewing_bearing_diameter_m=diameter,
-                        ),
+                        fz0=float(base_map.get("Fz", 0.0)),
+                        fz_s=float(sens_map.get("Fz", 0.0)),
+                        mx0=float(base_map.get("Mx", 0.0)),
+                        mx_s=float(sens_map.get("Mx", 0.0)),
+                        my0=float(base_map.get("My", base_map.get("M", 0.0))),
+                        my_s=float(sens_map.get("My", sens_map.get("M", 0.0))),
+                        diameter_m=diameter,
                         tolerance=self.TOLERANCE,
                     )
                 linear = resolve_connection_component_linear_response(point, entity_id, component)
@@ -971,8 +993,6 @@ class CraneCalculator:
 
         See ``compute_limit_capacities_kN`` for how each limit is inverted.
         """
-        gravity = abs(self.doc.environment.gravity_m_s2)
-
         h_max_kN = float("inf")
         governing_limit_id = None
         for limit_key, capacity_kN in self.compute_limit_capacities_kN(
@@ -981,7 +1001,25 @@ class CraneCalculator:
             if capacity_kN < h_max_kN:
                 h_max_kN = capacity_kN
                 governing_limit_id = limit_key
+        return self.capacity_from_hook_force(
+            point,
+            h_max_kN,
+            governing_limit_id=governing_limit_id,
+            hook_daf=hook_daf,
+            hook_mass_t=hook_mass_t,
+        )
 
+    def capacity_from_hook_force(
+        self,
+        point: AnalysisPoint,
+        h_max_kN: float,
+        *,
+        governing_limit_id: Optional[str] = None,
+        hook_daf: float = 1.0,
+        hook_mass_t: float = 0.0,
+    ) -> AllowableCapacity:
+        """Express an allowable hook force at ``point`` as an ``AllowableCapacity``."""
+        gravity = abs(self.doc.environment.gravity_m_s2)
         if h_max_kN == float("inf"):
             h_max_kN = 1000.0  # Default fallback
 
@@ -1002,6 +1040,7 @@ class CraneCalculator:
             governing_limit_id=governing_limit_id,
             governing_wind_direction=point.governing_wind_direction,
             margin_kN=max(0.0, h_max_kN),
+            governing_slew_deg=None if point.crane_gravity.is_plumb else point.slew_deg,
         )
 
     def compute_omnidirectional_allowable_load(

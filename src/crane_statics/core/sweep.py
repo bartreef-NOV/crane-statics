@@ -88,6 +88,7 @@ def run_capacity_sweep(
     }
 
     def _wind_points(angle: float, hoist_runtime_overrides: dict[str, dict[str, Any]]) -> list:
+        """Every case a chart point is the worst of: wind directions x vessel slews."""
         points = []
         for case in iter_wind_directional_cases(hoist, wind_speed):
             pt = calc.compute_analysis_point(
@@ -99,23 +100,36 @@ def run_capacity_sweep(
                 hoist_runtime_overrides=hoist_runtime_overrides,
             )
             if pt is not None:
-                points.append(pt)
+                points.extend(calc.slew_envelope_points(pt))
         return points
 
-    def _min_capacity(
+    def _capacities(
         points: list, design_limits_map: dict[str, dict], hook_mass_t: float
-    ) -> Optional[AllowableCapacity]:
-        best = None
+    ) -> tuple[Optional[AllowableCapacity], dict[str, float]]:
+        """Worst capacity over the points, and each limit's own worst hook force.
+
+        Each point's limits are inverted once; the governing capacity is what
+        ``compute_allowable_load`` would return for the worst point.
+        """
+        best: Optional[AllowableCapacity] = None
+        per_limit_kN = {lid: float("inf") for lid in design_limits_map}
         for pt in points:
-            cap = calc.compute_allowable_load(
+            h_point_kN, governing = float("inf"), None
+            for lid, h_kN in calc.compute_limit_capacities_kN(pt, design_limits_map).items():
+                if h_kN < h_point_kN:
+                    h_point_kN, governing = h_kN, lid
+                if h_kN < per_limit_kN[lid]:
+                    per_limit_kN[lid] = h_kN
+            cap = calc.capacity_from_hook_force(
                 pt,
-                design_limits_map,
+                h_point_kN,
+                governing_limit_id=governing,
                 hook_daf=hoist.hook_daf,
                 hook_mass_t=hook_mass_t,
             )
             if best is None or cap.max_allowable_load_kN < best.max_allowable_load_kN:
                 best = cap
-        return best
+        return best, per_limit_kN
 
     def _resolve_entity(limit_key: str) -> str:
         for comp in KNOWN_LIMIT_COMPONENTS:
@@ -202,7 +216,7 @@ def run_capacity_sweep(
             if not pts:
                 contractual_results.append((cp, None, None))
                 continue
-            cap = _min_capacity(pts, enabled_limits, mode_hook_mass_t)
+            cap, _per_limit = _capacities(pts, enabled_limits, mode_hook_mass_t)
             if cap is None:
                 contractual_results.append((cp, None, None))
                 continue
@@ -225,7 +239,7 @@ def run_capacity_sweep(
                     pts = _wind_points(angle, hoist_runtime_overrides)
                     if not pts:
                         continue
-                    cap = _min_capacity(pts, enabled_limits, mode_hook_mass_t)
+                    cap, per_limit_kN = _capacities(pts, enabled_limits, mode_hook_mass_t)
                     if cap is None:
                         continue
                     if math.isfinite(cap.max_allowable_load_t):
@@ -234,9 +248,13 @@ def run_capacity_sweep(
                     for lid, comps in enabled_limits.items():
                         if not any(_affects_hook_load(pt, lid, comps) for pt in pts):
                             continue
-                        cap_limit = _min_capacity(pts, {lid: comps}, mode_hook_mass_t)
-                        if cap_limit is None:
-                            continue
+                        cap_limit = calc.capacity_from_hook_force(
+                            pts[0],
+                            per_limit_kN[lid],
+                            governing_limit_id=lid,
+                            hook_daf=hoist.hook_daf,
+                            hook_mass_t=mode_hook_mass_t,
+                        )
                         # CRITICAL: Use max_allowable_load_t (payload domain) for curves, not kN.
                         # Chart Y-axis shows payload tonnes, not hook-force.
                         if math.isfinite(cap_limit.max_allowable_load_t):

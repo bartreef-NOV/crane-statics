@@ -33,6 +33,8 @@ class ContractualPointResult:
     angle_deg: float
     best_demand: float
     best_case: DirectionalAnalysisCase
+    # Vessel slew of the governing case on a heeled/trimmed vessel; None when level.
+    best_slew_deg: Optional[float] = None
 
 
 @dataclass
@@ -52,6 +54,7 @@ class RopeAutoSetResult:
     governing_wind_direction: Optional[str] = None
     governing_mode: Optional[str] = None
     used_system_rope_fallback: bool = False
+    governing_slew_deg: Optional[float] = None
 
 
 @dataclass
@@ -70,6 +73,7 @@ class ConnectionAutoSetResult:
     governing_sidelead_deg: Optional[float] = None
     governing_wind_direction: Optional[str] = None
     governing_mode: Optional[str] = None
+    governing_slew_deg: Optional[float] = None
 
 
 def _required_hook_force_kN(
@@ -127,6 +131,7 @@ def _evaluate_contractual_points(
 
                 best_demand = float("-inf")
                 best_case = None
+                best_slew_deg: Optional[float] = None
 
                 hook_kN = _required_hook_force_kN(
                     cp.load_t,
@@ -167,18 +172,25 @@ def _evaluate_contractual_points(
                     if pt is None:
                         continue
 
-                    demand_point = (
+                    lead_point = (
                         _compose_lead_channel_point(pt, case)
                         if use_lead_channel_composition
                         else pt
                     )
-                    demand = demand_extractor(demand_point, hook_kN, case)
-                    if demand is None or not math.isfinite(demand):
-                        continue
+                    # On a heeled/trimmed vessel the point must hold at every slew.
+                    for demand_point in calc.slew_envelope_points(lead_point):
+                        demand = demand_extractor(demand_point, hook_kN, case)
+                        if demand is None or not math.isfinite(demand):
+                            continue
 
-                    if demand > best_demand:
-                        best_demand = demand
-                        best_case = case
+                        if demand > best_demand:
+                            best_demand = demand
+                            best_case = case
+                            best_slew_deg = (
+                                None
+                                if demand_point.crane_gravity.is_plumb
+                                else float(demand_point.slew_deg)
+                            )
 
                 if math.isfinite(best_demand) and best_demand > 0.0 and best_case is not None:
                     results.append(
@@ -190,6 +202,7 @@ def _evaluate_contractual_points(
                             angle_deg=float(angle),
                             best_demand=best_demand,
                             best_case=best_case,
+                            best_slew_deg=best_slew_deg,
                         )
                     )
 
@@ -255,6 +268,7 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
         Optional[float],
         Optional[str],
         Optional[str],
+        Optional[float],
     ]:
         results = _evaluate_contractual_points(
             hoists,
@@ -267,7 +281,7 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
         )
 
         if not results:
-            return float("-inf"), 0, None, None, None, None, None, None, None, None
+            return float("-inf"), 0, None, None, None, None, None, None, None, None, None
 
         best = max(results, key=lambda r: r.best_demand)
         return (
@@ -281,6 +295,7 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
             best.best_case.sidelead_deg,
             best.best_case.wind_direction,
             best.mode_name,
+            best.best_slew_deg,
         )
 
     (
@@ -294,6 +309,7 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
         governing_sidelead_deg,
         governing_wind_direction,
         governing_mode,
+        governing_slew_deg,
     ) = _evaluate(relevant_hoists)
 
     # For non-solve ropes, retry across all hoists if direct-owner points could
@@ -315,6 +331,7 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
             governing_sidelead_deg,
             governing_wind_direction,
             governing_mode,
+            governing_slew_deg,
         ) = _evaluate(list(doc.hoists))
         if evaluated_points > 0:
             using_fallback = True
@@ -341,6 +358,7 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
         governing_wind_direction=governing_wind_direction,
         governing_mode=governing_mode,
         used_system_rope_fallback=using_fallback,
+        governing_slew_deg=governing_slew_deg,
     )
 
 
@@ -401,4 +419,5 @@ def compute_required_connection_capacity_kN(
         governing_sidelead_deg=best.best_case.sidelead_deg,
         governing_wind_direction=best.best_case.wind_direction,
         governing_mode=best.mode_name,
+        governing_slew_deg=best.best_slew_deg,
     )
