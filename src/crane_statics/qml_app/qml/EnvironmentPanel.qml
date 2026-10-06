@@ -55,6 +55,9 @@ ColumnLayout {
                     modelVm.clearEnvironmentValue(envRow.fieldKey)
                 else
                     modelVm.setEnvironmentValue(envRow.fieldKey, value)
+                // Re-sync: the view model may clamp the value, and while this field
+                // keeps focus it ignores environmentChanged.
+                envRow.applyDisplayValue()
             }
 
             Connections {
