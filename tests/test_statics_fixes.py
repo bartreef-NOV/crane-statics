@@ -55,3 +55,73 @@ class TestCalculatorReflectsInPlaceEdits:
         document.environment.gravity_m_s2 = 2.0 * float(document.environment.gravity_m_s2)
 
         assert _platform_fz(document, hoist_id) == pytest.approx(2.0 * before, rel=1e-9)
+
+
+def _zero_hook_point(doc, hoist_id: str):
+    point = get_calculator(doc).compute_analysis_point(
+        45.0, 0.0, hoist_id, wind_speed_m_s=0.0, wind_direction="+X"
+    )
+    assert point is not None
+    return point
+
+
+class TestLimitsAlreadyExceededAtZeroHookLoad:
+    def test_rope_limit_below_its_baseline_gives_zero_capacity(self, document):
+        hoist_id = _payload_hoist_id(document)
+        point = _zero_hook_point(document, hoist_id)
+        baseline = point.baseline_rope_tensions["boom_hoist"]
+        assert baseline > 0.0
+
+        cap = get_calculator(document).compute_allowable_load(
+            point, {"boom_hoist_T": {"T": 0.5 * baseline}}
+        )
+
+        assert cap.max_allowable_load_kN == 0.0
+        assert cap.governing_limit_id == "boom_hoist_T"
+
+    def test_resultant_limit_below_its_baseline_gives_zero_capacity(self, document):
+        hoist_id = _payload_hoist_id(document)
+        point = _zero_hook_point(document, hoist_id)
+        heel = point.baseline_reactions["heel_point"]
+        resultant = (heel["Fx"] ** 2 + heel["Fz"] ** 2) ** 0.5
+
+        cap = get_calculator(document).compute_allowable_load(
+            point, {"heel_point_resultant": {"resultant": 0.5 * resultant}}
+        )
+
+        assert cap.max_allowable_load_kN == 0.0
+        assert cap.governing_limit_id == "heel_point_resultant"
+
+
+class TestLimitsBoundTheDemandMagnitude:
+    def test_compression_growing_with_hook_load_governs(self, document):
+        hoist_id = _payload_hoist_id(document)
+        point = _zero_hook_point(document, hoist_id)
+        baseline = point.baseline_reactions["rear_hinge"]["Fz"]
+        sens = point.sensitivity_reactions["rear_hinge"]["Fz"]
+        assert baseline < 0.0 and sens < 0.0
+        limit = 1.2 * abs(baseline)
+
+        cap = get_calculator(document).compute_allowable_load(
+            point, {"rear_hinge_Fz": {"Fz": limit}}
+        )
+
+        assert cap.max_allowable_load_kN == pytest.approx((limit + baseline) / -sens)
+        assert cap.governing_limit_id == "rear_hinge_Fz"
+
+    def test_per_limit_capacities_agree_with_the_governing_minimum(self, document):
+        hoist_id = _payload_hoist_id(document)
+        point = _zero_hook_point(document, hoist_id)
+        limits = {
+            "boom_hoist_T": {"T": 2.0 * point.baseline_rope_tensions["boom_hoist"]},
+            "rear_hinge_Fz": {"Fz": 1.2 * abs(point.baseline_reactions["rear_hinge"]["Fz"])},
+        }
+        calc = get_calculator(document)
+
+        per_limit = calc.compute_limit_capacities_kN(point, limits)
+        cap = calc.compute_allowable_load(point, limits)
+
+        assert set(per_limit) == set(limits)
+        governing = min(per_limit, key=lambda key: per_limit[key])
+        assert cap.governing_limit_id == governing
+        assert cap.max_allowable_load_kN == pytest.approx(per_limit[governing])
