@@ -251,3 +251,22 @@ class TestPlatformBaseFyIsTheGroundReaction:
             - still.baseline_reactions["platform_base"]["Fy"]
         )
         assert delta_fy == pytest.approx(total_mass_t, rel=1e-9)
+
+
+class TestSideleadEntersAtTheSheave:
+    def test_side_unit_moment_uses_the_sheave_height(self, document):
+        from crane_statics.calculation.solver.kinematics import KinematicsAdapter
+
+        hoist = next(h for h in document.hoists if h.id == "MH")
+        load_node = next(n for n in document.nodes if n.id == hoist.load_node_id)
+        sheave_id = load_node.below_node_id
+        assert sheave_id
+        positions = KinematicsAdapter(document.model_dump()).compute_all_node_positions(45.0)
+        sheave_z = float(positions[sheave_id]["z"])
+        assert float(positions[hoist.load_node_id]["z"]) < sheave_z
+
+        side = _level_point(document, "MH").sidelead_lateral_unit_reactions
+        assert side is not None
+
+        # Rope force along its line of action through the sheave, about the platform base.
+        assert side["platform_base"]["Mx"] == pytest.approx(-sheave_z, rel=1e-9)

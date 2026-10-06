@@ -410,12 +410,17 @@ class CraneCalculator:
 
         hoist = self.hoists.get(hoist_id)
         if hoist is not None:
-            load_node = node_pos.get(str(hoist.load_node_id))
-            if load_node is not None:
+            # Like offlead, the side force acts along the rope's line of action,
+            # which passes through the sheave the hook hangs from.
+            load_node_id = str(hoist.load_node_id)
+            hook_node = next((n for n in self.doc.nodes if n.id == load_node_id), None)
+            sheave_id = str(getattr(hook_node, "below_node_id", None) or load_node_id)
+            sheave = node_pos.get(sheave_id, node_pos.get(load_node_id))
+            if sheave is not None:
                 _accumulate_force(
-                    float(load_node[0]),
+                    float(sheave[0]),
                     0.0,
-                    float(load_node[1]),
+                    float(sheave[1]),
                     fx=0.0,
                     fy=float(side_lateral_force_kN),
                     fz=0.0,
