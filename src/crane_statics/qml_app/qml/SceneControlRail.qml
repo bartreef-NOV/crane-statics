@@ -112,6 +112,60 @@ ColumnLayout {
 
     GroupBox {
         Layout.fillWidth: true
+        title: qsTr("Vessel")
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
+
+        GridLayout {
+            anchors.fill: parent
+            columns: 2
+            columnSpacing: root.layoutSpacing
+            rowSpacing: root.layoutSpacing
+
+            Label { text: qsTr("Attitude:") }
+            Label {
+                Layout.fillWidth: true
+                text: sceneVm.vesselAttitudeText
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+                ToolTip.visible: sceneVm.vesselLevel && attitudeHover.hovered
+                ToolTip.text: qsTr("Set heel and trim in Model > Environment")
+                HoverHandler { id: attitudeHover }
+            }
+
+            NumericRow {
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                label: qsTr("Slew (deg from bow):")
+                from: -360
+                to: 360
+                decimals: 1
+                value: sceneVm.slew
+                onCommitted: newValue => sceneVm.setSlew(newValue)
+            }
+
+            Label { text: qsTr("In-plane tilt:") }
+            Label {
+                Layout.fillWidth: true
+                text: sceneVm.inPlaneTiltText
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+            }
+
+            Label { text: qsTr("Out-of-plane tilt:") }
+            Label {
+                Layout.fillWidth: true
+                text: sceneVm.outOfPlaneTiltText
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+            }
+        }
+    }
+
+    GroupBox {
+        Layout.fillWidth: true
         title: qsTr("Load")
         topPadding: Metrics.spacing24
         bottomPadding: Metrics.spacing6

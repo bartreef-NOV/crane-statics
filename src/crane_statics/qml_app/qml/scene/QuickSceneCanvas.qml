@@ -18,11 +18,9 @@ Item {
     readonly property real effectiveScale: sceneScale * zoom
     readonly property var waterline: frame && frame.waterline ? frame.waterline : null
     readonly property var status: frame && frame.status ? frame.status : null
-    readonly property string mslLabelText: waterline && waterline.scene_y !== undefined && waterline.z_msl !== undefined
-        ? `MSL  z = ${waterline.z_msl.toFixed(1)} m` : ""
-    readonly property int mslLabelY: waterline && waterline.scene_y !== undefined
-        ? Math.round(mapSceneY(waterline.scene_y)) : 0
-    readonly property color mslLabelColor: Theme.info
+    // Screen y of the (possibly tilted) waterline at both canvas edges.
+    readonly property real waterlineLeftY: waterlineYAt(0)
+    readonly property real waterlineRightY: waterlineYAt(width)
 
     Component.onDestruction: {
     }
@@ -48,6 +46,14 @@ Item {
 
     function mapSceneY(value) {
         return sceneLayer.y + value * effectiveScale
+    }
+
+    // The scene mapping scales uniformly, so the frame's scene slope is the screen slope.
+    function waterlineYAt(screenX) {
+        if (!waterline)
+            return 0
+        return mapSceneY(waterline.scene_y)
+            + waterline.slope * (screenX - mapSceneX(waterline.pivot_x))
     }
 
     function baseSceneX(scale) {
@@ -187,24 +193,33 @@ Item {
         color: root.status ? root.status.color : "transparent"
     }
 
-    Rectangle {
+    Shape {
+        id: sea
         visible: root.waterline !== null
-        x: 0
-        y: root.waterline ? root.mapSceneY(root.waterline.scene_y) : 0
-        width: root.width
-        height: Math.max(0, root.height - y)
-        color: Theme.colorWithAlpha(Theme.info, 0.19)
+        anchors.fill: parent
         z: -2
-    }
 
-    Rectangle {
-        visible: root.waterline !== null
-        x: 0
-        y: root.waterline ? root.mapSceneY(root.waterline.scene_y) : 0
-        width: root.width
-        height: 2
-        color: Theme.info
-        z: -1
+        readonly property real floorY: Math.max(root.height, root.waterlineLeftY, root.waterlineRightY)
+
+        ShapePath {
+            strokeColor: "transparent"
+            fillColor: Theme.colorWithAlpha(Theme.info, 0.19)
+            startX: 0
+            startY: root.waterlineLeftY
+            PathLine { x: root.width; y: root.waterlineRightY }
+            PathLine { x: root.width; y: sea.floorY }
+            PathLine { x: 0; y: sea.floorY }
+            PathLine { x: 0; y: root.waterlineLeftY }
+        }
+
+        ShapePath {
+            strokeColor: Theme.info
+            strokeWidth: 2
+            fillColor: "transparent"
+            startX: 0
+            startY: root.waterlineLeftY
+            PathLine { x: root.width; y: root.waterlineRightY }
+        }
     }
 
     Item {
@@ -390,7 +405,7 @@ Item {
 
     Label {
         x: 8
-        y: root.waterline ? root.mapSceneY(root.waterline.scene_y) - height - 2 : 0
+        y: root.waterline ? root.waterlineYAt(x) - height - 2 : 0
         text: root.waterline ? root.waterline.label : ""
         visible: text.length > 0
         color: Theme.info

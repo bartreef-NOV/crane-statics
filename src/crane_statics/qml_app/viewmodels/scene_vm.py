@@ -7,6 +7,11 @@ from typing import Any, Optional
 
 from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal, pyqtSlot
 
+from crane_statics.calculation.vessel_attitude import (
+    VesselAttitude,
+    crane_frame_gravity,
+    normalize_slew_deg,
+)
 from crane_statics.core.analysis_presenter import AnalysisPresenter
 from crane_statics.core.analysis_services import (
     AnalysisCalculator,
@@ -15,6 +20,7 @@ from crane_statics.core.analysis_services import (
 )
 from crane_statics.core.drawn_loads import LoadConditions, active_hoist_dict
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
+from crane_statics.presentation.formatters import VesselAttitudeFormatter
 from crane_statics.qml_app.adapters.scene_adapter import SceneStateAdapter
 from crane_statics.qml_app.scene.scene_drag import DragEdit, DragLimits, SceneDrag
 from crane_statics.qml_app.session import SessionState
@@ -42,6 +48,7 @@ class SceneViewModel(QObject):
     tackleBoundsChanged = pyqtSignal()
     loadChanged = pyqtSignal()
     environmentChanged = pyqtSignal()
+    attitudeChanged = pyqtSignal()
     hookModeChanged = pyqtSignal()
     contractualChanged = pyqtSignal()
     displayOptionsChanged = pyqtSignal()
@@ -71,6 +78,7 @@ class SceneViewModel(QObject):
         self._analysis_point: Any = None
         self._drag: Optional[SceneDrag] = None
         self._initialized_load_hoist_id: Optional[str] = None
+        self._attitude_readouts = self._level_readouts()
 
         self._rope_rows_model = DictListModel(RESULT_ROLES, self)
         self._connection_rows_model = DictListModel(RESULT_ROLES, self)
@@ -606,6 +614,67 @@ class SceneViewModel(QObject):
     def setRollAccel(self, value: float) -> None:
         self._set_scene_field("roll_accel_rad_s2", float(value), self.environmentChanged)
 
+    # ------------------------------------------------------------------
+    # Vessel attitude and slew
+    # ------------------------------------------------------------------
+
+    @pyqtProperty(float, notify=attitudeChanged)
+    def slew(self) -> float:
+        return self._scene_field("slew_deg")
+
+    @pyqtSlot(float)
+    def setSlew(self, value: float) -> None:
+        self._set_scene_field("slew_deg", normalize_slew_deg(float(value)), self.attitudeChanged)
+
+    @pyqtProperty(bool, notify=attitudeChanged)
+    def vesselLevel(self) -> bool:
+        return bool(self._attitude_readouts["level"])
+
+    @pyqtProperty(str, notify=attitudeChanged)
+    def vesselAttitudeText(self) -> str:
+        return str(self._attitude_readouts["attitude"])
+
+    @pyqtProperty(str, notify=attitudeChanged)
+    def inPlaneTiltText(self) -> str:
+        return str(self._attitude_readouts["in_plane"])
+
+    @pyqtProperty(str, notify=attitudeChanged)
+    def outOfPlaneTiltText(self) -> str:
+        return str(self._attitude_readouts["out_of_plane"])
+
+    @staticmethod
+    def _level_readouts() -> dict[str, Any]:
+        return {
+            "level": True,
+            "attitude": VesselAttitudeFormatter.attitude_text(0.0, 0.0),
+            "in_plane": VesselAttitudeFormatter.in_plane_tilt_text(0.0),
+            "out_of_plane": VesselAttitudeFormatter.out_of_plane_tilt_text(0.0),
+        }
+
+    def _refresh_attitude_readouts(self) -> None:
+        doc = self._model.document
+        state = self._model.get_active_hoist_state()
+        if doc is None:
+            readouts = self._level_readouts()
+        else:
+            motion = doc.environment.vessel_motion
+            attitude = VesselAttitude(float(motion.heel_deg), float(motion.trim_deg))
+            slew = 0.0 if state is None else float(state.scene_state.slew_deg)
+            gravity = crane_frame_gravity(attitude, slew)
+            readouts = {
+                "level": attitude.is_level,
+                "attitude": VesselAttitudeFormatter.attitude_text(
+                    attitude.heel_deg, attitude.trim_deg
+                ),
+                "in_plane": VesselAttitudeFormatter.in_plane_tilt_text(gravity.in_plane_tilt_deg),
+                "out_of_plane": VesselAttitudeFormatter.out_of_plane_tilt_text(
+                    gravity.out_of_plane_tilt_deg
+                ),
+            }
+        if readouts != self._attitude_readouts:
+            self._attitude_readouts = readouts
+            self.attitudeChanged.emit()
+
     def _scene_field(self, name: str) -> float:
         state = self._model.get_active_hoist_state()
         return 0.0 if state is None else float(getattr(state.scene_state, name))
@@ -847,6 +916,7 @@ class SceneViewModel(QObject):
         # failed solve clears them rather than leaving the previous one on screen.
         self._analysis_point = pt
         self._set_result_rows(rope_rows, conn_rows)
+        self._refresh_attitude_readouts()
         self._publish_scene_frame()
 
     def _set_result_rows(self, rope_rows, connection_rows) -> None:

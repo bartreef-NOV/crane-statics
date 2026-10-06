@@ -478,6 +478,33 @@ class EnvironmentFormatter:
         return f"{float(value):.3f}"
 
 
+class VesselAttitudeFormatter:
+    """Static vessel attitude and the tilt it gives the slewed crane."""
+
+    @staticmethod
+    def attitude_text(heel_deg: float, trim_deg: float) -> str:
+        if float(heel_deg) == 0.0 and float(trim_deg) == 0.0:
+            return "Level vessel"
+        return f"Heel {float(heel_deg):+.2f}°, trim {float(trim_deg):+.2f}°"
+
+    @staticmethod
+    def _tilt_text(tilt_deg: float, positive: str, negative: str) -> str:
+        magnitude = f"{abs(float(tilt_deg)):.2f}°"
+        if magnitude == "0.00°":
+            return magnitude
+        return f"{magnitude} {positive if tilt_deg > 0 else negative}"
+
+    @staticmethod
+    def in_plane_tilt_text(tilt_deg: float) -> str:
+        """Lean of gravity in the luffing plane; + is toward the boom tip."""
+        return VesselAttitudeFormatter._tilt_text(tilt_deg, "toward boom tip", "away from boom tip")
+
+    @staticmethod
+    def out_of_plane_tilt_text(tilt_deg: float) -> str:
+        """Lean of gravity across the luffing plane; + is to the boom's left."""
+        return VesselAttitudeFormatter._tilt_text(tilt_deg, "to boom's left", "to boom's right")
+
+
 # ============================================================================
 # RESULT ROW FORMATTING
 # ============================================================================

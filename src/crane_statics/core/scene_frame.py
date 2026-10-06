@@ -100,11 +100,17 @@ class SceneGuide:
 
 @dataclass(frozen=True)
 class SceneWaterline:
-    """A horizontal mean-sea-level overlay in scene coordinates."""
+    """The mean-sea-level line in scene coordinates.
+
+    It passes through (``pivot_x``, ``scene_y``) with scene slope ``slope``
+    (dy/dx, y down): level unless the vessel's heel/trim tilts the luffing plane.
+    """
 
     scene_y: float
     elevation_z: float
     label: str
+    pivot_x: float = 0.0
+    slope: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -631,8 +637,16 @@ class SceneFrameBuilder:
         self.winch_spools.append(spool)
         return spool
 
-    def set_waterline(self, *, scene_y: float, elevation_z: float, label: str) -> SceneWaterline:
-        self.waterline = SceneWaterline(scene_y, elevation_z, label)
+    def set_waterline(
+        self,
+        *,
+        scene_y: float,
+        elevation_z: float,
+        label: str,
+        pivot_x: float = 0.0,
+        slope: float = 0.0,
+    ) -> SceneWaterline:
+        self.waterline = SceneWaterline(scene_y, elevation_z, label, pivot_x, slope)
         return self.waterline
 
     def add_hit_target(

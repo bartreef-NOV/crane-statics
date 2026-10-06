@@ -351,6 +351,21 @@ def resolve_rope_tension_kN(
     return base + sens * float(hook_load_kN)
 
 
+def drawn_crane_gravity(
+    document_dict: Mapping[str, Any], conditions: LoadConditions, analysis_point: Any = None
+) -> CraneFrameGravity:
+    """The gravity direction a drawing of these conditions uses.
+
+    Reactions come from the solved point, so its gravity is authoritative; the
+    conditions' slew only stands in when there is no point yet.
+    """
+    solved = getattr(analysis_point, "crane_gravity", None)
+    if isinstance(solved, CraneFrameGravity):
+        return solved
+    attitude = VesselAttitude.from_environment((document_dict or {}).get("environment"))
+    return crane_frame_gravity(attitude, float(conditions.slew_deg))
+
+
 def _weight_detail(title: str, fx: float, fz: float) -> str:
     if fx == 0.0:
         return f"{title}\nFz={fz:.1f} kN"
@@ -381,16 +396,7 @@ class _LoadBuilder:
         self._pt = analysis_point
         self._filter = body_filter
         self._env = self._doc.get("environment", {}) or {}
-        # Reactions come from the solved point, so its gravity is the one weights
-        # must be drawn with; the conditions' slew only stands in when there is none.
-        solved_gravity = getattr(analysis_point, "crane_gravity", None)
-        self._g: CraneFrameGravity = (
-            solved_gravity
-            if isinstance(solved_gravity, CraneFrameGravity)
-            else crane_frame_gravity(
-                VesselAttitude.from_environment(self._env), float(conditions.slew_deg)
-            )
-        )
+        self._g = drawn_crane_gravity(self._doc, conditions, analysis_point)
 
     # -- geometry ---------------------------------------------------------
 

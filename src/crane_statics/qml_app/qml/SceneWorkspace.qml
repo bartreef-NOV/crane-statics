@@ -57,17 +57,6 @@ Item {
                     border.width: Metrics.borderWidth
                     border.color: Theme.border
                 }
-
-                Label {
-                    anchors.left: canvas.left
-                    anchors.leftMargin: Metrics.spacing8
-                    y: canvas.mslLabelY - height - 2
-                    text: canvas.mslLabelText
-                    visible: canvas.mslLabelText.length > 0
-                    color: canvas.mslLabelColor
-                    font.bold: true
-                    padding: 2
-                }
             }
 
             RowLayout {
