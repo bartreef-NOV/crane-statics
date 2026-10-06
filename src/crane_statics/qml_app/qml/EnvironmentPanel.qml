@@ -171,6 +171,19 @@ ColumnLayout {
 
     GroupBox {
         Layout.fillWidth: true
+        title: qsTr("Vessel Attitude")
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: root.layoutSpacing
+
+            EnvRow { label: qsTr("Heel (°, + starboard down)"); fieldKey: "heel_deg"; decimals: 2 }
+            EnvRow { label: qsTr("Trim (°, + bow down)"); fieldKey: "trim_deg"; decimals: 2 }
+        }
+    }
+
+    GroupBox {
+        Layout.fillWidth: true
         title: qsTr("Accelerations")
 
         ColumnLayout {

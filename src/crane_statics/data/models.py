@@ -16,6 +16,7 @@ from .authored_models import (
     AUTHORED_SCHEMA_NAME,
     AUTHORED_SCHEMA_VERSION,
     BOOM_HOIST_ID,
+    MAX_VESSEL_TILT_DEG,
     authored_schema_major,
     format_authored_validation_error,
     hoist_node_prefix,
@@ -25,6 +26,8 @@ CANONICAL_BODIES = ["boom", "rear_leg", "front_leg", "platform"]
 DEFAULT_GRAVITY_M_S2 = 9.81
 DEFAULT_AIR_DENSITY_KG_M3 = 1.225
 DEFAULT_VESSEL_MOTION = {
+    "heel_deg": 0.0,
+    "trim_deg": 0.0,
     "accel_x_m_s2": 0.0,
     "accel_y_m_s2": 0.0,
     "accel_z_m_s2": 0.0,
@@ -90,6 +93,18 @@ class VesselMotion(BaseModel):
     accel_z_m_s2: float = Field(default=0.0, description="Translational Z acceleration")
     reference_x_m: float = Field(default=0.0, description="Pitch rotation reference X")
     reference_z_m: float = Field(default=0.0, description="Pitch rotation reference Z")
+    heel_deg: float = Field(
+        default=0.0,
+        ge=-MAX_VESSEL_TILT_DEG,
+        le=MAX_VESSEL_TILT_DEG,
+        description="Static heel, degrees; + starboard down",
+    )
+    trim_deg: float = Field(
+        default=0.0,
+        ge=-MAX_VESSEL_TILT_DEG,
+        le=MAX_VESSEL_TILT_DEG,
+        description="Static trim, degrees; + bow down",
+    )
     pitch_angular_accel_rad_s2: float = Field(default=0.0, description="Pitch angular acceleration")
     roll_angular_accel_rad_s2: float = Field(default=0.0, description="Roll angular acceleration")
 
@@ -1152,6 +1167,12 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             "wind_profile_exponent": float(environment_src["wind_profile_exponent"]),
             "mean_sealevel_z_m": float(environment_src["mean_sealevel_z_m"]),
             "vessel_motion": {
+                "heel_deg": float(
+                    vessel_motion_src.get("heel_deg", DEFAULT_VESSEL_MOTION["heel_deg"])
+                ),
+                "trim_deg": float(
+                    vessel_motion_src.get("trim_deg", DEFAULT_VESSEL_MOTION["trim_deg"])
+                ),
                 "accel_x_m_s2": abs(
                     float(
                         vessel_motion_src.get("accel_x_m_s2", DEFAULT_VESSEL_MOTION["accel_x_m_s2"])
@@ -2096,6 +2117,11 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         },
     }
     vessel_motion_out = {key: float(vm.get(key, 0.0)) for key in DEFAULT_VESSEL_MOTION}
+    # Heel and trim are optional since 6.1; leaving a level attitude out keeps the
+    # file readable by builds that predate them.
+    for attitude_key in ("heel_deg", "trim_deg"):
+        if not vessel_motion_out[attitude_key]:
+            del vessel_motion_out[attitude_key]
     if any(vessel_motion_out.values()):
         model_definition["vessel_motion"] = vessel_motion_out
     hook_height = data.get("hook_height_at_min_outreach_m")

@@ -564,6 +564,22 @@ class TestEnvironmentEditing:
 
         assert document.environment.vessel_motion.pitch_angular_accel_rad_s2 == pytest.approx(0.125)
 
+    def test_vessel_attitude_writes_through_with_its_sign(self, model_vm, document):
+        model_vm.setEnvironmentValue("heel_deg", -2.5)
+        model_vm.setEnvironmentValue("trim_deg", 1.25)
+
+        assert document.environment.vessel_motion.heel_deg == pytest.approx(-2.5)
+        assert document.environment.vessel_motion.trim_deg == pytest.approx(1.25)
+        assert model_vm.environment["heel_deg"] == pytest.approx(-2.5)
+        assert model_vm.environment["trim_deg"] == pytest.approx(1.25)
+
+    def test_vessel_attitude_is_clamped_to_the_schema_bound(self, model_vm, document):
+        model_vm.setEnvironmentValue("heel_deg", 45.0)
+        model_vm.setEnvironmentValue("trim_deg", -90.0)
+
+        assert document.environment.vessel_motion.heel_deg == pytest.approx(30.0)
+        assert document.environment.vessel_motion.trim_deg == pytest.approx(-30.0)
+
     def test_setting_support_width_writes_through(self, model_vm, document):
         model_vm.setEnvironmentValue("boom_width_m", 4.5)
 

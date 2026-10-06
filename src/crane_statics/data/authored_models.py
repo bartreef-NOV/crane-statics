@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
 AUTHORED_SCHEMA_MAJOR_VERSION = 6
-AUTHORED_SCHEMA_VERSION = "6.0.0"
+AUTHORED_SCHEMA_VERSION = "6.1.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -62,11 +62,31 @@ class AuthoredMetadata(BaseModel):
     description: Optional[str] = None
 
 
+MAX_VESSEL_TILT_DEG = 30.0
+"""Largest static heel or trim magnitude a document may declare."""
+
+
 class AuthoredVesselMotion(BaseModel):
-    """Optional vessel accelerations and rotation reference. Omitted values default to zero."""
+    """Optional vessel accelerations, static attitude and rotation reference.
+
+    Omitted values default to zero. Heel and trim (added in 6.1) are signed and
+    rotate gravity in the slewing crane frame; accelerations are magnitudes.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    heel_deg: float = Field(
+        default=0.0,
+        ge=-MAX_VESSEL_TILT_DEG,
+        le=MAX_VESSEL_TILT_DEG,
+        description="Static vessel heel in degrees; positive is starboard side down.",
+    )
+    trim_deg: float = Field(
+        default=0.0,
+        ge=-MAX_VESSEL_TILT_DEG,
+        le=MAX_VESSEL_TILT_DEG,
+        description="Static vessel trim in degrees; positive is bow down.",
+    )
     accel_x_m_s2: float = Field(default=0.0, ge=0)
     accel_y_m_s2: float = Field(default=0.0, ge=0)
     accel_z_m_s2: float = Field(default=0.0, ge=0)
@@ -115,7 +135,9 @@ class AuthoredGlobalPosition3D(BaseModel):
     )
 
     x_m: float = Field(description="Global horizontal coordinate in metres.")
-    y_m: float = Field(description="Global transverse coordinate in metres.")
+    y_m: float = Field(
+        description="Global transverse coordinate in metres; positive is to the boom's left."
+    )
     z_m: float = Field(description="Global vertical coordinate in metres.")
 
 
@@ -127,7 +149,9 @@ class AuthoredBoomPosition3D(BaseModel):
     )
 
     u_m: float = Field(description="Boom-local longitudinal coordinate in metres.")
-    v_m: float = Field(description="Boom-local transverse coordinate in metres.")
+    v_m: float = Field(
+        description="Boom-local transverse coordinate in metres; positive is to the boom's left."
+    )
     w_m: float = Field(description="Boom-local vertical coordinate in metres.")
 
 

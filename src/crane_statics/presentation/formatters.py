@@ -451,6 +451,8 @@ class EnvironmentFormatter:
         "air_density_kg_m3": "Air Density (kg/m³)",
         "wind_profile_exponent": "Wind Profile Exponent",
         "mean_sealevel_z_m": "Mean Sea Level Z (m)",
+        "heel_deg": "Heel (°, + starboard down)",
+        "trim_deg": "Trim (°, + bow down)",
         "accel_x_m_s2": "Accel X (m/s²)",
         "accel_y_m_s2": "Accel Y (m/s²)",
         "accel_z_m_s2": "Accel Z (m/s²)",

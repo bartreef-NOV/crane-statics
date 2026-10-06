@@ -20,6 +20,7 @@ from crane_statics.core.model_health import health_status
 from crane_statics.qml_app.contracts import EnvironmentSettings
 from crane_statics.qml_app.session import SessionState
 from crane_statics.data import payload_hoist_ids
+from crane_statics.data.authored_models import MAX_VESSEL_TILT_DEG
 
 from ..models.list_models import DictListModel
 from ..models.document_models import (
@@ -49,6 +50,8 @@ ENVIRONMENT_KEYS = [
     "mean_sealevel_z_m",
 ]
 VESSEL_MOTION_KEYS = [
+    "heel_deg",
+    "trim_deg",
     "accel_x_m_s2",
     "accel_y_m_s2",
     "accel_z_m_s2",
@@ -57,6 +60,12 @@ VESSEL_MOTION_KEYS = [
     "reference_x_m",
     "reference_z_m",
 ]
+# Signed static attitude: setattr bypasses pydantic validation, so clamp to the
+# bound the schema enforces on load.
+CLAMPED_ENVIRONMENT_KEYS = {
+    "heel_deg": (-MAX_VESSEL_TILT_DEG, MAX_VESSEL_TILT_DEG),
+    "trim_deg": (-MAX_VESSEL_TILT_DEG, MAX_VESSEL_TILT_DEG),
+}
 SUPPORT_WIDTH_KEYS = ["boom_width_m", "slewing_bearing_diameter_m"]
 # Support-width keys that may be cleared back to "unset" via clearEnvironmentValue.
 NULLABLE_SUPPORT_WIDTH_KEYS = {"slewing_bearing_diameter_m"}
@@ -341,6 +350,9 @@ class ModelViewModel(QObject):
             target = doc
         else:
             return
+        if key in CLAMPED_ENVIRONMENT_KEYS:
+            low, high = CLAMPED_ENVIRONMENT_KEYS[key]
+            value = min(high, max(low, float(value)))
         previous = getattr(target, key)
         if float(previous or 0.0) == float(value):
             return

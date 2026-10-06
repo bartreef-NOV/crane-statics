@@ -106,6 +106,8 @@ class EnvironmentSettings:
     mean_sealevel_z_m: float = 0.0
 
     # Vessel Motion
+    heel_deg: float = 0.0
+    trim_deg: float = 0.0
     accel_x_m_s2: float = 0.0
     accel_y_m_s2: float = 0.0
     accel_z_m_s2: float = 0.0
@@ -130,6 +132,8 @@ class EnvironmentSettings:
             "air_density_kg_m3": self.air_density_kg_m3,
             "wind_profile_exponent": self.wind_profile_exponent,
             "mean_sealevel_z_m": self.mean_sealevel_z_m,
+            "heel_deg": self.heel_deg,
+            "trim_deg": self.trim_deg,
             "accel_x_m_s2": self.accel_x_m_s2,
             "accel_y_m_s2": self.accel_y_m_s2,
             "accel_z_m_s2": self.accel_z_m_s2,
@@ -152,6 +156,8 @@ class EnvironmentSettings:
             air_density_kg_m3=float(data.get("air_density_kg_m3", 1.225)),
             wind_profile_exponent=float(data.get("wind_profile_exponent", 0.2)),
             mean_sealevel_z_m=float(data.get("mean_sealevel_z_m", 0.0)),
+            heel_deg=float(data.get("heel_deg", 0.0)),
+            trim_deg=float(data.get("trim_deg", 0.0)),
             accel_x_m_s2=float(data.get("accel_x_m_s2", 0.0)),
             accel_y_m_s2=float(data.get("accel_y_m_s2", 0.0)),
             accel_z_m_s2=float(data.get("accel_z_m_s2", 0.0)),

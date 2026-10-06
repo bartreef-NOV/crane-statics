@@ -131,7 +131,7 @@
           "type": "number"
         },
         "v_m": {
-          "description": "Boom-local transverse coordinate in metres.",
+          "description": "Boom-local transverse coordinate in metres; positive is to the boom's left.",
           "title": "V M",
           "type": "number"
         },
@@ -278,7 +278,7 @@
           "type": "number"
         },
         "y_m": {
-          "description": "Global transverse coordinate in metres.",
+          "description": "Global transverse coordinate in metres; positive is to the boom's left.",
           "title": "Y M",
           "type": "number"
         },
@@ -919,8 +919,24 @@
     },
     "AuthoredVesselMotion": {
       "additionalProperties": false,
-      "description": "Optional vessel accelerations and rotation reference. Omitted values default to zero.",
+      "description": "Optional vessel accelerations, static attitude and rotation reference.\n\nOmitted values default to zero. Heel and trim (added in 6.1) are signed and\nrotate gravity in the slewing crane frame; accelerations are magnitudes.",
       "properties": {
+        "heel_deg": {
+          "default": 0.0,
+          "description": "Static vessel heel in degrees; positive is starboard side down.",
+          "maximum": 30.0,
+          "minimum": -30.0,
+          "title": "Heel Deg",
+          "type": "number"
+        },
+        "trim_deg": {
+          "default": 0.0,
+          "description": "Static vessel trim in degrees; positive is bow down.",
+          "maximum": 30.0,
+          "minimum": -30.0,
+          "title": "Trim Deg",
+          "type": "number"
+        },
         "accel_x_m_s2": {
           "default": 0.0,
           "minimum": 0,
@@ -1145,7 +1161,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "6.0.0"
+        "version": "6.1.0"
       }
     }
   ],
