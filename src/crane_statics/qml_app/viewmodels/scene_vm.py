@@ -7,11 +7,6 @@ from typing import Any, Optional
 
 from PyQt6.QtCore import QObject, pyqtBoundSignal, pyqtProperty, pyqtSignal, pyqtSlot
 
-from crane_statics.calculation.vessel_attitude import (
-    VesselAttitude,
-    crane_frame_gravity,
-    normalize_slew_deg,
-)
 from crane_statics.core.analysis_presenter import AnalysisPresenter
 from crane_statics.core.analysis_services import (
     AnalysisCalculator,
@@ -20,6 +15,7 @@ from crane_statics.core.analysis_services import (
 )
 from crane_statics.core.drawn_loads import LoadConditions, active_hoist_dict
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
+from crane_statics.core.session_model import SceneState
 from crane_statics.presentation.formatters import VesselAttitudeFormatter
 from crane_statics.qml_app.adapters.scene_adapter import SceneStateAdapter
 from crane_statics.qml_app.scene.scene_drag import DragEdit, DragLimits, SceneDrag
@@ -624,7 +620,9 @@ class SceneViewModel(QObject):
 
     @pyqtSlot(float)
     def setSlew(self, value: float) -> None:
-        self._set_scene_field("slew_deg", normalize_slew_deg(float(value)), self.attitudeChanged)
+        self._set_scene_field(
+            "slew_deg", SceneState.wrap_slew_deg(float(value)), self.attitudeChanged
+        )
 
     @pyqtProperty(bool, notify=attitudeChanged)
     def vesselLevel(self) -> bool:
@@ -646,25 +644,22 @@ class SceneViewModel(QObject):
     def _level_readouts() -> dict[str, Any]:
         return {
             "level": True,
-            "attitude": VesselAttitudeFormatter.attitude_text(0.0, 0.0),
+            "attitude": VesselAttitudeFormatter.attitude_text(0.0, 0.0, level=True),
             "in_plane": VesselAttitudeFormatter.in_plane_tilt_text(0.0),
             "out_of_plane": VesselAttitudeFormatter.out_of_plane_tilt_text(0.0),
         }
 
     def _refresh_attitude_readouts(self) -> None:
-        doc = self._model.document
-        state = self._model.get_active_hoist_state()
-        if doc is None:
+        if self._model.document is None:
             readouts = self._level_readouts()
         else:
-            motion = doc.environment.vessel_motion
-            attitude = VesselAttitude(float(motion.heel_deg), float(motion.trim_deg))
-            slew = 0.0 if state is None else float(state.scene_state.slew_deg)
-            gravity = crane_frame_gravity(attitude, slew)
+            inputs = self._scene_inputs()
+            attitude = inputs.vessel_attitude()
+            gravity = inputs.crane_gravity()
             readouts = {
                 "level": attitude.is_level,
                 "attitude": VesselAttitudeFormatter.attitude_text(
-                    attitude.heel_deg, attitude.trim_deg
+                    attitude.heel_deg, attitude.trim_deg, level=attitude.is_level
                 ),
                 "in_plane": VesselAttitudeFormatter.in_plane_tilt_text(gravity.in_plane_tilt_deg),
                 "out_of_plane": VesselAttitudeFormatter.out_of_plane_tilt_text(
@@ -898,6 +893,9 @@ class SceneViewModel(QObject):
         self.geometryChanged.emit()
         self.loadChanged.emit()
         self.environmentChanged.emit()
+        # Slew belongs to each hoist's scene state, so a hoist or document switch
+        # changes it even when the readouts read the same.
+        self.attitudeChanged.emit()
         self._after_state_changed()
 
     def _after_state_changed(self) -> None:

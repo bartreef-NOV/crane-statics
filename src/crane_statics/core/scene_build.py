@@ -22,6 +22,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Optional, Tuple, cast
 
 from crane_statics.calculation.rope_mass import compute_rope_on_winch, find_winch_node_ids
+from crane_statics.calculation.vessel_attitude import CraneFrameGravity, VesselAttitude
 from crane_statics.presentation.formatters import HoistFormatter, node_display_name
 
 from . import drawn_loads
@@ -280,6 +281,16 @@ class SceneInputs:
             node_definitions,
             str(self.hoist.get("load_node_id") or ""),
             self.tackle_length_m,
+        )
+
+    def vessel_attitude(self) -> VesselAttitude:
+        """The document's static heel and trim."""
+        return VesselAttitude.from_environment((self.document_dict or {}).get("environment"))
+
+    def crane_gravity(self) -> CraneFrameGravity:
+        """The gravity direction the scene is drawn at: the solved point's, when there is one."""
+        return drawn_loads.drawn_crane_gravity(
+            self.document_dict or {}, self.conditions, self.analysis_point
         )
 
     def body_filter(self, body_id: Optional[str] = None) -> FreeBodyFilter:
@@ -740,9 +751,7 @@ class _SceneBuilder:
         # the side gravity leans to, pivoting under the slew axis.
         base = positions.get("platform_base", {"x": 0.0})
         pivot_x, scene_y = self._to_scene(float(base["x"]), float(elevation_z))
-        gravity = drawn_loads.drawn_crane_gravity(
-            document, self._inputs.conditions, self._inputs.analysis_point
-        )
+        gravity = self._inputs.crane_gravity()
         self._msl_z = float(elevation_z)
         self._msl_scene_y = scene_y
         self._msl_pivot_x = pivot_x

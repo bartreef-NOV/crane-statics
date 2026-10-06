@@ -8,6 +8,7 @@ from typing import Any, Callable, Optional
 
 from ..calculation.engine import AllowableCapacity, AnalysisPoint, get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
+from ..calculation.vessel_attitude import VesselAttitude
 from ..data.models import CraneDocument
 from .analysis_cases import analysis_mode_by_name, iter_wind_directional_cases
 from .demand_extraction import (
@@ -315,9 +316,17 @@ def run_capacity_sweep(
         if split_hook_mass is not None and split_falls is not None:
             mode_results["split"] = _compute_mode("split")
 
+    attitude = VesselAttitude.from_environment(
+        doc.model_dump(include={"environment"})["environment"]
+    )
     return {
         "hoist": hoist,
         "modes": mode_results,
+        "vessel_attitude": {
+            "heel_deg": attitude.heel_deg,
+            "trim_deg": attitude.trim_deg,
+            "level": attitude.is_level,
+        },
         "n_points": max((v.get("n_points", 0) for v in mode_results.values()), default=0),
         "n_points_by_mode": {k: int(v.get("n_points", 0)) for k, v in mode_results.items()},
     }

@@ -485,7 +485,6 @@ class ChartViewModel(QObject):
             self._set_stale(True)
             return
         self._last_result = result or {}
-        # The generation matches, so the document still holds the attitude swept at.
         self._condition_text = self._chart_condition_text()
         self._set_stale(False)
         by_mode = self._last_result.get("n_points_by_mode") or {}
@@ -565,11 +564,12 @@ class ChartViewModel(QObject):
         return self._condition_text
 
     def _chart_condition_text(self) -> str:
-        doc = self._model.document
-        if doc is None:
+        attitude = self._last_result.get("vessel_attitude")
+        if not attitude:
             return ""
-        motion = doc.environment.vessel_motion
-        return VesselAttitudeFormatter.chart_condition_text(motion.heel_deg, motion.trim_deg)
+        return VesselAttitudeFormatter.chart_condition_text(
+            attitude["heel_deg"], attitude["trim_deg"], level=bool(attitude["level"])
+        )
 
     @pyqtProperty("QVariantList", notify=chartUpdated)
     def limitSeries(self) -> list:

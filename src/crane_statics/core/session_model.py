@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from crane_statics.data import CraneDocument, Hoist, payload_hoist_ids
 
+from ..calculation.vessel_attitude import normalize_slew_deg
 from .limit_components import validate_limit_component
 from .limit_factory import DesignLimitFactory
 
@@ -31,8 +32,13 @@ class SceneState:
     accel_z_m_s2: float = 0.0
     pitch_accel_rad_s2: float = 0.0
     roll_accel_rad_s2: float = 0.0
-    # Crane slew on the vessel, degrees from the bow (+ toward starboard).
+    # Crane slew on the vessel, degrees from the bow (+ toward starboard), in [0, 360).
     slew_deg: float = 0.0
+
+    @staticmethod
+    def wrap_slew_deg(slew_deg: float) -> float:
+        """Any slew angle as the equivalent one in [0, 360)."""
+        return normalize_slew_deg(slew_deg)
 
 
 @dataclass

@@ -482,15 +482,15 @@ class VesselAttitudeFormatter:
     """Static vessel attitude and the tilt it gives the slewed crane."""
 
     @staticmethod
-    def attitude_text(heel_deg: float, trim_deg: float) -> str:
-        if float(heel_deg) == 0.0 and float(trim_deg) == 0.0:
+    def attitude_text(heel_deg: float, trim_deg: float, *, level: bool) -> str:
+        if level:
             return "Level vessel"
         return f"Heel {float(heel_deg):+.2f}°, trim {float(trim_deg):+.2f}°"
 
     @staticmethod
-    def chart_condition_text(heel_deg: float, trim_deg: float) -> str:
+    def chart_condition_text(heel_deg: float, trim_deg: float, *, level: bool) -> str:
         """What a load chart on this vessel is rated for; empty when level."""
-        if float(heel_deg) == 0.0 and float(trim_deg) == 0.0:
+        if level:
             return ""
         attitude = f"heel {float(heel_deg):+.1f}°, trim {float(trim_deg):+.1f}°"
         return f"Worst case over 360° slew · {attitude}"

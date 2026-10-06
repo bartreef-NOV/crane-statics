@@ -44,6 +44,9 @@ RowLayout {
             const clamped = Math.max(root.from, Math.min(root.to, value))
             setValue(clamped)
             root.committed(clamped)
+            // The view model may rewrite the value (e.g. wrap a slew angle); show its
+            // result even though this field keeps focus.
+            Qt.callLater(() => setValue(root.value))
         }
 
         flippable: root.flippable

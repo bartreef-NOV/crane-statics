@@ -175,3 +175,17 @@ class TestAllowableCapacityReportsTheSlew:
         point = calc.compute_analysis_point(45.0, 0.0, "MH", slew_deg=120.0)
 
         assert calc.compute_allowable_load(point, LIMITS).governing_slew_deg is None
+
+
+class TestSweepReportsItsCondition:
+    def test_the_sweep_names_the_attitude_it_was_rated_for(self, document):
+        tilted = _tilted(document, heel_deg=2.0, trim_deg=-1.0)
+
+        result = run_capacity_sweep(tilted, "MH", LIMITS, 60.0, {})
+
+        assert result["vessel_attitude"] == {"heel_deg": 2.0, "trim_deg": -1.0, "level": False}
+
+    def test_a_level_sweep_says_so(self, document):
+        result = run_capacity_sweep(document, "MH", LIMITS, 60.0, {})
+
+        assert result["vessel_attitude"]["level"] is True

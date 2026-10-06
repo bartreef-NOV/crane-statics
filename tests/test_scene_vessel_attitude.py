@@ -116,3 +116,41 @@ class TestTiltedWaterline:
         )
 
         assert world_x == pytest.approx(float(base["x"]))
+
+
+class TestSlewFollowsTheActiveHoist:
+    def test_switching_hoist_notifies_its_own_slew(self):
+        vm = _scene_vm(heel_deg=3.0)
+        vm.setSlew(90.0)
+        other = next(h for h in vm.hoistIds if h != vm.selectedHoistId)
+        emitted: list[int] = []
+        vm.attitudeChanged.connect(lambda: emitted.append(1))
+
+        vm.selectHoist(other)
+
+        assert emitted
+        assert vm.slew == 0.0
+
+    def test_loading_a_level_document_notifies_the_reset_slew(self):
+        vm = _scene_vm()
+        vm.setSlew(45.0)
+        emitted: list[int] = []
+        vm.attitudeChanged.connect(lambda: emitted.append(1))
+
+        vm._model.set_document(load_document(EXAMPLE))
+
+        assert emitted
+        assert vm.slew == 0.0
+
+
+def test_scene_view_model_reads_gravity_through_core():
+    source = (
+        Path(__file__).parent.parent
+        / "src"
+        / "crane_statics"
+        / "qml_app"
+        / "viewmodels"
+        / "scene_vm.py"
+    ).read_text(encoding="utf-8")
+
+    assert "crane_statics.calculation" not in source
