@@ -54,38 +54,21 @@ class AnalysisPoint:
 
 _WIND_DIRECTIONS = {"+X", "-X", "+Y", "-Y"}
 
-# Module-level calculator cache for cross-service reuse
-# Maps document id -> CraneCalculator instance
-_CALCULATOR_CACHE: dict[int, "CraneCalculator"] = {}
-
 
 def get_calculator(document: CraneDocument) -> "CraneCalculator":
-    """Get or create a CraneCalculator for the given document.
+    """Return a CraneCalculator built from the document's current contents.
 
-    Calculators are reused per document so the derived document dict, kinematics
-    adapter and static solver context are built once rather than per service
-    (sweep, limit_auto_set, analysis_services).
-
-    Args:
-        document: CraneDocument to analyze
-
-    Returns:
-        The CraneCalculator instance for this document.
+    A calculator snapshots the document when it is constructed, and documents are
+    edited in place, so one is built per call rather than cached by identity --
+    a cached snapshot silently solved against stale geometry and loads.
+    Construction is cheap next to a single analysis point.
 
     Example:
         calc = get_calculator(doc)
         pt = calc.compute_analysis_point(10.0, 50.0, "hoist_1")
         cap = calc.compute_allowable_load(pt, limits)
     """
-    doc_id = id(document)
-    if doc_id not in _CALCULATOR_CACHE:
-        _CALCULATOR_CACHE[doc_id] = CraneCalculator(document)
-    return _CALCULATOR_CACHE[doc_id]
-
-
-def clear_calculator_cache() -> None:
-    """Clear all cached calculators (useful for session cleanup)."""
-    _CALCULATOR_CACHE.clear()
+    return CraneCalculator(document)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
