@@ -7,10 +7,12 @@ sidelead force enters the structure.
 """
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from crane_statics.calculation.engine import get_calculator
+from crane_statics.core.analysis_cases import analysis_mode_by_name
 from crane_statics.core.io import load_document
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
@@ -125,3 +127,41 @@ class TestLimitsBoundTheDemandMagnitude:
         governing = min(per_limit, key=lambda key: per_limit[key])
         assert cap.governing_limit_id == governing
         assert cap.max_allowable_load_kN == pytest.approx(per_limit[governing])
+
+
+def _level_point(doc, hoist_id: str, **kwargs: Any):
+    inputs: dict[str, Any] = dict(
+        wind_speed_m_s=0.0,
+        wind_direction="+X",
+        accel_x_m_s2=0.0,
+        accel_y_m_s2=0.0,
+        accel_z_m_s2=0.0,
+        pitch_accel_rad_s2=0.0,
+        roll_accel_rad_s2=0.0,
+        offlead_deg=0.0,
+        sidelead_deg=0.0,
+    )
+    inputs.update(kwargs)
+    point = get_calculator(doc).compute_analysis_point(45.0, 0.0, hoist_id, **inputs)
+    assert point is not None
+    return point
+
+
+class TestSplitCompensationMassIsVertical:
+    def test_split_mode_adds_no_lateral_platform_force(self, document):
+        mode = analysis_mode_by_name(next(h for h in document.hoists if h.id == "MH"), "split")
+        assert mode.name == "split"
+
+        point = _level_point(document, "MH", hoist_runtime_overrides=mode.runtime_overrides)
+
+        assert point.baseline_reactions["platform_base"]["Fy"] == pytest.approx(0.0, abs=1e-9)
+
+    def test_split_mode_leaves_the_overturning_moment_unchanged(self, document):
+        mode = analysis_mode_by_name(next(h for h in document.hoists if h.id == "MH"), "split")
+
+        normal = _level_point(document, "MH")
+        split = _level_point(document, "MH", hoist_runtime_overrides=mode.runtime_overrides)
+
+        assert split.baseline_reactions["platform_base"]["Mx"] == pytest.approx(
+            normal.baseline_reactions["platform_base"]["Mx"], rel=1e-9
+        )
