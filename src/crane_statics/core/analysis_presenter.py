@@ -11,6 +11,7 @@ import math
 import re
 from typing import TYPE_CHECKING, Any, Optional
 
+from ..calculation.vessel_attitude import ATTITUDE_FIELDS, VesselAttitude
 from . import drawn_loads
 from .drawn_loads import BodyLoads, FreeBodyFilter, LoadConditions
 
@@ -249,8 +250,8 @@ class AnalysisPresenter:
             return None
         if level_vessel:
             doc = doc.model_copy(deep=True)
-            doc.environment.vessel_motion.heel_deg = 0.0
-            doc.environment.vessel_motion.trim_deg = 0.0
+            for field_name in ATTITUDE_FIELDS:
+                setattr(doc.environment.vessel_motion, field_name, 0.0)
         calc = CraneCalculator(doc)
         point = calc.compute_analysis_point(
             boom_angle_deg,
@@ -321,8 +322,9 @@ class AnalysisPresenter:
         offlead_env = dict(inertia_env, offlead_deg=float(sc.offlead_deg))
         full_env = dict(offlead_env, sidelead_deg=float(sc.sidelead_deg))
 
-        motion = doc.environment.vessel_motion
-        tilted = bool(motion.heel_deg or motion.trim_deg)
+        tilted = not VesselAttitude.from_environment(
+            {"vessel_motion": doc.environment.vessel_motion.model_dump()}
+        ).is_level
         dead = _demand(hook_load_kN=0.0, **zero_env)
         dead_level = _demand(hook_load_kN=0.0, level_vessel=True, **zero_env) if tilted else dead
         with_hook = _demand(hook_load_kN=hook, **zero_env)

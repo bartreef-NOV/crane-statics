@@ -14,6 +14,7 @@ import logging
 import math
 from ..data.models import CraneDocument
 from .point_composition import with_crane_gravity
+from .rope_mass import hook_support_node_id
 from .solver.kinematics import KinematicsAdapter
 from .vessel_attitude import (
     ENVELOPE_SLEW_STEP_DEG,
@@ -238,16 +239,17 @@ def compute_platform_base_mradial_kNm(
     return math.hypot(float(mx_kNm), float(my_kNm))
 
 
-_SPLIT_PIN_PAIRS = (
-    ("heel_point", "heel_left", "heel_right"),
-    ("front_hinge", "front_leg_left", "front_leg_right"),
-    ("rear_hinge", "rear_leg_left", "rear_leg_right"),
-)
+# Support group -> (in-plane total, left (+Y) pin, right pin).
+_SPLIT_PIN_PAIRS = {
+    "heel": ("heel_point", "heel_left", "heel_right"),
+    "front_leg": ("front_hinge", "front_leg_left", "front_leg_right"),
+    "rear_leg": ("rear_hinge", "rear_leg_left", "rear_leg_right"),
+}
 
 
 def _add_even_split_entries(channel: dict[str, dict[str, float]]) -> None:
     """Give an in-plane channel the left/right pin entries it implies (half each)."""
-    for total, left, right in _SPLIT_PIN_PAIRS:
+    for total, left, right in _SPLIT_PIN_PAIRS.values():
         components = channel.get(total)
         if not components:
             continue
@@ -453,7 +455,6 @@ class CraneCalculator:
                     _accumulate_force(
                         position[0], 0.0, position[1], fx=0.0, fy=rope_mass_t * weight_y, fz=0.0
                     )
-            node_defs = {n.id: n for n in self.doc.nodes}
             overrides = hoist_runtime_overrides or {}
             for idle in self.doc.hoists:
                 if idle.id == hoist_id:
@@ -464,8 +465,9 @@ class CraneCalculator:
                 hook_id = str(idle.load_node_id)
                 if idle_mass_t <= 0.0 or hook_id not in node_pos:
                     continue
-                below_id = getattr(node_defs.get(hook_id), "below_node_id", None)
-                idle_sheave = node_pos.get(str(below_id or ""), node_pos[hook_id])
+                idle_sheave = node_pos.get(
+                    hook_support_node_id(self._doc_dict, idle.id), node_pos[hook_id]
+                )
                 _accumulate_force(
                     idle_sheave[0], 0.0, idle_sheave[1], fx=0.0, fy=idle_mass_t * weight_y, fz=0.0
                 )
@@ -498,8 +500,7 @@ class CraneCalculator:
             # Like offlead, the side force acts along the rope's line of action,
             # which passes through the sheave the hook hangs from.
             load_node_id = str(hoist.load_node_id)
-            hook_node = next((n for n in self.doc.nodes if n.id == load_node_id), None)
-            sheave_id = str(getattr(hook_node, "below_node_id", None) or load_node_id)
+            sheave_id = hook_support_node_id(self._doc_dict, hoist_id)
             sheave = node_pos.get(sheave_id, node_pos.get(load_node_id))
             if sheave is not None:
                 _accumulate_force(
@@ -535,19 +536,9 @@ class CraneCalculator:
         if boom_width <= 0.0:
             raise ValueError("Support widths must be > 0")
 
-        total_map = {
-            "heel": "heel_point",
-            "front_leg": "front_hinge",
-            "rear_leg": "rear_hinge",
-        }
-        side_entity = {
-            "heel": ("heel_left", "heel_right", boom_width),
-            "front_leg": ("front_leg_left", "front_leg_right", boom_width),
-            "rear_leg": ("rear_leg_left", "rear_leg_right", boom_width),
-        }
         split: dict[str, dict[str, float]] = {}
-        for group, total_entity in total_map.items():
-            left_entity, right_entity, width = side_entity[group]
+        for group, (total_entity, left_entity, right_entity) in _SPLIT_PIN_PAIRS.items():
+            width = boom_width
             base = point.baseline_reactions.get(total_entity, {})
             sens = point.sensitivity_reactions.get(total_entity, {})
             total_fx = float(base.get("Fx", 0.0)) + float(sens.get("Fx", 0.0)) * float(

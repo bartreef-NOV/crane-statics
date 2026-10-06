@@ -25,7 +25,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Mapping, Optional, Sequence
 
-from ..calculation.rope_mass import RopeNodeMass, rope_mass_at_nodes
+from ..calculation.rope_mass import RopeNodeMass, hook_support_node_id, rope_mass_at_nodes
 from ..calculation.vessel_attitude import CraneFrameGravity, VesselAttitude, crane_frame_gravity
 from ..presentation.formatters import node_display_name
 
@@ -381,15 +381,18 @@ class _LoadBuilder:
         self._pt = analysis_point
         self._filter = body_filter
         self._env = self._doc.get("environment", {}) or {}
-        self._g = crane_frame_gravity(
-            VesselAttitude.from_environment(self._env), float(conditions.slew_deg)
+        # Reactions come from the solved point, so its gravity is the one weights
+        # must be drawn with; the conditions' slew only stands in when there is none.
+        solved_gravity = getattr(analysis_point, "crane_gravity", None)
+        self._g: CraneFrameGravity = (
+            solved_gravity
+            if isinstance(solved_gravity, CraneFrameGravity)
+            else crane_frame_gravity(
+                VesselAttitude.from_environment(self._env), float(conditions.slew_deg)
+            )
         )
 
     # -- geometry ---------------------------------------------------------
-
-    @property
-    def crane_gravity(self) -> CraneFrameGravity:
-        return self._g
 
     def _weight(self, mass_t: float) -> tuple[float, float]:
         """(Fx, Fz) weight of a mass in the crane's X/Z plane."""
@@ -399,11 +402,10 @@ class _LoadBuilder:
             -float(mass_t) * g_kN_per_t * self._g.vertical,
         )
 
-    def _sheave_of(self, hook_node_id: str) -> str:
+    def _sheave_of(self, hoist_id: str, hook_node_id: str) -> str:
         """The node a hook block hangs from; its rope's line of action passes there."""
-        node_defs = {n.get("id"): n for n in self._doc.get("nodes", [])}
-        below_id = (node_defs.get(hook_node_id, {}) or {}).get("below_node_id")
-        return str(below_id) if below_id and below_id in self._positions else hook_node_id
+        sheave_id = hook_support_node_id(dict(self._doc), hoist_id)
+        return sheave_id if sheave_id in self._positions else hook_node_id
 
     def _heel(self) -> Mapping[str, float]:
         return self._positions.get("boom_heel", {"x": 0.0, "z": 0.0})
@@ -656,7 +658,9 @@ class _LoadBuilder:
         lateral_fx = offlead_fx + tilt_fx
         if abs(lateral_fx) > 1e-9:
             # Lateral load enters the boom at the sheave; the tackle below carries no moment arm.
-            anchor = self._positions[self._sheave_of(str(load_node_id))]
+            anchor = self._positions[
+                self._sheave_of(str(self._hoist.get("id", "")), str(load_node_id))
+            ]
             label = (
                 f"Offlead {abs(lateral_fx):.0f} kN"
                 if tilt_fx == 0.0
@@ -794,7 +798,7 @@ class _LoadBuilder:
             if not self._filter.is_free_body or self._filter.owns_node(node_id):
                 current = node_forces.setdefault(node_id, [0.0, 0.0])
                 current[1] += weight_fz
-            sheave_id = self._sheave_of(node_id)
+            sheave_id = self._sheave_of(str(hoist.get("id", "")), node_id)
             if weight_fx != 0.0 and (
                 not self._filter.is_free_body or self._filter.owns_node(sheave_id)
             ):

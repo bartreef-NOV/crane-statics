@@ -325,3 +325,29 @@ class TestSceneAnalysisUsesTheSlew:
 
         assert overview is not None
         assert "Vessel attitude" not in [term["name"] for term in overview["terms"]]
+
+
+class TestDrawnLoadsFollowTheAnalysisPoint:
+    def test_weights_are_drawn_at_the_slew_the_reactions_were_solved_at(self, document):
+        tilted = _tilted(document)
+        point = CraneCalculator(tilted).compute_analysis_point(
+            45.0, 0.0, "MH", tackle_length_m=40.0, slew_deg=75.0, **QUIET
+        )
+        assert point is not None
+        conditions = {
+            key: value
+            for key, value in QUIET.items()
+            if key not in {"accel_y_m_s2", "roll_accel_rad_s2", "sidelead_deg"}
+        }
+        # The conditions name a different slew; the solved point is the authority.
+        inputs = scene_inputs(
+            tilted, "MH", angle=45.0, analysis_point=point, tackle_length_m=40.0, **conditions
+        )
+        positions = inputs.node_positions()
+        loads = inputs.body_loads(positions, "boom")
+        vectors = loads.vectors(
+            dl.GRAVITY, dl.ROPE_WEIGHT, dl.IDLE_HOOK_MASS, dl.ROPE_INTERFACE, dl.REACTIONS
+        )
+
+        assert abs(sum(v.fx_kN for v in vectors)) <= 1e-6
+        assert abs(sum(v.fz_kN for v in vectors)) <= 1e-6

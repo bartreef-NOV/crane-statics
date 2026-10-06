@@ -650,9 +650,12 @@ def _accumulate_loads(
         ld_fx[body] += fx_kN
         ld_m[body] += -node_pos[node_id][1] * fx_kN
 
-    def _sheave_of(hook_node_id: str) -> str:
-        below_id = str((node_lookup.get(hook_node_id, {}) or {}).get("below_node_id") or "")
-        return below_id if below_id and below_id in node_pos else hook_node_id
+    def _sheave_of(hanging_hoist_id: str, hook_node_id: str) -> str:
+        # ``rope_mass`` reaches back into this package for kinematics.
+        from ..rope_mass import hook_support_node_id
+
+        sheave_id = hook_support_node_id(doc_dict, hanging_hoist_id)
+        return sheave_id if sheave_id in node_pos else hook_node_id
 
     for hoist_item in ctx.get("hoists", []):
         node_id = str(hoist_item.get("load_node_id", ""))
@@ -726,7 +729,7 @@ def _accumulate_loads(
                 fz = -idle_mass_t * gravity_vertical
                 ld_fz[hbody] += fz
                 ld_m[hbody] += hx * fz
-                _apply_lateral_at(_sheave_of(node_id), idle_mass_t * gravity_lateral_x)
+                _apply_lateral_at(_sheave_of(idle_id, node_id), idle_mass_t * gravity_lateral_x)
 
     # Rope self-weight, lumped at the nodes by ``rope_mass.rope_mass_at_nodes``.
     # It is dead load: it feels gravity and the vessel motion, carries no wind

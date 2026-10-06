@@ -28,6 +28,9 @@ from typing import Any, Mapping, Optional
 ENVELOPE_SLEW_STEP_DEG = 15.0
 """Default spacing of the slew samples a load-chart envelope is taken over."""
 
+ATTITUDE_FIELDS = ("heel_deg", "trim_deg")
+"""The ``environment.vessel_motion`` fields that make up the static attitude."""
+
 
 @dataclass(frozen=True)
 class VesselAttitude:
