@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, pyqtBoundSignal, pyqtProperty, pyqtSignal, pyqtSlot
 
 from crane_statics.calculation.vessel_attitude import (
     VesselAttitude,
@@ -679,7 +679,7 @@ class SceneViewModel(QObject):
         state = self._model.get_active_hoist_state()
         return 0.0 if state is None else float(getattr(state.scene_state, name))
 
-    def _set_scene_field(self, name: str, value: Any, notify: pyqtSignal) -> None:
+    def _set_scene_field(self, name: str, value: Any, notify: pyqtBoundSignal) -> None:
         state = self._model.get_active_hoist_state()
         if state is None:
             return
