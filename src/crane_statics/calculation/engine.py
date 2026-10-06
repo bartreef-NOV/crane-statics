@@ -465,11 +465,16 @@ class CraneCalculator:
             total_fz = float(base.get("Fz", 0.0)) + float(sens.get("Fz", 0.0)) * float(
                 hook_force_kN
             )
+            # Left is the +Y pin at y = +w/2. The pins' reactions balance the applied
+            # moments about the group origin: Mz - (w/2)(L_x - R_x) = 0 and
+            # Mx + (w/2)(L_z - R_z) = 0.
             d_fx = float(moments[group]["Mz"]) / float(width)
-            d_fz = float(moments[group]["Mx"]) / float(width)
+            d_fz = -float(moments[group]["Mx"]) / float(width)
             split[left_entity] = {"Fx": 0.5 * total_fx + d_fx, "Fz": 0.5 * total_fz + d_fz}
             split[right_entity] = {"Fx": 0.5 * total_fx - d_fx, "Fz": 0.5 * total_fz - d_fz}
-        return split, float(moments["platform_base"]["Mx"]), float(total_fy_platform)
+        # Forces are reported as the ground's reaction on the crane, like the in-plane
+        # Fx/Fz; moments stay the right-handed moment of the applied loads, like My.
+        return split, float(moments["platform_base"]["Mx"]), -float(total_fy_platform)
 
     def _augment_point_with_split_supports(
         self,

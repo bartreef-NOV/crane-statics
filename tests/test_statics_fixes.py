@@ -191,3 +191,63 @@ class TestPlatformBaseMomentsShareOneOrigin:
         assert lateral_mx(loaded) - lateral_mx(document) == pytest.approx(
             extra_mass_t * extra_z_m, rel=1e-9
         )
+
+
+def _with_probe_mass(doc, body_id: str, **position: float):
+    from crane_statics.data.models import MassPoint
+
+    probed = doc.model_copy(deep=True)
+    body = next(b for b in probed.bodies if b.id == body_id)
+    fields: dict[str, Any] = {"x_m": 0.0, "z_m": 0.0}
+    fields.update(position)
+    body.mass_points.append(MassPoint(id="probe", mass_t=1000.0, **fields))
+    return probed
+
+
+class TestLeftIsPlusYForEverySplitComponent:
+    def test_a_mass_left_of_the_centreline_loads_the_left_supports_more(self, document):
+        probe_y_m = 5.0
+        probed = _with_probe_mass(
+            document, "boom", local_x_m=10.0, local_y_m=probe_y_m, local_z_m=0.0
+        )
+        gravity = abs(float(document.environment.gravity_m_s2))
+        width = float(document.support_widths.boom_width_m)
+
+        before = _level_point(document, "MH").baseline_reactions
+        after = _level_point(probed, "MH").baseline_reactions
+
+        # Weight at +y: R_left - R_right grows by 2 * y * m * g / w for every group.
+        expected = 2.0 * probe_y_m * 1000.0 * gravity / width
+        for left, right in (
+            ("heel_left", "heel_right"),
+            ("front_leg_left", "front_leg_right"),
+            ("rear_leg_left", "rear_leg_right"),
+        ):
+            delta = (after[left]["Fz"] - after[right]["Fz"]) - (
+                before[left]["Fz"] - before[right]["Fz"]
+            )
+            assert delta == pytest.approx(expected, rel=1e-9), left
+
+    def test_a_plus_y_hook_side_load_shifts_fx_toward_the_left_support(self, document):
+        point = _level_point(document, "MH")
+        side = point.sidelead_lateral_unit_reactions
+        assert side is not None
+
+        # +Y at the hook, forward of the heel: yaw Mz = x*Fy > 0 is reacted by
+        # the left (+Y) pin pushing forward relative to the right one.
+        assert side["heel_left"]["Fx"] > 0.0 > side["heel_right"]["Fx"]
+
+
+class TestPlatformBaseFyIsTheGroundReaction:
+    def test_fy_opposes_the_applied_lateral_inertia(self, document):
+        total_mass_t = sum(mp.mass_t for body in document.bodies for mp in body.mass_points)
+
+        pushed = _level_point(document, "MH", accel_y_m_s2=1.0)
+        still = _level_point(document, "MH")
+
+        # accel_y = +1 applies -m * 1 kN per tonne along Y; the ground pushes back.
+        delta_fy = (
+            pushed.baseline_reactions["platform_base"]["Fy"]
+            - still.baseline_reactions["platform_base"]["Fy"]
+        )
+        assert delta_fy == pytest.approx(total_mass_t, rel=1e-9)
