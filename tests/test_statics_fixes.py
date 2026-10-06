@@ -165,3 +165,29 @@ class TestSplitCompensationMassIsVertical:
         assert split.baseline_reactions["platform_base"]["Mx"] == pytest.approx(
             normal.baseline_reactions["platform_base"]["Mx"], rel=1e-9
         )
+
+
+class TestPlatformBaseMomentsShareOneOrigin:
+    def test_lateral_load_moment_is_taken_about_the_platform_base(self, document):
+        from crane_statics.data.models import MassPoint
+
+        extra_z_m = 20.0
+        extra_mass_t = 1000.0
+        loaded = document.model_copy(deep=True)
+        platform = next(b for b in loaded.bodies if b.id == "platform")
+        platform.mass_points.append(
+            MassPoint(id="probe", mass_t=extra_mass_t, x_m=0.0, y_m=0.0, z_m=extra_z_m)
+        )
+
+        def lateral_mx(doc) -> float:
+            pushed = _level_point(doc, "MH", accel_y_m_s2=1.0)
+            still = _level_point(doc, "MH")
+            return float(
+                pushed.baseline_reactions["platform_base"]["Mx"]
+                - still.baseline_reactions["platform_base"]["Mx"]
+            )
+
+        # Inertia -m*ay at height z about the platform base (0, 0): Mx = -z * Fy.
+        assert lateral_mx(loaded) - lateral_mx(document) == pytest.approx(
+            extra_mass_t * extra_z_m, rel=1e-9
+        )

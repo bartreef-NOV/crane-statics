@@ -342,7 +342,7 @@ class CraneCalculator:
             "heel": node_pos.get("boom_heel", (0.0, 0.0)),
             "front_leg": node_pos.get("front_base", (0.0, 0.0)),
             "rear_leg": node_pos.get("rear_base", (0.0, 0.0)),
-            "platform_base": node_pos.get("platform_heel", (0.0, 0.0)),
+            "platform_base": node_pos.get("platform_base", (0.0, 0.0)),
         }
         moments = {
             "heel": {"Mx": 0.0, "Mz": 0.0},
