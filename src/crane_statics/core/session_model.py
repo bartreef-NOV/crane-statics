@@ -31,6 +31,8 @@ class SceneState:
     accel_z_m_s2: float = 0.0
     pitch_accel_rad_s2: float = 0.0
     roll_accel_rad_s2: float = 0.0
+    # Crane slew on the vessel, degrees from the bow (+ toward starboard).
+    slew_deg: float = 0.0
 
 
 @dataclass

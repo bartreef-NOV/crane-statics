@@ -53,6 +53,12 @@ class DirectionalResponseBasis:
     inactive_rope_baselines: Dict[str, float]
     pitch_sign: float
     connection_local_axes: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    # Response to gravity of full magnitude along +X on every dead mass, per unit
+    # in-plane gravity fraction; empty when the vessel is level.
+    gravity_lateral_x_raw: Dict[str, float] = field(default_factory=dict)
+    # Geometry the basis was solved at, for the out-of-plane support split.
+    node_pos: Dict[str, Tuple[float, float]] = field(default_factory=dict)
+    rope_mass_t_by_node: Dict[str, float] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +441,16 @@ def _accumulate_loads(
     solver_ctx: Dict[str, Any] | None = None,
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
     rope_mass_t_by_node: Dict[str, float] | None = None,
+    gravity_vertical_fraction: float = 1.0,
+    gravity_lateral_x_fraction: float = 0.0,
 ) -> Tuple[Dict[str, dict], Dict[str, dict]]:
+    """Right-hand side (``ld``) and boom-hoist unit coefficients (``bh``) per body.
+
+    Gravity points along (lateral_x, -vertical) in the crane's X/Z plane: the
+    fractions come from ``vessel_attitude.crane_frame_gravity`` and default to a
+    level vessel. They scale weights, never rope tensions -- a hook hangs plumb,
+    so its rope carries the full hook weight whatever the tilt.
+    """
     ctx = solver_ctx or build_solver_static_context(doc_dict)
     body_ids: List[str] = ctx["body_ids"]
     body_index: Dict[str, int] = ctx["body_index"]
@@ -450,6 +465,10 @@ def _accumulate_loads(
 
     env = doc_dict.get("environment", {})
     gravity = abs(env.get("gravity_m_s2", 9.81))
+    # Weight components: a lateral gravity component acts like a negative X acceleration.
+    gravity_vertical = gravity * float(gravity_vertical_fraction)
+    gravity_lateral_x = gravity * float(gravity_lateral_x_fraction)
+    weight_ax = accel_x_m_s2 - gravity_lateral_x
     air_density = env.get("air_density_kg_m3", 1.225)
     vm = env.get("vessel_motion") or {}
     ref_x = float(vm.get("reference_x_m", 0.0))
@@ -461,7 +480,7 @@ def _accumulate_loads(
     # Mass / inertia loads
     for bidx, mass_t, cx, cz in ctx["mass_entries_global"]:
         fx, fz = inertia_force(
-            mass_t, cx, cz, accel_x_m_s2, accel_z_m_s2, pitch_rad_s2, ref_x, ref_z, gravity
+            mass_t, cx, cz, weight_ax, accel_z_m_s2, pitch_rad_s2, ref_x, ref_z, gravity_vertical
         )
         ld_fx[bidx] += fx
         ld_fz[bidx] += fz
@@ -470,7 +489,7 @@ def _accumulate_loads(
     for bidx, mass_t, lx, lz in ctx["mass_entries_local"]:
         cx, cz = _resolve_boom_local_cg(lx, lz, node_pos)
         fx, fz = inertia_force(
-            mass_t, cx, cz, accel_x_m_s2, accel_z_m_s2, pitch_rad_s2, ref_x, ref_z, gravity
+            mass_t, cx, cz, weight_ax, accel_z_m_s2, pitch_rad_s2, ref_x, ref_z, gravity_vertical
         )
         ld_fx[bidx] += fx
         ld_fz[bidx] += fz
@@ -613,6 +632,28 @@ def _accumulate_loads(
 
     # Hook loads: active hoist (cargo load) + idle hoist hook masses
     node_lookup = {n["id"]: n for n in doc_dict.get("nodes", []) if n.get("id")}
+
+    def _body_of(node_id: str) -> int:
+        body = node_body_cache.get(node_id)
+        if body is None:
+            body = body_index.get(node_body_map.get(node_id, "boom"), -1)
+            node_body_cache[node_id] = body
+        return body
+
+    def _apply_lateral_at(node_id: str, fx_kN: float) -> None:
+        """In-plane horizontal force at a node (a hanging block's sheave)."""
+        if node_id not in node_pos or abs(fx_kN) <= VECTOR_MAGNITUDE_TOLERANCE:
+            return
+        body = _body_of(node_id)
+        if body < 0:
+            return
+        ld_fx[body] += fx_kN
+        ld_m[body] += -node_pos[node_id][1] * fx_kN
+
+    def _sheave_of(hook_node_id: str) -> str:
+        below_id = str((node_lookup.get(hook_node_id, {}) or {}).get("below_node_id") or "")
+        return below_id if below_id and below_id in node_pos else hook_node_id
+
     for hoist_item in ctx.get("hoists", []):
         node_id = str(hoist_item.get("load_node_id", ""))
         if not node_id or node_id not in node_pos:
@@ -626,9 +667,11 @@ def _accumulate_loads(
             continue
 
         if hoist_item.get("id") == hoist_id:
-            # Active hoist: apply hook load downward
-            ld_fz[hbody] -= hook_load_kN
-            ld_m[hbody] += hx * (-hook_load_kN)
+            # Active hoist: the hook load's vertical part acts at the hook; its lateral
+            # part (tilt, offlead) is composed onto the offlead unit at the sheave.
+            hook_fz = -hook_load_kN * float(gravity_vertical_fraction)
+            ld_fz[hbody] += hook_fz
+            ld_m[hbody] += hx * hook_fz
             # Offlead force enters at the rope reference (sheave) above the hook.
             support_node_id = node_id
             load_node = node_lookup.get(node_id, {})
@@ -668,9 +711,10 @@ def _accumulate_loads(
                         sbody_comp = body_index.get(node_body_map.get(support_node_id, "boom"), -1)
                         node_body_cache[support_node_id] = sbody_comp
                     if sbody_comp >= 0:
-                        fz_comp = -comp_mass_t * gravity_abs
+                        fz_comp = -comp_mass_t * gravity_vertical
                         ld_fz[sbody_comp] += fz_comp
                         ld_m[sbody_comp] += sx_comp * fz_comp
+                    _apply_lateral_at(support_node_id, comp_mass_t * gravity_lateral_x)
         else:
             # Idle hoist: apply hook block mass downward at hook node
             idle_id = str(hoist_item.get("id", "") or "")
@@ -679,9 +723,10 @@ def _accumulate_loads(
                 idle_override.get("hook_mass_t", hoist_item.get("hook_mass_t", 0.0)) or 0.0
             )
             if idle_mass_t > 0:
-                fz = -idle_mass_t * gravity_abs
+                fz = -idle_mass_t * gravity_vertical
                 ld_fz[hbody] += fz
                 ld_m[hbody] += hx * fz
+                _apply_lateral_at(_sheave_of(node_id), idle_mass_t * gravity_lateral_x)
 
     # Rope self-weight, lumped at the nodes by ``rope_mass.rope_mass_at_nodes``.
     # It is dead load: it feels gravity and the vessel motion, carries no wind
@@ -700,7 +745,15 @@ def _accumulate_loads(
             continue
         rx, rz = position
         fx, fz = inertia_force(
-            rope_mass_t, rx, rz, accel_x_m_s2, accel_z_m_s2, pitch_rad_s2, ref_x, ref_z, gravity
+            rope_mass_t,
+            rx,
+            rz,
+            weight_ax,
+            accel_z_m_s2,
+            pitch_rad_s2,
+            ref_x,
+            ref_z,
+            gravity_vertical,
         )
         ld_fx[rbody] += fx
         ld_fz[rbody] += fz
@@ -730,6 +783,8 @@ def _run_statics(
     solver_ctx: Dict[str, Any] | None = None,
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
     rope_mass_t_by_node: Dict[str, float] | None = None,
+    gravity_vertical_fraction: float = 1.0,
+    gravity_lateral_x_fraction: float = 0.0,
 ) -> Dict[str, float]:
     """Solve 3-body statics sequentially: boom → rear/front leg frame → platform."""
     ld, bh = _accumulate_loads(
@@ -746,6 +801,8 @@ def _run_statics(
         solver_ctx,
         hoist_runtime_overrides,
         rope_mass_t_by_node,
+        gravity_vertical_fraction,
+        gravity_lateral_x_fraction,
     )
 
     heel_x, heel_z = node_pos["boom_heel"]
@@ -865,6 +922,7 @@ def build_directional_response_basis(
     # ``rope_mass`` reaches back into this package for kinematics, so importing it
     # at module level would close the cycle.
     from ..rope_mass import active_hook_positions, falls_override_effective_mult, rope_mass_at_nodes
+    from ..vessel_attitude import VesselAttitude, crane_frame_gravity
 
     hoist_data = next((h for h in doc_dict.get("hoists", []) if h["id"] == hoist_id), None)
     if hoist_data is None:
@@ -885,6 +943,11 @@ def build_directional_response_basis(
     outreach_m = node_pos.get(load_node_id, (0.0, 0.0))[0]
 
     ctx = solver_ctx or build_solver_static_context(doc_dict)
+
+    # The vertical share of gravity does not depend on slew, so it is solved into
+    # every channel; the lateral share varies with slew and gets a unit channel.
+    attitude = VesselAttitude.from_environment(doc_dict.get("environment"))
+    vertical_fraction = crane_frame_gravity(attitude, 0.0).vertical
 
     falls_by_hoist_id: Dict[str, int] = {}
     for runtime_hoist_id, override in (hoist_runtime_overrides or {}).items():
@@ -915,6 +978,7 @@ def build_directional_response_basis(
         solver_ctx=ctx,
         hoist_runtime_overrides=hoist_runtime_overrides,
         rope_mass_t_by_node=rope_mass_t_by_node,
+        gravity_vertical_fraction=vertical_fraction,
     )
     if not dead_raw:
         return None
@@ -933,6 +997,7 @@ def build_directional_response_basis(
         solver_ctx=ctx,
         hoist_runtime_overrides=hoist_runtime_overrides,
         rope_mass_t_by_node=rope_mass_t_by_node,
+        gravity_vertical_fraction=vertical_fraction,
     )
     if not raw_hook_unit:
         return None
@@ -950,6 +1015,7 @@ def build_directional_response_basis(
         solver_ctx=ctx,
         hoist_runtime_overrides=hoist_runtime_overrides,
         rope_mass_t_by_node=rope_mass_t_by_node,
+        gravity_vertical_fraction=vertical_fraction,
     )
     if not raw_offlead_lateral_unit:
         return None
@@ -957,7 +1023,12 @@ def build_directional_response_basis(
     offlead_lateral_sensitivity_raw = _subtract_raw(raw_offlead_lateral_unit, dead_raw)
 
     def _channel(
-        *, wind: float = 0.0, ax: float = 0.0, az: float = 0.0, pitch: float = 0.0
+        *,
+        wind: float = 0.0,
+        ax: float = 0.0,
+        az: float = 0.0,
+        pitch: float = 0.0,
+        lateral_x: float = 0.0,
     ) -> Dict[str, float] | None:
         r = _run_statics(
             doc_dict,
@@ -973,6 +1044,8 @@ def build_directional_response_basis(
             solver_ctx=ctx,
             hoist_runtime_overrides=hoist_runtime_overrides,
             rope_mass_t_by_node=rope_mass_t_by_node,
+            gravity_vertical_fraction=vertical_fraction,
+            gravity_lateral_x_fraction=lateral_x,
         )
         return _subtract_raw(r, dead_raw) if r else None
 
@@ -993,7 +1066,8 @@ def build_directional_response_basis(
     pt_raw: Dict[str, float] | None = (
         _channel(pitch=pt_ref) if pt_ref > 0 else {k: 0.0 for k in dead_raw}
     )
-    if any(v is None for v in (wind_raw, ax_raw, az_raw, pt_raw)):
+    gravity_x_raw: Dict[str, float] | None = {} if attitude.is_level else _channel(lateral_x=1.0)
+    if any(v is None for v in (wind_raw, ax_raw, az_raw, pt_raw, gravity_x_raw)):
         return None
     wind_raw = cast(Dict[str, float], wind_raw)
     ax_raw = cast(Dict[str, float], ax_raw)
@@ -1036,7 +1110,25 @@ def build_directional_response_basis(
         inactive_rope_baselines=inactive_rope_baselines,
         pitch_sign=(1.0 if pitch_rad_s2 > 0 else (-1.0 if pitch_rad_s2 < 0 else 0.0)),
         connection_local_axes=_connection_local_axes_for_nodes(node_pos),
+        gravity_lateral_x_raw=cast(Dict[str, float], gravity_x_raw),
+        node_pos=node_pos,
+        rope_mass_t_by_node=rope_mass_t_by_node,
     )
+
+
+def _gravity_lateral_x_unit_maps(basis: DirectionalResponseBasis) -> Dict[str, Any]:
+    """Per-unit in-plane gravity channel as point maps (None when level)."""
+    if not basis.gravity_lateral_x_raw:
+        return {
+            "gravity_lateral_x_unit_rope_tensions": None,
+            "gravity_lateral_x_unit_reactions": None,
+        }
+    return {
+        "gravity_lateral_x_unit_rope_tensions": _build_rope_channel_map(
+            basis.rope_ids, basis.gravity_lateral_x_raw.get("t_bh", 0.0)
+        ),
+        "gravity_lateral_x_unit_reactions": _reactions_from_raw(basis.gravity_lateral_x_raw),
+    }
 
 
 def compose_unit_basis_point(
@@ -1083,6 +1175,7 @@ def compose_unit_basis_point(
         "offlead_lateral_unit_reactions": _reactions_from_raw(
             basis.offlead_lateral_sensitivity_raw
         ),
+        **_gravity_lateral_x_unit_maps(basis),
         "governing_signs": {
             "wind_speed": wind_sign,
             "accel_x": accel_x_sign,
@@ -1148,6 +1241,7 @@ def compose_scalar_envelope_unit_basis_point(
         "offlead_lateral_unit_reactions": _reactions_from_raw(
             basis.offlead_lateral_sensitivity_raw
         ),
+        **_gravity_lateral_x_unit_maps(basis),
         "governing_signs": {},
         "connection_local_axes": dict(basis.connection_local_axes),
     }

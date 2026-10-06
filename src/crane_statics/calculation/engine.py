@@ -8,11 +8,14 @@ This module implements the core mathematical solver for:
 - Contractual evaluation
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Any
+import logging
 import math
 from ..data.models import CraneDocument
+from .point_composition import with_crane_gravity
 from .solver.kinematics import KinematicsAdapter
+from .vessel_attitude import PLUMB, CraneFrameGravity, VesselAttitude, crane_frame_gravity
 from .solver.crane_solver import (
     build_solver_static_context,
     build_directional_response_basis,
@@ -20,6 +23,8 @@ from .solver.crane_solver import (
     compose_scalar_envelope_unit_basis_point,
 )
 from .capacity import solve_capacity_limit_kN, solve_radial_capacity_kN
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass
@@ -50,6 +55,16 @@ class AnalysisPoint:
     # Governing signs for environmental loads
     governing_signs: dict[str, int] | None = None  # wind, accel_x, accel_z, pitch -> {-1, 0, 1}
     governing_wind_direction: Optional[str] = None
+
+    # Baseline responses per unit lateral gravity fraction (see vessel_attitude):
+    # in the luffing plane, and across it (support split only). None when level.
+    gravity_lateral_x_unit_rope_tensions: Optional[dict[str, float]] = None
+    gravity_lateral_x_unit_reactions: Optional[dict[str, dict[str, float]]] = None
+    gravity_lateral_y_unit_reactions: Optional[dict[str, dict[str, float]]] = None
+
+    # Gravity direction (and the slew producing it) the point is composed at.
+    crane_gravity: CraneFrameGravity = field(default_factory=lambda: PLUMB)
+    slew_deg: float = 0.0
 
 
 _WIND_DIRECTIONS = {"+X", "-X", "+Y", "-Y"}
@@ -216,6 +231,27 @@ def compute_platform_base_mradial_kNm(
     return math.hypot(float(mx_kNm), float(my_kNm))
 
 
+_SPLIT_PIN_PAIRS = (
+    ("heel_point", "heel_left", "heel_right"),
+    ("front_hinge", "front_leg_left", "front_leg_right"),
+    ("rear_hinge", "rear_leg_left", "rear_leg_right"),
+)
+
+
+def _add_even_split_entries(channel: dict[str, dict[str, float]]) -> None:
+    """Give an in-plane channel the left/right pin entries it implies (half each)."""
+    for total, left, right in _SPLIT_PIN_PAIRS:
+        components = channel.get(total)
+        if not components:
+            continue
+        half = {
+            "Fx": 0.5 * float(components.get("Fx", 0.0)),
+            "Fz": 0.5 * float(components.get("Fz", 0.0)),
+        }
+        channel[left] = dict(half)
+        channel[right] = dict(half)
+
+
 def _linear_capacity_kN(limit_kN: float, baseline: float, sens: float, tolerance: float) -> float:
     """Largest H >= 0 with |baseline + sens*H| <= limit_kN (0 if already exceeded)."""
     if abs(baseline) - limit_kN > tolerance:
@@ -334,9 +370,21 @@ class CraneCalculator:
         roll_accel_rad_s2: float,
         side_lateral_force_kN: float,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
+        *,
+        gravity_vertical: float = 1.0,
+        gravity_lateral_y: float = 0.0,
+        node_pos: Optional[dict[str, tuple[float, float]]] = None,
+        rope_mass_t_by_node: Optional[dict[str, float]] = None,
     ) -> tuple[dict[str, dict[str, float]], float, float]:
-        node_positions = self._kinematics.compute_all_node_positions(boom_angle_deg)
-        node_pos = {nid: (float(v["x"]), float(v["z"])) for nid, v in node_positions.items()}
+        """Out-of-plane (Y) loads split across each support group's left/right pins.
+
+        ``gravity_vertical`` / ``gravity_lateral_y`` are the crane-frame gravity
+        fractions (see ``vessel_attitude``); ``node_pos`` and the rope lumps are
+        the geometry the in-plane basis was solved at.
+        """
+        if node_pos is None:
+            node_positions = self._kinematics.compute_all_node_positions(boom_angle_deg)
+            node_pos = {nid: (float(v["x"]), float(v["z"])) for nid, v in node_positions.items()}
 
         origin_by_group = {
             "heel": node_pos.get("boom_heel", (0.0, 0.0)),
@@ -368,6 +416,8 @@ class CraneCalculator:
         env = self.doc.environment
         vm = env.vessel_motion
         gravity_abs = abs(float(env.gravity_m_s2))
+        weight_z = gravity_abs * float(gravity_vertical)
+        weight_y = gravity_abs * float(gravity_lateral_y)
         roll_ref_z = float(vm.reference_z_m if vm is not None else 0.0)
 
         for body in self.doc.bodies:
@@ -381,9 +431,35 @@ class CraneCalculator:
                     xw, zw = float(mp.x_m), float(mp.z_m)
                     yw = float(mp.y_m)
                 ay_pt = float(accel_y_m_s2) + float(roll_accel_rad_s2) * (zw - roll_ref_z)
-                fy_acc = -float(mp.mass_t) * ay_pt
-                fz_weight = -float(mp.mass_t) * gravity_abs
+                fy_acc = -float(mp.mass_t) * ay_pt + float(mp.mass_t) * weight_y
+                fz_weight = -float(mp.mass_t) * weight_z
                 _accumulate_force(xw, yw, zw, fx=0.0, fy=fy_acc, fz=fz_weight)
+
+        if weight_y != 0.0:
+            # Lateral weight of the dead masses the in-plane solve also tilts: rope
+            # lumps at their nodes and idle hook blocks at the sheave they hang from.
+            for node_id, rope_mass_t in (rope_mass_t_by_node or {}).items():
+                position = node_pos.get(node_id)
+                if position is not None and rope_mass_t > 0.0:
+                    _accumulate_force(
+                        position[0], 0.0, position[1], fx=0.0, fy=rope_mass_t * weight_y, fz=0.0
+                    )
+            node_defs = {n.id: n for n in self.doc.nodes}
+            overrides = hoist_runtime_overrides or {}
+            for idle in self.doc.hoists:
+                if idle.id == hoist_id:
+                    continue
+                idle_mass_t = float(
+                    overrides.get(idle.id, {}).get("hook_mass_t", idle.hook_mass_t) or 0.0
+                )
+                hook_id = str(idle.load_node_id)
+                if idle_mass_t <= 0.0 or hook_id not in node_pos:
+                    continue
+                below_id = getattr(node_defs.get(hook_id), "below_node_id", None)
+                idle_sheave = node_pos.get(str(below_id or ""), node_pos[hook_id])
+                _accumulate_force(
+                    idle_sheave[0], 0.0, idle_sheave[1], fx=0.0, fy=idle_mass_t * weight_y, fz=0.0
+                )
 
         rho = float(env.air_density_kg_m3)
         z_ref = float(env.wind_reference_height_m_asl)
@@ -441,8 +517,9 @@ class CraneCalculator:
             )
             if comp_mass_t > 1e-12 and support_node_id and support_node_id in node_pos:
                 sx, sz = node_pos[support_node_id]
-                fz_comp = -comp_mass_t * gravity_abs
-                _accumulate_force(float(sx), 0.0, float(sz), fx=0.0, fy=0.0, fz=fz_comp)
+                fz_comp = -comp_mass_t * weight_z
+                fy_comp = comp_mass_t * weight_y
+                _accumulate_force(float(sx), 0.0, float(sz), fx=0.0, fy=fy_comp, fz=fz_comp)
 
         widths = self.doc.support_widths
         boom_width = float(widths.boom_width_m)
@@ -490,44 +567,34 @@ class CraneCalculator:
         roll_accel_rad_s2: float,
         sidelead_deg: float,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
+        *,
+        gravity_vertical: float = 1.0,
+        tilted: bool = False,
+        node_pos: Optional[dict[str, tuple[float, float]]] = None,
+        rope_mass_t_by_node: Optional[dict[str, float]] = None,
     ) -> None:
-        split_at_zero, platform_mx_at_zero, platform_fy_at_zero = (
-            self._build_split_support_reactions(
+        def _split(
+            hook_force_kN: float, side_force_kN: float, lateral_y: float = 0.0
+        ) -> tuple[dict[str, dict[str, float]], float, float]:
+            return self._build_split_support_reactions(
                 point,
                 hoist_id,
                 point.boom_angle_deg,
-                hook_force_kN=0.0,
+                hook_force_kN=hook_force_kN,
                 wind_y_m_s=wind_y_m_s,
                 accel_y_m_s2=accel_y_m_s2,
                 roll_accel_rad_s2=roll_accel_rad_s2,
-                side_lateral_force_kN=0.0,
+                side_lateral_force_kN=side_force_kN,
                 hoist_runtime_overrides=hoist_runtime_overrides,
+                gravity_vertical=gravity_vertical,
+                gravity_lateral_y=lateral_y,
+                node_pos=node_pos,
+                rope_mass_t_by_node=rope_mass_t_by_node,
             )
-        )
-        split_at_one, platform_mx_at_one, platform_fy_at_one = self._build_split_support_reactions(
-            point,
-            hoist_id,
-            point.boom_angle_deg,
-            hook_force_kN=1.0,
-            wind_y_m_s=wind_y_m_s,
-            accel_y_m_s2=accel_y_m_s2,
-            roll_accel_rad_s2=roll_accel_rad_s2,
-            side_lateral_force_kN=0.0,
-            hoist_runtime_overrides=hoist_runtime_overrides,
-        )
-        split_at_side_unit, platform_mx_at_side_unit, platform_fy_at_side_unit = (
-            self._build_split_support_reactions(
-                point,
-                hoist_id,
-                point.boom_angle_deg,
-                hook_force_kN=0.0,
-                wind_y_m_s=wind_y_m_s,
-                accel_y_m_s2=accel_y_m_s2,
-                roll_accel_rad_s2=roll_accel_rad_s2,
-                side_lateral_force_kN=1.0,
-                hoist_runtime_overrides=hoist_runtime_overrides,
-            )
-        )
+
+        split_at_zero, platform_mx_at_zero, platform_fy_at_zero = _split(0.0, 0.0)
+        split_at_one, platform_mx_at_one, platform_fy_at_one = _split(1.0, 0.0)
+        split_at_side_unit, platform_mx_at_side_unit, platform_fy_at_side_unit = _split(0.0, 1.0)
         side_scale = math.sin(math.radians(float(sidelead_deg)))
         side_unit_reactions: dict[str, dict[str, float]] = {}
         for entity, base_comp in split_at_zero.items():
@@ -575,6 +642,30 @@ class CraneCalculator:
         platform_base_sens["My"] = float(platform_base_sens.get("M", 0.0))
         point.sidelead_lateral_unit_reactions = side_unit_reactions
 
+        # In-plane unit channels move each pin pair's total, which the pins share
+        # evenly: the out-of-plane differential does not depend on in-plane loads.
+        for channel in (
+            point.offlead_lateral_unit_reactions,
+            point.gravity_lateral_x_unit_reactions,
+        ):
+            if channel is not None:
+                _add_even_split_entries(channel)
+
+        if tilted:
+            split_at_gy, platform_mx_at_gy, platform_fy_at_gy = _split(0.0, 0.0, lateral_y=1.0)
+            gravity_y_unit: dict[str, dict[str, float]] = {
+                entity: {
+                    component: float(split_at_gy[entity][component]) - float(value)
+                    for component, value in base_comp.items()
+                }
+                for entity, base_comp in split_at_zero.items()
+            }
+            gravity_y_unit["platform_base"] = {
+                "Fy": float(platform_fy_at_gy) - float(platform_fy_at_zero),
+                "Mx": float(platform_mx_at_gy) - float(platform_mx_at_zero),
+            }
+            point.gravity_lateral_y_unit_reactions = gravity_y_unit
+
     def compute_analysis_point(
         self,
         boom_angle_deg: float,
@@ -591,6 +682,7 @@ class CraneCalculator:
         sidelead_deg: Optional[float] = None,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
         tackle_length_m: Optional[float] = None,
+        slew_deg: float = 0.0,
     ) -> Optional[AnalysisPoint]:
         """Full linear response at one boom angle.
 
@@ -598,6 +690,11 @@ class CraneCalculator:
         It moves rope weight between the falls and the winch, so an interactive
         caller passes what the scene draws; leaving it ``None`` evaluates the
         designed operating position (see ``rope_mass.active_hook_positions``).
+
+        ``slew_deg`` orients the crane on a heeled/trimmed vessel and has no
+        effect on a level one. The point carries per-unit lateral gravity
+        channels, so ``point_composition.with_crane_gravity`` can move it to any
+        other slew without solving again.
         """
         try:
             if not self.hoists.get(hoist_id):
@@ -688,7 +785,12 @@ class CraneCalculator:
                 connection_local_axes=composed.get("connection_local_axes"),
                 governing_signs=composed.get("governing_signs"),
                 governing_wind_direction=(wind_dir if wind_ref > self.TOLERANCE else None),
+                gravity_lateral_x_unit_rope_tensions=composed.get(
+                    "gravity_lateral_x_unit_rope_tensions"
+                ),
+                gravity_lateral_x_unit_reactions=composed.get("gravity_lateral_x_unit_reactions"),
             )
+            attitude = VesselAttitude.from_environment(self._doc_dict.get("environment"))
             self._augment_point_with_split_supports(
                 point,
                 hoist_id,
@@ -697,9 +799,23 @@ class CraneCalculator:
                 roll_accel_rad_s2=roll_ref,
                 sidelead_deg=sidelead_ref,
                 hoist_runtime_overrides=hoist_runtime_overrides,
+                gravity_vertical=crane_frame_gravity(attitude, 0.0).vertical,
+                tilted=not attitude.is_level,
+                node_pos=basis.node_pos,
+                rope_mass_t_by_node=basis.rope_mass_t_by_node,
             )
-            return point
+            vertical = crane_frame_gravity(attitude, 0.0).vertical
+            point.crane_gravity = CraneFrameGravity(vertical=vertical)
+            if attitude.is_level:
+                point.slew_deg = float(slew_deg)
+                return point
+            return with_crane_gravity(
+                point, crane_frame_gravity(attitude, slew_deg), slew_deg=float(slew_deg)
+            )
         except Exception:
+            _LOG.exception(
+                "Analysis point failed at %.3f deg for hoist %s", boom_angle_deg, hoist_id
+            )
             return None
 
     def _compute_outreach(self, boom_angle_deg: float, hoist_id: str) -> float:
@@ -905,6 +1021,7 @@ class CraneCalculator:
         offlead_deg: Optional[float] = None,
         sidelead_deg: Optional[float] = None,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
+        slew_deg: float = 0.0,
     ) -> Optional[AllowableCapacity]:
         wind_ref = (
             self.doc.environment.max_wind_speed_m_s
@@ -927,6 +1044,7 @@ class CraneCalculator:
                 offlead_deg=offlead_deg,
                 sidelead_deg=sidelead_deg,
                 hoist_runtime_overrides=hoist_runtime_overrides,
+                slew_deg=slew_deg,
             )
             if point is None:
                 continue

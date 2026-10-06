@@ -257,6 +257,7 @@ class AnalysisCalculator:
             sidelead_deg=sc.sidelead_deg,
             hoist_runtime_overrides=overrides,
             tackle_length_m=sc.tackle_length_m,
+            slew_deg=sc.slew_deg,
         )
 
     def compute_result_rows(
@@ -497,6 +498,7 @@ class AnalysisCalculator:
             offlead_deg=abs(float(sc.offlead_deg)),
             sidelead_deg=sc.sidelead_deg,
             hoist_runtime_overrides=self._hoist.active_hoist_runtime_overrides(),
+            slew_deg=sc.slew_deg,
         )
 
     def resolve_row_demand(

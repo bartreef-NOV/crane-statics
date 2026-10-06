@@ -233,14 +233,24 @@ class AnalysisPresenter:
         sidelead_deg: float,
         boom_angle_deg: float,
         tackle_length_m: float,
+        slew_deg: float,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
+        level_vessel: bool = False,
     ) -> Optional[float]:
-        """Compute demand for a result row at specific environmental conditions."""
+        """Compute demand for a result row at specific environmental conditions.
+
+        ``level_vessel`` evaluates the document with its heel and trim zeroed, to
+        separate the vessel attitude's share of the demand.
+        """
         from ..calculation.engine import CraneCalculator
 
         doc = self._session.document
         if doc is None:
             return None
+        if level_vessel:
+            doc = doc.model_copy(deep=True)
+            doc.environment.vessel_motion.heel_deg = 0.0
+            doc.environment.vessel_motion.trim_deg = 0.0
         calc = CraneCalculator(doc)
         point = calc.compute_analysis_point(
             boom_angle_deg,
@@ -257,6 +267,7 @@ class AnalysisPresenter:
             sidelead_deg=sidelead_deg,
             hoist_runtime_overrides=hoist_runtime_overrides,
             tackle_length_m=tackle_length_m,
+            slew_deg=slew_deg,
         )
         if point is None:
             return None
@@ -280,6 +291,7 @@ class AnalysisPresenter:
                 hoist_id,
                 boom_angle_deg=float(sc.boom_angle_deg),
                 tackle_length_m=float(sc.tackle_length_m),
+                slew_deg=float(sc.slew_deg),
                 hoist_runtime_overrides=overrides,
                 **kwargs,
             )
@@ -309,7 +321,10 @@ class AnalysisPresenter:
         offlead_env = dict(inertia_env, offlead_deg=float(sc.offlead_deg))
         full_env = dict(offlead_env, sidelead_deg=float(sc.sidelead_deg))
 
+        motion = doc.environment.vessel_motion
+        tilted = bool(motion.heel_deg or motion.trim_deg)
         dead = _demand(hook_load_kN=0.0, **zero_env)
+        dead_level = _demand(hook_load_kN=0.0, level_vessel=True, **zero_env) if tilted else dead
         with_hook = _demand(hook_load_kN=hook, **zero_env)
         with_wind = _demand(hook_load_kN=hook, **wind_env)
         with_inertia = _demand(hook_load_kN=hook, **inertia_env)
@@ -317,6 +332,7 @@ class AnalysisPresenter:
         full = _demand(hook_load_kN=hook, **full_env)
         if (
             dead is None
+            or dead_level is None
             or with_hook is None
             or with_wind is None
             or with_inertia is None
@@ -326,7 +342,11 @@ class AnalysisPresenter:
             return None
 
         terms: list[dict[str, Any]] = [
-            {"name": "Dead load baseline", "value_kN": float(dead)},
+            {"name": "Dead load baseline", "value_kN": float(dead_level)}
+        ]
+        if tilted:
+            terms.append({"name": "Vessel attitude", "value_kN": float(dead - dead_level)})
+        terms += [
             {"name": "Hook load", "value_kN": float(with_hook - dead)},
             {"name": "Wind", "value_kN": float(with_wind - with_hook)},
             {"name": "Inertia", "value_kN": float(with_inertia - with_wind)},

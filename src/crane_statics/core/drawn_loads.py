@@ -11,6 +11,12 @@ out-of-plane (Y) forces -- see ``engine._build_split_support_reactions``, which
 routes them into ``fy`` alone -- so they have no drawable vector here and no
 effect on in-plane equilibrium. They are deliberately absent from
 :class:`LoadConditions` rather than silently dropped.
+
+On a heeled/trimmed vessel gravity tilts. Its in-plane part is drawn here: every
+weight gets an X component and a reduced Z component, from the same
+``vessel_attitude.crane_frame_gravity`` the solver uses, derived from the
+document's attitude and ``LoadConditions.slew_deg``. The out-of-plane part
+belongs to the support split, like sidelead.
 """
 
 from __future__ import annotations
@@ -20,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator, Mapping, Optional, Sequence
 
 from ..calculation.rope_mass import RopeNodeMass, rope_mass_at_nodes
+from ..calculation.vessel_attitude import CraneFrameGravity, VesselAttitude, crane_frame_gravity
 from ..presentation.formatters import node_display_name
 
 # Unified reaction semantics: a reaction's participating bodies and the node it
@@ -173,6 +180,8 @@ class LoadConditions:
     pitch_accel_rad_s2: float = 0.0
     offlead_deg: float = 0.0
     split_mode_active: bool = False
+    # Crane slew on the vessel; it only matters when the document sets heel/trim.
+    slew_deg: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -342,6 +351,12 @@ def resolve_rope_tension_kN(
     return base + sens * float(hook_load_kN)
 
 
+def _weight_detail(title: str, fx: float, fz: float) -> str:
+    if fx == 0.0:
+        return f"{title}\nFz={fz:.1f} kN"
+    return f"{title}\nFx={fx:.1f} kN  Fz={fz:.1f} kN"
+
+
 def mass_point_label(mass_point: Mapping[str, Any]) -> str:
     mass_point_id = str(mass_point.get("id", "")).strip()
     return mass_point_id if mass_point_id else "Unnamed mass point"
@@ -366,8 +381,29 @@ class _LoadBuilder:
         self._pt = analysis_point
         self._filter = body_filter
         self._env = self._doc.get("environment", {}) or {}
+        self._g = crane_frame_gravity(
+            VesselAttitude.from_environment(self._env), float(conditions.slew_deg)
+        )
 
     # -- geometry ---------------------------------------------------------
+
+    @property
+    def crane_gravity(self) -> CraneFrameGravity:
+        return self._g
+
+    def _weight(self, mass_t: float) -> tuple[float, float]:
+        """(Fx, Fz) weight of a mass in the crane's X/Z plane."""
+        g_kN_per_t = abs(float(self._env.get("gravity_m_s2", 9.81)))
+        return (
+            float(mass_t) * g_kN_per_t * self._g.lateral_x,
+            -float(mass_t) * g_kN_per_t * self._g.vertical,
+        )
+
+    def _sheave_of(self, hook_node_id: str) -> str:
+        """The node a hook block hangs from; its rope's line of action passes there."""
+        node_defs = {n.get("id"): n for n in self._doc.get("nodes", [])}
+        below_id = (node_defs.get(hook_node_id, {}) or {}).get("below_node_id")
+        return str(below_id) if below_id and below_id in self._positions else hook_node_id
 
     def _heel(self) -> Mapping[str, float]:
         return self._positions.get("boom_heel", {"x": 0.0, "z": 0.0})
@@ -397,7 +433,6 @@ class _LoadBuilder:
 
     def gravity(self) -> tuple[LoadVector, ...]:
         vectors: list[LoadVector] = []
-        g_kN_per_t = abs(float(self._env.get("gravity_m_s2", 9.81)))
 
         for body_id, body in self._bodies():
             for mass_point in body.get("mass_points", []):
@@ -408,17 +443,17 @@ class _LoadBuilder:
                 if point is None:
                     continue
                 xw, zw = point
-                fz = -mass * g_kN_per_t
+                fx, fz = self._weight(mass)
                 label = mass_point_label(mass_point)
                 vectors.append(
                     LoadVector(
                         world_x=xw,
                         world_z=zw,
-                        fx_kN=0.0,
+                        fx_kN=fx,
                         fz_kN=fz,
                         category=GRAVITY,
-                        label=f"Weight {label}: {abs(fz):.1f} kN",
-                        detail=f"Weight {label} ({body_id})\nFz={fz:.1f} kN",
+                        label=f"Weight {label}: {math.hypot(fx, fz):.1f} kN",
+                        detail=_weight_detail(f"Weight {label} ({body_id})", fx, fz),
                     )
                 )
 
@@ -429,16 +464,16 @@ class _LoadBuilder:
         if support_mass_t is not None and support_node_id and support_node_id in self._positions:
             if not self._filter.is_free_body or self._filter.owns_node(support_node_id):
                 position = self._positions[support_node_id]
-                fz = -float(support_mass_t) * g_kN_per_t
+                fx, fz = self._weight(float(support_mass_t))
                 vectors.append(
                     LoadVector(
                         world_x=float(position["x"]),
                         world_z=float(position["z"]),
-                        fx_kN=0.0,
+                        fx_kN=fx,
                         fz_kN=fz,
                         category=GRAVITY,
-                        label=f"Split block weight: {abs(fz):.1f} kN",
-                        detail=f"Split block weight\nFz={fz:.1f} kN",
+                        label=f"Split block weight: {math.hypot(fx, fz):.1f} kN",
+                        detail=_weight_detail("Split block weight", fx, fz),
                     )
                 )
         return tuple(vectors)
@@ -471,7 +506,6 @@ class _LoadBuilder:
         one arrow per node rather than split across the Gravity and Inertia
         categories -- the detail text names the reeved and spooled shares.
         """
-        g_kN_per_t = abs(float(self._env.get("gravity_m_s2", 9.81)))
         vessel_motion = self._env.get("vessel_motion", {}) or {}
         ref_x = float(vessel_motion.get("reference_x_m", 0.0))
         ref_z = float(vessel_motion.get("reference_z_m", 0.0))
@@ -485,8 +519,9 @@ class _LoadBuilder:
             xw, zw = float(position["x"]), float(position["z"])
             mass_t = float(entry.mass_t)
             # Rope carries no wind area and no hook DAF: dead mass on a moving vessel.
-            fx = -mass_t * (ax + pitch * (zw - ref_z))
-            fz = -mass_t * (g_kN_per_t + az - pitch * (xw - ref_x))
+            weight_fx, weight_fz = self._weight(mass_t)
+            fx = weight_fx - mass_t * (ax + pitch * (zw - ref_z))
+            fz = weight_fz - mass_t * (az - pitch * (xw - ref_x))
             name = node_display_name(node_id)
             vectors.append(
                 LoadVector(
@@ -590,7 +625,11 @@ class _LoadBuilder:
         return tuple(vectors)
 
     def hook_load(self) -> tuple[LoadVector, ...]:
-        """Hook payload weight plus its offlead component, applied at the hook node."""
+        """Hook load: its vertical part at the hook, its lateral part at the sheave.
+
+        The lateral part is the offlead plus, on a tilted vessel, the plumb hook's
+        lean in the luffing plane.
+        """
         load_node_id = self._hoist.get("load_node_id")
         if not load_node_id or load_node_id not in self._positions:
             return ()
@@ -606,31 +645,31 @@ class _LoadBuilder:
                 world_x=float(hook["x"]),
                 world_z=float(hook["z"]),
                 fx_kN=0.0,
-                fz_kN=-hook_kN,
+                fz_kN=-hook_kN * self._g.vertical,
                 category=HOOK_LOAD,
                 label=f"Hook {hook_kN:.0f} kN",
             )
         ]
 
-        offlead = float(self._c.offlead_deg)
-        if abs(offlead) > 1e-6:
-            offlead_fx = math.sin(math.radians(offlead)) * hook_kN
-            # Offlead enters the boom at the sheave; the tackle below carries no moment arm.
-            node_defs = {n.get("id"): n for n in self._doc.get("nodes", [])}
-            below_id = (node_defs.get(load_node_id, {}) or {}).get("below_node_id")
-            anchor = (
-                self._positions[below_id]
-                if below_id and below_id in self._positions
-                else self._positions[load_node_id]
+        offlead_fx = math.sin(math.radians(float(self._c.offlead_deg))) * hook_kN
+        tilt_fx = self._g.lateral_x * hook_kN
+        lateral_fx = offlead_fx + tilt_fx
+        if abs(lateral_fx) > 1e-9:
+            # Lateral load enters the boom at the sheave; the tackle below carries no moment arm.
+            anchor = self._positions[self._sheave_of(str(load_node_id))]
+            label = (
+                f"Offlead {abs(lateral_fx):.0f} kN"
+                if tilt_fx == 0.0
+                else f"Hook lateral {abs(lateral_fx):.0f} kN (offlead + tilt)"
             )
             vectors.append(
                 LoadVector(
                     world_x=float(anchor["x"]),
                     world_z=float(anchor["z"]),
-                    fx_kN=offlead_fx,
+                    fx_kN=lateral_fx,
                     fz_kN=0.0,
                     category=HOOK_LOAD,
-                    label=f"Offlead {abs(offlead_fx):.0f} kN",
+                    label=label,
                 )
             )
         return tuple(vectors)
@@ -730,7 +769,6 @@ class _LoadBuilder:
         if not self._doc:
             return {}
 
-        g_kN_per_t = abs(float(self._env.get("gravity_m_s2", 9.81)))
         active_hoist_id = str(self._hoist.get("id", "")).strip()
 
         for hoist in self._doc.get("hoists", []):
@@ -742,8 +780,6 @@ class _LoadBuilder:
             node_id = str(hoist.get("load_node_id", "")).strip()
             if not node_id or node_id not in self._positions:
                 continue
-            if self._filter.is_free_body and not self._filter.owns_node(node_id):
-                continue
 
             try:
                 hook_mass_t = float(hoist.get("hook_mass_t", 0.0) or 0.0)
@@ -752,8 +788,18 @@ class _LoadBuilder:
             if hook_mass_t <= 0.0:
                 continue
 
-            current = node_forces.setdefault(node_id, [0.0, 0.0])
-            current[1] += -hook_mass_t * g_kN_per_t
+            # The block hangs plumb: its weight's vertical part acts at the hook, its
+            # in-plane lean at the sheave it hangs from (like the active hook's).
+            weight_fx, weight_fz = self._weight(hook_mass_t)
+            if not self._filter.is_free_body or self._filter.owns_node(node_id):
+                current = node_forces.setdefault(node_id, [0.0, 0.0])
+                current[1] += weight_fz
+            sheave_id = self._sheave_of(node_id)
+            if weight_fx != 0.0 and (
+                not self._filter.is_free_body or self._filter.owns_node(sheave_id)
+            ):
+                current = node_forces.setdefault(sheave_id, [0.0, 0.0])
+                current[0] += weight_fx
 
         return {node_id: (values[0], values[1]) for node_id, values in node_forces.items()}
 

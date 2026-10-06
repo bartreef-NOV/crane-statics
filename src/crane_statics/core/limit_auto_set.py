@@ -6,12 +6,13 @@ and chart-row Auto-Set use identical semantics.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import math
 from typing import Optional, Callable, Any
 
 from ..data.models import CraneDocument
 from ..calculation.engine import CraneCalculator, get_calculator
+from ..calculation.point_composition import compose_lateral_channels
 from ..calculation.solver.kinematics import KinematicsAdapter
 from .analysis_cases import (
     iter_wind_lead_directional_cases,
@@ -80,38 +81,10 @@ def _required_hook_force_kN(
 
 def _compose_lead_channel_point(pt: Any, case: DirectionalAnalysisCase) -> Any:
     """Compose one lead-sign case from a zero-lead analysis point."""
-    offlead_scale = math.sin(math.radians(float(case.offlead_deg or 0.0)))
-    sidelead_scale = math.sin(math.radians(float(case.sidelead_deg or 0.0)))
-    offlead_rope_channels = pt.offlead_lateral_unit_rope_tensions or {}
-    offlead_reaction_channels = pt.offlead_lateral_unit_reactions or {}
-    sidelead_reaction_channels = pt.sidelead_lateral_unit_reactions or {}
-
-    sensitivity_ropes = {
-        rope_id: float(sensitivity) + offlead_scale * float(offlead_rope_channels.get(rope_id, 0.0))
-        for rope_id, sensitivity in pt.sensitivity_rope_tensions.items()
-    }
-    sensitivity_reactions: dict[str, dict[str, float]] = {}
-    entity_ids = (
-        set(pt.sensitivity_reactions)
-        | set(offlead_reaction_channels)
-        | set(sidelead_reaction_channels)
-    )
-    for entity_id in entity_ids:
-        base_components = pt.sensitivity_reactions.get(entity_id, {})
-        offlead_components = offlead_reaction_channels.get(entity_id, {})
-        sidelead_components = sidelead_reaction_channels.get(entity_id, {})
-        component_ids = set(base_components) | set(offlead_components) | set(sidelead_components)
-        sensitivity_reactions[entity_id] = {
-            component: float(base_components.get(component, 0.0))
-            + offlead_scale * float(offlead_components.get(component, 0.0))
-            + sidelead_scale * float(sidelead_components.get(component, 0.0))
-            for component in component_ids
-        }
-
-    return replace(
+    return compose_lateral_channels(
         pt,
-        sensitivity_rope_tensions=sensitivity_ropes,
-        sensitivity_reactions=sensitivity_reactions,
+        hook_x=math.sin(math.radians(float(case.offlead_deg or 0.0))),
+        hook_y=math.sin(math.radians(float(case.sidelead_deg or 0.0))),
     )
 
 

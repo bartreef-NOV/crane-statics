@@ -2,7 +2,8 @@
 
 The goldens were captured before vessel heel/trim/slew existed. With heel and
 trim at zero every analysis point, capacity sweep and rope auto-set result
-must match them to rounding. Regenerate only for a deliberate model change:
+must match them to rounding; fields added since capture are not compared.
+Regenerate only for a deliberate model change:
 
     CRANE_STATICS_REGEN_GOLDENS=1 pytest tests/test_level_attitude_goldens.py
 """
@@ -116,7 +117,9 @@ def _snapshot() -> dict[str, Any]:
 def _assert_close(actual: Any, expected: Any, path: str = "$") -> None:
     if isinstance(expected, dict):
         assert isinstance(actual, dict), path
-        assert set(actual) == set(expected), f"{path}: keys {set(actual) ^ set(expected)}"
+        # Fields added since capture (e.g. per-unit gravity channels) are not regressions.
+        missing = set(expected) - set(actual)
+        assert not missing, f"{path}: missing {missing}"
         for key in expected:
             _assert_close(actual[key], expected[key], f"{path}.{key}")
     elif isinstance(expected, list):

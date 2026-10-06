@@ -155,6 +155,7 @@ class SceneViewModel(QObject):
             pitch_accel_rad_s2=float(sc.pitch_accel_rad_s2),
             offlead_deg=float(sc.offlead_deg),
             split_mode_active=bool(state.split_mode_active),
+            slew_deg=float(sc.slew_deg),
         )
 
     def _publish_scene_frame(self) -> None:
