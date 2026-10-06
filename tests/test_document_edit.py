@@ -182,6 +182,23 @@ class TestHoistEditing:
         assert not any(r.id == rope_id for r in document.ropes)
         assert not any(n.id == hook_id for n in document.nodes)
 
+    def test_delete_hoist_removes_nodes_it_owns(self, editor, document):
+        owned = {n.id for n in document.nodes if n.id.startswith("wh_")}
+        assert owned, "fixture should give WH its own sheave and winch nodes"
+
+        editor.delete_hoist("WH")
+
+        remaining = {n.id for n in document.nodes}
+        assert not owned & remaining
+        assert any(n.id.startswith("mh_") for n in document.nodes)
+
+    def test_delete_hoist_keeps_unrelated_nodes_sharing_its_prefix(self, editor, document):
+        editor.add_node(build_node("platform", "wh_marker", x_m=0.0, z_m=0.0))
+
+        editor.delete_hoist("WH")
+
+        assert any(n.id == "wh_marker" for n in document.nodes)
+
     def test_update_hoist_preserves_contractual_points(self, editor, document):
         payload = next(h for h in document.hoists if not editor.is_solve_hoist(h))
         original = [(cp.outreach_m, cp.load_t) for cp in payload.contractual_points]

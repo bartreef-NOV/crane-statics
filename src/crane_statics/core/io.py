@@ -2,6 +2,7 @@
 
 import json
 import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from ..data.authored_models import (
     AuthoredDocument,
     AUTHORED_SCHEMA_MAJOR_VERSION,
     AUTHORED_SCHEMA_NAME,
+    EXAMPLE_DOCUMENT,
     authored_schema_major,
     format_authored_validation_error,
 )
@@ -63,6 +65,23 @@ _StrictIntSafeLoader.add_implicit_resolver(
     re.compile(r"^[-+]?(?:0|[1-9][0-9_]*|0x[0-9a-fA-F_]+|0b[0-1_]+)$"),
     list("-+0123456789"),
 )
+
+
+_MAX_FLOW_WIDTH = 90
+
+
+class _CompactSafeDumper(yaml.SafeDumper):
+    """SafeDumper that writes mappings of plain scalars (coordinates, chart points, reeving
+    entries) in flow style on one line when short, and everything else in block style."""
+
+
+def _represent_mapping(dumper: yaml.SafeDumper, data: dict) -> yaml.MappingNode:
+    flat = all(not isinstance(v, (dict, list, tuple)) for v in data.values())
+    flat = flat and sum(len(f"{k}: {v}, ") for k, v in data.items()) <= _MAX_FLOW_WIDTH
+    return dumper.represent_mapping("tag:yaml.org,2002:map", data, flow_style=flat or None)
+
+
+_CompactSafeDumper.add_representer(dict, _represent_mapping)
 
 
 def _validate_authored_schema(data: dict[str, Any]) -> None:
@@ -137,12 +156,13 @@ def save_document(doc: CraneDocument, path: Path) -> None:
             if fmt == "json":
                 json.dump(authored_data, f, indent=2)
             else:
-                yaml.safe_dump(
+                yaml.dump(
                     authored_data,
                     f,
+                    Dumper=_CompactSafeDumper,
                     sort_keys=False,
-                    default_flow_style=False,
                     allow_unicode=True,
+                    width=100,
                 )
     except DocumentIOError:
         raise
@@ -151,81 +171,5 @@ def save_document(doc: CraneDocument, path: Path) -> None:
 
 
 def create_default_document() -> CraneDocument:
-    """Create a new default crane model from template.
-
-    Mirrors AuthoredDocument's root-level example (EXAMPLE_DOCUMENT in
-    crane_statics.data.authored_models) — keep both in sync.
-    """
-    default_data = {
-        "schema": {
-            "name": "crane-statics",
-            "version": "5.13.0",
-        },
-        "metadata": {
-            "name": "New Crane Model",
-        },
-        "model_definition": {
-            "environment": {
-                "gravity_m_s2": 9.81,
-                "air_density_kg_m3": 1.225,
-                "wind_profile_exponent": 0.143,
-                "wind_reference_height_m_asl": 10.0,
-                "mean_sealevel_z_m": -35.0,
-                "max_wind_speed_m_s": 20.0,
-            },
-            "vessel_motion": {
-                "accel_x_m_s2": 0.0,
-                "accel_y_m_s2": 0.0,
-                "accel_z_m_s2": 0.0,
-                "pitch_angular_accel_rad_s2": 0.0,
-                "roll_angular_accel_rad_s2": 0.0,
-                "reference_x_m": 0.0,
-                "reference_z_m": 0.0,
-            },
-            "boom_width_m": 1.0,
-            "slewing_bearing_diameter_m": 1.0,
-            "boom_heel": {"x_m": 0.0, "z_m": 0.0},
-            "upper_hinge": {"x_m": 0.0, "z_m": 0.0},
-            "rear_hinge": {"x_m": 0.0, "z_m": 0.0},
-            "front_hinge": {"x_m": 0.0, "z_m": 0.0},
-            "boom": {
-                "mass_points": [],
-                "wind_areas": [],
-                "nodes": {
-                    "mh_hook": {"u_m": 0.0, "w_m": 0.0},
-                },
-            },
-            "rear_leg": {
-                "mass_points": [],
-                "wind_areas": [],
-                "nodes": {},
-            },
-            "front_leg": {
-                "mass_points": [],
-                "wind_areas": [],
-                "nodes": {},
-            },
-            "platform": {
-                "mass_points": [],
-                "wind_areas": [],
-                "nodes": {},
-            },
-            "payload_hoists": {
-                "MH": {
-                    "rope_segments": [{"from": "boom_heel", "to": "mh_hook"}],
-                    "support_node_id": "mh_hook",
-                    "hook_daf": 1.0,
-                    "offlead_deg": 0.0,
-                    "sidelead_deg": 0.0,
-                    "falls": 1,
-                    "hook_mass_t": 0.0,
-                    "contractual_points": [{"outreach_m": 0.0, "load_t": 0.0}],
-                }
-            },
-            "boom_hoist": {
-                "rope_segments": [{"from": "boom_heel", "to": "rear_top", "parts": 2}],
-            },
-        },
-    }
-
-    return normalize_document(default_data)
+    """Create a new default crane model from AuthoredDocument's root-level example."""
+    return normalize_document(deepcopy(EXAMPLE_DOCUMENT))

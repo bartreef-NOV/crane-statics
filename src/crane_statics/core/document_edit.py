@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from ..data.authored_models import hoist_node_prefix
 from ..data.models import (
     Body,
     ContractualPoint,
@@ -419,12 +420,40 @@ class DocumentEditor:
 
         rope_id = hoist.rope_id
         managed_hook_id = str(hoist.load_node_id)
+        rope = self.rope_for_hoist(hoist)
+        path_node_ids = {
+            end
+            for seg in (rope.segments if rope else [])
+            for end in (seg.from_node_id, seg.to_node_id)
+        }
         self._doc.hoists = [h for h in self._doc.hoists if h.id != hoist_id]
 
         if not any(h.rope_id == rope_id for h in self._doc.hoists):
             self._doc.ropes = [r for r in self._doc.ropes if r.id != rope_id]
         if _is_managed_hook_node_id(managed_hook_id):
             self._doc.nodes = [n for n in self._doc.nodes if n.id != managed_hook_id]
+        self._remove_orphaned_hoist_nodes(hoist_id, path_node_ids)
+
+    def _remove_orphaned_hoist_nodes(self, hoist_id: str, path_node_ids: set[str]) -> None:
+        """Drop the deleted hoist's own sheave/winch nodes that no remaining rope uses."""
+        prefix = hoist_node_prefix(hoist_id)
+        in_use = {
+            end
+            for rope in self._doc.ropes
+            for seg in rope.segments
+            for end in (seg.from_node_id, seg.to_node_id)
+        }
+        self._doc.nodes = [
+            n
+            for n in self._doc.nodes
+            if not (
+                n.id in path_node_ids
+                and n.id.startswith(prefix)
+                and n.id not in RESERVED_TOPOLOGY_NODE_IDS
+                and n.id not in in_use
+                and not _is_managed_hook_node_id(n.id)
+            )
+        ]
 
     def resolved_support_node_id(self, hoist: Hoist) -> str:
         support = str(hoist.support_node_id or "").strip()

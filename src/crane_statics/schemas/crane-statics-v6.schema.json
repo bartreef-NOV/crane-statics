@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/schemas/crane-statics-v5.schema.json",
+  "$id": "https://example.com/schemas/crane-statics-v6.schema.json",
   "title": "AuthoredDocument",
   "$defs": {
     "AuthoredBoomBody": {
@@ -39,22 +39,36 @@
     },
     "AuthoredBoomHoist": {
       "additionalProperties": false,
+      "description": "The rope system that luffs the boom. Its hoist-local node IDs are prefixed ``bh_``.",
       "properties": {
-        "rope_segments": {
-          "items": {
-            "$ref": "#/$defs/AuthoredRopeSegment"
-          },
-          "minItems": 1,
-          "title": "Rope Segments",
-          "type": "array"
+        "rope": {
+          "$ref": "#/$defs/AuthoredBoomHoistRope"
         },
+        "reeving": {
+          "items": {
+            "$ref": "#/$defs/AuthoredReevingEntry"
+          },
+          "minItems": 2,
+          "title": "Reeving",
+          "type": "array"
+        }
+      },
+      "required": [
+        "reeving"
+      ],
+      "title": "AuthoredBoomHoist",
+      "type": "object"
+    },
+    "AuthoredBoomHoistRope": {
+      "additionalProperties": false,
+      "properties": {
         "linear_mass_kg_m": {
           "default": 0.0,
           "minimum": 0,
           "title": "Linear Mass Kg M",
           "type": "number"
         },
-        "rope_length_m": {
+        "length_m": {
           "anyOf": [
             {
               "minimum": 0,
@@ -66,13 +80,10 @@
           ],
           "default": null,
           "description": "Total rope length in metres. Omit to leave the length on the drum unknown, in which case no spooled rope mass is reported for this hoist.",
-          "title": "Rope Length M"
+          "title": "Length M"
         }
       },
-      "required": [
-        "rope_segments"
-      ],
-      "title": "AuthoredBoomHoist",
+      "title": "AuthoredBoomHoistRope",
       "type": "object"
     },
     "AuthoredBoomPosition2D": {
@@ -136,36 +147,6 @@
         "w_m"
       ],
       "title": "AuthoredBoomPosition3D",
-      "type": "object"
-    },
-    "AuthoredContractualPoint": {
-      "additionalProperties": false,
-      "description": "A rated operating point on the hoist capacity curve.",
-      "examples": [
-        {
-          "load_t": 1433.0,
-          "outreach_m": 50.0
-        }
-      ],
-      "properties": {
-        "outreach_m": {
-          "description": "Horizontal outreach in metres.",
-          "minimum": 0,
-          "title": "Outreach M",
-          "type": "number"
-        },
-        "load_t": {
-          "description": "Permitted payload in tonnes.",
-          "minimum": 0,
-          "title": "Load T",
-          "type": "number"
-        }
-      },
-      "required": [
-        "outreach_m",
-        "load_t"
-      ],
-      "title": "AuthoredContractualPoint",
       "type": "object"
     },
     "AuthoredEnvironment": {
@@ -315,6 +296,77 @@
       "title": "AuthoredGlobalPosition3D",
       "type": "object"
     },
+    "AuthoredHook": {
+      "additionalProperties": false,
+      "properties": {
+        "mass_t": {
+          "minimum": 0,
+          "title": "Mass T",
+          "type": "number"
+        },
+        "falls": {
+          "description": "Rope falls between the support sheave and the hook.",
+          "minimum": 1,
+          "title": "Falls",
+          "type": "integer"
+        },
+        "daf": {
+          "description": "Hook dynamic amplification factor.",
+          "minimum": 1,
+          "title": "Daf",
+          "type": "number"
+        },
+        "offlead_deg": {
+          "minimum": 0,
+          "title": "Offlead Deg",
+          "type": "number"
+        },
+        "sidelead_deg": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Sidelead Deg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "mass_t",
+        "falls",
+        "daf",
+        "offlead_deg"
+      ],
+      "title": "AuthoredHook",
+      "type": "object"
+    },
+    "AuthoredLoadChartPoint": {
+      "additionalProperties": false,
+      "description": "A rated operating point on the hoist capacity curve.",
+      "examples": [
+        {
+          "load_t": 1433.0,
+          "outreach_m": 50.0
+        }
+      ],
+      "properties": {
+        "outreach_m": {
+          "description": "Horizontal outreach in metres.",
+          "minimum": 0,
+          "title": "Outreach M",
+          "type": "number"
+        },
+        "load_t": {
+          "description": "Permitted payload in tonnes.",
+          "minimum": 0,
+          "title": "Load T",
+          "type": "number"
+        }
+      },
+      "required": [
+        "outreach_m",
+        "load_t"
+      ],
+      "title": "AuthoredLoadChartPoint",
+      "type": "object"
+    },
     "AuthoredMassPointBoom": {
       "additionalProperties": false,
       "description": "Boom structural mass located in boom-local U/V/W coordinates.",
@@ -440,6 +492,384 @@
           "description": "Absolute global Z the hook must reach at each payload hoist's minimum outreach. Every payload hoist's maximum hook travel and total rope length are derived from it. Omit to default to environment.mean_sealevel_z_m.",
           "title": "Hook Height At Min Outreach M"
         },
+        "structure": {
+          "$ref": "#/$defs/AuthoredStructure"
+        },
+        "boom": {
+          "$ref": "#/$defs/AuthoredBoomBody",
+          "description": "The boom body: its structural mass, wind areas, and shared boom-local nodes. Hoist sheaves belong in each hoist's reeving."
+        },
+        "rear_leg": {
+          "$ref": "#/$defs/AuthoredGlobalBody",
+          "description": "The rear leg body supporting the upper structure, in global coordinates."
+        },
+        "front_leg": {
+          "$ref": "#/$defs/AuthoredGlobalBody",
+          "description": "The front leg body supporting the upper structure, in global coordinates."
+        },
+        "platform": {
+          "$ref": "#/$defs/AuthoredGlobalBody",
+          "description": "The fixed platform/base body, in global coordinates."
+        },
+        "boom_hoist": {
+          "$ref": "#/$defs/AuthoredBoomHoist",
+          "description": "The rope system that raises and lowers the boom."
+        },
+        "payload_hoists": {
+          "description": "Named payload hoists. Each is self-contained: deleting its block removes the hoist together with the sheaves it owns.",
+          "minProperties": 1,
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9_-]*$": {
+              "$ref": "#/$defs/AuthoredPayloadHoist"
+            }
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Payload Hoists",
+          "type": "object"
+        }
+      },
+      "required": [
+        "environment",
+        "structure",
+        "boom_hoist",
+        "payload_hoists"
+      ],
+      "title": "AuthoredModelDefinition",
+      "type": "object"
+    },
+    "AuthoredPayloadHoist": {
+      "additionalProperties": false,
+      "description": "Self-contained payload hoist: its rope, its reeving path with the sheaves it\nowns, its hook block and its load chart. The hook hangs from the last reeving\nnode unless support_node names another; the application creates the managed\nhook node automatically.",
+      "examples": [
+        {
+          "hook": {
+            "daf": 1.1,
+            "falls": 20,
+            "mass_t": 50.0,
+            "offlead_deg": 1.0
+          },
+          "load_chart": [
+            {
+              "load_t": 1000.0,
+              "outreach_m": 16.0
+            }
+          ],
+          "reeving": [
+            {
+              "body": "platform",
+              "node": "winch",
+              "x_m": 1.81,
+              "z_m": 3.99
+            },
+            {
+              "body": "boom",
+              "node": "boom_sheave_4",
+              "parts": 2,
+              "u_m": 109.0,
+              "w_m": -4.25
+            }
+          ],
+          "rope": {
+            "linear_mass_kg_m": 9.17
+          }
+        }
+      ],
+      "properties": {
+        "rope": {
+          "$ref": "#/$defs/AuthoredPayloadHoistRope"
+        },
+        "reeving": {
+          "items": {
+            "$ref": "#/$defs/AuthoredReevingEntry"
+          },
+          "minItems": 2,
+          "title": "Reeving",
+          "type": "array"
+        },
+        "support_node": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reeving node the hook hangs from. Omit to use the last reeving entry.",
+          "title": "Support Node"
+        },
+        "hook": {
+          "$ref": "#/$defs/AuthoredHook"
+        },
+        "load_chart": {
+          "items": {
+            "$ref": "#/$defs/AuthoredLoadChartPoint"
+          },
+          "minItems": 1,
+          "title": "Load Chart",
+          "type": "array"
+        },
+        "split": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuthoredSplitMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "reeving",
+        "hook",
+        "load_chart"
+      ],
+      "title": "AuthoredPayloadHoist",
+      "type": "object"
+    },
+    "AuthoredPayloadHoistRope": {
+      "additionalProperties": false,
+      "properties": {
+        "linear_mass_kg_m": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Linear Mass Kg M",
+          "type": "number"
+        },
+        "drum_dead_turns": {
+          "default": 0,
+          "description": "Turns of rope that must remain on the drum when the hook is at its lowest point. Requires drum_diameter_m.",
+          "minimum": 0,
+          "title": "Drum Dead Turns",
+          "type": "integer"
+        },
+        "drum_diameter_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mean wrap diameter of the dead turns in metres. Dead rope length is drum_dead_turns * pi * drum_diameter_m and is added to the derived total rope length.",
+          "title": "Drum Diameter M"
+        }
+      },
+      "title": "AuthoredPayloadHoistRope",
+      "type": "object"
+    },
+    "AuthoredReevingEntry": {
+      "additionalProperties": false,
+      "description": "One stop on a hoist's rope path, listed in order from the winch outwards.\n\nAn entry carrying ``body`` and coordinates defines a node owned by this hoist;\nits global ID is the lowercased hoist ID, an underscore, and ``node``. An entry\nwithout coordinates passes through a node by name: another node of this hoist\nif one is so named, otherwise a global node (a primary node such as\n``boom_heel`` or a shared node listed under a body's ``nodes``).",
+      "examples": [
+        {
+          "body": "platform",
+          "node": "winch",
+          "x_m": 1.81,
+          "z_m": 3.99
+        },
+        {
+          "body": "boom",
+          "node": "boom_sheave_4",
+          "parts": 2,
+          "u_m": 109.0,
+          "w_m": -4.25
+        }
+      ],
+      "properties": {
+        "node": {
+          "description": "Node name, local to this hoist unless it reuses a node.",
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Node",
+          "type": "string"
+        },
+        "body": {
+          "anyOf": [
+            {
+              "enum": [
+                "boom",
+                "rear_leg",
+                "front_leg",
+                "platform"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Body the node moves with. Boom nodes use u_m/w_m; the others use x_m/z_m. Omit (with all coordinates) to pass through an existing node.",
+          "title": "Body"
+        },
+        "u_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Boom-local longitudinal coordinate.",
+          "title": "U M"
+        },
+        "w_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Boom-local vertical coordinate.",
+          "title": "W M"
+        },
+        "x_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Global horizontal coordinate.",
+          "title": "X M"
+        },
+        "z_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Global vertical coordinate.",
+          "title": "Z M"
+        },
+        "parts": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rope parts in the span arriving at this node (default 1). Not allowed on the first entry.",
+          "title": "Parts"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Node the span arriving here starts from, when it is not the previous entry. Not allowed on the first entry.",
+          "title": "From"
+        }
+      },
+      "required": [
+        "node"
+      ],
+      "title": "AuthoredReevingEntry",
+      "type": "object"
+    },
+    "AuthoredSchemaBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "const": "crane-statics",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^6\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "AuthoredSchemaBlock",
+      "type": "object"
+    },
+    "AuthoredSplitHook": {
+      "additionalProperties": false,
+      "properties": {
+        "mass_t": {
+          "minimum": 0,
+          "title": "Mass T",
+          "type": "number"
+        },
+        "falls": {
+          "minimum": 1,
+          "title": "Falls",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "mass_t",
+        "falls"
+      ],
+      "title": "AuthoredSplitHook",
+      "type": "object"
+    },
+    "AuthoredSplitMode": {
+      "additionalProperties": false,
+      "description": "Optional split-block operating mode with its own hook block and load chart.",
+      "properties": {
+        "hook": {
+          "$ref": "#/$defs/AuthoredSplitHook"
+        },
+        "load_chart": {
+          "items": {
+            "$ref": "#/$defs/AuthoredLoadChartPoint"
+          },
+          "minItems": 1,
+          "title": "Load Chart",
+          "type": "array"
+        }
+      },
+      "required": [
+        "hook",
+        "load_chart"
+      ],
+      "title": "AuthoredSplitMode",
+      "type": "object"
+    },
+    "AuthoredStructure": {
+      "additionalProperties": false,
+      "description": "Primary structure geometry: the boom heel, the hinges and support widths.",
+      "properties": {
         "boom_width_m": {
           "description": "Boom structural width in metres, used for platform-base bearing line load checks.",
           "exclusiveMinimum": 0,
@@ -475,272 +905,16 @@
         "front_hinge": {
           "$ref": "#/$defs/AuthoredGlobalPosition2D",
           "description": "Global position of the front leg's upper hinge."
-        },
-        "boom": {
-          "$ref": "#/$defs/AuthoredBoomBody",
-          "description": "The boom body: its structural mass, wind areas, and boom-local nodes."
-        },
-        "rear_leg": {
-          "$ref": "#/$defs/AuthoredGlobalBody",
-          "description": "The rear leg body supporting the upper structure, in global coordinates."
-        },
-        "front_leg": {
-          "$ref": "#/$defs/AuthoredGlobalBody",
-          "description": "The front leg body supporting the upper structure, in global coordinates."
-        },
-        "platform": {
-          "$ref": "#/$defs/AuthoredGlobalBody",
-          "description": "The fixed platform/base body, in global coordinates."
-        },
-        "boom_hoist": {
-          "$ref": "#/$defs/AuthoredBoomHoist",
-          "description": "The rope system that raises and lowers the boom."
-        },
-        "payload_hoists": {
-          "description": "Named payload hoists, each attached to a support node on the boom.",
-          "minProperties": 1,
-          "patternProperties": {
-            "^[A-Za-z][A-Za-z0-9_-]*$": {
-              "$ref": "#/$defs/AuthoredPayloadHoist"
-            }
-          },
-          "propertyNames": {
-            "minLength": 1
-          },
-          "title": "Payload Hoists",
-          "type": "object"
         }
       },
       "required": [
-        "environment",
         "boom_width_m",
         "boom_heel",
         "upper_hinge",
         "rear_hinge",
-        "front_hinge",
-        "boom",
-        "rear_leg",
-        "front_leg",
-        "platform",
-        "boom_hoist",
-        "payload_hoists"
+        "front_hinge"
       ],
-      "title": "AuthoredModelDefinition",
-      "type": "object"
-    },
-    "AuthoredPayloadHoist": {
-      "additionalProperties": false,
-      "description": "Payload hoist attached to a named support node. The application creates\nthe managed hook node automatically.",
-      "examples": [
-        {
-          "contractual_points": [
-            {
-              "load_t": 1433.0,
-              "outreach_m": 50.0
-            }
-          ],
-          "falls": 20,
-          "hook_daf": 1.1,
-          "hook_mass_t": 102.0,
-          "offlead_deg": 1.0,
-          "rope_segments": [
-            {
-              "from": "winch",
-              "parts": 2,
-              "to": "sheave"
-            }
-          ],
-          "support_node_id": "mh_boom_sheave_4"
-        }
-      ],
-      "properties": {
-        "rope_segments": {
-          "items": {
-            "$ref": "#/$defs/AuthoredRopeSegment"
-          },
-          "minItems": 1,
-          "title": "Rope Segments",
-          "type": "array"
-        },
-        "linear_mass_kg_m": {
-          "default": 0.0,
-          "minimum": 0,
-          "title": "Linear Mass Kg M",
-          "type": "number"
-        },
-        "support_node_id": {
-          "minLength": 1,
-          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
-          "title": "Support Node Id",
-          "type": "string"
-        },
-        "hook_daf": {
-          "minimum": 1,
-          "title": "Hook Daf",
-          "type": "number"
-        },
-        "offlead_deg": {
-          "minimum": 0,
-          "title": "Offlead Deg",
-          "type": "number"
-        },
-        "sidelead_deg": {
-          "default": 0.0,
-          "minimum": 0,
-          "title": "Sidelead Deg",
-          "type": "number"
-        },
-        "drum_dead_turns": {
-          "default": 0,
-          "description": "Turns of rope that must remain on the drum when the hook is at its lowest point. Requires drum_diameter_m.",
-          "minimum": 0,
-          "title": "Drum Dead Turns",
-          "type": "integer"
-        },
-        "drum_diameter_m": {
-          "anyOf": [
-            {
-              "exclusiveMinimum": 0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Mean wrap diameter of the dead turns in metres. Dead rope length is drum_dead_turns * pi * drum_diameter_m and is added to the derived total rope length.",
-          "title": "Drum Diameter M"
-        },
-        "falls": {
-          "minimum": 1,
-          "title": "Falls",
-          "type": "integer"
-        },
-        "hook_mass_t": {
-          "minimum": 0,
-          "title": "Hook Mass T",
-          "type": "number"
-        },
-        "contractual_points": {
-          "items": {
-            "$ref": "#/$defs/AuthoredContractualPoint"
-          },
-          "minItems": 1,
-          "title": "Contractual Points",
-          "type": "array"
-        },
-        "split": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AuthoredPayloadHoistMode"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "rope_segments",
-        "support_node_id",
-        "hook_daf",
-        "offlead_deg",
-        "falls",
-        "hook_mass_t",
-        "contractual_points"
-      ],
-      "title": "AuthoredPayloadHoist",
-      "type": "object"
-    },
-    "AuthoredPayloadHoistMode": {
-      "additionalProperties": false,
-      "properties": {
-        "falls": {
-          "minimum": 1,
-          "title": "Falls",
-          "type": "integer"
-        },
-        "hook_mass_t": {
-          "minimum": 0,
-          "title": "Hook Mass T",
-          "type": "number"
-        },
-        "contractual_points": {
-          "items": {
-            "$ref": "#/$defs/AuthoredContractualPoint"
-          },
-          "minItems": 1,
-          "title": "Contractual Points",
-          "type": "array"
-        }
-      },
-      "required": [
-        "falls",
-        "hook_mass_t",
-        "contractual_points"
-      ],
-      "title": "AuthoredPayloadHoistMode",
-      "type": "object"
-    },
-    "AuthoredRopeSegment": {
-      "additionalProperties": false,
-      "description": "One connected rope path segment. Node IDs must refer to nodes in the model.",
-      "examples": [
-        {
-          "from": "winch",
-          "parts": 2,
-          "to": "sheave"
-        }
-      ],
-      "properties": {
-        "from": {
-          "description": "Starting node ID.",
-          "minLength": 1,
-          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
-          "title": "From",
-          "type": "string"
-        },
-        "to": {
-          "description": "Ending node ID.",
-          "minLength": 1,
-          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
-          "title": "To",
-          "type": "string"
-        },
-        "parts": {
-          "default": 1,
-          "minimum": 1,
-          "title": "Parts",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "from",
-        "to"
-      ],
-      "title": "AuthoredRopeSegment",
-      "type": "object"
-    },
-    "AuthoredSchemaBlock": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "const": "crane-statics",
-          "title": "Name",
-          "type": "string"
-        },
-        "version": {
-          "pattern": "^5\\.\\d+\\.\\d+$",
-          "title": "Version",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "version"
-      ],
-      "title": "AuthoredSchemaBlock",
+      "title": "AuthoredStructure",
       "type": "object"
     },
     "AuthoredVesselMotion": {
@@ -902,30 +1076,17 @@
         "name": "New Crane Model"
       },
       "model_definition": {
-        "boom": {
-          "mass_points": [],
-          "nodes": {
-            "mh_hook": {
-              "u_m": 0.0,
-              "w_m": 0.0
-            }
-          },
-          "wind_areas": []
-        },
-        "boom_heel": {
-          "x_m": 0.0,
-          "z_m": 0.0
-        },
         "boom_hoist": {
-          "rope_segments": [
+          "reeving": [
             {
-              "from": "boom_heel",
-              "parts": 2,
-              "to": "rear_top"
+              "node": "boom_heel"
+            },
+            {
+              "node": "rear_top",
+              "parts": 2
             }
           ]
         },
-        "boom_width_m": 1.0,
         "environment": {
           "air_density_kg_m3": 1.225,
           "gravity_m_s2": 9.81,
@@ -934,69 +1095,57 @@
           "wind_profile_exponent": 0.143,
           "wind_reference_height_m_asl": 10.0
         },
-        "front_hinge": {
-          "x_m": 0.0,
-          "z_m": 0.0
-        },
-        "front_leg": {
-          "mass_points": [],
-          "nodes": {},
-          "wind_areas": []
-        },
         "payload_hoists": {
           "MH": {
-            "contractual_points": [
+            "hook": {
+              "daf": 1.0,
+              "falls": 1,
+              "mass_t": 0.0,
+              "offlead_deg": 0.0
+            },
+            "load_chart": [
               {
                 "load_t": 0.0,
                 "outreach_m": 0.0
               }
             ],
-            "falls": 1,
-            "hook_daf": 1.0,
-            "hook_mass_t": 0.0,
-            "offlead_deg": 0.0,
-            "rope_segments": [
+            "reeving": [
               {
-                "from": "boom_heel",
-                "to": "mh_hook"
+                "node": "boom_heel"
+              },
+              {
+                "body": "boom",
+                "node": "hook",
+                "u_m": 0.0,
+                "w_m": 0.0
               }
-            ],
-            "sidelead_deg": 0.0,
-            "support_node_id": "mh_hook"
+            ]
           }
         },
-        "platform": {
-          "mass_points": [],
-          "nodes": {},
-          "wind_areas": []
-        },
-        "rear_hinge": {
-          "x_m": 0.0,
-          "z_m": 0.0
-        },
-        "rear_leg": {
-          "mass_points": [],
-          "nodes": {},
-          "wind_areas": []
-        },
-        "slewing_bearing_diameter_m": 1.0,
-        "upper_hinge": {
-          "x_m": 0.0,
-          "z_m": 0.0
-        },
-        "vessel_motion": {
-          "accel_x_m_s2": 0.0,
-          "accel_y_m_s2": 0.0,
-          "accel_z_m_s2": 0.0,
-          "pitch_angular_accel_rad_s2": 0.0,
-          "reference_x_m": 0.0,
-          "reference_z_m": 0.0,
-          "roll_angular_accel_rad_s2": 0.0
+        "structure": {
+          "boom_heel": {
+            "x_m": 0.0,
+            "z_m": 0.0
+          },
+          "boom_width_m": 1.0,
+          "front_hinge": {
+            "x_m": 0.0,
+            "z_m": 0.0
+          },
+          "rear_hinge": {
+            "x_m": 0.0,
+            "z_m": 0.0
+          },
+          "slewing_bearing_diameter_m": 1.0,
+          "upper_hinge": {
+            "x_m": 0.0,
+            "z_m": 0.0
+          }
         }
       },
       "schema": {
         "name": "crane-statics",
-        "version": "5.13.0"
+        "version": "6.0.0"
       }
     }
   ],
