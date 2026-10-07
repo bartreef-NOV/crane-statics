@@ -59,8 +59,13 @@ hoist, per-hoist state, derived design limits, and a named change-event registry
 
 **Scene state** — `SessionModel`'s `SceneState`: what the operator has dialled in for
 one hoist. Boom angle, hook load, tackle length, offlead, sidelead, wind speed and
-direction, and the three linear plus two angular accelerations. This is the *input*
-to everything drawn and everything solved.
+direction, the three linear plus two angular accelerations, and the crane's slew.
+This is the *input* to everything drawn and everything solved.
+
+**Scene attitude** — the heel and trim the Scene solves and draws at
+(`SessionModel.scene_attitude()`). It follows the document's vessel attitude until
+edited in the Scene, then holds `scene_attitude_override` for every hoist until reset
+or a document loads. Never saved; `scene_document()` carries it into the Scene's solve.
 
 **Hoist state** — `HoistState`: one hoist's scene state plus its UI-adjacent state —
 split mode flag, chart mode, selected contractual index, cached sweep data.
@@ -109,7 +114,8 @@ equilibrium.
 
 **Vessel attitude** — the static heel (+ starboard down) and trim (+ bow down) of the
 vessel, in `environment.vessel_motion`. *Vessel heel* is unrelated to `boom_heel`, the
-boom's pivot node, or to the renderer's `heel_world`.
+boom's pivot node, or to the renderer's `heel_world`. The Scene may try its own (see
+*Scene attitude*); load charts always use the document's.
 
 **Slew** — the crane's rotation on the vessel, in degrees from the bow, + toward
 starboard (`SceneState.slew_deg`). It only matters when the vessel is not level.

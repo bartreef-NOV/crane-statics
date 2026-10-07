@@ -29,6 +29,12 @@ decision, gravity was hard-coded as −Z everywhere.
 Slew is a Scene operating input (`SceneState.slew_deg`) and is not saved.
 `vessel_motion` accelerations stay in the crane frame, as before.
 
+*Amended 2026-10-07:* the Scene may try a heel and trim of its own
+(`SessionModel.scene_attitude_override`). It follows the document's until edited in
+the Scene, applies to every hoist, and is never saved. Only the Scene's solve and
+drawing see it, through `SessionModel.scene_document()`; load charts, auto-set and the
+Model workspace keep the document's design condition.
+
 **Weights tilt; rope tensions do not.** The hook hangs plumb, so a rope carries the
 full hook weight whatever the tilt.
 
@@ -64,6 +70,17 @@ full hook weight whatever the tilt.
 **The Scene shows one slew; the chart shows the envelope.** The scene solves and
 draws at `SceneState.slew_deg`. Drawn weights use the analysis point's own
 `crane_gravity`, so the Equilibrium Check closes by construction.
+
+**Hooks are drawn plumb; the solver's hook stays below its sheave.** The scene hangs
+each hook along the luffing-plane projection of gravity: the active hook at its
+tackle length, idle hooks at their kinematic drop.
+
+- A hook's weight is drawn whole at the hook. That point lies on the sheave's line of
+  action, so the moment equals the solver's split (vertical part below the sheave,
+  lateral part at it). Offlead still enters at the sheave.
+- Rope is weighed on the upright geometry. A drawn fall is only its projection, which
+  is short of the true length whenever gravity leans across the plane.
+- Outreach stays the sheave's crane-frame x, however the hook leans.
 
 ## Consequences
 

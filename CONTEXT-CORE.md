@@ -20,7 +20,7 @@ Essential terms for understanding the codebase structure. For the complete vocab
 
 **Scene state** — the operator's inputs for one hoist: boom angle, hook load, tackle length, offlead, sidelead, wind, accelerations, and crane slew on the vessel.
 
-**Vessel attitude** — static heel and trim, saved in the document; with slew it tilts gravity in the crane frame. Load charts are the worst case over slew.
+**Vessel attitude** — static heel and trim, saved in the document; with slew it tilts gravity in the crane frame. Load charts are the worst case over slew. The Scene may try its own heel and trim without saving them.
 
 **Scene frame** — `core/scene_frame.py::SceneFrame`: immutable description of what the canvas shows (nodes, ropes, forces, labels, hit targets, mapping).
 

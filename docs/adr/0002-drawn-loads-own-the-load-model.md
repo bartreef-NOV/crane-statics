@@ -56,7 +56,8 @@ catch, not a request the module should ignore.
 trimmed vessel, the in-plane part of tilted gravity is drawn here. Every weight gains
 an X component and a reduced Z component. `LoadConditions.slew_deg` orients the crane,
 and the analysis point's `crane_gravity` takes precedence when there is one. The
-out-of-plane part (`lateral_y`) stays in the support split, like sidelead.
+out-of-plane part (`lateral_y`) stays in the support split, like sidelead. Hooks are
+drawn plumb below their sheaves, so a hook block's weight acts whole at the hook.
 
 ## Consequences
 
