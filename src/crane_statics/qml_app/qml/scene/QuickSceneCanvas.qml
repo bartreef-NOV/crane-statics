@@ -16,11 +16,7 @@ Item {
         height / Math.max(1, fitRect.height)
     )
     readonly property real effectiveScale: sceneScale * zoom
-    readonly property var waterline: frame && frame.waterline ? frame.waterline : null
     readonly property var status: frame && frame.status ? frame.status : null
-    // Screen y of the (possibly tilted) waterline at both canvas edges.
-    readonly property real waterlineLeftY: waterlineYAt(0)
-    readonly property real waterlineRightY: waterlineYAt(width)
 
     Component.onDestruction: {
     }
@@ -46,14 +42,6 @@ Item {
 
     function mapSceneY(value) {
         return sceneLayer.y + value * effectiveScale
-    }
-
-    // The scene mapping scales uniformly, so the frame's scene slope is the screen slope.
-    function waterlineYAt(screenX) {
-        if (!waterline)
-            return 0
-        return mapSceneY(waterline.scene_y)
-            + waterline.slope * (screenX - mapSceneX(waterline.pivot_x))
     }
 
     function baseSceneX(scale) {
@@ -191,35 +179,6 @@ Item {
         visible: root.status !== null
         text: root.status ? root.status.text : ""
         color: root.status ? root.status.color : "transparent"
-    }
-
-    Shape {
-        id: sea
-        visible: root.waterline !== null
-        anchors.fill: parent
-        z: -2
-
-        readonly property real floorY: Math.max(root.height, root.waterlineLeftY, root.waterlineRightY)
-
-        ShapePath {
-            strokeColor: "transparent"
-            fillColor: Theme.colorWithAlpha(Theme.info, 0.19)
-            startX: 0
-            startY: root.waterlineLeftY
-            PathLine { x: root.width; y: root.waterlineRightY }
-            PathLine { x: root.width; y: sea.floorY }
-            PathLine { x: 0; y: sea.floorY }
-            PathLine { x: 0; y: root.waterlineLeftY }
-        }
-
-        ShapePath {
-            strokeColor: Theme.info
-            strokeWidth: 2
-            fillColor: "transparent"
-            startX: 0
-            startY: root.waterlineLeftY
-            PathLine { x: root.width; y: root.waterlineRightY }
-        }
     }
 
     Item {
@@ -401,15 +360,6 @@ Item {
             color: modelData.color
             font.pixelSize: 12
         }
-    }
-
-    Label {
-        x: 8
-        y: root.waterline ? root.waterlineYAt(x) - height - 2 : 0
-        text: root.waterline ? root.waterline.label : ""
-        visible: text.length > 0
-        color: Theme.info
-        padding: 2
     }
 
     // How much rope sits on each winch. Screen-space, so it neither pans nor scales

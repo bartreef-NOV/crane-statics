@@ -23,7 +23,6 @@ class TestSceneStateAdapter:
             "moments",
             "labels",
             "guides",
-            "waterline",
             "hitTargets",
             "boomAxes",
             "winchSpools",
@@ -38,7 +37,6 @@ class TestSceneStateAdapter:
         assert frame["fitRect"] == {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
         assert frame["nodes"] == []
         assert frame["ropeSegments"] == []
-        assert frame["waterline"] is None
         assert frame["hitTargets"] == []
         assert frame["status"] is None
 
@@ -55,7 +53,6 @@ class TestSceneStateAdapter:
         source.moments = []
         source.labels = []
         source.guides = []
-        source.waterline = None
         source.hit_targets = []
         source.boom_axes = []
         source.winch_spools = []
@@ -67,4 +64,3 @@ class TestSceneStateAdapter:
         assert result["fitRect"] == {"x": 0.0, "y": 0.0, "width": 100.0, "height": 100.0}
         assert result["nodes"] == []
         assert result["ropeSegments"] == []
-        assert result["waterline"] is None

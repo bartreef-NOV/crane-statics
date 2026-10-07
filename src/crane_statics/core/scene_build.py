@@ -386,10 +386,6 @@ class _SceneBuilder:
         self._guide_bottom_scene_y: Optional[float] = None
         self._outreach_label = ""
         self._hook_height_label = ""
-        self._msl_z: Optional[float] = None
-        self._msl_scene_y: Optional[float] = None
-        self._msl_pivot_x = 0.0
-        self._msl_slope = 0.0
 
     # ------------------------------------------------------------------
     # Orchestration
@@ -421,13 +417,12 @@ class _SceneBuilder:
         if inputs.display.show_winch_spools:
             self._draw_winch_spools(positions, body_filter)
 
-        # Fit rect follows the node pins only: decorative extents (waterline fill,
-        # status text, long force arrows) must not inflate what the viewport frames.
+        # Fit rect follows the node pins only: decorative extents (status text, long
+        # force arrows) must not inflate what the viewport frames.
         self._fit_rect = self._mapping.fit_rect(
             self._scene_node_xy.values(), margin=self._layout.fit_margin
         )
 
-        self._draw_waterline(positions)
         self._draw_hook_marker(positions)
         self._draw_hook_guide(positions)
         self._draw_boom_frame(positions)
@@ -451,14 +446,6 @@ class _SceneBuilder:
                     scene_y=float(self._guide_scene_y or 0.0),
                     label=label,
                 )
-        if self._msl_z is not None and self._msl_scene_y is not None:
-            self._frame.set_waterline(
-                scene_y=self._msl_scene_y,
-                elevation_z=self._msl_z,
-                label=f"MSL  z = {self._msl_z:.1f} m",
-                pivot_x=self._msl_pivot_x,
-                slope=self._msl_slope,
-            )
         radius = self._layout.hit_target_radius
         for start, end in self._boom_frame_segs:
             self._frame.add_hit_target(
@@ -739,23 +726,6 @@ class _SceneBuilder:
     # ------------------------------------------------------------------
     # Guides and annotation
     # ------------------------------------------------------------------
-
-    def _draw_waterline(self, positions: Positions) -> None:
-        document = self._inputs.document_dict
-        if self._inputs.display.freebody_body is not None or not document:
-            return
-        elevation_z = document.get("environment", {}).get("mean_sealevel_z_m")
-        if elevation_z is None:
-            return
-        # The sea is perpendicular to gravity: in the crane frame it rises toward
-        # the side gravity leans to, pivoting under the slew axis.
-        base = positions.get("platform_base", {"x": 0.0})
-        pivot_x, scene_y = self._to_scene(float(base["x"]), float(elevation_z))
-        gravity = self._inputs.crane_gravity()
-        self._msl_z = float(elevation_z)
-        self._msl_scene_y = scene_y
-        self._msl_pivot_x = pivot_x
-        self._msl_slope = -gravity.lateral_x / gravity.vertical if gravity.lateral_x else 0.0
 
     def _hook_position(self, positions: Positions) -> Optional[dict[str, float]]:
         if self._inputs.display.freebody_body is not None:

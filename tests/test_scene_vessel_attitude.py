@@ -1,11 +1,9 @@
-"""Scene workspace on a heeled/trimmed vessel: slew control, readouts, waterline."""
+"""Scene workspace on a heeled/trimmed vessel: slew control and tilt readouts."""
 
-import math
 from pathlib import Path
 
 import pytest
 
-from crane_statics.calculation.vessel_attitude import VesselAttitude, crane_frame_gravity
 from crane_statics.core.io import load_document
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
@@ -82,40 +80,6 @@ class TestAttitudeReadouts:
 
         assert vm.vesselAttitudeText == "Heel -2.00°, trim +0.00°"
         assert vm.inPlaneTiltText == "2.00° away from boom tip"
-
-
-class TestTiltedWaterline:
-    def test_a_level_waterline_is_horizontal(self):
-        vm = _scene_vm()
-
-        waterline = vm._canvas.renderer.scene_frame.waterline
-
-        assert waterline is not None
-        assert waterline.slope == 0.0
-
-    def test_the_sea_rises_toward_the_side_gravity_leans_to(self):
-        vm = _scene_vm(heel_deg=3.0)
-        vm.setSlew(90.0)
-        gravity = crane_frame_gravity(VesselAttitude(3.0, 0.0), 90.0)
-
-        waterline = vm._canvas.renderer.scene_frame.waterline
-
-        assert waterline is not None
-        # World slope dz/dx = lateral_x / vertical; scene y points down.
-        assert waterline.slope == pytest.approx(-gravity.lateral_x / gravity.vertical)
-        assert waterline.slope == pytest.approx(-math.tan(math.radians(3.0)))
-
-    def test_the_waterline_pivots_under_the_slew_axis(self):
-        vm = _scene_vm(heel_deg=3.0)
-        renderer = vm._canvas.renderer
-        frame = renderer.scene_frame
-
-        base = vm._kinematics.kinematics().compute_all_node_positions(vm.angle)["platform_base"]
-        world_x, _world_z = renderer.scene_to_world(
-            frame.waterline.pivot_x, frame.waterline.scene_y
-        )
-
-        assert world_x == pytest.approx(float(base["x"]))
 
 
 class TestSlewFollowsTheActiveHoist:

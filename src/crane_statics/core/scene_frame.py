@@ -99,21 +99,6 @@ class SceneGuide:
 
 
 @dataclass(frozen=True)
-class SceneWaterline:
-    """The mean-sea-level line in scene coordinates.
-
-    It passes through (``pivot_x``, ``scene_y``) with scene slope ``slope``
-    (dy/dx, y down): level unless the vessel's heel/trim tilts the luffing plane.
-    """
-
-    scene_y: float
-    elevation_z: float
-    label: str
-    pivot_x: float = 0.0
-    slope: float = 0.0
-
-
-@dataclass(frozen=True)
 class SceneHitTarget:
     """A transformed scene-space target for canvas interaction."""
 
@@ -232,7 +217,6 @@ class SceneFrame:
     moments: tuple[SceneMoment, ...]
     labels: tuple[SceneLabel, ...]
     guides: tuple[SceneGuide, ...]
-    waterline: SceneWaterline | None
     hit_targets: tuple[SceneHitTarget, ...]
     boom_axes: tuple[SceneAxis, ...]
     winch_spools: tuple[SceneWinchSpool, ...]
@@ -263,7 +247,6 @@ class SceneFrameBuilder:
         self.guides: list[SceneGuide] = []
         self.hit_targets: list[SceneHitTarget] = []
         self.winch_spools: list[SceneWinchSpool] = []
-        self.waterline: SceneWaterline | None = None
         self.status: SceneStatus | None = None
 
     @staticmethod
@@ -637,18 +620,6 @@ class SceneFrameBuilder:
         self.winch_spools.append(spool)
         return spool
 
-    def set_waterline(
-        self,
-        *,
-        scene_y: float,
-        elevation_z: float,
-        label: str,
-        pivot_x: float = 0.0,
-        slope: float = 0.0,
-    ) -> SceneWaterline:
-        self.waterline = SceneWaterline(scene_y, elevation_z, label, pivot_x, slope)
-        return self.waterline
-
     def add_hit_target(
         self,
         *,
@@ -699,7 +670,6 @@ class SceneFrameBuilder:
             moments=tuple(self.moments),
             labels=tuple(self.labels),
             guides=tuple(self.guides),
-            waterline=self.waterline,
             hit_targets=tuple(self.hit_targets),
             boom_axes=tuple(self.boom_axes),
             winch_spools=tuple(self.winch_spools),

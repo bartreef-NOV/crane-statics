@@ -142,9 +142,9 @@ same values the scene draws.
 
 **Scene frame** — `core/scene_frame.py::SceneFrame`: an immutable value describing
 everything the canvas shows, in *scene* coordinates. Nodes, rope segments,
-structural members, markers, force arrows, moments, labels, guides, waterline, hit
-targets, boom axes, fit rect, mapping, status, revision. Colours are hex strings, not
-Qt types, so the frame travels to QML unchanged.
+structural members, markers, force arrows, moments, labels, guides, hit targets,
+boom axes, fit rect, mapping, status, revision. Colours are hex strings, not Qt
+types, so the frame travels to QML unchanged.
 
 **Scene mapping** — the world↔scene coordinate transform carried on the frame.
 `to_scene` projects; the renderer's `scene_to_world` inverts it for hit-testing.

@@ -62,9 +62,8 @@ full hook weight whatever the tilt.
   remain comparable with the level chart.
 
 **The Scene shows one slew; the chart shows the envelope.** The scene solves and
-draws at `SceneState.slew_deg`. Its waterline is drawn perpendicular to the in-plane
-gravity. Drawn weights use the analysis point's own `crane_gravity`, so the
-Equilibrium Check closes by construction.
+draws at `SceneState.slew_deg`. Drawn weights use the analysis point's own
+`crane_gravity`, so the Equilibrium Check closes by construction.
 
 ## Consequences
 
