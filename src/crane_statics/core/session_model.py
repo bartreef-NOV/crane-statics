@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -9,10 +10,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from crane_statics.data import CraneDocument, Hoist, payload_hoist_ids
+from crane_statics.data.authored_models import MAX_VESSEL_TILT_DEG
 
-from ..calculation.vessel_attitude import normalize_slew_deg
+from ..calculation.vessel_attitude import VesselAttitude, normalize_slew_deg
 from .limit_components import validate_limit_component
 from .limit_factory import DesignLimitFactory
+from .scene_attitude import document_with_attitude
 
 
 @dataclass
@@ -88,6 +91,8 @@ class SessionModel:
         self.selected_hoist_id: Optional[str] = None
         self.selected_editor_hoist_id: Optional[str] = None
         self.hoist_states: dict[str, HoistState] = {}
+        # The Scene's own heel and trim, or None to follow the document's. Never saved.
+        self.scene_attitude_override: Optional[VesselAttitude] = None
         self.design_limits: list[DesignLimit] = []
         self.design_limits_by_id: dict[str, DesignLimit] = {}
         self.notification_history: list[str] = []
@@ -115,6 +120,7 @@ class SessionModel:
         self.dirty = False
         self.is_new_document = path is None
         self.hoist_states.clear()
+        self.scene_attitude_override = None
         self.selected_hoist_id = None
         self.selected_editor_hoist_id = None
         self.design_limits.clear()
@@ -230,6 +236,50 @@ class SessionModel:
     def get_active_hoist_state(self) -> Optional[HoistState]:
         return self.hoist_states.get(self.selected_hoist_id) if self.selected_hoist_id else None
 
+    # -- Scene attitude ----------------------------------------------------
+
+    def document_attitude(self) -> VesselAttitude:
+        """The document's design heel and trim; level when there is no document."""
+        if self.document is None:
+            return VesselAttitude()
+        motion = self.document.environment.vessel_motion
+        return VesselAttitude(float(motion.heel_deg), float(motion.trim_deg))
+
+    def scene_attitude(self) -> VesselAttitude:
+        """The heel and trim the Scene solves and draws at."""
+        if self.scene_attitude_override is not None:
+            return self.scene_attitude_override
+        return self.document_attitude()
+
+    @property
+    def scene_attitude_overridden(self) -> bool:
+        return self.scene_attitude_override is not None
+
+    def set_scene_attitude(self, heel_deg: float, trim_deg: float) -> VesselAttitude:
+        """Try a heel and trim in the Scene only.
+
+        Angles are clamped to the schema's limit, and a non-finite one keeps the
+        current value. Choosing the document's own attitude follows it again. The
+        document is neither changed nor marked dirty.
+        """
+        current = self.scene_attitude()
+        attitude = VesselAttitude(
+            _scene_tilt_deg(heel_deg, current.heel_deg),
+            _scene_tilt_deg(trim_deg, current.trim_deg),
+        )
+        self.scene_attitude_override = None if attitude == self.document_attitude() else attitude
+        return self.scene_attitude()
+
+    def reset_scene_attitude(self) -> None:
+        """Follow the document's heel and trim again."""
+        self.scene_attitude_override = None
+
+    def scene_document(self) -> Optional[CraneDocument]:
+        """The document at the Scene's attitude: the document itself unless overridden."""
+        if self.document is None or self.scene_attitude_override is None:
+            return self.document
+        return document_with_attitude(self.document, self.scene_attitude_override)
+
     def set_dirty(self, dirty: bool) -> None:
         if self.dirty != dirty:
             self.dirty = dirty
@@ -264,3 +314,10 @@ class SessionModel:
         for candidate_id, state in self.hoist_states.items():
             state.split_mode_active = hoist_id is not None and candidate_id == hoist_id
         return hoist_id
+
+
+def _scene_tilt_deg(value: float, current: float) -> float:
+    angle = float(value)
+    if not math.isfinite(angle):
+        return current
+    return max(-MAX_VESSEL_TILT_DEG, min(MAX_VESSEL_TILT_DEG, angle))

@@ -11,9 +11,10 @@ import math
 import re
 from typing import TYPE_CHECKING, Any, Optional
 
-from ..calculation.vessel_attitude import ATTITUDE_FIELDS, VesselAttitude
+from ..calculation.vessel_attitude import VesselAttitude
 from . import drawn_loads
 from .drawn_loads import BodyLoads, FreeBodyFilter, LoadConditions
+from .scene_attitude import document_with_attitude
 
 if TYPE_CHECKING:
     from .session_model import SessionModel
@@ -240,18 +241,17 @@ class AnalysisPresenter:
     ) -> Optional[float]:
         """Compute demand for a result row at specific environmental conditions.
 
-        ``level_vessel`` evaluates the document with its heel and trim zeroed, to
-        separate the vessel attitude's share of the demand.
+        The document is taken at the Scene's attitude, as the Scene's own row was;
+        ``level_vessel`` zeroes its heel and trim instead, to separate the vessel
+        attitude's share of the demand.
         """
         from ..calculation.engine import CraneCalculator
 
-        doc = self._session.document
+        doc = self._session.scene_document()
         if doc is None:
             return None
         if level_vessel:
-            doc = doc.model_copy(deep=True)
-            for field_name in ATTITUDE_FIELDS:
-                setattr(doc.environment.vessel_motion, field_name, 0.0)
+            doc = document_with_attitude(doc, VesselAttitude())
         calc = CraneCalculator(doc)
         point = calc.compute_analysis_point(
             boom_angle_deg,
@@ -322,9 +322,7 @@ class AnalysisPresenter:
         offlead_env = dict(inertia_env, offlead_deg=float(sc.offlead_deg))
         full_env = dict(offlead_env, sidelead_deg=float(sc.sidelead_deg))
 
-        tilted = not VesselAttitude.from_environment(
-            {"vessel_motion": doc.environment.vessel_motion.model_dump()}
-        ).is_level
+        tilted = not self._session.scene_attitude().is_level
         dead = _demand(hook_load_kN=0.0, **zero_env)
         dead_level = _demand(hook_load_kN=0.0, level_vessel=True, **zero_env) if tilted else dead
         with_hook = _demand(hook_load_kN=hook, **zero_env)

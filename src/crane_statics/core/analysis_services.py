@@ -231,8 +231,8 @@ class AnalysisCalculator:
         self._hoist = hoist_svc
 
     def compute_analysis_point(self) -> Optional[AnalysisPoint]:
-        """Compute equilibrium check for current geometry and loads."""
-        doc = self._session.document
+        """Compute equilibrium check for current geometry and loads, at the Scene's attitude."""
+        doc = self._session.scene_document()
         hoist_id = self._session.selected_hoist_id
         if not doc or not hoist_id:
             return None
@@ -466,8 +466,11 @@ class AnalysisCalculator:
         return pt, rope_rows, conn_rows
 
     def compute_auto_load(self) -> Optional[AllowableCapacity]:
-        """Invert enabled limits to find allowable hook load; None when unavailable."""
-        doc = self._session.document
+        """Invert enabled limits to find allowable hook load; None when unavailable.
+
+        Solved at the Scene's attitude, like :meth:`compute_analysis_point`.
+        """
+        doc = self._session.scene_document()
         hoist_id = self._session.selected_hoist_id
         if not doc or not hoist_id:
             return None
