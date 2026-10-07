@@ -15,7 +15,7 @@ from crane_statics.data.authored_models import MAX_VESSEL_TILT_DEG
 from ..calculation.vessel_attitude import VesselAttitude, normalize_slew_deg
 from .limit_components import validate_limit_component
 from .limit_factory import DesignLimitFactory
-from .scene_attitude import document_with_attitude
+from .scene_attitude import document_dict_with_attitude, document_with_attitude
 
 
 @dataclass
@@ -267,8 +267,14 @@ class SessionModel:
             _scene_tilt_deg(heel_deg, current.heel_deg),
             _scene_tilt_deg(trim_deg, current.trim_deg),
         )
-        self.scene_attitude_override = None if attitude == self.document_attitude() else attitude
+        self.scene_attitude_override = attitude
+        self._drop_redundant_scene_attitude()
         return self.scene_attitude()
+
+    def _drop_redundant_scene_attitude(self) -> None:
+        """An override equal to the document's attitude is no override: follow it again."""
+        if self.scene_attitude_override == self.document_attitude():
+            self.scene_attitude_override = None
 
     def reset_scene_attitude(self) -> None:
         """Follow the document's heel and trim again."""
@@ -280,12 +286,19 @@ class SessionModel:
             return self.document
         return document_with_attitude(self.document, self.scene_attitude_override)
 
+    def scene_document_dict(self, document_dict: dict[str, Any]) -> dict[str, Any]:
+        """A serialized document at the Scene's attitude, as :meth:`scene_document` solves it."""
+        if self.scene_attitude_override is None:
+            return document_dict
+        return document_dict_with_attitude(document_dict, self.scene_attitude_override)
+
     def set_dirty(self, dirty: bool) -> None:
         if self.dirty != dirty:
             self.dirty = dirty
             self._emit("dirty_changed", dirty)
 
     def mark_content_changed(self) -> None:
+        self._drop_redundant_scene_attitude()
         self.set_dirty(True)
         self._emit("content_changed")
 

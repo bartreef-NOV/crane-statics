@@ -14,7 +14,6 @@ from crane_statics.core.analysis_services import (
     KinematicsService,
 )
 from crane_statics.core.drawn_loads import LoadConditions, active_hoist_dict
-from crane_statics.core.scene_attitude import document_dict_with_attitude
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
 from crane_statics.core.session_model import SceneState
 from crane_statics.data.authored_models import MAX_VESSEL_TILT_DEG
@@ -129,10 +128,10 @@ class SceneViewModel(QObject):
         the whole scene is described by one cached ``model_dump()`` per document.
         """
         kinematics = self._kinematics.kinematics()
-        document_dict = None if kinematics is None else kinematics.doc
-        if document_dict is not None and self._model.scene_attitude_overridden:
-            # The Scene's own heel and trim; the cached serialization stays the document's.
-            document_dict = document_dict_with_attitude(document_dict, self._model.scene_attitude())
+        # At the Scene's own heel and trim; the cached serialization stays the document's.
+        document_dict = (
+            None if kinematics is None else self._model.scene_document_dict(kinematics.doc)
+        )
         hoist_id = self._model.selected_hoist_id or ""
         state = self._model.get_active_hoist_state()
         tackle_min, tackle_max = self._tackle_bounds()

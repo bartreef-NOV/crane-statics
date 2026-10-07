@@ -87,6 +87,18 @@ class TestSessionSceneAttitude:
         session.document.environment.vessel_motion.heel_deg = 4.0
         assert session.scene_attitude() == VesselAttitude(4.0, 0.0)
 
+    def test_a_model_edit_that_matches_the_override_follows_the_model_again(self, document):
+        session = _session(document)
+        session.set_scene_attitude(3.0, 0.0)
+
+        session.document.environment.vessel_motion.heel_deg = 3.0
+        session.mark_content_changed()
+
+        assert session.scene_attitude_overridden is False
+        session.document.environment.vessel_motion.heel_deg = 1.0
+        session.mark_content_changed()
+        assert session.scene_attitude() == VesselAttitude(1.0, 0.0)
+
     def test_an_override_ignores_later_model_edits(self, document):
         session = _session(document)
         session.set_scene_attitude(3.0, 0.0)
@@ -168,6 +180,25 @@ class TestSceneDocument:
         assert scene_doc.environment.vessel_motion.accel_x_m_s2 == (
             session.document.environment.vessel_motion.accel_x_m_s2
         )
+
+
+class TestSceneDocumentDict:
+    def test_is_the_dict_itself_when_not_overridden(self, document):
+        session = _session(document)
+        source = document.model_dump()
+
+        assert session.scene_document_dict(source) is source
+
+    def test_carries_the_override(self, document):
+        session = _session(document)
+        session.set_scene_attitude(3.0, 1.0)
+        source = document.model_dump()
+
+        scene_dict = session.scene_document_dict(source)
+
+        assert scene_dict["environment"]["vessel_motion"]["heel_deg"] == 3.0
+        assert scene_dict["environment"]["vessel_motion"]["trim_deg"] == 1.0
+        assert source["environment"]["vessel_motion"]["heel_deg"] == 0.0
 
 
 class TestAttitudeCopies:
