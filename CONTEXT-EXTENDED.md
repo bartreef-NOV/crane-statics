@@ -64,8 +64,9 @@ This is the *input* to everything drawn and everything solved.
 
 **Scene attitude** — the heel and trim the Scene solves and draws at
 (`SessionModel.scene_attitude()`). It follows the document's vessel attitude until
-edited in the Scene, then holds `scene_attitude_override` for every hoist until reset
-or a document loads. Never saved; `scene_document()` carries it into the Scene's solve.
+edited in the Scene, then holds `scene_attitude_override` for every hoist until reset,
+a document loads, or the Model is edited to match it. Never saved; `scene_document()`
+and `scene_document_dict()` carry it into the Scene's solve and drawing.
 
 **Hoist state** — `HoistState`: one hoist's scene state plus its UI-adjacent state —
 split mode flag, chart mode, selected contractual index, cached sweep data.
