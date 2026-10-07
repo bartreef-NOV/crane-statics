@@ -239,6 +239,47 @@ class FreeBodyFilter:
         return _SYNTHETIC_SUPPORT_BY_BODY.get(self.selected_body)
 
 
+def hook_sheaves(document_dict: Mapping[str, Any]) -> dict[str, str]:
+    """Each payload hoist's hook node and the sheave it hangs from.
+
+    A boom hoist ends on a boom-local sheave, from which no hook hangs.
+    """
+    nodes = {node.get("id"): node for node in document_dict.get("nodes", [])}
+    sheaves: dict[str, str] = {}
+    for hoist in document_dict.get("hoists", []):
+        hook_id = str(hoist.get("load_node_id") or "")
+        node = nodes.get(hook_id) or {}
+        if not node.get("below_node_id") or node.get("local_x_m") is not None:
+            continue
+        sheaves[hook_id] = hook_support_node_id(dict(document_dict), str(hoist.get("id", "")))
+    return sheaves
+
+
+def upright_hook_positions(
+    document_dict: Mapping[str, Any],
+    positions: Mapping[str, Mapping[str, float]],
+    gravity: CraneFrameGravity,
+) -> dict[str, dict[str, float]]:
+    """Drawn positions with each plumb hook hung straight below its sheave again.
+
+    The inverse of drawing hooks plumb, at the same rope length: the solver's
+    geometry. Rope is weighed on it, because a plumb hook's drawn falls are only
+    their luffing-plane projection, short of their true length whenever gravity
+    also leans across the plane.
+    """
+    upright = {node_id: dict(point) for node_id, point in positions.items()}
+    if gravity.vertical == 1.0:
+        return upright
+    for hook_id, sheave_id in hook_sheaves(document_dict).items():
+        hook = positions.get(hook_id)
+        sheave = positions.get(sheave_id)
+        if hook is None or sheave is None:
+            continue
+        drop_m = (float(sheave["z"]) - float(hook["z"])) / gravity.vertical
+        upright[hook_id] = {"x": float(sheave["x"]), "z": float(sheave["z"]) - drop_m}
+    return upright
+
+
 def node_body_map(document_dict: Mapping[str, Any]) -> dict[str, str]:
     """Node id -> owning body id, for :class:`FreeBodyFilter`."""
     return {
@@ -397,6 +438,7 @@ class _LoadBuilder:
         self._filter = body_filter
         self._env = self._doc.get("environment", {}) or {}
         self._g = drawn_crane_gravity(self._doc, conditions, analysis_point)
+        self._rope_positions = upright_hook_positions(self._doc, self._positions, self._g)
 
     # -- geometry ---------------------------------------------------------
 
@@ -487,10 +529,13 @@ class _LoadBuilder:
         return tuple(vectors)
 
     def rope_weight_node_masses(self) -> dict[str, RopeNodeMass]:
-        """Rope self-weight lumped per node, filtered to the selected free body."""
+        """Rope self-weight lumped per node, filtered to the selected free body.
+
+        Weighed on the upright geometry, so the falls keep their true length.
+        """
         masses = rope_mass_at_nodes(
             dict(self._doc),
-            self._positions,
+            self._rope_positions,
             effective_mult=lambda rope_id, segment, authored_mult: effective_segment_mult(
                 self._hoist,
                 segment,
@@ -633,10 +678,11 @@ class _LoadBuilder:
         return tuple(vectors)
 
     def hook_load(self) -> tuple[LoadVector, ...]:
-        """Hook load: its vertical part at the hook, its lateral part at the sheave.
+        """Hook load along gravity at the hook; offlead at the sheave.
 
-        The lateral part is the offlead plus, on a tilted vessel, the plumb hook's
-        lean in the luffing plane.
+        The hook is drawn plumb below its sheave, so its weight has the same line of
+        action -- and moment -- as the solver's vertical part below the sheave plus
+        lateral part at the sheave.
         """
         load_node_id = self._hoist.get("load_node_id")
         if not load_node_id or load_node_id not in self._positions:
@@ -652,7 +698,7 @@ class _LoadBuilder:
             LoadVector(
                 world_x=float(hook["x"]),
                 world_z=float(hook["z"]),
-                fx_kN=0.0,
+                fx_kN=hook_kN * self._g.lateral_x,
                 fz_kN=-hook_kN * self._g.vertical,
                 category=HOOK_LOAD,
                 label=f"Hook {hook_kN:.0f} kN",
@@ -660,26 +706,19 @@ class _LoadBuilder:
         ]
 
         offlead_fx = math.sin(math.radians(float(self._c.offlead_deg))) * hook_kN
-        tilt_fx = self._g.lateral_x * hook_kN
-        lateral_fx = offlead_fx + tilt_fx
-        if abs(lateral_fx) > 1e-9:
-            # Lateral load enters the boom at the sheave; the tackle below carries no moment arm.
+        if abs(offlead_fx) > 1e-9:
+            # Offlead enters the boom at the sheave; the tackle below carries no moment arm.
             anchor = self._positions[
                 self._sheave_of(str(self._hoist.get("id", "")), str(load_node_id))
             ]
-            label = (
-                f"Offlead {abs(lateral_fx):.0f} kN"
-                if tilt_fx == 0.0
-                else f"Hook lateral {abs(lateral_fx):.0f} kN (offlead + tilt)"
-            )
             vectors.append(
                 LoadVector(
                     world_x=float(anchor["x"]),
                     world_z=float(anchor["z"]),
-                    fx_kN=lateral_fx,
+                    fx_kN=offlead_fx,
                     fz_kN=0.0,
                     category=HOOK_LOAD,
-                    label=label,
+                    label=f"Offlead {abs(offlead_fx):.0f} kN",
                 )
             )
         return tuple(vectors)
@@ -798,18 +837,13 @@ class _LoadBuilder:
             if hook_mass_t <= 0.0:
                 continue
 
-            # The block hangs plumb: its weight's vertical part acts at the hook, its
-            # in-plane lean at the sheave it hangs from (like the active hook's).
+            # The block is drawn plumb below its sheave, so its whole weight acts at
+            # the hook on the sheave's line of action (like the active hook's).
             weight_fx, weight_fz = self._weight(hook_mass_t)
             if not self._filter.is_free_body or self._filter.owns_node(node_id):
                 current = node_forces.setdefault(node_id, [0.0, 0.0])
-                current[1] += weight_fz
-            sheave_id = self._sheave_of(str(hoist.get("id", "")), node_id)
-            if weight_fx != 0.0 and (
-                not self._filter.is_free_body or self._filter.owns_node(sheave_id)
-            ):
-                current = node_forces.setdefault(sheave_id, [0.0, 0.0])
                 current[0] += weight_fx
+                current[1] += weight_fz
 
         return {node_id: (values[0], values[1]) for node_id, values in node_forces.items()}
 
@@ -1052,6 +1086,11 @@ def build_body_loads(
     ``body_filter=None`` builds the whole crane's loads. Pass a
     :class:`FreeBodyFilter` with a ``selected_body`` to cut a free body, which
     also brings in the interface loads (rope, reactions) that body sees.
+
+    ``node_positions`` must be the positions as drawn
+    (:meth:`~crane_statics.core.scene_build.SceneInputs.node_positions`): hook
+    weights act at the hooks, which only balance the solved reactions when each
+    hangs plumb below its sheave.
     """
     return _LoadBuilder(
         document_dict,

@@ -21,7 +21,11 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Optional, Tuple, cast
 
-from crane_statics.calculation.rope_mass import compute_rope_on_winch, find_winch_node_ids
+from crane_statics.calculation.rope_mass import (
+    compute_rope_on_winch,
+    find_winch_node_ids,
+    hook_support_node_id,
+)
 from crane_statics.calculation.vessel_attitude import CraneFrameGravity, VesselAttitude
 from crane_statics.presentation.formatters import HoistFormatter, node_display_name
 
@@ -231,6 +235,29 @@ class SceneLayout:
 DEFAULT_LAYOUT = SceneLayout()
 
 
+def plumb_hook_positions(
+    positions: Positions,
+    hook_drops: Mapping[str, tuple[str, float]],
+    gravity: CraneFrameGravity,
+) -> Positions:
+    """Positions with each hook hung ``drop`` metres below its sheave along gravity.
+
+    ``hook_drops`` maps a hook node to the sheave it hangs from and its drop. The
+    hook is drawn on the luffing-plane projection of that plumb line; a level
+    vessel hangs it straight down crane-frame -Z. The input is not mutated.
+    """
+    result = {node_id: dict(point) for node_id, point in positions.items()}
+    for hook_id, (sheave_id, drop_m) in hook_drops.items():
+        sheave = positions.get(sheave_id)
+        if hook_id not in result or sheave is None:
+            continue
+        result[hook_id] = {
+            "x": float(sheave["x"]) + float(drop_m) * gravity.lateral_x,
+            "z": float(sheave["z"]) - float(drop_m) * gravity.vertical,
+        }
+    return result
+
+
 @dataclass(frozen=True)
 class SceneInputs:
     """Everything the scene shows, as one value.
@@ -238,8 +265,8 @@ class SceneInputs:
     This replaces an ordered eight-setter push protocol on the renderer. The two
     position sets it derives are deliberately distinct:
 
-    * :meth:`node_positions` is the scene *as drawn* -- the hook hangs at the
-      current tackle length.
+    * :meth:`node_positions` is the scene *as drawn* -- every hook hangs plumb
+      below its sheave, the active one at the current tackle length.
     * :meth:`base_node_positions` is the *kinematic* geometry at the same boom
       angle, which is what the displayed boom basis is derived from. Lowering the
       hook must not rotate that basis.
@@ -269,19 +296,29 @@ class SceneInputs:
         )
 
     def node_positions(self) -> Positions:
-        """Node positions as drawn, with the active hook lowered by the tackle length."""
+        """Node positions as drawn: every hook hangs plumb along the scene's gravity.
+
+        The active hook hangs the tackle length below its sheave; the others keep
+        the drop the kinematics gave them.
+        """
         base = self.base_node_positions()
         if not base:
             return {}
-        node_definitions = {
-            node.get("id"): node for node in (self.document_dict or {}).get("nodes", [])
-        }
-        return SceneFrameBuilder.with_hook_tackle(
-            base,
-            node_definitions,
-            str(self.hoist.get("load_node_id") or ""),
-            self.tackle_length_m,
-        )
+        return plumb_hook_positions(base, self._hook_drops(base), self.crane_gravity())
+
+    def _hook_drops(self, base: Positions) -> dict[str, tuple[str, float]]:
+        """Hook node -> (the sheave it hangs from, its drop), for every payload hook."""
+        active_hook_id = str(self.hoist.get("load_node_id") or "")
+        drops: dict[str, tuple[str, float]] = {}
+        for hook_id, sheave_id in drawn_loads.hook_sheaves(self.document_dict or {}).items():
+            if hook_id not in base or sheave_id not in base:
+                continue
+            if hook_id == active_hook_id:
+                drop_m = float(self.tackle_length_m)
+            else:
+                drop_m = float(base[sheave_id]["z"]) - float(base[hook_id]["z"])
+            drops[hook_id] = (sheave_id, drop_m)
+        return drops
 
     def vessel_attitude(self) -> VesselAttitude:
         """The document's static heel and trim."""
@@ -383,6 +420,7 @@ class _SceneBuilder:
         self._fit_rect = (0.0, 0.0, 0.0, 0.0)
         self._guide_scene_x: Optional[float] = None
         self._guide_scene_y: Optional[float] = None
+        self._outreach_scene_x: Optional[float] = None
         self._guide_bottom_scene_y: Optional[float] = None
         self._outreach_label = ""
         self._hook_height_label = ""
@@ -436,13 +474,14 @@ class _SceneBuilder:
     def _publish(self) -> SceneFrame:
         has_guide = self._guide_scene_x is not None and self._guide_scene_y is not None
         if has_guide:
-            for kind, label in (
-                ("outreach", self._outreach_label),
-                ("hook_height", self._hook_height_label),
+            guide_x = float(self._guide_scene_x or 0.0)
+            for kind, label, scene_x in (
+                ("outreach", self._outreach_label, float(self._outreach_scene_x or guide_x)),
+                ("hook_height", self._hook_height_label, guide_x),
             ):
                 self._frame.add_guide(
                     kind=kind,
-                    scene_x=float(self._guide_scene_x or 0.0),
+                    scene_x=scene_x,
                     scene_y=float(self._guide_scene_y or 0.0),
                     label=label,
                 )
@@ -460,11 +499,12 @@ class _SceneBuilder:
         if has_guide:
             guide_x = float(self._guide_scene_x or 0.0)
             guide_y = float(self._guide_scene_y or 0.0)
+            outreach_x = float(self._outreach_scene_x or guide_x)
             self._frame.add_hit_target(
                 kind="outreach",
-                start_x=guide_x,
+                start_x=outreach_x,
                 start_y=guide_y,
-                end_x=guide_x,
+                end_x=outreach_x,
                 end_y=float(self._guide_bottom_scene_y or guide_y),
                 radius=radius,
                 extends_to_canvas_edge=True,
@@ -702,6 +742,10 @@ class _SceneBuilder:
         document = self._inputs.document_dict
         if not document:
             return
+        # Measured on the upright geometry, like the rope weight the loads carry.
+        rope_positions = drawn_loads.upright_hook_positions(
+            document, positions, self._inputs.crane_gravity()
+        )
         for hoist in document.get("hoists", []):
             hoist_id = str(hoist.get("id", "")).strip()
             if not hoist_id:
@@ -714,7 +758,7 @@ class _SceneBuilder:
                 continue
             try:
                 length_m, mass_kg = compute_rope_on_winch(
-                    document, hoist_id, positions, self._effective_multiplier
+                    document, hoist_id, rope_positions, self._effective_multiplier
                 )
             except (ValueError, KeyError):
                 continue
@@ -740,16 +784,23 @@ class _SceneBuilder:
         if hook is None:
             return
         self._guide_bottom_scene_y = self._layout.height - self._layout.pad
-        self._outreach_label = f"R = {float(hook['x']):.1f} m"
+        self._outreach_label = f"R = {self._outreach_x(positions, hook):.1f} m"
+
+    def _outreach_x(self, positions: Positions, hook: Mapping[str, float]) -> float:
+        """Crane-frame outreach: the x of the sheave the hook hangs from, however it leans."""
+        inputs = self._inputs
+        sheave = positions.get(hook_support_node_id(inputs.document_dict or {}, inputs.hoist_id))
+        return float((sheave or hook)["x"])
 
     def _draw_hook_guide(self, positions: Positions) -> None:
-        """Anchor for the dashed hook-elevation and outreach guides."""
+        """Anchors for the dashed guides: hook elevation at the hook, outreach at its sheave."""
         hook = self._hook_position(positions)
         if hook is None:
             return
         scene_x, scene_y = self._to_scene(hook["x"], hook["z"])
         self._guide_scene_x = scene_x
         self._guide_scene_y = scene_y
+        self._outreach_scene_x = self._to_scene(self._outreach_x(positions, hook), hook["z"])[0]
         self._hook_height_label = f"Z = {float(hook['z']):.1f} m"
 
     def _boom_axes(self) -> tuple[Axis, Axis]:

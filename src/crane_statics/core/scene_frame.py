@@ -249,27 +249,6 @@ class SceneFrameBuilder:
         self.winch_spools: list[SceneWinchSpool] = []
         self.status: SceneStatus | None = None
 
-    @staticmethod
-    def with_hook_tackle(
-        base_positions: dict[str, dict[str, float]],
-        node_definitions: dict[str, dict],
-        load_node_id: str,
-        tackle_length_m: float,
-    ) -> dict[str, dict[str, float]]:
-        """Return positions with the active hook lowered from its support node."""
-        positions = {node_id: dict(point) for node_id, point in base_positions.items()}
-        load_node = positions.get(load_node_id)
-        reference_id = str(
-            (node_definitions.get(load_node_id, {}) or {}).get("below_node_id") or ""
-        )
-        reference_node = positions.get(reference_id)
-        if load_node is not None and reference_node is not None:
-            positions[load_node_id] = {
-                "x": float(load_node["x"]),
-                "z": float(reference_node["z"]) - float(tackle_length_m),
-            }
-        return positions
-
     def add_node(self, node_id: str, scene_x: float, scene_y: float, tooltip: str) -> SceneNode:
         node = SceneNode(node_id, scene_x, scene_y, tooltip)
         self.nodes.append(node)

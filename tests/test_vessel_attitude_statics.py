@@ -15,6 +15,7 @@ import pytest
 
 from crane_statics.calculation.engine import CraneCalculator
 from crane_statics.calculation.point_composition import with_crane_gravity
+from crane_statics.calculation.rope_mass import hook_support_node_id
 from crane_statics.calculation.vessel_attitude import VesselAttitude, crane_frame_gravity
 from crane_statics.core import drawn_loads as dl
 from crane_statics.core.io import load_document
@@ -229,6 +230,11 @@ class TestDrawnLoadsBalanceTheTiltedSolve:
             **conditions,
         )
         positions = inputs.node_positions()
+        # The hook is drawn plumb, off its sheave's x, so closure tests the plumb drawing.
+        sheave = positions[hook_support_node_id(inputs.document_dict, "MH")]
+        hook = positions[inputs.hoist["load_node_id"]]
+        assert hook["x"] - sheave["x"] == pytest.approx(tackle_m * _gravity(slew_deg).lateral_x)
+        assert abs(hook["x"] - sheave["x"]) > 0.1
         refs = {
             "platform": "platform_base",
             "boom": "boom_heel",

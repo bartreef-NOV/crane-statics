@@ -185,20 +185,6 @@ def test_builder_generates_rotated_boom_cg_markers():
     )
 
 
-def test_builder_lowers_the_hook_from_its_support_node_without_mutating_inputs():
-    positions = {"support": {"x": 10.0, "z": 30.0}, "hook": {"x": 10.0, "z": 28.0}}
-
-    result = SceneFrameBuilder.with_hook_tackle(
-        positions,
-        {"hook": {"below_node_id": "support"}},
-        "hook",
-        12.0,
-    )
-
-    assert result["hook"] == {"x": 10.0, "z": 18.0}
-    assert positions["hook"] == {"x": 10.0, "z": 28.0}
-
-
 def test_builder_generates_split_support_cg_marker():
     builder = SceneFrameBuilder()
 
