@@ -124,15 +124,37 @@ ColumnLayout {
             columnSpacing: root.layoutSpacing
             rowSpacing: root.layoutSpacing
 
-            Label { text: qsTr("Attitude:") }
-            Label {
+            // Scene-only: the Model's heel and trim (and the load charts) are unaffected.
+            NumericRow {
+                Layout.columnSpan: 2
                 Layout.fillWidth: true
-                text: sceneVm.vesselAttitudeText
-                horizontalAlignment: Text.AlignRight
-                elide: Text.ElideRight
-                ToolTip.visible: sceneVm.vesselLevel && attitudeHover.hovered
-                ToolTip.text: qsTr("Set heel and trim in Model > Environment")
-                HoverHandler { id: attitudeHover }
+                label: qsTr("Heel (°, + stbd down):")
+                from: -sceneVm.maxTiltDeg
+                to: sceneVm.maxTiltDeg
+                decimals: 2
+                value: sceneVm.heel
+                onCommitted: newValue => sceneVm.setHeel(newValue)
+            }
+
+            NumericRow {
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                label: qsTr("Trim (°, + bow down):")
+                from: -sceneVm.maxTiltDeg
+                to: sceneVm.maxTiltDeg
+                decimals: 2
+                value: sceneVm.trim
+                onCommitted: newValue => sceneVm.setTrim(newValue)
+            }
+
+            Button {
+                Layout.columnSpan: 2
+                Layout.alignment: Qt.AlignRight
+                text: qsTr("Reset to Model")
+                enabled: sceneVm.attitudeOverridden
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Use the Model's heel and trim: %1").arg(sceneVm.modelAttitudeText)
+                onClicked: sceneVm.resetAttitude()
             }
 
             NumericRow {

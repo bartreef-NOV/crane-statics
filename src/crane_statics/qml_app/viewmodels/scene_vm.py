@@ -14,8 +14,10 @@ from crane_statics.core.analysis_services import (
     KinematicsService,
 )
 from crane_statics.core.drawn_loads import LoadConditions, active_hoist_dict
+from crane_statics.core.scene_attitude import document_dict_with_attitude
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
 from crane_statics.core.session_model import SceneState
+from crane_statics.data.authored_models import MAX_VESSEL_TILT_DEG
 from crane_statics.presentation.formatters import VesselAttitudeFormatter
 from crane_statics.qml_app.adapters.scene_adapter import SceneStateAdapter
 from crane_statics.qml_app.scene.scene_drag import DragEdit, DragLimits, SceneDrag
@@ -128,6 +130,9 @@ class SceneViewModel(QObject):
         """
         kinematics = self._kinematics.kinematics()
         document_dict = None if kinematics is None else kinematics.doc
+        if document_dict is not None and self._model.scene_attitude_overridden:
+            # The Scene's own heel and trim; the cached serialization stays the document's.
+            document_dict = document_dict_with_attitude(document_dict, self._model.scene_attitude())
         hoist_id = self._model.selected_hoist_id or ""
         state = self._model.get_active_hoist_state()
         tackle_min, tackle_max = self._tackle_bounds()
@@ -624,13 +629,41 @@ class SceneViewModel(QObject):
             "slew_deg", SceneState.wrap_slew_deg(float(value)), self.attitudeChanged
         )
 
+    @pyqtProperty(float, notify=attitudeChanged)
+    def heel(self) -> float:
+        return float(self._attitude_readouts["heel"])
+
+    @pyqtSlot(float)
+    def setHeel(self, value: float) -> None:
+        self._set_scene_attitude(heel_deg=float(value))
+
+    @pyqtProperty(float, notify=attitudeChanged)
+    def trim(self) -> float:
+        return float(self._attitude_readouts["trim"])
+
+    @pyqtSlot(float)
+    def setTrim(self, value: float) -> None:
+        self._set_scene_attitude(trim_deg=float(value))
+
+    @pyqtProperty(float, constant=True)
+    def maxTiltDeg(self) -> float:
+        return MAX_VESSEL_TILT_DEG
+
     @pyqtProperty(bool, notify=attitudeChanged)
-    def vesselLevel(self) -> bool:
-        return bool(self._attitude_readouts["level"])
+    def attitudeOverridden(self) -> bool:
+        return bool(self._attitude_readouts["overridden"])
 
     @pyqtProperty(str, notify=attitudeChanged)
-    def vesselAttitudeText(self) -> str:
-        return str(self._attitude_readouts["attitude"])
+    def modelAttitudeText(self) -> str:
+        """The Model's heel and trim, which :meth:`resetAttitude` returns to."""
+        return str(self._attitude_readouts["model_attitude"])
+
+    @pyqtSlot()
+    def resetAttitude(self) -> None:
+        if self._model.document is None:
+            return
+        self._model.reset_scene_attitude()
+        self._after_scene_attitude_changed()
 
     @pyqtProperty(str, notify=attitudeChanged)
     def inPlaneTiltText(self) -> str:
@@ -643,8 +676,10 @@ class SceneViewModel(QObject):
     @staticmethod
     def _level_readouts() -> dict[str, Any]:
         return {
-            "level": True,
-            "attitude": VesselAttitudeFormatter.attitude_text(0.0, 0.0, level=True),
+            "heel": 0.0,
+            "trim": 0.0,
+            "overridden": False,
+            "model_attitude": VesselAttitudeFormatter.attitude_text(0.0, 0.0, level=True),
             "in_plane": VesselAttitudeFormatter.in_plane_tilt_text(0.0),
             "out_of_plane": VesselAttitudeFormatter.out_of_plane_tilt_text(0.0),
         }
@@ -656,10 +691,15 @@ class SceneViewModel(QObject):
             inputs = self._scene_inputs()
             attitude = inputs.vessel_attitude()
             gravity = inputs.crane_gravity()
+            model_attitude = self._model.document_attitude()
             readouts = {
-                "level": attitude.is_level,
-                "attitude": VesselAttitudeFormatter.attitude_text(
-                    attitude.heel_deg, attitude.trim_deg, level=attitude.is_level
+                "heel": attitude.heel_deg,
+                "trim": attitude.trim_deg,
+                "overridden": self._model.scene_attitude_overridden,
+                "model_attitude": VesselAttitudeFormatter.attitude_text(
+                    model_attitude.heel_deg,
+                    model_attitude.trim_deg,
+                    level=model_attitude.is_level,
                 ),
                 "in_plane": VesselAttitudeFormatter.in_plane_tilt_text(gravity.in_plane_tilt_deg),
                 "out_of_plane": VesselAttitudeFormatter.out_of_plane_tilt_text(
@@ -669,6 +709,33 @@ class SceneViewModel(QObject):
         if readouts != self._attitude_readouts:
             self._attitude_readouts = readouts
             self.attitudeChanged.emit()
+
+    def _set_scene_attitude(
+        self, *, heel_deg: Optional[float] = None, trim_deg: Optional[float] = None
+    ) -> None:
+        if self._model.document is None:
+            return
+        current = self._model.scene_attitude()
+        self._model.set_scene_attitude(
+            current.heel_deg if heel_deg is None else heel_deg,
+            current.trim_deg if trim_deg is None else trim_deg,
+        )
+        self._after_scene_attitude_changed()
+
+    def _after_scene_attitude_changed(self) -> None:
+        """Re-solve at the Scene's new heel and trim.
+
+        Unlike a scene-state edit this does not mark the session's content changed:
+        the attitude is the Scene's alone, so the document stays clean and the load
+        chart is not made stale.
+        """
+        state = self._model.get_active_hoist_state()
+        if state is not None and state.scene_state.hook_load_auto:
+            self.recomputeAutoLoad()
+        else:
+            self._after_state_changed()
+        # Even when the readouts read the same, a clamped entry must be echoed back.
+        self.attitudeChanged.emit()
 
     def _scene_field(self, name: str) -> float:
         state = self._model.get_active_hoist_state()
