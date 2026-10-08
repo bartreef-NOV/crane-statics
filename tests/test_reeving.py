@@ -183,6 +183,76 @@ def test_examples_round_trip_byte_stable(example, tmp_path):
     assert load_document(out).model_dump() == doc.model_dump()
 
 
+def test_pass_through_entry_without_node_is_rejected():
+    data = _authored()
+    data["model_definition"]["payload_hoists"]["MH"]["reeving"].append({})
+
+    with pytest.raises(ValueError, match="neither body nor node"):
+        normalize_document(data)
+
+
+def test_omitted_node_auto_names_owned_entries():
+    data = _authored()
+    reeving = data["model_definition"]["payload_hoists"]["MH"]["reeving"]
+    for entry in reeving:
+        entry.pop("node", None)
+
+    doc = normalize_document(data)
+
+    nodes = _nodes(doc)
+    assert {"mh_n1", "mh_n2", "mh_n3"} <= set(nodes)
+    assert set(doc.auto_named_node_ids) >= {"mh_n1", "mh_n2", "mh_n3"}
+
+
+def test_auto_naming_skips_names_already_used_explicitly():
+    data = _authored()
+    reeving = data["model_definition"]["payload_hoists"]["MH"]["reeving"]
+    reeving[0]["node"] = "n1"
+    del reeving[1]["node"]
+    del reeving[2]["node"]
+
+    doc = normalize_document(data)
+
+    nodes = _nodes(doc)
+    assert {"mh_n1", "mh_n2", "mh_n3"} <= set(nodes)
+    assert set(doc.auto_named_node_ids) == {"mh_n2", "mh_n3"}
+
+
+def test_auto_named_node_omits_node_key_on_save(tmp_path):
+    data = _authored()
+    reeving = data["model_definition"]["payload_hoists"]["MH"]["reeving"]
+    for entry in reeving:
+        entry.pop("node", None)
+    path = tmp_path / "auto_named.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    doc = load_document(path)
+
+    save_document(doc, tmp_path / "out.yaml")
+    saved = yaml.safe_load((tmp_path / "out.yaml").read_text(encoding="utf-8"))
+
+    mh_reeving = saved["model_definition"]["payload_hoists"]["MH"]["reeving"]
+    assert all("node" not in entry for entry in mh_reeving)
+    reloaded = load_document(tmp_path / "out.yaml")
+    assert _segments(reloaded, "MH") == _segments(doc, "MH")
+
+
+def test_pass_through_of_auto_named_node_keeps_explicit_node_on_save(tmp_path):
+    data = _authored()
+    reeving = data["model_definition"]["payload_hoists"]["MH"]["reeving"]
+    del reeving[0]["node"]  # "winch" becomes auto-named "n1"
+    reeving.append({"node": "n1", "from": "tip"})
+    path = tmp_path / "passthrough.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    doc = load_document(path)
+
+    save_document(doc, tmp_path / "out.yaml")
+    saved = yaml.safe_load((tmp_path / "out.yaml").read_text(encoding="utf-8"))
+
+    mh_reeving = saved["model_definition"]["payload_hoists"]["MH"]["reeving"]
+    assert "node" not in mh_reeving[0]
+    assert mh_reeving[-1]["node"] == "n1"
+
+
 def test_v5_documents_are_rejected(tmp_path):
     data = _authored()
     data["schema"]["version"] = "5.13.0"

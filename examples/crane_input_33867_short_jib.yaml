@@ -1,0 +1,120 @@
+schema: {name: crane-statics, version: 6.2.0}
+metadata: {name: Crane Statics Example Strashnov}
+model_definition:
+  environment:
+    gravity_m_s2: 9.81
+    air_density_kg_m3: 1.225
+    wind_profile_exponent: 0.12
+    wind_reference_height_m_asl: 40.0
+    mean_sealevel_z_m: -53.0
+    max_wind_speed_m_s: 15.1
+  hook_height_at_min_outreach_m: 0.0
+  structure:
+    boom_width_m: 19.5
+    slewing_bearing_diameter_m: 23.0
+    boom_heel: {x_m: 6.4, z_m: 17.3}
+    upper_hinge: {x_m: -13.34, z_m: 50.845}
+    rear_hinge: {x_m: -13.34, z_m: 18.125}
+    front_hinge: {x_m: 4.95, z_m: 18.125}
+  boom:
+    mass_points:
+    - id: boom_structure
+      mass_t: 728.29
+      position: {u_m: 56.9, v_m: 0.0, w_m: -1.0}
+    wind_areas:
+    - id: boom_structure_A
+      cd: 1.4
+      position: {u_m: 45.0, w_m: 0.0}
+      area_w_m2: 228.0
+      area_v_m2: 228.0
+    - id: boom_structure_B
+      cd: 1.4
+      position: {u_m: 100.0, w_m: -4.0}
+      area_w_m2: 5.0
+      area_v_m2: 5.0
+    - id: boom_structure_C
+      cd: 1.4
+      position: {u_m: 98.0, w_m: -1.0}
+      area_w_m2: 50.0
+      area_v_m2: 50.0
+  platform:
+    mass_points:
+    - id: platform_structure
+      mass_t: 2296.553
+      position: {x_m: -10.82, y_m: 0.09, z_m: 3.39}
+    - id: winches
+      mass_t: 566.815
+      position: {x_m: -3.71, y_m: -0.32, z_m: 6.87}
+    - id: slewing_system
+      mass_t: 213.874
+      position: {x_m: -0.58, y_m: 0.0, z_m: 0.08}
+    - id: electrical
+      mass_t: 141.413
+      position: {x_m: -17.0, y_m: 0.0, z_m: 10.9}
+    - id: utility
+      mass_t: 82.176
+      position: {x_m: -3.21, y_m: 0.0, z_m: 14.28}
+    - id: tuggers_and_trolley
+      mass_t: 17.113
+      position: {x_m: -4.62, y_m: 0.2, z_m: 3.36}
+    - id: aux1_wire_on_drum
+      mass_t: 33.492
+      position: {x_m: -1.0, y_m: 0.0, z_m: 7.5}
+    wind_areas:
+    - id: platform_wind_x
+      cd: 1.4
+      position: {x_m: -6.89, z_m: 12.66}
+      area_x_m2: 625.0
+      area_y_m2: 0.0
+    - id: platform_wind_y
+      cd: 1.4
+      position: {x_m: -6.89, z_m: 12.66}
+      area_x_m2: 0.0
+      area_y_m2: 625.0
+  boom_hoist:
+    rope: {linear_mass_kg_m: 19.67, length_m: 7600.0}
+    reeving:
+    - {body: platform, x_m: -11.8, z_m: 14.3}
+    - {body: front_leg, x_m: -13.34, z_m: 50.845, parts: 2}
+    - {body: boom, u_m: 97.5, w_m: 4.0, parts: 56}
+  payload_hoists:
+    MH:
+      hook: {mass_t: 169.8, falls: 40, daf: 1.1, offlead_deg: 2.0}
+      rope: {linear_mass_kg_m: 19.67}
+      reeving:
+      - {body: platform, x_m: -8.0, z_m: 5.3}
+      - {body: front_leg, x_m: -10.01, z_m: 47.055, parts: 4}
+      - {body: boom, u_m: 98.8, w_m: -6.35, parts: 4}
+      load_chart:
+      - {load_t: 3500.0, outreach_m: 32.0}
+      - {load_t: 3500.0, outreach_m: 44.8}
+      - {load_t: 3000.0, outreach_m: 51.0}
+      - {load_t: 2250.0, outreach_m: 65.0}
+      - {load_t: 1650.0, outreach_m: 75.0}
+      - {load_t: 1225.0, outreach_m: 85.0}
+      - {load_t: 800.0, outreach_m: 98.0}
+    AH2:
+      hook: {mass_t: 9.4, falls: 2, daf: 1.3, offlead_deg: 15.0}
+      rope: {linear_mass_kg_m: 12.62}
+      reeving:
+      - {body: platform, x_m: 3.3, z_m: 6.9}
+      - {body: front_leg, x_m: -5.626, z_m: 33.487}
+      - {body: front_leg, x_m: 2.999, z_m: 24.939}
+      - {body: boom, u_m: 10.0, w_m: 4.0}
+      - {body: boom, u_m: 77.6, w_m: -4.2}
+      load_chart:
+      - {load_t: 93.0, outreach_m: 25.6}
+      - {load_t: 93.0, outreach_m: 72.0}
+      - {load_t: 50.0, outreach_m: 83.0}
+    WH1:
+      hook: {mass_t: 5.8, falls: 2, daf: 1.3, offlead_deg: 5.0}
+      rope: {linear_mass_kg_m: 14.01}
+      reeving:
+      - {body: platform, x_m: 3.3, z_m: 6.8}
+      - {body: front_leg, x_m: -5.626, z_m: 33.487}
+      - {body: front_leg, x_m: 2.999, z_m: 24.939}
+      - {body: boom, u_m: 98.94, w_m: 4.0}
+      - {body: boom, u_m: 104.3, w_m: -9.35}
+      load_chart:
+      - {load_t: 110.0, outreach_m: 36.0}
+      - {load_t: 110.0, outreach_m: 110.0}

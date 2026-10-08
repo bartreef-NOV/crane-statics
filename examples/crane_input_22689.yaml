@@ -1,4 +1,4 @@
-schema: {name: crane-statics, version: 6.1.0}
+schema: {name: crane-statics, version: 6.2.0}
 metadata: {name: Crane Statics Example 22689 (Full Geometry)}
 model_definition:
   environment:
@@ -92,58 +92,58 @@ model_definition:
   boom_hoist:
     rope: {linear_mass_kg_m: 20.3, length_m: 4500.0}
     reeving:
-    - {node: winch, body: platform, x_m: -8.35, z_m: 5.85}
-    - {node: aframe_sheave_1, body: rear_leg, x_m: -9.4, z_m: 47.0, parts: 2}
-    - {node: aframe_sheave_2, body: rear_leg, x_m: -11.0, z_m: 58.3, parts: 2}
-    - {node: boom_sheave_3, body: boom, u_m: 153.0, w_m: 3.8, parts: 24}
+    - {body: platform, x_m: -8.35, z_m: 5.85}
+    - {body: rear_leg, x_m: -9.4, z_m: 47.0, parts: 2}
+    - {body: rear_leg, x_m: -11.0, z_m: 58.3, parts: 2}
+    - {body: boom, u_m: 153.0, w_m: 3.8, parts: 24}
   payload_hoists:
     MH:
+      hook: {mass_t: 102.0, falls: 20, daf: 1.1, offlead_deg: 1.0, sidelead_deg: 2.5}
       rope: {linear_mass_kg_m: 20.3}
       reeving:
-      - {node: winch, body: platform, x_m: -8.374, z_m: 2.218}
-      - {node: aframe_sheave_1, body: rear_leg, x_m: -7.5, z_m: 46.55, parts: 2}
-      - {node: aframe_sheave_2, body: front_leg, x_m: 8.5, z_m: 9.25, parts: 2}
-      - {node: boom_sheave_3, body: boom, u_m: 23.5, w_m: 3.85, parts: 2}
-      - {node: boom_sheave_4, body: boom, u_m: 155.0, w_m: -6.05, parts: 2}
-      hook: {mass_t: 102.0, falls: 20, daf: 1.1, offlead_deg: 1.0, sidelead_deg: 2.5}
+      - {body: platform, x_m: -8.374, z_m: 2.218}
+      - {body: rear_leg, x_m: -7.5, z_m: 46.55, parts: 2}
+      - {body: front_leg, x_m: 8.5, z_m: 9.25, parts: 2}
+      - {body: boom, u_m: 23.5, w_m: 3.85, parts: 2}
+      - {body: boom, u_m: 155.0, w_m: -6.05, parts: 2}
       load_chart:
-      - {outreach_m: 27.2, load_t: 2000.0}
-      - {outreach_m: 35.8, load_t: 2000.0}
-      - {outreach_m: 38.3, load_t: 1900.0}
-      - {outreach_m: 50.0, load_t: 1433.0}
-      - {outreach_m: 68.0, load_t: 916.0}
-      - {outreach_m: 100.0, load_t: 435.0}
-      - {outreach_m: 151.0, load_t: 100.0}
-      - {outreach_m: 162.0, load_t: 100.0}
+      - {load_t: 2000.0, outreach_m: 27.2}
+      - {load_t: 2000.0, outreach_m: 35.8}
+      - {load_t: 1900.0, outreach_m: 38.3}
+      - {load_t: 1433.0, outreach_m: 50.0}
+      - {load_t: 916.0, outreach_m: 68.0}
+      - {load_t: 435.0, outreach_m: 100.0}
+      - {load_t: 100.0, outreach_m: 151.0}
+      - {load_t: 100.0, outreach_m: 162.0}
       split:
         hook: {mass_t: 91.51, falls: 12}
         load_chart:
-        - {outreach_m: 27.2, load_t: 1300.0}
-        - {outreach_m: 55.0, load_t: 1300.0}
-        - {outreach_m: 60.0, load_t: 1141.0}
+        - {load_t: 1300.0, outreach_m: 27.2}
+        - {load_t: 1300.0, outreach_m: 55.0}
+        - {load_t: 1141.0, outreach_m: 60.0}
     WH:
+      hook: {mass_t: 13.77, falls: 4, daf: 1.3, offlead_deg: 2.0, sidelead_deg: 4.5}
       rope: {linear_mass_kg_m: 13.4}
       reeving:
-      - {node: winch, body: platform, x_m: -8.25, z_m: 8.32}
-      - {node: aframe_sheave_1, body: rear_leg, x_m: -8.28, z_m: 49.3}
-      - {node: aframe_sheave_2, body: front_leg, x_m: 8.5, z_m: 9.25}
-      - {node: boom_sheave_3, body: boom, u_m: 23.5, w_m: 3.85}
-      - {node: boom_sheave_4, body: boom, u_m: 164.0, w_m: -9.5}
-      hook: {mass_t: 13.77, falls: 4, daf: 1.3, offlead_deg: 2.0, sidelead_deg: 4.5}
+      - {body: platform, x_m: -8.25, z_m: 8.32}
+      - {body: rear_leg, x_m: -8.28, z_m: 49.3}
+      - {body: front_leg, x_m: 8.5, z_m: 9.25}
+      - {body: boom, u_m: 23.5, w_m: 3.85}
+      - {body: boom, u_m: 164.0, w_m: -9.5}
       load_chart:
-      - {outreach_m: 31.4, load_t: 300.0}
-      - {outreach_m: 119.0, load_t: 300.0}
-      - {outreach_m: 133.0, load_t: 225.0}
-      - {outreach_m: 168.0, load_t: 50.0}
+      - {load_t: 300.0, outreach_m: 31.4}
+      - {load_t: 300.0, outreach_m: 119.0}
+      - {load_t: 225.0, outreach_m: 133.0}
+      - {load_t: 50.0, outreach_m: 168.0}
     SH:
+      hook: {mass_t: 1.632, falls: 1, daf: 1.3, offlead_deg: 4.0, sidelead_deg: 4.5}
       rope: {linear_mass_kg_m: 4.6}
       reeving:
-      - {node: winch, body: boom, u_m: 77.8, w_m: 0.0}
-      - {node: boom_sheave_1, body: boom, u_m: 155.6, w_m: 3.1}
-      - {node: boom_sheave_2, body: boom, u_m: 160.8, w_m: -8.33}
-      hook: {mass_t: 1.632, falls: 1, daf: 1.3, offlead_deg: 4.0, sidelead_deg: 4.5}
+      - {body: boom, u_m: 77.8, w_m: 0.0}
+      - {body: boom, u_m: 155.6, w_m: 3.1}
+      - {body: boom, u_m: 160.8, w_m: -8.33}
       load_chart:
-      - {outreach_m: 31.4, load_t: 15.0}
-      - {outreach_m: 119.0, load_t: 15.0}
-      - {outreach_m: 133.0, load_t: 15.0}
-      - {outreach_m: 168.0, load_t: 15.0}
+      - {load_t: 15.0, outreach_m: 31.4}
+      - {load_t: 15.0, outreach_m: 119.0}
+      - {load_t: 15.0, outreach_m: 133.0}
+      - {load_t: 15.0, outreach_m: 168.0}

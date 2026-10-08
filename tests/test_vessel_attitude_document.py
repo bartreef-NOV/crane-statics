@@ -25,7 +25,7 @@ def _load(tmp_path, data: dict):
 
 
 def test_schema_version_is_bumped_for_the_new_optional_fields():
-    assert AUTHORED_SCHEMA_VERSION == "6.1.0"
+    assert AUTHORED_SCHEMA_VERSION == "6.2.0"
 
 
 def test_heel_and_trim_load_with_their_signs(tmp_path):
@@ -66,7 +66,7 @@ def test_save_round_trips_a_tilted_vessel(tmp_path):
     save_document(doc, out)
 
     on_disk = yaml.safe_load(out.read_text(encoding="utf-8"))
-    assert on_disk["schema"]["version"] == "6.1.0"
+    assert on_disk["schema"]["version"] == "6.2.0"
     motion = on_disk["model_definition"]["vessel_motion"]
     assert (motion["heel_deg"], motion["trim_deg"]) == (2.5, -0.5)
     reloaded = load_document(out)

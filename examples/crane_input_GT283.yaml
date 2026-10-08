@@ -1,4 +1,4 @@
-schema: {name: crane-statics, version: 6.1.0}
+schema: {name: crane-statics, version: 6.2.0}
 metadata: {name: Crane Statics Example GT283}
 model_definition:
   environment:
@@ -61,40 +61,40 @@ model_definition:
   boom_hoist:
     rope: {linear_mass_kg_m: 20.3, length_m: 3560.0}
     reeving:
-    - {node: winch, body: platform, x_m: -1.81, z_m: 3.99}
-    - {node: aframe_sheave_1, body: rear_leg, x_m: -9.385, z_m: 40.222, parts: 2}
-    - {node: boom_sheave_3, body: boom, u_m: 106.0, w_m: 3.75, parts: 28}
+    - {body: platform, x_m: -1.81, z_m: 3.99}
+    - {body: rear_leg, x_m: -9.385, z_m: 40.222, parts: 2}
+    - {body: boom, u_m: 106.0, w_m: 3.75, parts: 28}
   payload_hoists:
     MH:
+      hook: {mass_t: 50.0, falls: 20, daf: 1.1, offlead_deg: 1.0, sidelead_deg: 2.5}
       rope: {linear_mass_kg_m: 9.17}
       reeving:
-      - {node: winch, body: platform, x_m: 1.81, z_m: 3.99}
-      - {node: aframe_sheave_1, body: rear_leg, x_m: -6.235, z_m: 38.612, parts: 2}
-      - {node: boom_sheave_3, body: boom, u_m: 103.9, w_m: 1.6, parts: 2}
-      - {node: boom_sheave_4, body: boom, u_m: 109.0, w_m: -4.25, parts: 2}
-      hook: {mass_t: 50.0, falls: 20, daf: 1.1, offlead_deg: 1.0, sidelead_deg: 2.5}
+      - {body: platform, x_m: 1.81, z_m: 3.99}
+      - {body: rear_leg, x_m: -6.235, z_m: 38.612, parts: 2}
+      - {body: boom, u_m: 103.9, w_m: 1.6, parts: 2}
+      - {body: boom, u_m: 109.0, w_m: -4.25, parts: 2}
       load_chart:
-      - {outreach_m: 16.0, load_t: 1000.0}
-      - {outreach_m: 25.0, load_t: 1000.0}
+      - {load_t: 1000.0, outreach_m: 16.0}
+      - {load_t: 1000.0, outreach_m: 25.0}
     AH:
+      hook: {mass_t: 7.0, falls: 6, daf: 1.3, offlead_deg: 2.0, sidelead_deg: 4.5}
       rope: {linear_mass_kg_m: 5.83}
       reeving:
-      - {node: winch, body: platform, x_m: -1.449, z_m: 7.042}
-      - {node: aframe_sheave_1, body: rear_leg, x_m: -7.325, z_m: 39.502}
-      - {node: boom_sheave_3, body: boom, u_m: 103.5, w_m: 0.3}
-      - {node: boom_sheave_4, body: boom, u_m: 113.5, w_m: -6.0}
-      hook: {mass_t: 7.0, falls: 6, daf: 1.3, offlead_deg: 2.0, sidelead_deg: 4.5}
+      - {body: platform, x_m: -1.449, z_m: 7.042}
+      - {body: rear_leg, x_m: -7.325, z_m: 39.502}
+      - {body: boom, u_m: 103.5, w_m: 0.3}
+      - {body: boom, u_m: 113.5, w_m: -6.0}
       load_chart:
-      - {outreach_m: 23.0, load_t: 160.0}
-      - {outreach_m: 70.0, load_t: 160.0}
+      - {load_t: 160.0, outreach_m: 23.0}
+      - {load_t: 160.0, outreach_m: 70.0}
     trolley:
+      hook: {mass_t: 7.7, falls: 1, daf: 1.3, offlead_deg: 4.0, sidelead_deg: 4.5}
       rope: {linear_mass_kg_m: 4.96}
       reeving:
-      - {node: winch, body: platform, x_m: -1.349, z_m: 8.542}
-      - {node: aframe_sheave_1, body: rear_leg, x_m: -6.235, z_m: 38.612}
-      - {node: aframe_sheave_2, body: rear_leg, x_m: 2.5, z_m: 6.742}
-      - {node: boom_sheave_1, body: boom, u_m: 15.0, w_m: -2.0}
-      - {node: boom_sheave_2, body: boom, u_m: 90.0, w_m: -2.0}
-      hook: {mass_t: 7.7, falls: 1, daf: 1.3, offlead_deg: 4.0, sidelead_deg: 4.5}
+      - {body: platform, x_m: -1.349, z_m: 8.542}
+      - {body: rear_leg, x_m: -6.235, z_m: 38.612}
+      - {body: rear_leg, x_m: 2.5, z_m: 6.742}
+      - {body: boom, u_m: 15.0, w_m: -2.0}
+      - {body: boom, u_m: 90.0, w_m: -2.0}
       load_chart:
-      - {outreach_m: 72.5, load_t: 25.0}
+      - {load_t: 25.0, outreach_m: 72.5}

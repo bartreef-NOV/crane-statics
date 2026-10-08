@@ -670,7 +670,7 @@
     },
     "AuthoredReevingEntry": {
       "additionalProperties": false,
-      "description": "One stop on a hoist's rope path, listed in order from the winch outwards.\n\nAn entry carrying ``body`` and coordinates defines a node owned by this hoist;\nits global ID is the lowercased hoist ID, an underscore, and ``node``. An entry\nwithout coordinates passes through a node by name: another node of this hoist\nif one is so named, otherwise a global node (a primary node such as\n``boom_heel`` or a shared node listed under a body's ``nodes``).",
+      "description": "One stop on a hoist's rope path, listed in order from the winch outwards.\n\nAn entry carrying ``body`` and coordinates defines a node owned by this hoist;\nits global ID is the lowercased hoist ID, an underscore, and ``node``. ``node``\nmay be omitted on such an entry, in which case a name of the form ``n1``,\n``n2``, ... is generated. An entry without coordinates passes through a node\nby name: another node of this hoist if one is so named, otherwise a global\nnode (a primary node such as ``boom_heel`` or a shared node listed under a\nbody's ``nodes``); ``node`` is required on such an entry.",
       "examples": [
         {
           "body": "platform",
@@ -688,11 +688,19 @@
       ],
       "properties": {
         "node": {
-          "description": "Node name, local to this hoist unless it reuses a node.",
-          "minLength": 1,
-          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
-          "title": "Node",
-          "type": "string"
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Node name, local to this hoist unless it reuses a node. Required when this entry passes through an existing node (no body). May be omitted when this entry defines a new node (has body); an id of the form n1, n2, ... is then generated from this entry's position among auto-named entries in this hoist's reeving list.",
+          "title": "Node"
         },
         "body": {
           "anyOf": [
@@ -795,9 +803,6 @@
           "title": "From"
         }
       },
-      "required": [
-        "node"
-      ],
       "title": "AuthoredReevingEntry",
       "type": "object"
     },
@@ -1161,7 +1166,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "6.1.0"
+        "version": "6.2.0"
       }
     }
   ],

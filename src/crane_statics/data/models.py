@@ -393,6 +393,13 @@ class CraneDocument(BaseModel):
     connections: Optional[list[dict[str, Any]]] = Field(
         default=None, description="Runtime-generated only"
     )
+    auto_named_node_ids: list[str] = Field(
+        default_factory=list,
+        description="Internal bookkeeping: node ids whose authored reeving entry omitted an "
+        "explicit node name (auto-generated as n1, n2, ... in order). Used only to decide "
+        "whether to omit node again when saving back to authored form; not part of the "
+        "published authored or runtime contract.",
+    )
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -446,20 +453,42 @@ def _is_authored_document(doc_data: dict[str, Any]) -> bool:
 
 def _expand_reeving(
     hoist_id: str, reeving: list[dict[str, Any]], ctx: str
-) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]], list[str]]:
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]], list[str], set[str]]:
     """Expand an authored reeving path into owned runtime nodes and rope segments.
 
-    Returns (nodes, segments, path) where nodes maps global node ID to a runtime
-    node record, segments are chained from/to/parts dicts, and path lists the
-    global node ID of each reeving entry in order."""
+    Returns (nodes, segments, path, auto_named) where nodes maps global node ID to
+    a runtime node record, segments are chained from/to/parts dicts, path lists the
+    global node ID of each reeving entry in order, and auto_named is the set of
+    global node IDs whose authored entry omitted `node` (generated as n1, n2, ...
+    in order of appearance, skipping any name already used explicitly in this
+    reeving)."""
     prefix = hoist_node_prefix(hoist_id)
-    owned = {e["node"] for e in reeving if e.get("body")}
+    used_names = {str(e["node"]) for e in reeving if e.get("node") is not None and e.get("body")}
+    names: list[str] = []
+    auto_named_local: set[str] = set()
+    next_index = 1
+    for entry in reeving:
+        raw_name = entry.get("node")
+        if raw_name is None:
+            while f"n{next_index}" in used_names:
+                next_index += 1
+            name = f"n{next_index}"
+            next_index += 1
+            used_names.add(name)
+            auto_named_local.add(name)
+        else:
+            name = str(raw_name)
+        names.append(name)
+
+    owned = {name for name, entry in zip(names, reeving) if entry.get("body")}
     nodes: dict[str, dict[str, Any]] = {}
     path: list[str] = []
     segments: list[dict[str, Any]] = []
-    for idx, entry in enumerate(reeving):
-        name = str(entry["node"])
+    auto_named: set[str] = set()
+    for idx, (entry, name) in enumerate(zip(reeving, names)):
         global_id = f"{prefix}{name}" if name in owned else name
+        if name in auto_named_local and name in owned:
+            auto_named.add(global_id)
         if entry.get("body"):
             if entry["body"] == "boom":
                 coords = {"u_m": float(entry["u_m"]), "w_m": float(entry["w_m"])}
@@ -475,7 +504,7 @@ def _expand_reeving(
                 {"from": start, "to": global_id, **({"parts": parts} if parts != 1 else {})}
             )
         path.append(global_id)
-    return nodes, segments, path
+    return nodes, segments, path, auto_named
 
 
 def _infer_solve_load_node_id(segments: list[dict[str, Any]], ctx: str) -> str:
@@ -607,13 +636,14 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
 
     boom_id = BOOM_HOIST_ID
     expanded: dict[str, tuple[list[dict[str, Any]], list[str]]] = {}
+    auto_named_node_ids: set[str] = set()
     for hoist_key, hoist_src in [(boom_id, boom_hoist_src), *payload_hoists_src.items()]:
         ctx = (
             "model_definition.boom_hoist"
             if hoist_key == boom_id
             else f"model_definition.payload_hoists[{hoist_key}]"
         )
-        hoist_nodes, hoist_segments, hoist_path = _expand_reeving(
+        hoist_nodes, hoist_segments, hoist_path, hoist_auto_named = _expand_reeving(
             str(hoist_key), hoist_src["reeving"], f"{ctx}.reeving"
         )
         for node_id, node_rec in hoist_nodes.items():
@@ -623,6 +653,7 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                 )
             nodes_src[node_id] = node_rec
         expanded[str(hoist_key)] = (hoist_segments, hoist_path)
+        auto_named_node_ids.update(hoist_auto_named)
 
     nodes_with_inferred_body: dict[str, Any] = {}
     for node_id, node in nodes_src.items():
@@ -1221,6 +1252,7 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         "nodes": nodes,
         "ropes": ropes,
         "hoists": hoists,
+        "auto_named_node_ids": sorted(auto_named_node_ids),
     }
 
 
@@ -1786,11 +1818,15 @@ def _authored_reeving(
     segments: list[dict[str, Any]],
     nodes_by_id: dict[str, dict[str, Any]],
     owned_ids: set[str],
+    auto_named_ids: set[str],
 ) -> list[dict[str, Any]]:
     """Convert ordered runtime rope segments into an authored reeving path.
 
     Nodes in owned_ids are written inline (name without the hoist prefix, with body and
-    coordinates on first appearance); any other node is written by its global ID."""
+    coordinates on first appearance); any other node is written by its global ID. A node
+    in auto_named_ids omits its node key again on its owning (first) occurrence, since
+    that name was itself generated rather than authored; any later pass-through entry
+    that explicitly names it still writes the node key."""
     prefix = hoist_node_prefix(hoist_id)
 
     def _name(node_id: str) -> str:
@@ -1800,8 +1836,11 @@ def _authored_reeving(
     seen: set[str] = set()
 
     def _entry(node_id: str) -> dict[str, Any]:
-        entry: dict[str, Any] = {"node": _name(node_id)}
-        if node_id in owned_ids and node_id not in seen:
+        is_owning_occurrence = node_id in owned_ids and node_id not in seen
+        entry: dict[str, Any] = {}
+        if not (is_owning_occurrence and node_id in auto_named_ids):
+            entry["node"] = _name(node_id)
+        if is_owning_occurrence:
             node = nodes_by_id[node_id]
             entry["body"] = str(node.get("body"))
             entry.update(_authored_node_coords(node))
@@ -1836,6 +1875,7 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
     and folds each hoist's exclusive sheave/winch nodes into its own reeving path.
     """
     data = doc.model_dump(exclude={"connections"})
+    auto_named_ids = set(doc.auto_named_node_ids)
 
     derived_node_ids = {"front_top", "platform_rear", "platform_front", "platform_heel"}
     data["nodes"] = [n for n in data["nodes"] if n.get("id") not in derived_node_ids]
@@ -1996,7 +2036,9 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
     for hoist in data.get("hoists", []):
         hid = str(hoist.get("id"))
         rope = ropes_by_id[str(hoist["rope_id"])]
-        reeving = _authored_reeving(hid, hoist_segments[hid], nodes_by_id, owned_by_hoist[hid])
+        reeving = _authored_reeving(
+            hid, hoist_segments[hid], nodes_by_id, owned_by_hoist[hid], auto_named_ids
+        )
 
         if rope.get("tension_mode") == "solve":
             rope_out: dict[str, Any] = {}
@@ -2060,7 +2102,12 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         if rope_out:
             hoist_out["rope"] = rope_out
         hoist_out["reeving"] = reeving
-        last = reeving[-1]["node"] if reeving else ""
+        last_global_id = str(hoist_segments[hid][-1]["to"]) if hoist_segments[hid] else ""
+        last = (
+            last_global_id[len(hoist_node_prefix(hid)) :]
+            if last_global_id in owned_by_hoist[hid]
+            else last_global_id
+        )
         support_name = (
             support_node_id[len(hoist_node_prefix(hid)) :]
             if support_node_id in owned_by_hoist[hid]

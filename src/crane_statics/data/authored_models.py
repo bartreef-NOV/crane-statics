@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
 AUTHORED_SCHEMA_MAJOR_VERSION = 6
-AUTHORED_SCHEMA_VERSION = "6.1.0"
+AUTHORED_SCHEMA_VERSION = "6.2.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -289,10 +289,12 @@ class AuthoredReevingEntry(BaseModel):
     """One stop on a hoist's rope path, listed in order from the winch outwards.
 
     An entry carrying ``body`` and coordinates defines a node owned by this hoist;
-    its global ID is the lowercased hoist ID, an underscore, and ``node``. An entry
-    without coordinates passes through a node by name: another node of this hoist
-    if one is so named, otherwise a global node (a primary node such as
-    ``boom_heel`` or a shared node listed under a body's ``nodes``)."""
+    its global ID is the lowercased hoist ID, an underscore, and ``node``. ``node``
+    may be omitted on such an entry, in which case a name of the form ``n1``,
+    ``n2``, ... is generated. An entry without coordinates passes through a node
+    by name: another node of this hoist if one is so named, otherwise a global
+    node (a primary node such as ``boom_heel`` or a shared node listed under a
+    body's ``nodes``); ``node`` is required on such an entry."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -311,7 +313,14 @@ class AuthoredReevingEntry(BaseModel):
         },
     )
 
-    node: IdName = Field(description="Node name, local to this hoist unless it reuses a node.")
+    node: Optional[IdName] = Field(
+        default=None,
+        description="Node name, local to this hoist unless it reuses a node. Required when "
+        "this entry passes through an existing node (no body). May be omitted when this "
+        "entry defines a new node (has body); an id of the form n1, n2, ... is then "
+        "generated from this entry's position among auto-named entries in this hoist's "
+        "reeving list.",
+    )
     body: Optional[Literal["boom", "rear_leg", "front_leg", "platform"]] = Field(
         default=None,
         description="Body the node moves with. Boom nodes use u_m/w_m; the others use x_m/z_m. "
@@ -336,15 +345,21 @@ class AuthoredReevingEntry(BaseModel):
 
     @model_validator(mode="after")
     def _check_body_coordinates(self) -> "AuthoredReevingEntry":
+        if self.body is None and self.node is None:
+            raise ValueError(
+                "reeving entry has neither body nor node; pass-through entries must name "
+                "the node they reuse"
+            )
         coords = {k for k in ("u_m", "w_m", "x_m", "z_m") if getattr(self, k) is not None}
+        label = self.node or "<auto-named>"
         if self.body is None:
             if coords:
-                raise ValueError(f"node {self.node!r} has coordinates but no body")
+                raise ValueError(f"node {label!r} has coordinates but no body")
         elif self.body == "boom":
             if coords != {"u_m", "w_m"}:
-                raise ValueError(f"boom node {self.node!r} must use exactly u_m and w_m")
+                raise ValueError(f"boom node {label!r} must use exactly u_m and w_m")
         elif coords != {"x_m", "z_m"}:
-            raise ValueError(f"{self.body} node {self.node!r} must use exactly x_m and z_m")
+            raise ValueError(f"{self.body} node {label!r} must use exactly x_m and z_m")
         return self
 
 
@@ -354,7 +369,7 @@ def _check_reeving(reeving: list[AuthoredReevingEntry]) -> None:
         raise ValueError("the first reeving entry cannot have parts or from")
     defined: set[str] = set()
     for entry in reeving:
-        if entry.body is not None:
+        if entry.body is not None and entry.node is not None:
             if entry.node in defined:
                 raise ValueError(
                     f"reeving node {entry.node!r} is defined twice; omit body and coordinates "
