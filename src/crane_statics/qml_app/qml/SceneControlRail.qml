@@ -1,25 +1,24 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
-import "components"
+import BF.DesignSystem
 
 ColumnLayout {
     id: root
 
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     spacing: root.layoutSpacing
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Active Hoist")
-        topPadding: 24
-        bottomPadding: 6
-        leftPadding: 6
-        rightPadding: 6
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         Flow {
             anchors.fill: parent
@@ -39,14 +38,14 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Hook Configuration")
         visible: sceneVm.splitable
-        topPadding: 24
-        bottomPadding: 6
-        leftPadding: 6
-        rightPadding: 6
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         RowLayout {
             anchors.fill: parent
@@ -70,13 +69,13 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Geometry")
-        topPadding: 24
-        bottomPadding: 6
-        leftPadding: 6
-        rightPadding: 6
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         ColumnLayout {
             anchors.fill: parent
@@ -94,8 +93,8 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Outreach (m):")
-                from: 0
-                to: 300
+                from: sceneVm.outreachMin
+                to: sceneVm.outreachMax
                 value: sceneVm.outreach
                 onCommitted: newValue => sceneVm.setOutreach(newValue)
             }
@@ -111,13 +110,13 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Load")
-        topPadding: 24
-        bottomPadding: 6
-        leftPadding: 6
-        rightPadding: 6
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         ColumnLayout {
             anchors.fill: parent
@@ -140,7 +139,7 @@ ColumnLayout {
 
                 Item { Layout.fillWidth: true }
 
-                StyledCheckBox {
+                CheckBox {
                     Layout.preferredWidth: 96
                     text: qsTr("Auto")
                     checked: sceneVm.hookLoadAuto
@@ -150,7 +149,7 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Off Lead (deg):")
+                label: qsTr("Offlead (deg):")
                 from: -90
                 to: 90
                 flippable: true
@@ -160,23 +159,23 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Side Lead (deg):")
+                label: qsTr("Sidelead (deg):")
                 from: -90
                 to: 90
                 flippable: true
-                value: sceneVm.sideLead
-                onCommitted: newValue => sceneVm.setSideLead(newValue)
+                value: sceneVm.sidelead
+                onCommitted: newValue => sceneVm.setSidelead(newValue)
             }
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Wind")
-        topPadding: 24
-        bottomPadding: 6
-        leftPadding: 6
-        rightPadding: 6
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         ColumnLayout {
             anchors.fill: parent
@@ -205,13 +204,13 @@ ColumnLayout {
                     Layout.preferredWidth: 96
                     spacing: Math.max(2, root.layoutSpacing - 4)
 
-                    StyledRadioButton {
+                    RadioButton {
                         text: qsTr("X")
                         checked: sceneVm.windAxis === "X"
                         onClicked: sceneVm.setWindAxis("X")
                     }
 
-                    StyledRadioButton {
+                    RadioButton {
                         text: qsTr("Y")
                         checked: sceneVm.windAxis === "Y"
                         onClicked: sceneVm.setWindAxis("Y")
@@ -221,13 +220,13 @@ ColumnLayout {
         }
     }
 
-    StyledGroupBox {
+    GroupBox {
         Layout.fillWidth: true
         title: qsTr("Accelerations")
-        topPadding: 24
-        bottomPadding: 6
-        leftPadding: 6
-        rightPadding: 6
+        topPadding: Metrics.spacing24
+        bottomPadding: Metrics.spacing6
+        leftPadding: Metrics.spacing6
+        rightPadding: Metrics.spacing6
 
         ColumnLayout {
             anchors.fill: parent

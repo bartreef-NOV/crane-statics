@@ -2,10 +2,10 @@
 
 import math
 import pytest
+from dataclasses import fields, replace
 from pathlib import Path
 import json
 from importlib import resources
-import crane_statics.calculation.engine as engine_module
 import crane_statics.core.limit_auto_set as limit_auto_set_module
 from jsonschema import Draft202012Validator
 from PyQt6.QtGui import QGuiApplication
@@ -23,6 +23,7 @@ from crane_statics.core.limit_auto_set import (
 )
 from crane_statics.core.analysis_cases import iter_wind_lead_directional_cases
 from crane_statics.core import drawn_loads as dl
+from crane_statics.schemas.generate_schema import SCHEMA_FILENAME
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
 from crane_statics.core.session_model import SessionModel
 from crane_statics.qml_app.session import SessionState
@@ -79,6 +80,30 @@ def scene_inputs(
     )
 
 
+def scene_inputs_at_drawn_tackle(doc, hoist_id: str, *, angle: float = 45.0, **kwargs):
+    """Scene inputs whose analysis point was solved at the tackle length it draws.
+
+    Rope weight moves between the falls and the winch drum as the hook is lowered,
+    so drawn loads only balance the solved reactions when both were evaluated at
+    the same hook position -- which is what the view model does.
+    """
+    drawn = {field.name for field in fields(dl.LoadConditions)} | {"display", "tackle_length_m"}
+    inputs = scene_inputs(
+        doc,
+        hoist_id,
+        angle=angle,
+        **{key: value for key, value in kwargs.items() if key in drawn},
+    )
+    point = CraneCalculator(doc).compute_analysis_point(
+        angle,
+        0.0,
+        hoist_id,
+        tackle_length_m=inputs.tackle_length_m,
+        **{key: value for key, value in kwargs.items() if key != "display"},
+    )
+    return replace(inputs, analysis_point=point)
+
+
 class SceneHarness:
     """Headless stand-in for the QML scene workspace (view model + painted-item canvas)."""
 
@@ -127,8 +152,10 @@ class SceneHarness:
     def report(self) -> dict:
         """The drawn-load report backing both Equilibrium Check and Load Summary."""
         inputs = self.inputs
+        document_dict = inputs.document_dict
+        assert document_dict is not None
         return self.vm._presenter.build_drawn_load_sections(
-            document_dict=inputs.document_dict,
+            document_dict=document_dict,
             analysis_point=inputs.analysis_point,
             node_positions=inputs.node_positions(),
             conditions=inputs.conditions,
@@ -145,7 +172,7 @@ class TestA1ExampleFileLoads:
 
     def test_loads_without_error(self):
         """Example file should load through normal path."""
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -155,7 +182,7 @@ class TestA1ExampleFileLoads:
 
     def test_creates_scene_context(self):
         """Loaded document should have hoists for scene context."""
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -355,7 +382,7 @@ class TestA8WindDirectionContract:
 
     def test_omnidirectional_capacity_matches_worst_direction(self):
 
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -418,7 +445,7 @@ class TestA8WindDirectionContract:
             payload_t → (payload + hook_mass) * gravity * daf → hook_force_kN
                     → hook_force / daf / gravity - hook_mass → payload_t (recovered)
         """
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -479,7 +506,7 @@ class TestA8WindDirectionContract:
             assert cap.max_allowable_load_t < cp.load_t
 
     def test_scene_wind_overlay_hidden_for_y_directions_in_xz_canvas(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -520,7 +547,7 @@ class TestA9InactiveHoistRopeRows:
         return str(hoist.rope_id)
 
     def test_inactive_hoists_with_hook_mass_have_rope_tension_rows(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -543,7 +570,7 @@ class TestA9InactiveHoistRopeRows:
             assert row_map[hoist.id] == pytest.approx(pt.baseline_rope_tensions[channel])
 
     def test_inactive_hoist_with_zero_hook_mass_still_shows_zero_row(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -572,13 +599,11 @@ class TestA9InactiveHoistRopeRows:
 class TestAuthoredSchemaPolicy:
     """Strict authored schema policy and latest-schema round-trip behavior."""
 
-    def _minimal_v5(self) -> dict:
+    def _minimal_v6(self) -> dict:
         return {
-            "schema": {"name": "crane-statics", "version": "5.12.0"},
-            "metadata": {"name": "V5 Minimal"},
+            "schema": {"name": "crane-statics", "version": "6.0.0"},
+            "metadata": {"name": "V6 Minimal"},
             "model_definition": {
-                "boom_width_m": 1.0,
-                "slewing_bearing_diameter_m": 1.0,
                 "environment": {
                     "gravity_m_s2": 9.81,
                     "air_density_kg_m3": 1.225,
@@ -596,10 +621,14 @@ class TestAuthoredSchemaPolicy:
                     "reference_x_m": 0.0,
                     "reference_z_m": 0.0,
                 },
-                "boom_heel": {"x_m": 8.5, "z_m": 8.0},
-                "upper_hinge": {"x_m": -11.0, "z_m": 52.3},
-                "rear_hinge": {"x_m": -11.0, "z_m": 7.7},
-                "front_hinge": {"x_m": 6.87, "z_m": 7.7},
+                "structure": {
+                    "boom_width_m": 1.0,
+                    "slewing_bearing_diameter_m": 1.0,
+                    "boom_heel": {"x_m": 8.5, "z_m": 8.0},
+                    "upper_hinge": {"x_m": -11.0, "z_m": 52.3},
+                    "rear_hinge": {"x_m": -11.0, "z_m": 7.7},
+                    "front_hinge": {"x_m": 6.87, "z_m": 7.7},
+                },
                 "boom": {
                     "mass_points": [
                         {
@@ -617,10 +646,8 @@ class TestAuthoredSchemaPolicy:
                             "position": {"u_m": 9.5, "w_m": 0.2},
                         }
                     ],
-                    "nodes": {"mh_hook": {"u_m": 40.0, "w_m": -2.0}},
                 },
                 "rear_leg": {
-                    "mass_points": [],
                     "wind_areas": [
                         {
                             "id": "rear_wa",
@@ -630,46 +657,53 @@ class TestAuthoredSchemaPolicy:
                             "position": {"x_m": 0.0, "z_m": 20.0},
                         }
                     ],
-                    "nodes": {},
-                },
-                "front_leg": {"mass_points": [], "wind_areas": [], "nodes": {}},
-                "platform": {"mass_points": [], "wind_areas": [], "nodes": {}},
-                "payload_hoists": {
-                    "MH": {
-                        "support_node_id": "mh_hook",
-                        "hook_travel": {"min_m": 5.0, "max_m": 80.0},
-                        "hook_daf": 1.0,
-                        "offlead_deg": 0.0,
-                        "rope_segments": [{"from": "boom_heel", "to": "mh_hook", "parts": 2}],
-                        "falls": 2,
-                        "hook_mass_t": 0.0,
-                        "contractual_points": [{"outreach_m": 60.0, "load_t": 100.0}],
-                    }
                 },
                 "boom_hoist": {
-                    "rope_segments": [{"from": "boom_heel", "to": "rear_top", "parts": 2}],
+                    "reeving": [{"node": "boom_heel"}, {"node": "rear_top", "parts": 2}],
+                },
+                "payload_hoists": {
+                    "MH": {
+                        "reeving": [
+                            {"node": "boom_heel"},
+                            {
+                                "node": "hook",
+                                "body": "boom",
+                                "u_m": 40.0,
+                                "w_m": -2.0,
+                                "parts": 2,
+                            },
+                        ],
+                        "hook": {"mass_t": 0.0, "falls": 2, "daf": 1.0, "offlead_deg": 0.0},
+                        "load_chart": [{"outreach_m": 60.0, "load_t": 100.0}],
+                    }
                 },
             },
         }
 
-    def test_unsupported_version_is_rejected_by_normalizer(self):
-        data = self._minimal_v5()
+    def test_unsupported_major_version_is_rejected_by_normalizer(self):
+        data = self._minimal_v6()
         data["schema"]["version"] = "3.2.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema version 5.12.0 is supported"
+            ValueError, match="Only crane-statics schema major version 6 is supported"
         ):
             normalize_document(data)
 
-    def test_v5_1_authored_is_rejected_by_normalizer(self):
-        data = self._minimal_v5()
-        data["schema"]["version"] = "5.1.0"
+    def test_v6_minor_version_bump_is_accepted_by_normalizer(self):
+        data = self._minimal_v6()
+        data["schema"]["version"] = "6.1.0"
+        doc = normalize_document(data)
+        assert doc is not None
+
+    def test_v5_authored_is_rejected_by_normalizer(self):
+        data = self._minimal_v6()
+        data["schema"]["version"] = "5.13.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema version 5.12.0 is supported"
+            ValueError, match="Only crane-statics schema major version 6 is supported"
         ):
             normalize_document(data)
 
     def test_unsupported_version_is_rejected_by_loader(self, tmp_path):
-        data = self._minimal_v5()
+        data = self._minimal_v6()
         data["schema"]["version"] = "3.2.0"
         path = tmp_path / "legacy.json"
         path.write_text(json.dumps(data), encoding="utf-8")
@@ -677,8 +711,8 @@ class TestAuthoredSchemaPolicy:
         with pytest.raises(DocumentIOError, match="Unsupported authored schema version"):
             load_document(path)
 
-    def test_v5_named_authored_input_normalizes(self):
-        data = self._minimal_v5()
+    def test_v6_named_authored_input_normalizes(self):
+        data = self._minimal_v6()
         doc = normalize_document(data)
         assert len(doc.hoists) == 2
         assert {h.id for h in doc.hoists} == {"MH", "BH"}
@@ -691,11 +725,12 @@ class TestAuthoredSchemaPolicy:
         assert bh.hook_mass_t == 0.0
         assert bh.hook_daf == 1.0
 
-    def test_v5_component_mass_points_and_wind_areas_can_be_omitted(self):
-        data = self._minimal_v5()
+    def test_v6_component_mass_points_and_wind_areas_can_be_omitted(self):
+        data = self._minimal_v6()
         for body_id in ("boom", "rear_leg", "front_leg", "platform"):
-            data["model_definition"][body_id].pop("mass_points", None)
-            data["model_definition"][body_id].pop("wind_areas", None)
+            section = data["model_definition"].get(body_id, {})
+            section.pop("mass_points", None)
+            section.pop("wind_areas", None)
 
         doc = normalize_document(data)
         for body in doc.bodies:
@@ -704,12 +739,10 @@ class TestAuthoredSchemaPolicy:
 
         authored = document_to_authored_form(doc)
         for body_id in ("boom", "rear_leg", "front_leg", "platform"):
-            assert authored["model_definition"][body_id]["mass_points"] == []
-            assert authored["model_definition"][body_id]["wind_areas"] == []
+            assert body_id not in authored["model_definition"]
 
-    def test_v5_schema_defaults_are_applied_by_loader(self):
-        data = self._minimal_v5()
-        data["model_definition"]["rear_leg"].pop("nodes")
+    def test_v6_schema_defaults_are_applied_by_loader(self):
+        data = self._minimal_v6()
         data["model_definition"]["vessel_motion"].pop("accel_y_m_s2")
 
         doc = normalize_document(data)
@@ -719,8 +752,8 @@ class TestAuthoredSchemaPolicy:
         assert len(rear_leg.wind_areas) == 1
         assert doc.environment.vessel_motion.accel_y_m_s2 == pytest.approx(0.0)
 
-    def test_v5_rejects_zero_max_wind_speed(self, tmp_path):
-        data = self._minimal_v5()
+    def test_v6_rejects_zero_max_wind_speed(self, tmp_path):
+        data = self._minimal_v6()
         data["model_definition"]["environment"]["max_wind_speed_m_s"] = 0.0
         path = tmp_path / "zero_wind.json"
         path.write_text(json.dumps(data), encoding="utf-8")
@@ -728,18 +761,77 @@ class TestAuthoredSchemaPolicy:
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
-    def test_v5_rejects_reversed_hook_travel_bounds(self):
-        data = self._minimal_v5()
+    def test_v6_rejects_authored_hook_travel(self, tmp_path):
+        data = self._minimal_v6()
         data["model_definition"]["payload_hoists"]["MH"]["hook_travel"] = {
-            "min_m": 80.0,
-            "max_m": 5.0,
+            "min_m": 5.0,
+            "max_m": 80.0,
         }
+        path = tmp_path / "authored_travel.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
 
-        with pytest.raises(ValueError, match=r"hook_travel\.min_m must be <= max_m"):
-            normalize_document(data)
+        with pytest.raises(DocumentIOError, match="hook_travel"):
+            load_document(path)
 
-    def test_v5_directional_wind_area_fields_round_trip(self):
-        data = self._minimal_v5()
+    def test_v6_rejects_authored_payload_rope_length(self, tmp_path):
+        data = self._minimal_v6()
+        data["model_definition"]["payload_hoists"]["MH"]["rope_length_m"] = 500.0
+        path = tmp_path / "authored_rope_length.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+        with pytest.raises(DocumentIOError, match="rope_length_m"):
+            load_document(path)
+
+    def test_v6_dead_turns_require_a_drum_diameter(self, tmp_path):
+        data = self._minimal_v6()
+        data["model_definition"]["payload_hoists"]["MH"]["rope"] = {"drum_dead_turns": 4}
+        path = tmp_path / "dead_turns.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+        with pytest.raises(DocumentIOError, match="drum_diameter_m"):
+            load_document(path)
+
+    def _reachable_v6(self) -> dict:
+        """_minimal_v6 with a contractual outreach the 40 m boom can actually reach."""
+        data = self._minimal_v6()
+        data["model_definition"]["payload_hoists"]["MH"]["load_chart"] = [
+            {"outreach_m": 30.0, "load_t": 100.0}
+        ]
+        return data
+
+    def test_v6_dead_turns_extend_the_derived_rope_length(self):
+        bare = normalize_document(self._reachable_v6())
+        data = self._reachable_v6()
+        data["model_definition"]["payload_hoists"]["MH"]["rope"] = {
+            "drum_dead_turns": 4,
+            "drum_diameter_m": 1.5,
+        }
+        with_dead_turns = normalize_document(data)
+
+        bare_mh = next(h for h in bare.hoists if h.id == "MH")
+        dead_mh = next(h for h in with_dead_turns.hoists if h.id == "MH")
+
+        assert dead_mh.max_hook_travel_m == pytest.approx(bare_mh.max_hook_travel_m)
+        assert dead_mh.rope_length_m - bare_mh.rope_length_m == pytest.approx(4 * math.pi * 1.5)
+
+    def test_v6_hook_height_defaults_to_mean_sea_level(self):
+        doc = normalize_document(self._minimal_v6())
+        assert doc.hook_height_at_min_outreach_m == pytest.approx(-35.0)
+
+    def test_v6_authored_hook_height_drives_the_derived_travel(self):
+        data = self._reachable_v6()
+        data["model_definition"]["hook_height_at_min_outreach_m"] = -60.0
+        deeper = normalize_document(data)
+        shallower = normalize_document(self._reachable_v6())
+
+        deeper_mh = next(h for h in deeper.hoists if h.id == "MH")
+        shallower_mh = next(h for h in shallower.hoists if h.id == "MH")
+
+        assert deeper_mh.max_hook_travel_m - shallower_mh.max_hook_travel_m == pytest.approx(25.0)
+        assert deeper_mh.rope_length_m > shallower_mh.rope_length_m
+
+    def test_v6_directional_wind_area_fields_round_trip(self):
+        data = self._minimal_v6()
         data["model_definition"]["boom"]["wind_areas"][0]["area_w_m2"] = 1.5
         data["model_definition"]["boom"]["wind_areas"][0]["area_v_m2"] = 3.5
 
@@ -758,8 +850,8 @@ class TestAuthoredSchemaPolicy:
         assert "area_w_m2" not in saved_rear_wa
         assert "area_v_m2" not in saved_rear_wa
 
-    def test_v5_named_mass_position_round_trip(self):
-        data = self._minimal_v5()
+    def test_v6_named_mass_position_round_trip(self):
+        data = self._minimal_v6()
         data["model_definition"]["rear_leg"]["mass_points"] = [
             {"id": "rear_cg", "mass_t": 2.5, "position": {"x_m": 1.0, "y_m": -3.25, "z_m": 9.5}}
         ]
@@ -785,7 +877,7 @@ class TestAuthoredSchemaPolicy:
         assert rear_position == pytest.approx({"x_m": 1.0, "y_m": -3.25, "z_m": 9.5})
 
     def test_mass_point_y_offset_influences_split_support_results(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -812,7 +904,7 @@ class TestAuthoredSchemaPolicy:
             pitch_accel_rad_s2=0.0,
             roll_accel_rad_s2=0.0,
             offlead_deg=0.0,
-            side_lead_deg=0.0,
+            sidelead_deg=0.0,
         )
         offset_pt = offset_calc.compute_analysis_point(
             45.0,
@@ -826,7 +918,7 @@ class TestAuthoredSchemaPolicy:
             pitch_accel_rad_s2=0.0,
             roll_accel_rad_s2=0.0,
             offlead_deg=0.0,
-            side_lead_deg=0.0,
+            sidelead_deg=0.0,
         )
 
         assert base_pt is not None
@@ -838,7 +930,7 @@ class TestAuthoredSchemaPolicy:
         assert abs(offset_platform_mx - base_platform_mx) > 1e-6
 
     def test_lateral_acceleration_splits_every_support_group_left_of_right(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -855,7 +947,7 @@ class TestAuthoredSchemaPolicy:
             pitch_accel_rad_s2=0.0,
             roll_accel_rad_s2=0.05,
             offlead_deg=0.0,
-            side_lead_deg=0.0,
+            sidelead_deg=0.0,
         )
 
         assert pt is not None
@@ -873,7 +965,7 @@ class TestAuthoredSchemaPolicy:
             assert differential > 1e-6, f"{left_entity}/{right_entity} split evenly"
 
     def test_directional_wind_areas_follow_wind_axis(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -918,8 +1010,8 @@ class TestAuthoredSchemaPolicy:
             float(pt_y_small.baseline_reactions["platform_base"].get("Fy", 0.0))
         )
 
-    def test_v5_named_authored_input_loads(self, tmp_path):
-        data = self._minimal_v5()
+    def test_v6_named_authored_input_loads(self, tmp_path):
+        data = self._minimal_v6()
         path = tmp_path / "v5.json"
         path.write_text(json.dumps(data), encoding="utf-8")
 
@@ -927,9 +1019,9 @@ class TestAuthoredSchemaPolicy:
         assert doc.model_type == "fixed_topology_crane_2d"
         assert len(doc.hoists) == 2
 
-    def test_v5_rejects_authored_hanging_node(self, tmp_path):
-        data = self._minimal_v5()
-        data["model_definition"]["boom"]["nodes"]["user_hook"] = {
+    def test_v6_rejects_authored_hanging_node(self, tmp_path):
+        data = self._minimal_v6()
+        data["model_definition"].setdefault("boom", {}).setdefault("nodes", {})["user_hook"] = {
             "hang_from_node_id": "boom_heel",
         }
         path = tmp_path / "authored_hanging_node.json"
@@ -938,17 +1030,16 @@ class TestAuthoredSchemaPolicy:
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
-        doc = normalize_document(self._minimal_v5())
+        doc = normalize_document(self._minimal_v6())
         managed = next(node for node in doc.nodes if node.id == "__hook__MH")
         assert managed.below_node_id == "mh_hook"
 
-    def test_v5_split_mode_points_normalize_into_runtime_fields(self):
-        data = self._minimal_v5()
+    def test_v6_split_mode_points_normalize_into_runtime_fields(self):
+        data = self._minimal_v6()
         mh = data["model_definition"]["payload_hoists"]["MH"]
         mh["split"] = {
-            "falls": 1,
-            "hook_mass_t": 0.0,
-            "contractual_points": [{"outreach_m": 50.0, "load_t": 80.0}],
+            "hook": {"mass_t": 0.0, "falls": 1},
+            "load_chart": [{"outreach_m": 50.0, "load_t": 80.0}],
         }
 
         doc = normalize_document(data)
@@ -960,14 +1051,13 @@ class TestAuthoredSchemaPolicy:
         assert runtime_mh.split_contractual_points[0].outreach_m == pytest.approx(50.0)
         assert runtime_mh.split_contractual_points[0].load_t == pytest.approx(80.0)
 
-    def test_v5_rejects_removed_modes_wrapper(self, tmp_path):
-        data = self._minimal_v5()
+    def test_v6_rejects_removed_modes_wrapper(self, tmp_path):
+        data = self._minimal_v6()
         hoist = data["model_definition"]["payload_hoists"]["MH"]
         hoist["modes"] = {
             "normal": {
-                "falls": hoist.pop("falls"),
-                "hook_mass_t": hoist.pop("hook_mass_t"),
-                "contractual_points": hoist.pop("contractual_points"),
+                "hook": hoist.pop("hook"),
+                "load_chart": hoist.pop("load_chart"),
             }
         }
 
@@ -976,24 +1066,22 @@ class TestAuthoredSchemaPolicy:
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
-    def test_v5_rejects_split_values_above_normal_values(self):
-        data = self._minimal_v5()
+    def test_v6_rejects_split_values_above_normal_values(self):
+        data = self._minimal_v6()
         data["model_definition"]["payload_hoists"]["MH"]["split"] = {
-            "falls": 3,
-            "hook_mass_t": 1.0,
-            "contractual_points": [[50.0, 80.0]],
+            "hook": {"mass_t": 1.0, "falls": 3},
+            "load_chart": [{"outreach_m": 50.0, "load_t": 80.0}],
         }
 
-        with pytest.raises(ValueError, match="split.falls must be <= falls"):
+        with pytest.raises(ValueError, match="split.hook.falls must be <= hook.falls"):
             normalize_document(data)
 
-        data["model_definition"]["payload_hoists"]["MH"]["split"]["falls"] = 1
-        data["model_definition"]["payload_hoists"]["MH"]["split"]["hook_mass_t"] = 1.0
-        with pytest.raises(ValueError, match="split.hook_mass_t must be <= hook_mass_t"):
+        data["model_definition"]["payload_hoists"]["MH"]["split"]["hook"]["falls"] = 1
+        with pytest.raises(ValueError, match="split.hook.mass_t must be <= hook.mass_t"):
             normalize_document(data)
 
-    def test_v5_rejects_missing_solve_hoist(self, tmp_path):
-        data = self._minimal_v5()
+    def test_v6_rejects_missing_solve_hoist(self, tmp_path):
+        data = self._minimal_v6()
         del data["model_definition"]["boom_hoist"]
         path = tmp_path / "v5_no_solve.json"
         path.write_text(json.dumps(data), encoding="utf-8")
@@ -1004,29 +1092,52 @@ class TestAuthoredSchemaPolicy:
     @pytest.mark.parametrize(
         "primary_key", ["boom_heel", "upper_hinge", "rear_hinge", "front_hinge"]
     )
-    def test_v5_requires_each_primary_structure_point(self, tmp_path, primary_key):
-        data = self._minimal_v5()
-        del data["model_definition"][primary_key]
+    def test_v6_requires_each_primary_structure_point(self, tmp_path, primary_key):
+        data = self._minimal_v6()
+        del data["model_definition"]["structure"][primary_key]
         path = tmp_path / f"missing_{primary_key}.json"
         path.write_text(json.dumps(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
-    @pytest.mark.parametrize("dimension_key", ["boom_width_m", "slewing_bearing_diameter_m"])
-    def test_v5_requires_support_dimensions(self, tmp_path, dimension_key):
-        data = self._minimal_v5()
-        data["model_definition"].pop(dimension_key, None)
+    @pytest.mark.parametrize("dimension_key", ["boom_width_m"])
+    def test_v6_requires_support_dimensions(self, tmp_path, dimension_key):
+        data = self._minimal_v6()
+        data["model_definition"]["structure"].pop(dimension_key, None)
         path = tmp_path / f"missing_{dimension_key}.json"
         path.write_text(json.dumps(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
-    def test_v5_linear_mass_round_trips_for_boom_and_payload(self, tmp_path):
-        data = self._minimal_v5()
-        data["model_definition"]["boom_hoist"]["linear_mass_kg_m"] = 4.2
-        data["model_definition"]["payload_hoists"]["MH"]["linear_mass_kg_m"] = 3.1
+    def test_v6_allows_missing_slewing_bearing_diameter(self, tmp_path):
+        data = self._minimal_v6()
+        data["model_definition"]["structure"].pop("slewing_bearing_diameter_m", None)
+        path = tmp_path / "missing_slewing_bearing_diameter.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+        doc = load_document(path)
+
+        assert doc.support_widths.slewing_bearing_diameter_m is None
+
+    def test_v6_omits_slewing_bearing_diameter_on_round_trip_when_absent(self, tmp_path):
+        from crane_statics.data import document_to_authored_form
+
+        data = self._minimal_v6()
+        data["model_definition"]["structure"].pop("slewing_bearing_diameter_m", None)
+        path = tmp_path / "missing_slewing_bearing_diameter.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+        doc = load_document(path)
+        authored = document_to_authored_form(doc)
+
+        assert "slewing_bearing_diameter_m" not in authored["model_definition"]["structure"]
+
+    def test_v6_linear_mass_round_trips_for_boom_and_payload(self, tmp_path):
+        data = self._minimal_v6()
+        data["model_definition"]["boom_hoist"]["rope"] = {"linear_mass_kg_m": 4.2}
+        data["model_definition"]["payload_hoists"]["MH"]["rope"] = {"linear_mass_kg_m": 3.1}
         path = tmp_path / "linear_mass.json"
         path.write_text(json.dumps(data), encoding="utf-8")
 
@@ -1042,30 +1153,30 @@ class TestAuthoredSchemaPolicy:
         out_path = tmp_path / "linear_mass_saved.json"
         save_document(doc, out_path)
         saved = json.loads(out_path.read_text())
-        assert saved["model_definition"]["boom_hoist"]["linear_mass_kg_m"] == pytest.approx(4.2)
-        assert saved["model_definition"]["payload_hoists"]["MH"][
-            "linear_mass_kg_m"
-        ] == pytest.approx(3.1)
+        boom_rope = saved["model_definition"]["boom_hoist"]["rope"]
+        mh_rope = saved["model_definition"]["payload_hoists"]["MH"]["rope"]
+        assert boom_rope["linear_mass_kg_m"] == pytest.approx(4.2)
+        assert mh_rope["linear_mass_kg_m"] == pytest.approx(3.1)
 
-    def test_v5_boom_hoist_linear_mass_reaches_runtime_hoist(self):
-        doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.json")
+    def test_v6_boom_hoist_linear_mass_reaches_runtime_hoist(self):
+        doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml")
         boom_hoist = next(hoist for hoist in doc.hoists if hoist.id == "BH")
         boom_rope = next(rope for rope in doc.ropes if rope.id == boom_hoist.rope_id)
 
         assert boom_hoist.linear_mass_kg_m == pytest.approx(20.3)
         assert boom_rope.linear_mass_kg_m == pytest.approx(20.3)
 
-    def test_v5_rejects_negative_linear_mass(self, tmp_path):
-        data = self._minimal_v5()
-        data["model_definition"]["boom_hoist"]["linear_mass_kg_m"] = -0.1
+    def test_v6_rejects_negative_linear_mass(self, tmp_path):
+        data = self._minimal_v6()
+        data["model_definition"]["boom_hoist"]["rope"] = {"linear_mass_kg_m": -0.1}
         path = tmp_path / "negative_linear_mass.json"
         path.write_text(json.dumps(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
-    def test_v5_rejects_persisted_scene_defaults(self, tmp_path):
-        data = self._minimal_v5()
+    def test_v6_rejects_persisted_scene_defaults(self, tmp_path):
+        data = self._minimal_v6()
         data["analysis_defaults"] = {
             "scene": {
                 "wind_speed_m_s": 15.1,
@@ -1084,17 +1195,12 @@ class TestAuthoredSchemaPolicy:
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
-    def test_v5_accepts_additional_payload_hoist(self, tmp_path):
-        data = self._minimal_v5()
+    def test_v6_accepts_additional_payload_hoist(self, tmp_path):
+        data = self._minimal_v6()
         data["model_definition"]["payload_hoists"]["AH"] = {
-            "support_node_id": "boom_heel",
-            "hook_travel": {"min_m": 5.0, "max_m": 80.0},
-            "hook_daf": 1.0,
-            "offlead_deg": 0.0,
-            "falls": 2,
-            "hook_mass_t": 0.0,
-            "contractual_points": [{"outreach_m": 60.0, "load_t": 100.0}],
-            "rope_segments": [{"from": "boom_heel", "to": "front_base", "parts": 2}],
+            "reeving": [{"node": "boom_heel"}, {"node": "front_base", "parts": 2}],
+            "hook": {"mass_t": 0.0, "falls": 2, "daf": 1.0, "offlead_deg": 0.0},
+            "load_chart": [{"outreach_m": 60.0, "load_t": 100.0}],
         }
         path = tmp_path / "v5_payload_extra.json"
         path.write_text(json.dumps(data), encoding="utf-8")
@@ -1103,8 +1209,8 @@ class TestAuthoredSchemaPolicy:
         doc = load_document(path)
         assert len(doc.hoists) == 3
 
-    def test_v5_rejects_payload_fields_on_boom_hoist(self, tmp_path):
-        data = self._minimal_v5()
+    def test_v6_rejects_payload_fields_on_boom_hoist(self, tmp_path):
+        data = self._minimal_v6()
         data["model_definition"]["boom_hoist"]["load_node_id"] = "boom_heel"
         path = tmp_path / "v5_solve_payload_fields.json"
         path.write_text(json.dumps(data), encoding="utf-8")
@@ -1112,109 +1218,79 @@ class TestAuthoredSchemaPolicy:
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
-    def test_saved_document_validates_against_v5_schema(self, tmp_path):
+    def test_saved_document_validates_against_v6_schema(self, tmp_path):
         doc = create_default_document()
         out_path = tmp_path / "saved_schema_valid.json"
         save_document(doc, out_path)
 
         saved = json.loads(out_path.read_text())
-        schema_path = Path(__file__).parent.parent / "docs" / "crane-statics-v5.12.schema.json"
-        schema = json.loads(schema_path.read_text())
+        schema = json.loads(
+            resources.files("crane_statics.schemas")
+            .joinpath(SCHEMA_FILENAME)
+            .read_text(encoding="utf-8")
+        )
 
         validator = Draft202012Validator(schema)
         errors = sorted(validator.iter_errors(saved), key=lambda e: list(e.absolute_path))
         assert not errors, f"Schema validation errors: {[e.message for e in errors]}"
 
-    def test_documented_schema_matches_packaged_schema(self):
-        documented_schema = (
-            Path(__file__).parent.parent / "docs" / "crane-statics-v5.12.schema.json"
-        ).read_text(encoding="utf-8")
-        packaged_schema = (
-            resources.files("crane_statics.schemas")
-            .joinpath("crane-statics-v5.12.schema.json")
-            .read_text(encoding="utf-8")
-        )
-
-        assert documented_schema == packaged_schema
-
-    def test_save_outputs_compact_v5_schema(self, tmp_path):
+    def test_save_outputs_compact_v6_schema(self, tmp_path):
         doc = create_default_document()
-        out_path = tmp_path / "saved_v5.json"
+        out_path = tmp_path / "saved_v6.json"
         save_document(doc, out_path)
 
         saved = json.loads(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "5.12.0"
+        assert saved["schema"]["version"] == "6.0.0"
         assert "model_definition" in saved
-        assert "boom" in saved["model_definition"]
-        assert "rear_leg" in saved["model_definition"]
-        assert "front_leg" in saved["model_definition"]
-        assert "platform" in saved["model_definition"]
         assert "ropes" not in saved["model_definition"]
         assert "nodes" not in saved["model_definition"]
-        assert "nodes" in saved["model_definition"]["boom"]
         assert "topology" not in saved["model_definition"]
         assert "units" not in saved["metadata"]
-        assert "payload_hoists" in saved["model_definition"]
-        assert "boom_hoist" in saved["model_definition"]
-        assert "MH" in saved["model_definition"]["payload_hoists"]
-        assert "support_node_id" in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "hook_travel" in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "hook_daf" in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "offlead_deg" in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "falls" in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "hook_mass_t" in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "contractual_points" in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "split" not in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "splitable_block" not in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "rope_segments" in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "rope" not in saved["model_definition"]["payload_hoists"]["MH"]
-        assert "rope_segments" in saved["model_definition"]["boom_hoist"]
-        assert "rope" not in saved["model_definition"]["boom_hoist"]
-        assert "id" not in saved["model_definition"]["boom_hoist"]
-        assert "hook_travel" not in saved["model_definition"]["boom_hoist"]
-        assert "load_node_id" not in saved["model_definition"]["boom_hoist"]
-        assert "hook" not in saved["model_definition"]["boom_hoist"]
-        assert "contractual_curve" not in saved["model_definition"]["boom_hoist"]
-        mh_nodes = saved["model_definition"]["boom"]["nodes"]
-        assert isinstance(mh_nodes["mh_hook"], dict)
-        mh_seg0 = saved["model_definition"]["payload_hoists"]["MH"]["rope_segments"][0]
-        assert isinstance(mh_seg0, dict)
+        md = saved["model_definition"]
+        assert "structure" in md
+        assert "hook_height_at_min_outreach_m" in md
+        mh = md["payload_hoists"]["MH"]
+        assert set(mh) == {"reeving", "hook", "load_chart"}
+        assert set(mh["hook"]) == {"mass_t", "falls", "daf", "offlead_deg"}
+        assert "split" not in mh
+        assert mh["reeving"][-1] == {"node": "hook", "body": "boom", "u_m": 0.0, "w_m": 0.0}
+        assert set(md["boom_hoist"]) == {"reeving"}
+        assert md["boom_hoist"]["reeving"][-1] == {"node": "rear_top", "parts": 2}
+        # Empty bodies and all-zero vessel motion are not written out.
+        assert not {"boom", "rear_leg", "front_leg", "platform"} & set(md)
+        assert "vessel_motion" not in md
 
     def test_save_emits_split_mode_without_legacy_splitable_flag(self, tmp_path):
-        doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.json")
-        out_path = tmp_path / "saved_v5_split.json"
+        doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml")
+        out_path = tmp_path / "saved_v6_split.json"
         save_document(doc, out_path)
 
         saved = json.loads(out_path.read_text())
         mh = saved["model_definition"]["payload_hoists"]["MH"]
         assert "split" in mh
         assert "splitable_block" not in mh
-        assert mh["split"]["falls"] == 12
-        assert mh["split"]["hook_mass_t"] == pytest.approx(91.51)
+        assert mh["split"]["hook"]["falls"] == 12
+        assert mh["split"]["hook"]["mass_t"] == pytest.approx(91.51)
 
 
 class TestSplitModeAutosetAndChart:
     """Targeted tests for split-mode autoset and chart mode behavior."""
 
     def _example_doc(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
         return load_document(example_path)
 
-    def test_calculator_reuses_identical_primitive_basis(self, monkeypatch):
+    def test_opposite_wind_directions_share_one_primitive_basis(self):
+        """Wind sign is applied by composition, so the sensitivities are identical.
+
+        Only the baseline differs between +X and -X: the primitive basis is built
+        from the wind magnitude alone.
+        """
         doc = self._example_doc()
         calc = CraneCalculator(doc)
-        original_builder = engine_module.build_directional_response_basis
-        build_count = 0
-
-        def counting_builder(*args, **kwargs):
-            nonlocal build_count
-            build_count += 1
-            return original_builder(*args, **kwargs)
-
-        monkeypatch.setattr(engine_module, "build_directional_response_basis", counting_builder)
 
         first = calc.compute_analysis_point(
             45.0, 0.0, "MH", wind_speed_m_s=15.1, wind_direction="+X"
@@ -1224,7 +1300,6 @@ class TestSplitModeAutosetAndChart:
         )
 
         assert first is not None and second is not None
-        assert build_count == 1
         assert first.baseline_reactions != second.baseline_reactions
         assert first.sensitivity_reactions == second.sensitivity_reactions
 
@@ -1245,7 +1320,7 @@ class TestSplitModeAutosetAndChart:
                     wind_speed_m_s=wind_speed,
                     wind_direction=case.wind_direction,
                     offlead_deg=0.0,
-                    side_lead_deg=0.0,
+                    sidelead_deg=0.0,
                 )
 
             legacy = calc.compute_analysis_point(
@@ -1255,7 +1330,7 @@ class TestSplitModeAutosetAndChart:
                 wind_speed_m_s=wind_speed,
                 wind_direction=case.wind_direction,
                 offlead_deg=case.offlead_deg,
-                side_lead_deg=case.side_lead_deg,
+                sidelead_deg=case.sidelead_deg,
             )
             composed = limit_auto_set_module._compose_lead_channel_point(
                 zero_lead_points[case.wind_direction],
@@ -1528,7 +1603,7 @@ class TestResponsiveLayoutRegression:
     """Targeted UI regression tests for responsive sizing behavior."""
 
     def _example_doc(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         if not example_path.exists():
             pytest.skip("Example file not found")
         return load_document(example_path)
@@ -1609,8 +1684,8 @@ class TestResponsiveLayoutRegression:
                 s["message"] for s in report["sections"] if not s["passed"]
             )
 
-    def test_explicit_lateral_unit_maps_compose_offlead_and_side_lead(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+    def test_explicit_lateral_unit_maps_compose_offlead_and_sidelead(self):
+        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
         doc = load_document(example_path)
         calc = CraneCalculator(doc)
         common = {
@@ -1624,15 +1699,15 @@ class TestResponsiveLayoutRegression:
         }
 
         no_lead = calc.compute_analysis_point(
-            45.0, 0.0, "MH", offlead_deg=0.0, side_lead_deg=0.0, **common
+            45.0, 0.0, "MH", offlead_deg=0.0, sidelead_deg=0.0, **common
         )
         with_lead = calc.compute_analysis_point(
-            45.0, 0.0, "MH", offlead_deg=10.0, side_lead_deg=8.0, **common
+            45.0, 0.0, "MH", offlead_deg=10.0, sidelead_deg=8.0, **common
         )
 
         assert no_lead is not None and with_lead is not None
         assert no_lead.offlead_lateral_unit_reactions is not None
-        assert with_lead.side_lead_lateral_unit_reactions is not None
+        assert with_lead.sidelead_lateral_unit_reactions is not None
 
         offlead_unit_fx = no_lead.offlead_lateral_unit_reactions["heel_point"]["Fx"]
         observed_offlead_fx = (
@@ -1641,7 +1716,7 @@ class TestResponsiveLayoutRegression:
         )
         assert observed_offlead_fx == pytest.approx(math.sin(math.radians(10.0)) * offlead_unit_fx)
 
-        side_unit_fy = with_lead.side_lead_lateral_unit_reactions["platform_base"]["Fy"]
+        side_unit_fy = with_lead.sidelead_lateral_unit_reactions["platform_base"]["Fy"]
         observed_side_fy = (
             with_lead.sensitivity_reactions["platform_base"]["Fy"]
             - no_lead.sensitivity_reactions["platform_base"]["Fy"]
@@ -1784,6 +1859,7 @@ class TestResponsiveLayoutRegression:
 
         expected = [
             "Gravity",
+            "Rope weight",
             "Idle hook mass",
             "Hook load",
             "Wind",
@@ -2268,20 +2344,18 @@ class TestResponsiveLayoutRegression:
     def test_sceneview_boom_freebody_force_residual_is_small(self):
         doc = self._example_doc()
         hoist_id = doc.hoists[0].id
-        calc = CraneCalculator(doc)
-        pt = calc.compute_analysis_point(45.0, 0.0, hoist_id)
-        if pt is None:
-            pytest.skip("No analysis point available")
-
-        inputs = scene_inputs(
+        inputs = scene_inputs_at_drawn_tackle(
             doc,
             hoist_id,
-            analysis_point=pt,
             display={"selected_freebody": "boom"},
         )
-        positions = inputs.base_node_positions()
+        if inputs.analysis_point is None:
+            pytest.skip("No analysis point available")
+        positions = inputs.node_positions()
 
-        vectors = inputs.body_loads(positions).vectors(dl.GRAVITY, dl.ROPE_INTERFACE, dl.REACTIONS)
+        vectors = inputs.body_loads(positions).vectors(
+            dl.GRAVITY, dl.ROPE_WEIGHT, dl.ROPE_INTERFACE, dl.REACTIONS
+        )
 
         assert len(vectors) > 0
         sum_fx = float(sum(v.fx_kN for v in vectors))
@@ -2295,10 +2369,8 @@ class TestResponsiveLayoutRegression:
     def test_sceneview_all_freebodies_are_in_equilibrium_for_zeroed_environment_case(self):
         doc = self._example_doc()
         hoist_id = doc.hoists[0].id
-        calc = CraneCalculator(doc)
-        pt = calc.compute_analysis_point(
-            45.0,
-            0.0,
+        inputs = scene_inputs_at_drawn_tackle(
+            doc,
             hoist_id,
             wind_speed_m_s=0.0,
             wind_direction="+X",
@@ -2308,13 +2380,11 @@ class TestResponsiveLayoutRegression:
             pitch_accel_rad_s2=0.0,
             roll_accel_rad_s2=0.0,
             offlead_deg=0.0,
-            side_lead_deg=0.0,
+            sidelead_deg=0.0,
         )
-        if pt is None:
+        if inputs.analysis_point is None:
             pytest.skip("No analysis point available")
-
-        inputs = scene_inputs(doc, hoist_id, analysis_point=pt)
-        positions = inputs.base_node_positions()
+        positions = inputs.node_positions()
 
         refs = {
             "platform": "platform_base",
@@ -2325,7 +2395,9 @@ class TestResponsiveLayoutRegression:
 
         for body, ref_node in refs.items():
             loads = inputs.body_loads(positions, body)
-            vectors = loads.vectors(dl.GRAVITY, dl.IDLE_HOOK_MASS, dl.ROPE_INTERFACE, dl.REACTIONS)
+            vectors = loads.vectors(
+                dl.GRAVITY, dl.ROPE_WEIGHT, dl.IDLE_HOOK_MASS, dl.ROPE_INTERFACE, dl.REACTIONS
+            )
 
             assert len(vectors) > 0
             sum_fx = float(sum(v.fx_kN for v in vectors))
@@ -2437,8 +2509,9 @@ class TestResponsiveLayoutRegression:
         frame = build_scene_frame(inputs)
 
         axis_tips = [axis.label for axis in frame.boom_axes]
-        assert axis_tips.count("X") == 1
-        assert axis_tips.count("Z") == 1
+        # The boom's local axes are labelled U and W, not X and Z.
+        assert axis_tips.count("U") == 1
+        assert axis_tips.count("W") == 1
 
     def test_sceneview_rope_segment_engineering_tooltip_fields(self):
         doc = self._example_doc()

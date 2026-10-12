@@ -10,7 +10,7 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
 
 @pytest.fixture
@@ -274,5 +274,6 @@ class TestExport:
 
 def _splitable(vm: ChartViewModel, hoist_id: str) -> bool:
     doc = vm._model.document
+    assert doc is not None
     hoist = next((h for h in doc.hoists if h.id == hoist_id), None)
     return bool(hoist is not None and getattr(hoist, "splitable_block", False))

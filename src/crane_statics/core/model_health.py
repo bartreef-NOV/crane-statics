@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ..data.models import PRIMARY_NODE_IDS
+from ..data.models import CraneDocument, PRIMARY_NODE_IDS
 
 
 def _sample(ids: list[str], limit: int = 3) -> str:
@@ -13,7 +13,7 @@ def _sample(ids: list[str], limit: int = 3) -> str:
     return f"{head}{suffix}"
 
 
-def collect_model_health_issues(doc) -> tuple[list[str], list[str]]:
+def collect_model_health_issues(doc: Optional[CraneDocument]) -> tuple[list[str], list[str]]:
     """Return actionable blocking and warning issues for the model editor."""
     if doc is None:
         return [], []
@@ -84,31 +84,87 @@ def collect_model_health_issues(doc) -> tuple[list[str], list[str]]:
             f"{_sample(splitable_without_split_points)}"
         )
 
-    insufficient_rope_length = _hoists_with_insufficient_rope_length(doc)
+    insufficient_rope_length = _hoists_with_insufficient_rope_length(doc, solve_hoist_ids)
     if insufficient_rope_length:
         warnings.append(
             f"Hoists with insufficient rope length: {_sample(insufficient_rope_length)}"
         )
 
+    undrivable, unreachable = _payload_hook_height_issues(doc, solve_hoist_ids)
+    if undrivable:
+        warnings.append(
+            "Hoists whose rope length and hook travel could not be derived: "
+            f"{_sample(undrivable)}"
+        )
+    if unreachable:
+        warnings.append(
+            f"Hoists that cannot reach the design hook height at maximum outreach: "
+            f"{_sample(unreachable)}"
+        )
+
     return blocking, warnings
 
 
-def _hoists_with_insufficient_rope_length(doc) -> list[str]:
-    """Hoist ids whose authored rope_length_m can't reach max hook travel at 0 deg boom angle."""
-    from ..calculation.rope_mass import compute_reference_reeved_length_m
+def _hoists_with_insufficient_rope_length(
+    doc: CraneDocument, solve_hoist_ids: list[str]
+) -> list[str]:
+    """Boom-hoist ids whose authored rope_length_m is shorter than the reeving at 0 deg.
+
+    Payload hoists are exempt: their rope length is derived from the design hook
+    height, so it is sufficient by construction.
+    """
+    from ..calculation.rope_mass import reeved_length_at_angle_m
 
     doc_dict = doc.model_dump()
     flagged: list[str] = []
     for hoist in doc.hoists:
-        if hoist.rope_length_m is None:
+        if hoist.id not in solve_hoist_ids or hoist.rope_length_m is None:
             continue
         try:
-            reference_length = compute_reference_reeved_length_m(doc_dict, hoist.id)
+            reference_length = reeved_length_at_angle_m(doc_dict, hoist.id, 0.0)
         except ValueError:
             continue
         if reference_length is not None and float(hoist.rope_length_m) < reference_length:
             flagged.append(hoist.id)
     return sorted(flagged)
+
+
+def _payload_hook_height_issues(
+    doc: CraneDocument, solve_hoist_ids: list[str]
+) -> tuple[list[str], list[str]]:
+    """(derivation failed, design height unreachable at max outreach) payload hoist ids.
+
+    The second list is the honest form of the tackle clamp: at large outreach the
+    sheave can sit below the design hook height, and there the hook stops at the
+    sheave instead of reaching the water.
+    """
+    from ..calculation.rope_mass import hook_support_node_id
+    from ..calculation.solver.kinematics import KinematicsAdapter
+
+    hook_height_m = doc.hook_height_at_min_outreach_m
+    doc_dict = doc.model_dump()
+    kin = KinematicsAdapter(doc_dict)
+    undrivable: list[str] = []
+    unreachable: list[str] = []
+    for hoist in doc.hoists:
+        if hoist.id in solve_hoist_ids:
+            continue
+        if hoist.rope_length_m is None or hoist.max_hook_travel_m is None:
+            undrivable.append(hoist.id)
+            continue
+        if hook_height_m is None or hoist.outreach_max_m is None:
+            continue
+        support_id = hook_support_node_id(doc_dict, hoist.id)
+        try:
+            angle = kin.outreach_to_angle(float(hoist.outreach_max_m), hoist.id)
+            support = (
+                None if angle is None else kin.compute_all_node_positions(angle).get(support_id)
+            )
+        except (TypeError, ValueError, RuntimeError, ZeroDivisionError):
+            continue
+        if support is not None and float(support["z"]) < float(hook_height_m):
+            unreachable.append(hoist.id)
+    return sorted(undrivable), sorted(unreachable)
 
 
 def format_issue_summary(issues: list[str]) -> str:
@@ -118,7 +174,9 @@ def format_issue_summary(issues: list[str]) -> str:
     return issues[0] if extra <= 0 else f"{issues[0]} (+{extra} more)"
 
 
-def health_status(doc, validation_error: Optional[str] = None) -> tuple[str, str, str]:
+def health_status(
+    doc: Optional[CraneDocument], validation_error: Optional[str] = None
+) -> tuple[str, str, str]:
     """Return (severity, verdict, checks summary) for the model status strip."""
     if doc is None:
         return "none", "—", "Checks: —"

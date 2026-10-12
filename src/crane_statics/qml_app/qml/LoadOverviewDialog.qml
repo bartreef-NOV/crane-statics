@@ -1,13 +1,14 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
-import "components" as Components
+import BF.DesignSystem
 
-Components.Dialog {
+Dialog {
     id: root
 
     property var overview: ({})
+
+    SystemPalette { id: sysPalette }
 
     function showOverview(newOverview) {
         overview = newOverview
@@ -17,13 +18,13 @@ Components.Dialog {
     title: overview.title !== undefined ? overview.title : qsTr("Load Contribution Overview")
     modal: true
     anchors.centerIn: Overlay.overlay
-    width: Design.DesignTokens.sizing.dialogWidth
+    width: Metrics.dialogWidth
     standardButtons: Dialog.Close
 
     ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        spacing: Design.DesignTokens.spacing.sm
+        spacing: Metrics.spacing8
 
         Label {
             Layout.fillWidth: true
@@ -56,7 +57,7 @@ Components.Dialog {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: Design.DesignTokens.colors.divider
+            color: sysPalette.mid
         }
 
         RowLayout {

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import Any, Iterable, Mapping, Optional, Tuple
+from typing import Any, Iterable, Mapping, Optional, Tuple, cast
 
 from crane_statics.calculation.rope_mass import compute_rope_on_winch, find_winch_node_ids
 from crane_statics.presentation.formatters import HoistFormatter, node_display_name
@@ -62,6 +62,7 @@ ROPE_COLOR_KEYS = (
 #: and the rope/idle-hook interface loads that balance it) share a colour.
 FORCE_PALETTE_KEYS: dict[str, str] = {
     drawn_loads.GRAVITY: "force_hook",
+    drawn_loads.ROPE_WEIGHT: "force_hook",
     drawn_loads.IDLE_HOOK_MASS: "force_hook",
     drawn_loads.HOOK_LOAD: "force_hook",
     drawn_loads.WIND: "force_wind",
@@ -133,6 +134,7 @@ class SceneDisplay:
     show_labels: bool = False
     show_hook_forces: bool = False
     show_gravity_forces: bool = False
+    show_rope_weight_forces: bool = False
     show_wind_forces: bool = False
     show_inertia_forces: bool = False
     show_reaction_forces: bool = False
@@ -145,6 +147,7 @@ class SceneDisplay:
         "show_labels",
         "show_hook_forces",
         "show_gravity_forces",
+        "show_rope_weight_forces",
         "show_wind_forces",
         "show_inertia_forces",
         "show_reaction_forces",
@@ -185,13 +188,16 @@ class SceneDisplay:
         flag = {
             "hook": "show_hook_forces",
             "gravity": "show_gravity_forces",
+            "rope_weight": "show_rope_weight_forces",
             "wind": "show_wind_forces",
             "inertia": "show_inertia_forces",
             "reactions": "show_reaction_forces",
             "labels": "show_labels",
             "winch_spools": "show_winch_spools",
         }.get(name)
-        return self if flag is None else replace(self, **{flag: bool(visible)})
+        return (
+            self if flag is None else replace(self, **cast(dict[str, Any], {flag: bool(visible)}))
+        )
 
 
 @dataclass(frozen=True)
@@ -257,7 +263,9 @@ class SceneInputs:
         """Kinematic node positions at the drawn boom angle."""
         if self.kinematics is None:
             return {}
-        return self.kinematics.compute_all_node_positions(self.conditions.boom_angle_deg)
+        return cast(
+            Positions, self.kinematics.compute_all_node_positions(self.conditions.boom_angle_deg)
+        )
 
     def node_positions(self) -> Positions:
         """Node positions as drawn, with the active hook lowered by the tackle length."""
@@ -680,10 +688,10 @@ class _SceneBuilder:
     def _draw_winch_spools(self, positions: Positions, body_filter: FreeBodyFilter) -> None:
         """One readout row per hoist: how much rope is spooled on its winch.
 
-        Screen-space annotation rather than scene geometry -- this used to be a
-        centre-of-gravity symbol per winch node, which implied a mass participating
-        in the load model. It never did: ``calculation.rope_mass`` is display and
-        validation only, and ``core.drawn_loads`` does not read it.
+        Screen-space annotation rather than scene geometry -- a readout, not a load.
+        The spooled mass *is* carried by the load model, but as one arrow per node
+        under the "Rope weight" overlay, which sums every hoist sharing a winch
+        node; this row keeps the per-hoist inventory legible next to it.
 
         A hoist appears if *any* of its winch nodes belongs to the cut body, and
         reports its whole spooled total rather than a pro-rated share -- "rope on
@@ -782,7 +790,9 @@ class _SceneBuilder:
         x_end = self._to_scene(heel_x + length * x_axis[0], heel_z + length * x_axis[1])
         z_end = self._to_scene(heel_x + length * z_axis[0], heel_z + length * z_axis[1])
         self._boom_frame_segs = [(origin, x_end), (origin, z_end)]
-        for label, end, color_key in (("X", x_end, "axis_x"), ("Z", z_end, "axis_z")):
+        # U and W name the boom's local along/across axes, keeping X and Z free
+        # for the global frame the rest of the scene is labelled in.
+        for label, end, color_key in (("U", x_end, "axis_x"), ("W", z_end, "axis_z")):
             self._frame.add_axis(
                 label=label,
                 start_x=float(origin[0]),
@@ -811,6 +821,8 @@ class _SceneBuilder:
             visible.append(drawn_loads.ROPE_INTERFACE)
         if display.show_gravity_forces or free_body:
             visible.append(drawn_loads.GRAVITY)
+        if display.show_rope_weight_forces or free_body:
+            visible.append(drawn_loads.ROPE_WEIGHT)
         if display.show_hook_forces or free_body:
             visible.append(drawn_loads.HOOK_LOAD)
         if display.show_wind_forces or free_body:

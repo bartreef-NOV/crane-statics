@@ -19,7 +19,6 @@ from .solver.crane_solver import (
     compose_unit_basis_point,
     compose_scalar_envelope_unit_basis_point,
 )
-from .cache import DirectionalBasisCache
 from .capacity import solve_capacity_limit_kN, solve_radial_capacity_kN
 
 
@@ -41,7 +40,7 @@ class AnalysisPoint:
     # Independent force responses per lateral kN.
     offlead_lateral_unit_rope_tensions: Optional[dict[str, float]] = None
     offlead_lateral_unit_reactions: Optional[dict[str, dict[str, float]]] = None
-    side_lead_lateral_unit_reactions: Optional[dict[str, dict[str, float]]] = None
+    sidelead_lateral_unit_reactions: Optional[dict[str, dict[str, float]]] = None
 
     # Local axis information (for boom and leg components)
     connection_local_axes: Optional[dict[str, dict[str, float] | tuple[float, float]]] = (
@@ -49,7 +48,7 @@ class AnalysisPoint:
     )
 
     # Governing signs for environmental loads
-    governing_signs: dict[str, int] = None  # wind, accel_x, accel_z, pitch -> {-1, 0, 1}
+    governing_signs: dict[str, int] | None = None  # wind, accel_x, accel_z, pitch -> {-1, 0, 1}
     governing_wind_direction: Optional[str] = None
 
 
@@ -60,22 +59,18 @@ _WIND_DIRECTIONS = {"+X", "-X", "+Y", "-Y"}
 _CALCULATOR_CACHE: dict[int, "CraneCalculator"] = {}
 
 
-def get_calculator(
-    document: CraneDocument, cache_max_size: Optional[int] = 5000
-) -> "CraneCalculator":
+def get_calculator(document: CraneDocument) -> "CraneCalculator":
     """Get or create a CraneCalculator for the given document.
 
-    Calculators are cached by document id to enable cache sharing across
-    multiple services (sweep, limit_auto_set, analysis_services) within
-    the same session. Cache is per-document to isolate different analyses.
+    Calculators are reused per document so the derived document dict, kinematics
+    adapter and static solver context are built once rather than per service
+    (sweep, limit_auto_set, analysis_services).
 
     Args:
         document: CraneDocument to analyze
-        cache_max_size: Maximum number of basis objects to cache per calculator.
-                       Default: 5000. Only used on first call for a given document.
 
     Returns:
-        Cached CraneCalculator instance for this document.
+        The CraneCalculator instance for this document.
 
     Example:
         calc = get_calculator(doc)
@@ -84,7 +79,7 @@ def get_calculator(
     """
     doc_id = id(document)
     if doc_id not in _CALCULATOR_CACHE:
-        _CALCULATOR_CACHE[doc_id] = CraneCalculator(document, cache_max_size=cache_max_size)
+        _CALCULATOR_CACHE[doc_id] = CraneCalculator(document)
     return _CALCULATOR_CACHE[doc_id]
 
 
@@ -276,59 +271,22 @@ class CraneCalculator:
     # Numeric tolerance for comparisons
     TOLERANCE = NUMERIC_TOLERANCE
 
-    def __init__(self, document: CraneDocument, cache_max_size: Optional[int] = 5000):
-        """Initialize calculator with document and optional cache size limit.
+    def __init__(self, document: CraneDocument):
+        """Initialize calculator with a document.
 
         Args:
             document: CraneDocument to analyze
-            cache_max_size: Maximum number of basis objects to cache.
-                           Default: 5000. Use None for unbounded (not recommended for long runs).
         """
         self.doc = document
         self._doc_dict = document.model_dump()
         self.hoists = {h.id: h for h in document.hoists}
         self._kinematics = KinematicsAdapter(self._doc_dict)
         self._solver_ctx = build_solver_static_context(self._doc_dict)
-        self._directional_basis_cache = DirectionalBasisCache(max_size=cache_max_size)
-
-    @staticmethod
-    def _freeze_runtime_overrides(value: Any):
-        if isinstance(value, dict):
-            return tuple(
-                sorted(
-                    (str(key), CraneCalculator._freeze_runtime_overrides(item))
-                    for key, item in value.items()
-                )
-            )
-        if isinstance(value, (list, tuple)):
-            return tuple(CraneCalculator._freeze_runtime_overrides(item) for item in value)
-        return value
-
-    def _directional_basis_key(
-        self,
-        *,
-        boom_angle_deg: float,
-        hoist_id: str,
-        wind_speed_m_s: float,
-        accel_x_m_s2: float,
-        accel_z_m_s2: float,
-        pitch_accel_rad_s2: float,
-        hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]],
-    ) -> tuple:
-        return (
-            str(hoist_id),
-            float(boom_angle_deg),
-            float(wind_speed_m_s),
-            float(accel_x_m_s2),
-            float(accel_z_m_s2),
-            float(pitch_accel_rad_s2),
-            self._freeze_runtime_overrides(hoist_runtime_overrides or {}),
-        )
 
     def _build_connection_map(self) -> dict[str, dict]:
         if self.doc.connections is None:
             self.doc.connections = []
-        return {c.get("id"): c for c in self.doc.connections}
+        return {str(c.get("id")): c for c in self.doc.connections}
 
     @staticmethod
     def _resolve_boom_local_point(
@@ -526,7 +484,7 @@ class CraneCalculator:
         wind_y_m_s: float,
         accel_y_m_s2: float,
         roll_accel_rad_s2: float,
-        side_lead_deg: float,
+        sidelead_deg: float,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
     ) -> None:
         split_at_zero, platform_mx_at_zero, platform_fy_at_zero = (
@@ -566,7 +524,7 @@ class CraneCalculator:
                 hoist_runtime_overrides=hoist_runtime_overrides,
             )
         )
-        side_scale = math.sin(math.radians(float(side_lead_deg)))
+        side_scale = math.sin(math.radians(float(sidelead_deg)))
         side_unit_reactions: dict[str, dict[str, float]] = {}
         for entity, base_comp in split_at_zero.items():
             one_comp = split_at_one.get(entity, {})
@@ -611,7 +569,7 @@ class CraneCalculator:
         # Keep the in-plane moment under M while exposing the explicit My component.
         platform_base["My"] = float(platform_base.get("M", 0.0))
         platform_base_sens["My"] = float(platform_base_sens.get("M", 0.0))
-        point.side_lead_lateral_unit_reactions = side_unit_reactions
+        point.sidelead_lateral_unit_reactions = side_unit_reactions
 
     def compute_analysis_point(
         self,
@@ -626,9 +584,17 @@ class CraneCalculator:
         pitch_accel_rad_s2: Optional[float] = None,
         roll_accel_rad_s2: Optional[float] = None,
         offlead_deg: Optional[float] = None,
-        side_lead_deg: Optional[float] = None,
+        sidelead_deg: Optional[float] = None,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
+        tackle_length_m: Optional[float] = None,
     ) -> Optional[AnalysisPoint]:
+        """Full linear response at one boom angle.
+
+        ``tackle_length_m`` is the rope paid out below the active hoist's sheave.
+        It moves rope weight between the falls and the winch, so an interactive
+        caller passes what the scene draws; leaving it ``None`` evaluates the
+        designed operating position (see ``rope_mass.active_hook_positions``).
+        """
         try:
             if not self.hoists.get(hoist_id):
                 return None
@@ -661,32 +627,20 @@ class CraneCalculator:
                 if roll_accel_rad_s2 is None
                 else float(roll_accel_rad_s2)
             )
-            side_lead_ref = 0.0 if side_lead_deg is None else float(side_lead_deg)
-            basis_key = self._directional_basis_key(
-                boom_angle_deg=boom_angle_deg,
-                hoist_id=hoist_id,
+            sidelead_ref = 0.0 if sidelead_deg is None else float(sidelead_deg)
+            basis = build_directional_response_basis(
+                self._doc_dict,
+                self._kinematics,
+                hoist_id,
+                boom_angle_deg,
                 wind_speed_m_s=abs(wind_x_ref),
                 accel_x_m_s2=accel_x_ref,
                 accel_z_m_s2=accel_z_ref,
-                pitch_accel_rad_s2=pitch_ref,
+                pitch_rad_s2=pitch_ref,
+                solver_ctx=self._solver_ctx,
                 hoist_runtime_overrides=hoist_runtime_overrides,
+                tackle_length_m=tackle_length_m,
             )
-            basis = self._directional_basis_cache.get(basis_key)
-            if basis is None:
-                basis = build_directional_response_basis(
-                    self._doc_dict,
-                    self._kinematics,
-                    hoist_id,
-                    boom_angle_deg,
-                    wind_speed_m_s=abs(wind_x_ref),
-                    accel_x_m_s2=accel_x_ref,
-                    accel_z_m_s2=accel_z_ref,
-                    pitch_rad_s2=pitch_ref,
-                    solver_ctx=self._solver_ctx,
-                    hoist_runtime_overrides=hoist_runtime_overrides,
-                )
-                if basis is not None:
-                    self._directional_basis_cache.put(basis_key, basis)
             if basis is None:
                 return None
 
@@ -737,7 +691,7 @@ class CraneCalculator:
                 wind_y_m_s=wind_y_ref,
                 accel_y_m_s2=accel_y_ref,
                 roll_accel_rad_s2=roll_ref,
-                side_lead_deg=side_lead_ref,
+                sidelead_deg=sidelead_ref,
                 hoist_runtime_overrides=hoist_runtime_overrides,
             )
             return point
@@ -946,7 +900,7 @@ class CraneCalculator:
         pitch_accel_rad_s2: Optional[float] = None,
         roll_accel_rad_s2: Optional[float] = None,
         offlead_deg: Optional[float] = None,
-        side_lead_deg: Optional[float] = None,
+        sidelead_deg: Optional[float] = None,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
     ) -> Optional[AllowableCapacity]:
         wind_ref = (
@@ -968,7 +922,7 @@ class CraneCalculator:
                 pitch_accel_rad_s2=pitch_accel_rad_s2,
                 roll_accel_rad_s2=roll_accel_rad_s2,
                 offlead_deg=offlead_deg,
-                side_lead_deg=side_lead_deg,
+                sidelead_deg=sidelead_deg,
                 hoist_runtime_overrides=hoist_runtime_overrides,
             )
             if point is None:

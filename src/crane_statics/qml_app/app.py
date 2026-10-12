@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QCoreApplication, QEvent, QTimer, QUrl
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QTimer, QUrl
 from PyQt6.QtGui import QGuiApplication, QSurfaceFormat
 from PyQt6.QtQml import QQmlApplicationEngine
 
@@ -22,6 +22,7 @@ from .viewmodels.scene_vm import SceneViewModel
 _LOG = logging.getLogger(__name__)
 
 QML_DIR = Path(__file__).parent / "qml"
+DESIGN_DIR = Path(__file__).parent / "design"
 QML_MODULE = "CraneStatics"
 
 
@@ -45,11 +46,15 @@ def main(argv: list[str] | None = None) -> int:
     configure_controls_style()
     configure_surface_format()
     app = QGuiApplication(args)
+    # The app has a single, light-only appearance; force it regardless of the
+    # OS color scheme so the native style's chrome doesn't follow a dark OS theme.
+    hints = app.styleHints()
+    if hints is not None:
+        hints.setColorScheme(Qt.ColorScheme.Light)
 
     session = SessionState()
     engine = QQmlApplicationEngine(app)
     app_vm = AppViewModel(session, engine)
-    app_vm.applyColorScheme()
     model_vm = ModelViewModel(session, engine)
     scene_vm = SceneViewModel(session, engine)
     chart_vm = ChartViewModel(session, engine)
@@ -61,6 +66,7 @@ def main(argv: list[str] | None = None) -> int:
 
     app.aboutToQuit.connect(cleanup)
     engine.addImportPath(str(QML_DIR))
+    engine.addImportPath(str(DESIGN_DIR))
     context = engine.rootContext()
     context.setContextProperty("appVm", app_vm)
     context.setContextProperty("modelVm", model_vm)
@@ -79,4 +85,4 @@ def main(argv: list[str] | None = None) -> int:
     if len(args) > 1:
         QTimer.singleShot(0, lambda: app_vm.openPath(args[1]))
 
-    return app.exec()
+    return int(app.exec())

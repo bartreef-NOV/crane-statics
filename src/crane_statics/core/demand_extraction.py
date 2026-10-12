@@ -18,7 +18,7 @@ def extract_connection_component_response(
     hook_kN: float,
     connection_id: str,
     component: str,
-    support_widths_diameter_m: float = 1.0,
+    support_widths_diameter_m: Optional[float] = 1.0,
 ) -> Optional[float]:
     """Extract a single connection component demand from analysis point.
 
@@ -57,6 +57,8 @@ def extract_connection_component_response(
         return compute_platform_base_mradial_kNm(mx_kNm=mx, my_kNm=my)
 
     elif component == "max_bearing_line_load" and connection_id == "platform_base":
+        if support_widths_diameter_m is None:
+            return None
         fz = float(base_map.get("Fz", 0.0)) + float(sens_map.get("Fz", 0.0)) * hook_kN
         mx = float(base_map.get("Mx", 0.0)) + float(sens_map.get("Mx", 0.0)) * hook_kN
         my = (
@@ -85,7 +87,7 @@ def extract_connection_component_demand(
     hook_kN: float,
     connection_id: str,
     component: str,
-    support_widths_diameter_m: float = 1.0,
+    support_widths_diameter_m: Optional[float] = 1.0,
 ) -> Optional[float]:
     """Extract a non-negative connection demand from an analysis point."""
     response = extract_connection_component_response(
@@ -106,7 +108,7 @@ def connection_component_responds_to_hook_load(
     pt: Any,
     connection_id: str,
     component: str,
-    support_widths_diameter_m: float = 1.0,
+    support_widths_diameter_m: Optional[float] = 1.0,
     tolerance: float = 1e-9,
 ) -> bool:
     """Return whether a connection component changes with hook load."""

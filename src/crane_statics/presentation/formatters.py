@@ -29,11 +29,21 @@ def _entity_field(entity: Any, name: str) -> str:
 
 @dataclass(frozen=True)
 class Column:
-    """Column specification for table display."""
+    """Column specification for table display, and for editing it in place.
+
+    ``field`` names the entry this column writes in the table's edit-field map,
+    the same map the Add dialogs submit; a column without one is derived or
+    immutable and stays read-only. ``editable`` narrows that per record, because
+    the boom hoist and a payload hoist share one table but not one set of
+    authored fields.
+    """
 
     name: str
     accessor: Any  # Callable[[object], Any] but avoid import for circular dep
     decimals: Optional[int] = None
+    field: Optional[str] = None
+    editor: str = ""
+    editable: Any = None  # Callable[[object], bool] but avoid import for circular dep
 
     def format(self, record: Any) -> str:
         value = self.accessor(record)
@@ -45,6 +55,17 @@ class Column:
             decimals = self.decimals if self.decimals is not None else 1
             return f"{float(value):.{decimals}f}"
         return str(value)
+
+    def editor_kind(self) -> str:
+        """Which editor this column wants: stated, else implied by its formatting."""
+        if self.editor:
+            return self.editor
+        return "number" if self.decimals is not None else "text"
+
+    def is_editable(self, record: Any) -> bool:
+        if not self.field:
+            return False
+        return True if self.editable is None else bool(self.editable(record))
 
 
 # ============================================================================
@@ -289,52 +310,124 @@ class HoistFormatter:
     def table_columns(
         is_boom_hoist: Optional[Callable[[Any], bool]] = None,
     ) -> list[Column]:
-        """Column definitions for hoist table."""
+        """Column definitions for hoist table.
+
+        The two hoist kinds share the table but not the authored fields: a payload
+        hoist derives its rope length from the design hook height, while the boom
+        hoist authors it and owns no hook of its own. Columns that do not apply to
+        a row read blank there and refuse to be edited.
+        """
+
+        def is_boom(hoist: Any) -> bool:
+            return bool(is_boom_hoist and is_boom_hoist(hoist))
 
         def payload_value(getter: Callable[[Any], Any]) -> Callable[[Any], Any]:
-            return lambda hoist: None if is_boom_hoist and is_boom_hoist(hoist) else getter(hoist)
+            return lambda hoist: None if is_boom(hoist) else getter(hoist)
+
+        def payload_only(hoist: Any) -> bool:
+            return not is_boom(hoist)
+
+        def split_only(hoist: Any) -> bool:
+            return not is_boom(hoist) and bool(hoist.splitable_block)
 
         return [
+            # The rope, the managed hook node and the segments are all named after
+            # the hoist id, so it is fixed at creation rather than edited in place.
             Column("ID", lambda h: h.id),
-            Column("Support Node", payload_value(lambda h: h.support_node_id)),
-            Column("Falls", payload_value(lambda h: h.falls), decimals=1),
+            Column(
+                "Support Node",
+                payload_value(lambda h: h.support_node_id),
+                field="support_node_id",
+                editor="node",
+                editable=payload_only,
+            ),
+            Column(
+                "Falls",
+                payload_value(lambda h: h.falls),
+                decimals=1,
+                field="falls",
+                editor="int",
+                editable=payload_only,
+            ),
             Column(
                 "Hook Mass (t)",
                 payload_value(lambda h: h.hook_mass_t),
                 decimals=3,
+                field="hook_mass_t",
+                editable=payload_only,
             ),
-            Column("Linear Mass (kg/m)", lambda h: h.linear_mass_kg_m, decimals=3),
-            Column("Rope Length (m)", lambda h: h.rope_length_m, decimals=3),
+            Column(
+                "Linear Mass (kg/m)",
+                lambda h: h.linear_mass_kg_m,
+                decimals=3,
+                field="linear_mass_kg_m",
+            ),
+            Column(
+                "Rope Length (m)",
+                lambda h: h.rope_length_m,
+                decimals=3,
+                field="rope_length_m",
+                editable=is_boom,
+            ),
             Column(
                 "Splittable",
                 payload_value(lambda h: h.splitable_block),
+                field="splitable_block",
+                editor="bool",
+                editable=payload_only,
             ),
-            Column("Split Falls", payload_value(lambda h: h.split_falls), decimals=1),
+            Column(
+                "Split Falls",
+                payload_value(lambda h: h.split_falls),
+                decimals=1,
+                field="split_falls",
+                editor="int",
+                editable=split_only,
+            ),
             Column(
                 "Split Hook Mass (t)",
                 payload_value(lambda h: h.split_hook_mass_t),
                 decimals=3,
+                field="split_hook_mass_t",
+                editable=split_only,
             ),
             Column(
                 "DAF",
                 payload_value(lambda h: h.hook_daf),
                 decimals=3,
+                field="hook_daf",
+                editable=payload_only,
             ),
             Column(
-                "Off Lead (deg)",
+                "Offlead (deg)",
                 payload_value(lambda h: h.offlead_deg),
                 decimals=3,
+                field="offlead_deg",
+                editable=payload_only,
             ),
             Column(
-                "Side Lead (deg)",
-                payload_value(lambda h: h.side_lead_deg),
+                "Sidelead (deg)",
+                payload_value(lambda h: h.sidelead_deg),
                 decimals=3,
+                field="sidelead_deg",
+                editable=payload_only,
             ),
             Column(
-                "Min Hook Travel (m)",
-                payload_value(lambda h: h.min_hook_travel_m),
-                decimals=3,
+                "Drum Dead Turns",
+                payload_value(lambda h: h.drum_dead_turns),
+                decimals=1,
+                field="drum_dead_turns",
+                editor="int",
+                editable=payload_only,
             ),
+            Column(
+                "Drum Diameter (m)",
+                payload_value(lambda h: h.drum_diameter_m),
+                decimals=3,
+                field="drum_diameter_m",
+                editable=payload_only,
+            ),
+            # Derived from the design hook height, like the payload rope length.
             Column(
                 "Max Hook Travel (m)",
                 payload_value(lambda h: h.max_hook_travel_m),
@@ -367,6 +460,7 @@ class EnvironmentFormatter:
         "reference_z_m": "Reference Z (m)",
         "boom_width_m": "Boom Width (m)",
         "slewing_bearing_diameter_m": "Slewing Bearing Diameter (m)",
+        "hook_height_at_min_outreach_m": "Hook Height at Min Outreach (m)",
     }
 
     @staticmethod
@@ -560,15 +654,15 @@ class ComponentTableFormatter:
         if body_id == ComponentTableFormatter._BOOM_BODY_ID:
             # Boom uses boom-local U/W coordinates
             return [
-                Column("ID", lambda n: n.id),
-                Column("U (m)", lambda n: n.local_x_m, decimals=3),
-                Column("W (m)", lambda n: n.local_z_m, decimals=3),
+                Column("ID", lambda n: n.id, field="id"),
+                Column("U (m)", lambda n: n.local_x_m, decimals=3, field="local_x_m"),
+                Column("W (m)", lambda n: n.local_z_m, decimals=3, field="local_z_m"),
             ]
         # Other bodies use global X/Z coordinates
         return [
-            Column("ID", lambda n: n.id),
-            Column("X (m)", lambda n: n.x_m, decimals=3),
-            Column("Z (m)", lambda n: n.z_m, decimals=3),
+            Column("ID", lambda n: n.id, field="id"),
+            Column("X (m)", lambda n: n.x_m, decimals=3, field="x_m"),
+            Column("Z (m)", lambda n: n.z_m, decimals=3, field="z_m"),
         ]
 
     @staticmethod
@@ -576,18 +670,18 @@ class ComponentTableFormatter:
         """Column definitions for mass point table."""
         if body_id == ComponentTableFormatter._BOOM_BODY_ID:
             return [
-                Column("ID", lambda m: m.id),
-                Column("Mass (t)", lambda m: m.mass_t, decimals=3),
-                Column("U (m)", lambda m: m.local_x_m, decimals=3),
-                Column("V (m)", lambda m: m.local_y_m, decimals=3),
-                Column("W (m)", lambda m: m.local_z_m, decimals=3),
+                Column("ID", lambda m: m.id, field="id"),
+                Column("Mass (t)", lambda m: m.mass_t, decimals=3, field="mass_t"),
+                Column("U (m)", lambda m: m.local_x_m, decimals=3, field="local_x_m"),
+                Column("V (m)", lambda m: m.local_y_m, decimals=3, field="local_y_m"),
+                Column("W (m)", lambda m: m.local_z_m, decimals=3, field="local_z_m"),
             ]
         return [
-            Column("ID", lambda m: m.id),
-            Column("Mass (t)", lambda m: m.mass_t, decimals=3),
-            Column("X (m)", lambda m: m.x_m, decimals=3),
-            Column("Y (m)", lambda m: m.y_m, decimals=3),
-            Column("Z (m)", lambda m: m.z_m, decimals=3),
+            Column("ID", lambda m: m.id, field="id"),
+            Column("Mass (t)", lambda m: m.mass_t, decimals=3, field="mass_t"),
+            Column("X (m)", lambda m: m.x_m, decimals=3, field="x_m"),
+            Column("Y (m)", lambda m: m.y_m, decimals=3, field="y_m"),
+            Column("Z (m)", lambda m: m.z_m, decimals=3, field="z_m"),
         ]
 
     @staticmethod
@@ -595,35 +689,35 @@ class ComponentTableFormatter:
         """Column definitions for wind area table."""
         if body_id == ComponentTableFormatter._BOOM_BODY_ID:
             return [
-                Column("ID", lambda w: w.id),
-                Column("Area X (m²)", lambda w: w.area_w_m2, decimals=3),
-                Column("Area Y (m²)", lambda w: w.area_v_m2, decimals=3),
-                Column("U (m)", lambda w: w.local_x_m, decimals=3),
-                Column("W (m)", lambda w: w.local_z_m, decimals=3),
-                Column("Cd", lambda w: w.cd, decimals=3),
+                Column("ID", lambda w: w.id, field="id"),
+                Column("Area X (m²)", lambda w: w.area_w_m2, decimals=3, field="area_w_m2"),
+                Column("Area Y (m²)", lambda w: w.area_v_m2, decimals=3, field="area_v_m2"),
+                Column("U (m)", lambda w: w.local_x_m, decimals=3, field="local_x_m"),
+                Column("W (m)", lambda w: w.local_z_m, decimals=3, field="local_z_m"),
+                Column("Cd", lambda w: w.cd, decimals=3, field="cd"),
             ]
         return [
-            Column("ID", lambda w: w.id),
-            Column("Area X (m²)", lambda w: w.area_w_m2, decimals=3),
-            Column("Area Y (m²)", lambda w: w.area_v_m2, decimals=3),
-            Column("X (m)", lambda w: w.x_m, decimals=3),
-            Column("Z (m)", lambda w: w.z_m, decimals=3),
-            Column("Cd", lambda w: w.cd, decimals=3),
+            Column("ID", lambda w: w.id, field="id"),
+            Column("Area X (m²)", lambda w: w.area_w_m2, decimals=3, field="area_w_m2"),
+            Column("Area Y (m²)", lambda w: w.area_v_m2, decimals=3, field="area_v_m2"),
+            Column("X (m)", lambda w: w.x_m, decimals=3, field="x_m"),
+            Column("Z (m)", lambda w: w.z_m, decimals=3, field="z_m"),
+            Column("Cd", lambda w: w.cd, decimals=3, field="cd"),
         ]
 
     @staticmethod
     def rope_segment_columns() -> list[Column]:
         """Column definitions for rope segment table."""
         return [
-            Column("From Node", lambda s: s.from_node_id),
-            Column("To Node", lambda s: s.to_node_id),
-            Column("Mult", lambda s: s.mult, decimals=1),
+            Column("From Node", lambda s: s.from_node_id, field="from_node_id", editor="node"),
+            Column("To Node", lambda s: s.to_node_id, field="to_node_id", editor="node"),
+            Column("Mult", lambda s: s.mult, decimals=1, field="mult", editor="int"),
         ]
 
     @staticmethod
     def contractual_columns() -> list[Column]:
         """Column definitions for contractual point table."""
         return [
-            Column("Outreach (m)", lambda c: c.outreach_m, decimals=3),
-            Column("Load (t)", lambda c: c.load_t, decimals=3),
+            Column("Outreach (m)", lambda c: c.outreach_m, decimals=3, field="outreach_m"),
+            Column("Load (t)", lambda c: c.load_t, decimals=3, field="load_t"),
         ]

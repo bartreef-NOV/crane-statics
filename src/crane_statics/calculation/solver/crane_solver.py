@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple, Any
+from typing import TYPE_CHECKING, Dict, List, Tuple, Any, cast
 
 import numpy as np
 
+if TYPE_CHECKING:
+    from .kinematics import KinematicsAdapter
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Numeric Tolerance Constants
@@ -432,6 +434,7 @@ def _accumulate_loads(
     offlead_lateral_force_kN: float = 0.0,
     solver_ctx: Dict[str, Any] | None = None,
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
+    rope_mass_t_by_node: Dict[str, float] | None = None,
 ) -> Tuple[Dict[str, dict], Dict[str, dict]]:
     ctx = solver_ctx or build_solver_static_context(doc_dict)
     body_ids: List[str] = ctx["body_ids"]
@@ -474,7 +477,7 @@ def _accumulate_loads(
         ld_m[bidx] += cx * fz - cz * fx
 
     # Wind loads (power-law height profile, horizontal force only)
-    wind_sign = math.copysign(1.0, wind_speed_m_s) if wind_speed_m_s != 0 else 0.0
+    wind_sign: float = math.copysign(1.0, wind_speed_m_s) if wind_speed_m_s != 0 else 0.0
     v_mag = abs(wind_speed_m_s)
     boom_scale = _boom_wind_projection_scale(node_pos)
 
@@ -485,7 +488,7 @@ def _accumulate_loads(
             v_h = v_mag * (max(h_asl / wind_ref_h, 1e-6) ** wind_exp)
         else:
             v_h = 0.0
-        return wind_sign * 0.5 * air_density * v_h**2 * cd * eff_area / 1000.0
+        return float(wind_sign * 0.5 * air_density * v_h**2 * cd * eff_area / 1000.0)
 
     # This basis composes X-axis wind effects only; Y-axis wind is handled by
     # the explicit directional scene-analysis path in engine.py.
@@ -680,6 +683,29 @@ def _accumulate_loads(
                 ld_fz[hbody] += fz
                 ld_m[hbody] += hx * fz
 
+    # Rope self-weight, lumped at the nodes by ``rope_mass.rope_mass_at_nodes``.
+    # It is dead load: it feels gravity and the vessel motion, carries no wind
+    # area and no hook DAF, and it only ever lands on the right-hand side -- the
+    # boom-hoist coefficients (bh_*) are the unknown's, and rope weight is not
+    # proportional to that unknown.
+    for node_id, rope_mass_t in (rope_mass_t_by_node or {}).items():
+        position = node_pos.get(node_id)
+        if position is None or rope_mass_t <= 0.0:
+            continue
+        rbody = node_body_cache.get(node_id)
+        if rbody is None:
+            rbody = body_index.get(node_body_map.get(node_id, ""), -1)
+            node_body_cache[node_id] = rbody
+        if rbody < 0:
+            continue
+        rx, rz = position
+        fx, fz = inertia_force(
+            rope_mass_t, rx, rz, accel_x_m_s2, accel_z_m_s2, pitch_rad_s2, ref_x, ref_z, gravity
+        )
+        ld_fx[rbody] += fx
+        ld_fz[rbody] += fz
+        ld_m[rbody] += rx * fz - rz * fx
+
     ld = {bid: {"Fx": ld_fx[i], "Fz": ld_fz[i], "M": ld_m[i]} for i, bid in enumerate(body_ids)}
     bh = {bid: {"Fx": bh_fx[i], "Fz": bh_fz[i], "M": bh_m[i]} for i, bid in enumerate(body_ids)}
     return ld, bh
@@ -703,6 +729,7 @@ def _run_statics(
     offlead_lateral_force_kN: float = 0.0,
     solver_ctx: Dict[str, Any] | None = None,
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
+    rope_mass_t_by_node: Dict[str, float] | None = None,
 ) -> Dict[str, float]:
     """Solve 3-body statics sequentially: boom → rear/front leg frame → platform."""
     ld, bh = _accumulate_loads(
@@ -718,6 +745,7 @@ def _run_statics(
         offlead_lateral_force_kN,
         solver_ctx,
         hoist_runtime_overrides,
+        rope_mass_t_by_node,
     )
 
     heel_x, heel_z = node_pos["boom_heel"]
@@ -823,7 +851,7 @@ def _run_statics(
 
 def build_directional_response_basis(
     doc_dict: Dict[str, Any],
-    kinematics,  # KinematicsAdapter
+    kinematics: "KinematicsAdapter",
     hoist_id: str,
     boom_angle_deg: float,
     wind_speed_m_s: float = 0.0,
@@ -832,20 +860,46 @@ def build_directional_response_basis(
     pitch_rad_s2: float = 0.0,
     solver_ctx: Dict[str, Any] | None = None,
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
+    tackle_length_m: float | None = None,
 ) -> DirectionalResponseBasis | None:
-    node_positions_dicts = kinematics.compute_all_node_positions(boom_angle_deg)
+    # ``rope_mass`` reaches back into this package for kinematics, so importing it
+    # at module level would close the cycle.
+    from ..rope_mass import active_hook_positions, falls_override_effective_mult, rope_mass_at_nodes
+
+    hoist_data = next((h for h in doc_dict.get("hoists", []) if h["id"] == hoist_id), None)
+    if hoist_data is None:
+        return None
+
+    node_positions_dicts = active_hook_positions(
+        doc_dict,
+        hoist_id,
+        kinematics.compute_all_node_positions(boom_angle_deg),
+        tackle_length_m,
+    )
     node_pos: Dict[str, Tuple[float, float]] = {
         nid: (float(d["x"]), float(d["z"])) for nid, d in node_positions_dicts.items()
     }
     node_body_map: Dict[str, str] = {n["id"]: n.get("body", "") for n in doc_dict.get("nodes", [])}
 
-    hoist_data = next((h for h in doc_dict.get("hoists", []) if h["id"] == hoist_id), None)
-    if hoist_data is None:
-        return None
     load_node_id = str(hoist_data.get("load_node_id", ""))
     outreach_m = node_pos.get(load_node_id, (0.0, 0.0))[0]
 
     ctx = solver_ctx or build_solver_static_context(doc_dict)
+
+    falls_by_hoist_id: Dict[str, int] = {}
+    for runtime_hoist_id, override in (hoist_runtime_overrides or {}).items():
+        try:
+            falls_by_hoist_id[str(runtime_hoist_id)] = int(override["falls"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    rope_mass_t_by_node = {
+        node_id: entry.mass_t
+        for node_id, entry in rope_mass_at_nodes(
+            doc_dict,
+            node_positions_dicts,
+            effective_mult=falls_override_effective_mult(doc_dict, falls_by_hoist_id),
+        ).items()
+    }
 
     dead_raw = _run_statics(
         doc_dict,
@@ -860,6 +914,7 @@ def build_directional_response_basis(
         offlead_lateral_force_kN=0.0,
         solver_ctx=ctx,
         hoist_runtime_overrides=hoist_runtime_overrides,
+        rope_mass_t_by_node=rope_mass_t_by_node,
     )
     if not dead_raw:
         return None
@@ -877,6 +932,7 @@ def build_directional_response_basis(
         offlead_lateral_force_kN=0.0,
         solver_ctx=ctx,
         hoist_runtime_overrides=hoist_runtime_overrides,
+        rope_mass_t_by_node=rope_mass_t_by_node,
     )
     if not raw_hook_unit:
         return None
@@ -893,13 +949,16 @@ def build_directional_response_basis(
         offlead_lateral_force_kN=1.0,
         solver_ctx=ctx,
         hoist_runtime_overrides=hoist_runtime_overrides,
+        rope_mass_t_by_node=rope_mass_t_by_node,
     )
     if not raw_offlead_lateral_unit:
         return None
     hook_sensitivity_raw = _subtract_raw(raw_hook_unit, dead_raw)
     offlead_lateral_sensitivity_raw = _subtract_raw(raw_offlead_lateral_unit, dead_raw)
 
-    def _channel(*, wind=0.0, ax=0.0, az=0.0, pitch=0.0) -> Dict[str, float] | None:
+    def _channel(
+        *, wind: float = 0.0, ax: float = 0.0, az: float = 0.0, pitch: float = 0.0
+    ) -> Dict[str, float] | None:
         r = _run_statics(
             doc_dict,
             node_pos,
@@ -913,6 +972,7 @@ def build_directional_response_basis(
             offlead_lateral_force_kN=0.0,
             solver_ctx=ctx,
             hoist_runtime_overrides=hoist_runtime_overrides,
+            rope_mass_t_by_node=rope_mass_t_by_node,
         )
         return _subtract_raw(r, dead_raw) if r else None
 
@@ -921,12 +981,24 @@ def build_directional_response_basis(
     az_ref = abs(float(accel_z_m_s2))
     pt_ref = abs(float(pitch_rad_s2))
 
-    wind_raw = _channel(wind=wind_ref) if wind_ref > 0 else {k: 0.0 for k in dead_raw}
-    ax_raw = _channel(ax=ax_ref) if ax_ref > 0 else {k: 0.0 for k in dead_raw}
-    az_raw = _channel(az=az_ref) if az_ref > 0 else {k: 0.0 for k in dead_raw}
-    pt_raw = _channel(pitch=pt_ref) if pt_ref > 0 else {k: 0.0 for k in dead_raw}
+    wind_raw: Dict[str, float] | None = (
+        _channel(wind=wind_ref) if wind_ref > 0 else {k: 0.0 for k in dead_raw}
+    )
+    ax_raw: Dict[str, float] | None = (
+        _channel(ax=ax_ref) if ax_ref > 0 else {k: 0.0 for k in dead_raw}
+    )
+    az_raw: Dict[str, float] | None = (
+        _channel(az=az_ref) if az_ref > 0 else {k: 0.0 for k in dead_raw}
+    )
+    pt_raw: Dict[str, float] | None = (
+        _channel(pitch=pt_ref) if pt_ref > 0 else {k: 0.0 for k in dead_raw}
+    )
     if any(v is None for v in (wind_raw, ax_raw, az_raw, pt_raw)):
         return None
+    wind_raw = cast(Dict[str, float], wind_raw)
+    ax_raw = cast(Dict[str, float], ax_raw)
+    az_raw = cast(Dict[str, float], az_raw)
+    pt_raw = cast(Dict[str, float], pt_raw)
 
     rope_ids, active_rope_id, active_rope_parts = _active_rope_metadata(
         doc_dict,

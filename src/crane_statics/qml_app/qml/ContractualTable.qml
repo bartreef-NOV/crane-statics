@@ -1,23 +1,24 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
-import "components"
+import BF.DesignSystem
 
 Item {
     id: root
 
-    readonly property color surfaceColor: Design.DesignTokens.colors.surface
-    readonly property color borderColor: Design.DesignTokens.colors.border
-    readonly property color headerColor: Design.DesignTokens.colors.surfaceAlt
-    readonly property color headerTextColor: Design.DesignTokens.colors.textPrimary
-    readonly property color textColor: Design.DesignTokens.colors.textPrimary
-    readonly property color selectedColor: Design.DesignTokens.colors.selection
-    readonly property color selectedTextColor: Design.DesignTokens.colors.selectionText
-    readonly property color gridColor: Design.DesignTokens.colors.border
-    readonly property int tableRowHeight: Design.DesignTokens.layout.tableRowHeight
+    SystemPalette { id: sysPalette }
+
+    readonly property color surfaceColor: sysPalette.base
+    readonly property color borderColor: sysPalette.mid
+    readonly property color headerColor: sysPalette.alternateBase
+    readonly property color headerTextColor: sysPalette.text
+    readonly property color textColor: sysPalette.text
+    readonly property color selectedColor: sysPalette.highlight
+    readonly property color selectedTextColor: sysPalette.highlightedText
+    readonly property color gridColor: sysPalette.mid
+    readonly property int tableRowHeight: Metrics.tableRowHeight
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     property alias model: pointsList.model
@@ -43,9 +44,9 @@ Item {
                 font.bold: true
             }
 
-            IconButton { iconText: "+"; tooltipText: qsTr("Add"); onClicked: root.addRequested() }
-            IconButton { iconText: "\u270e"; tooltipText: qsTr("Edit"); semantic: "secondary"; enabled: root.hasSelection; onClicked: root.editRequested(root.currentRow) }
-            IconButton { iconText: "\u00d7"; tooltipText: qsTr("Delete"); semantic: "danger"; enabled: root.hasSelection; onClicked: root.deleteRequested(root.currentRow) }
+            Button { text: "+"; ToolTip.visible: hovered; ToolTip.text: qsTr("Add"); implicitWidth: Metrics.controlHeight; implicitHeight: Metrics.controlHeight; padding: 0; onClicked: root.addRequested() }
+            Button { text: "\u270e"; ToolTip.visible: hovered; ToolTip.text: qsTr("Edit"); implicitWidth: Metrics.controlHeight; implicitHeight: Metrics.controlHeight; padding: 0; enabled: root.hasSelection; onClicked: root.editRequested(root.currentRow) }
+            Button { text: "\u00d7"; ToolTip.visible: hovered; ToolTip.text: qsTr("Delete"); implicitWidth: Metrics.controlHeight; implicitHeight: Metrics.controlHeight; padding: 0; enabled: root.hasSelection; onClicked: root.deleteRequested(root.currentRow) }
         }
 
         Rectangle {
@@ -53,11 +54,11 @@ Item {
             Layout.fillHeight: true
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: 1
+            border.width: Metrics.borderWidth
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 1
+                anchors.margins: Metrics.borderWidth
                 spacing: 0
 
                 Row {
@@ -74,12 +75,12 @@ Item {
                             height: root.tableRowHeight
                             color: root.headerColor
                             border.color: root.gridColor
-                            border.width: 1
+                            border.width: Metrics.borderWidth
                             Label {
                                 anchors.fill: parent
-                                leftPadding: 6
-                                rightPadding: 6
-                                bottomPadding: 2
+                                leftPadding: Metrics.spacing6
+                                rightPadding: Metrics.spacing6
+                                bottomPadding: Metrics.spacing2
                                 text: parent.modelData
                                 color: root.headerTextColor
                                 font.bold: true
@@ -117,9 +118,9 @@ Item {
                         height: root.tableRowHeight
                         color: pointRow.selected
                             ? root.selectedColor
-                            : (pointRow.index % 2 === 0 ? root.surfaceColor : Design.DesignTokens.colors.surfaceAlt)
+                            : (pointRow.index % 2 === 0 ? root.surfaceColor : sysPalette.alternateBase)
                         border.color: root.gridColor
-                        border.width: 1
+                        border.width: Metrics.borderWidth
 
                         Row {
                             anchors.fill: parent
@@ -132,7 +133,7 @@ Item {
                                     required property int index
                                     width: root.width / 4
                                     height: root.tableRowHeight
-                                    leftPadding: 6
+                                    leftPadding: Metrics.spacing6
                                     text: modelData
                                     color: pointRow.selected ? root.selectedTextColor : root.textColor
                                     verticalAlignment: Text.AlignVCenter
@@ -142,7 +143,7 @@ Item {
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
                                         anchors.right: parent.right
-                                        width: 1
+                                        width: Metrics.borderWidth
                                         color: root.gridColor
                                     }
                                 }

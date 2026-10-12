@@ -23,7 +23,7 @@ class SceneState:
     hook_load_auto: bool = False
     tackle_length_m: float = 50.0
     offlead_deg: float = 0.0
-    side_lead_deg: float = 0.0
+    sidelead_deg: float = 0.0
     wind_speed_m_s: float = 0.0
     wind_direction: str = "+X"
     accel_x_m_s2: float = 0.0
@@ -116,15 +116,12 @@ class SessionModel:
             env = doc.environment
             vessel_motion = env.vessel_motion
             for hoist in doc.hoists:
-                min_travel = (
-                    float(hoist.min_hook_travel_m) if hoist.min_hook_travel_m is not None else 0.0
-                )
                 self.hoist_states[hoist.id] = HoistState(
                     hoist_id=hoist.id,
                     scene_state=SceneState(
-                        tackle_length_m=min_travel,
+                        tackle_length_m=0.0,
                         offlead_deg=float(hoist.offlead_deg),
-                        side_lead_deg=float(getattr(hoist, "side_lead_deg", hoist.offlead_deg)),
+                        sidelead_deg=float(getattr(hoist, "sidelead_deg", hoist.offlead_deg)),
                         wind_speed_m_s=float(env.max_wind_speed_m_s),
                         wind_direction="+X",
                         accel_x_m_s2=float(vessel_motion.accel_x_m_s2),

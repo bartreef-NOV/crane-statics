@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
+import BF.DesignSystem
 
 Frame {
     id: root
@@ -10,12 +10,8 @@ Frame {
     property var visibilityByKey: ({})
     signal toggleRequested(string key)
 
-    readonly property color surfaceColor: Design.DesignTokens.colors.surface
-    readonly property color borderColor: Design.DesignTokens.colors.border
-    readonly property color textColor: Design.DesignTokens.colors.textPrimary
-    readonly property color mutedTextColor: Design.DesignTokens.colors.textSecondary
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     padding: 8
@@ -24,12 +20,6 @@ Frame {
 
     function isVisible(key) {
         return visibilityByKey[key] !== false
-    }
-
-    background: Rectangle {
-        color: root.surfaceColor
-        border.color: root.borderColor
-        radius: 3
     }
 
     ColumnLayout {
@@ -42,14 +32,13 @@ Frame {
             Label {
                 text: qsTr("Series")
                 font.bold: true
-                color: root.textColor
             }
 
             Label {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignRight
                 text: qsTr("%1 visible / %2").arg(root.items.filter(item => root.isVisible(item.id)).length).arg(root.items.length)
-                color: root.mutedTextColor
+                opacity: 0.75
                 font.pixelSize: 11
             }
         }
@@ -87,7 +76,6 @@ Frame {
                         Layout.fillWidth: true
                         text: modelData.label
                         elide: Text.ElideRight
-                        color: root.isVisible(modelData.id) ? root.textColor : root.mutedTextColor
                         opacity: root.isVisible(modelData.id) ? 1.0 : 0.75
                         ToolTip.visible: entry.hovered && truncated
                         ToolTip.text: modelData.label
@@ -96,7 +84,7 @@ Frame {
 
                     Label {
                         text: root.isVisible(modelData.id) ? qsTr("Shown") : qsTr("Hidden")
-                        color: root.mutedTextColor
+                        opacity: 0.75
                         font.pixelSize: 10
                     }
                 }

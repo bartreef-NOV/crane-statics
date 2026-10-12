@@ -1,8 +1,7 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
-import "components"
+import BF.DesignSystem
 
 Item {
     id: root
@@ -12,8 +11,8 @@ Item {
 
     ColumnLayout {
         anchors.centerIn: parent
-        width: Math.min(520, root.width - 2 * Design.DesignTokens.spacing.sm)
-        spacing: Design.DesignTokens.spacing.md
+        width: Math.min(520, root.width - 2 * Metrics.spacing8)
+        spacing: Metrics.spacing16
 
         Label {
             Layout.fillWidth: true
@@ -25,14 +24,14 @@ Item {
 
         Label {
             Layout.fillWidth: true
-            text: qsTr("Open a crane_input.json file to begin analysis")
+            text: qsTr("Open a crane_input.json or .yaml file to begin analysis")
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
         }
 
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            spacing: Design.DesignTokens.spacing.controlGap
+            spacing: Metrics.spacing8
 
             Button {
                 text: qsTr("Choose File")
@@ -41,7 +40,6 @@ Item {
 
             Button {
                 text: qsTr("New Model")
-                semantic: "secondary"
                 onClicked: root.newRequested()
             }
         }

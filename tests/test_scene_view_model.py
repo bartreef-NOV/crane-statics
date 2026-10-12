@@ -13,7 +13,7 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.scene.scene_renderer import CraneSceneRenderer
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
 
 def _hook_guide_anchor(renderer):
@@ -131,7 +131,7 @@ class TestSceneViewModelState:
         assert frame["nodes"]
         assert frame["ropeSegments"]
         assert frame["fitRect"]["width"] > 0
-        assert {axis["label"] for axis in frame["boomAxes"]} == {"X", "Z"}
+        assert {axis["label"] for axis in frame["boomAxes"]} == {"U", "W"}
 
     def test_qml_scene_frame_revision_changes_with_geometry(self, scene_vm):
         previous = scene_vm.sceneFrame["revision"]
@@ -167,7 +167,7 @@ class TestSceneViewModelState:
             "outreach",
             "tackle_length",
         }
-        assert {axis.label for axis in frame.boom_axes} == {"X", "Z"}
+        assert {axis.label for axis in frame.boom_axes} == {"U", "W"}
         assert all(
             axis.color and math.hypot(axis.end_x - axis.start_x, axis.end_y - axis.start_y) > 0
             for axis in frame.boom_axes
@@ -183,17 +183,21 @@ class TestSceneViewModelState:
         assert scene_vm.outreach > 0.0
 
     def test_set_angle_republishes_the_frame_at_the_new_angle(self, scene_vm):
+        scene_vm.setTackle(25.0)
         scene_vm.setAngle(40.0)
         frame = scene_vm._canvas.renderer.scene_frame
 
-        load_node_id = _active_hoist(scene_vm).load_node_id
-        world = _node_positions(scene_vm, 40.0)[load_node_id]
-        drawn = next(node for node in frame.nodes if node.id == load_node_id)
-        kinematic_x, kinematic_y = frame.mapping.to_scene(world["x"], world["z"])
+        hoist = _active_hoist(scene_vm)
+        world = _node_positions(scene_vm, 40.0)
+        support = world[hoist.support_node_id or hoist.load_node_id]
+        drawn = next(node for node in frame.nodes if node.id == hoist.load_node_id)
+        support_x, support_y = frame.mapping.to_scene(support["x"], support["z"])
+        _hook_x, hook_y = frame.mapping.to_scene(support["x"], support["z"] - 25.0)
 
-        assert drawn.scene_x == pytest.approx(kinematic_x)
-        # The load node is drawn as the hook, hanging below its kinematic position.
-        assert drawn.scene_y > kinematic_y
+        assert drawn.scene_x == pytest.approx(support_x)
+        # The load node is drawn as the hook, hanging the tackle length below its sheave.
+        assert drawn.scene_y > support_y
+        assert drawn.scene_y == pytest.approx(hook_y)
 
     def test_set_outreach_maps_back_to_angle(self, scene_vm):
         scene_vm.setAngle(45.0)
@@ -248,19 +252,42 @@ class TestSceneViewModelState:
 
         assert scene_vm.outreach != pytest.approx(before)
 
-    def test_unreachable_outreach_reports_status(self, scene_vm):
+    def test_outreach_beyond_the_band_clamps_instead_of_warning(self, scene_vm):
+        """An out-of-band outreach is pulled onto the band, not refused.
+
+        The spin box and the drag both route through ``setOutreach``, so clamping
+        here is what keeps the indicator inside the hoist's reachable band.
+        """
         messages: list[str] = []
         scene_vm.statusMessage.connect(messages.append)
 
         scene_vm.setOutreach(9999.0)
+        beyond_max = scene_vm.outreach
+        scene_vm.setOutreach(-9999.0)
 
-        assert messages and "outside the reachable range" in messages[-1]
+        assert beyond_max == pytest.approx(scene_vm.outreachMax, abs=1e-6)
+        assert scene_vm.outreach == pytest.approx(scene_vm.outreachMin, abs=1e-6)
+        assert messages == []
 
     def test_angle_is_clamped_in_auto_load_mode(self, scene_vm):
         scene_vm.setHookLoadAuto(True)
         scene_vm.setAngle(400.0)
 
         assert scene_vm.angle <= scene_vm.angleMax + 1e-9
+
+    def test_angle_floor_relaxes_to_zero_only_when_auto_load_is_off(self, scene_vm):
+        """Auto off is the documented escape hatch for parking the boom at 0 deg."""
+        scene_vm.setHookLoadAuto(True)
+        scene_vm.setAngle(-30.0)
+        auto_angle = scene_vm.angle
+
+        scene_vm.setHookLoadAuto(False)
+        scene_vm.setAngle(0.0)
+
+        assert auto_angle == pytest.approx(scene_vm._kinematics.angle_bounds["MH"][0])
+        assert auto_angle > 0.0
+        assert scene_vm.angleMin == pytest.approx(0.0)
+        assert scene_vm.angle == pytest.approx(0.0)
 
     def test_hook_load_converts_to_kn(self, scene_vm):
         scene_vm.setHookLoadTonnes(10.0)
@@ -346,16 +373,33 @@ class TestSceneViewModelState:
         )
 
     def test_winch_spool_rows_replace_the_winch_cg_markers(self, scene_vm):
-        """The spooled rope mass is a readout now, not a centre-of-gravity symbol.
+        """The spooled rope mass is a readout, not a centre-of-gravity symbol.
 
-        ``calculation.rope_mass`` never fed the load model, so a CG symbol
-        overstated what the winch mass was; ``core.drawn_loads`` still does not
-        read it.
+        The mass does reach the load model, but through the "Rope weight" overlay:
+        one arrow per node, summed over every hoist spooling there. A CG symbol per
+        hoist would draw the same weight several times over on a shared winch node.
         """
         frame = scene_vm._canvas.renderer.scene_frame
 
         assert frame.winch_spools
         assert not any("Winch:" in marker.tooltip for marker in frame.markers)
+
+    def test_rope_weight_overlay_is_off_by_default_and_draws_one_arrow_per_node(self, scene_vm):
+        """Reeved and spooled rope share one arrow per node: it is one rope."""
+        assert scene_vm.displayOptions["show_rope_weight_forces"] is False
+        before = scene_vm._canvas.renderer.scene_frame.force_arrows
+        assert not any("Rope weight" in arrow.tooltip for arrow in before)
+
+        scene_vm.setDisplayOption("show_rope_weight_forces", True)
+        arrows = [
+            arrow
+            for arrow in scene_vm._canvas.renderer.scene_frame.force_arrows
+            if "Rope weight" in arrow.tooltip
+        ]
+
+        assert arrows
+        nodes = [arrow.tooltip.splitlines()[0] for arrow in arrows]
+        assert len(set(nodes)) == len(nodes)
 
     def test_winch_spools_reach_qml_as_camel_case_rows(self, scene_vm):
         rows = scene_vm.sceneFrame["winchSpools"]
@@ -487,5 +531,6 @@ class TestReportsAndOverview:
 
 def _is_splitable(vm: SceneViewModel, hoist_id: str) -> bool:
     doc = vm._model.document
+    assert doc is not None
     hoist = next((h for h in doc.hoists if h.id == hoist_id), None)
     return bool(hoist is not None and getattr(hoist, "splitable_block", False))

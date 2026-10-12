@@ -1,22 +1,23 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
-import "components"
+import BF.DesignSystem
 
 Item {
     id: root
 
-    readonly property color surfaceColor: Design.DesignTokens.colors.surface
-    readonly property color headerColor: Design.DesignTokens.colors.surfaceAlt
-    readonly property color headerTextColor: Design.DesignTokens.colors.textPrimary
-    readonly property color textColor: Design.DesignTokens.colors.textPrimary
-    readonly property color selectedColor: Design.DesignTokens.colors.selection
-    readonly property color selectedTextColor: Design.DesignTokens.colors.selectionText
-    readonly property color gridColor: Design.DesignTokens.colors.border
-    readonly property int tableRowHeight: Design.DesignTokens.layout.tableRowHeight
+    SystemPalette { id: sysPalette }
+
+    readonly property color surfaceColor: sysPalette.base
+    readonly property color headerColor: sysPalette.alternateBase
+    readonly property color headerTextColor: sysPalette.text
+    readonly property color textColor: sysPalette.text
+    readonly property color selectedColor: sysPalette.highlight
+    readonly property color selectedTextColor: sysPalette.highlightedText
+    readonly property color gridColor: sysPalette.mid
+    readonly property int tableRowHeight: Metrics.tableRowHeight
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     property alias model: table.model
@@ -24,6 +25,9 @@ Item {
     property string emptyText: qsTr("No entries.")
     property bool editable: false
     property int currentRow: -1
+    property int currentColumn: 0
+    // Node ids offered by the cells that hold a node reference.
+    property var editorChoices: []
     activeFocusOnTab: true
     focus: true
 
@@ -31,7 +35,6 @@ Item {
     Accessible.name: root.title.length > 0 ? root.title : qsTr("Data table")
 
     signal addRequested()
-    signal editRequested(int row)
     signal deleteRequested(int row)
 
     Keys.onPressed: event => {
@@ -41,9 +44,14 @@ Item {
         } else if (event.key === Qt.Key_Down) {
             root.currentRow = Math.min(table.rows - 1, root.currentRow + 1)
             event.accepted = true
+        } else if (event.key === Qt.Key_Left) {
+            root.currentColumn = Math.max(0, root.currentColumn - 1)
+            event.accepted = true
+        } else if (event.key === Qt.Key_Right) {
+            root.currentColumn = Math.min(table.columns - 1, root.currentColumn + 1)
+            event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            if (root.editable && root.hasSelection)
-                root.editRequested(root.currentRow)
+            root.startEdit(root.currentRow, root.currentColumn)
             event.accepted = true
         } else if (event.key === Qt.Key_Delete) {
             if (root.editable && root.hasSelection)
@@ -53,6 +61,29 @@ Item {
     }
 
     readonly property bool hasSelection: currentRow >= 0 && currentRow < table.rows
+
+    /*  Editing happens in the cell, so the table asks the model which cells accept
+        it: one row holds records that share a table but not a set of authored
+        fields, and several columns are derived rather than authored. Asking also
+        keeps Qt quiet, since editing a read-only index warns. */
+    function canEdit(row, column) {
+        if (!root.editable || row < 0 || column < 0)
+            return false
+        if (!root.model || typeof root.model.isCellEditable !== "function")
+            return false
+        return root.model.isCellEditable(row, column)
+    }
+
+    function startEdit(row, column) {
+        if (!root.canEdit(row, column))
+            return
+        table.edit(table.index(row, column))
+    }
+
+    function commitCell(row, column, value) {
+        if (root.model && typeof root.model.commitCell === "function")
+            root.model.commitCell(row, column, value)
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -69,26 +100,24 @@ Item {
                 font.bold: true
             }
 
-            IconButton {
-                iconText: "+"
-                tooltipText: qsTr("Add")
+            Button {
+                text: "+"
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Add")
+                implicitWidth: Metrics.controlHeight
+                implicitHeight: Metrics.controlHeight
+                padding: 0
                 visible: root.editable
                 onClicked: root.addRequested()
             }
 
-            IconButton {
-                iconText: "\u270e"
-                tooltipText: qsTr("Edit")
-                semantic: "secondary"
-                visible: root.editable
-                enabled: root.hasSelection
-                onClicked: root.editRequested(root.currentRow)
-            }
-
-            IconButton {
-                iconText: "\u00d7"
-                tooltipText: qsTr("Delete")
-                semantic: "danger"
+            Button {
+                text: "\u00d7"
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Delete")
+                implicitWidth: Metrics.controlHeight
+                implicitHeight: Metrics.controlHeight
+                padding: 0
                 visible: root.editable
                 enabled: root.hasSelection
                 onClicked: root.deleteRequested(root.currentRow)
@@ -102,11 +131,11 @@ Item {
             implicitHeight: root.tableRowHeight * 8
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: 1
+            border.width: Metrics.borderWidth
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 1
+                anchors.margins: Metrics.borderWidth
                 spacing: 0
 
                 HorizontalHeaderView {
@@ -123,16 +152,16 @@ Item {
                         implicitHeight: root.tableRowHeight
                         color: root.headerColor
                         border.color: root.gridColor
-                        border.width: 1
+                        border.width: Metrics.borderWidth
 
                         Label {
                             anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            anchors.bottomMargin: 2
+                            anchors.leftMargin: Metrics.spacing8
+                            anchors.rightMargin: Metrics.spacing8
+                            anchors.bottomMargin: Metrics.spacing2
                             text: headerCell.display
                             color: root.headerTextColor
-                            font.pixelSize: Design.DesignTokens.typography.caption
+                            font.pixelSize: Typography.caption
                             font.bold: true
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
@@ -159,6 +188,7 @@ Item {
                     columnSpacing: 0
                     rowSpacing: 0
                     boundsBehavior: Flickable.StopAtBounds
+                    editTriggers: TableView.DoubleTapped
 
                     onRowsChanged: if (root.currentRow >= rows) root.currentRow = -1
 
@@ -170,51 +200,72 @@ Item {
 
                         required property string display
                         required property bool numeric
+                        required property bool editable
+                        required property string editorKind
+                        required property var edit
                         required property int row
+                        required property int column
+                        required property bool editing
 
                         readonly property bool selected: row === root.currentRow
+                        readonly property bool current: selected && column === root.currentColumn
                         property bool hovered: false
 
-                        implicitWidth: Math.max(80, cellText.implicitWidth + 2 * 8)
+                        implicitWidth: Math.max(80, cellText.implicitWidth + 2 * Metrics.spacing8)
                         implicitHeight: root.tableRowHeight
                         color: cell.selected
                             ? root.selectedColor
                             : (cell.hovered
-                                ? Design.DesignTokens.colors.surfaceAlt
+                                ? sysPalette.alternateBase
                                 : (cell.row % 2 === 0
                                     ? root.surfaceColor
-                                    : Design.DesignTokens.colors.surfaceAlt))
+                                    : sysPalette.alternateBase))
 
-                        border.color: root.gridColor
-                        border.width: 1
+                        border.color: cell.current && root.activeFocus
+                            ? sysPalette.highlight
+                            : root.gridColor
+                        border.width: Metrics.borderWidth
 
                         Label {
                             id: cellText
                             anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
+                            anchors.leftMargin: Metrics.spacing8
+                            anchors.rightMargin: Metrics.spacing8
                             text: cell.display
                             color: cell.selected ? root.selectedTextColor : root.textColor
-                            font.pixelSize: Design.DesignTokens.typography.body
+                            font.pixelSize: Typography.body
                             elide: Text.ElideRight
                             verticalAlignment: Text.AlignVCenter
                             horizontalAlignment: cell.numeric ? Text.AlignRight : Text.AlignLeft
+                            visible: !cell.editing
                         }
 
                         TapHandler {
                             onSingleTapped: {
                                 root.currentRow = cell.row
+                                root.currentColumn = cell.column
                                 root.forceActiveFocus()
                             }
                             onDoubleTapped: {
                                 root.currentRow = cell.row
-                                if (root.editable)
-                                    root.editRequested(cell.row)
+                                root.currentColumn = cell.column
+                                root.startEdit(cell.row, cell.column)
                             }
                         }
 
                         HoverHandler {
+                            cursorShape: cell.editable && root.editable
+                                ? Qt.IBeamCursor
+                                : Qt.ArrowCursor
                             onHoveredChanged: cell.hovered = hovered
+                        }
+
+                        TableView.editDelegate: CellEditor {
+                            anchors.fill: parent
+                            kind: cell.editorKind
+                            initialValue: cell.edit
+                            choices: root.editorChoices
+                            onCommitRequested: root.commitCell(cell.row, cell.column, value)
                         }
                     }
                 }

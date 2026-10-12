@@ -230,8 +230,9 @@ class AnalysisPresenter:
         pitch_accel_rad_s2: float,
         roll_accel_rad_s2: float,
         offlead_deg: float,
-        side_lead_deg: float,
+        sidelead_deg: float,
         boom_angle_deg: float,
+        tackle_length_m: float,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
     ) -> Optional[float]:
         """Compute demand for a result row at specific environmental conditions."""
@@ -253,8 +254,9 @@ class AnalysisPresenter:
             pitch_accel_rad_s2=pitch_accel_rad_s2,
             roll_accel_rad_s2=roll_accel_rad_s2,
             offlead_deg=offlead_deg,
-            side_lead_deg=side_lead_deg,
+            sidelead_deg=sidelead_deg,
             hoist_runtime_overrides=hoist_runtime_overrides,
+            tackle_length_m=tackle_length_m,
         )
         if point is None:
             return None
@@ -272,11 +274,12 @@ class AnalysisPresenter:
         hook = float(sc.hook_load_kN)
         overrides = self._hoist_state.active_hoist_runtime_overrides()
 
-        def _demand(**kwargs) -> Optional[float]:
+        def _demand(**kwargs: Any) -> Optional[float]:
             return self._overview_point_demand(
                 row_meta,
                 hoist_id,
                 boom_angle_deg=float(sc.boom_angle_deg),
+                tackle_length_m=float(sc.tackle_length_m),
                 hoist_runtime_overrides=overrides,
                 **kwargs,
             )
@@ -290,7 +293,7 @@ class AnalysisPresenter:
             pitch_accel_rad_s2=0.0,
             roll_accel_rad_s2=0.0,
             offlead_deg=0.0,
-            side_lead_deg=0.0,
+            sidelead_deg=0.0,
         )
         wind_env = dict(
             zero_env, wind_speed_m_s=float(sc.wind_speed_m_s), wind_direction=str(sc.wind_direction)
@@ -304,7 +307,7 @@ class AnalysisPresenter:
             roll_accel_rad_s2=float(sc.roll_accel_rad_s2),
         )
         offlead_env = dict(inertia_env, offlead_deg=float(sc.offlead_deg))
-        full_env = dict(offlead_env, side_lead_deg=float(sc.side_lead_deg))
+        full_env = dict(offlead_env, sidelead_deg=float(sc.sidelead_deg))
 
         dead = _demand(hook_load_kN=0.0, **zero_env)
         with_hook = _demand(hook_load_kN=hook, **zero_env)
@@ -312,27 +315,36 @@ class AnalysisPresenter:
         with_inertia = _demand(hook_load_kN=hook, **inertia_env)
         with_offlead = _demand(hook_load_kN=hook, **offlead_env)
         full = _demand(hook_load_kN=hook, **full_env)
-        if None in (dead, with_hook, with_wind, with_inertia, with_offlead, full):
+        if (
+            dead is None
+            or with_hook is None
+            or with_wind is None
+            or with_inertia is None
+            or with_offlead is None
+            or full is None
+        ):
             return None
 
-        terms = [
+        terms: list[dict[str, Any]] = [
             {"name": "Dead load baseline", "value_kN": float(dead)},
             {"name": "Hook load", "value_kN": float(with_hook - dead)},
             {"name": "Wind", "value_kN": float(with_wind - with_hook)},
             {"name": "Inertia", "value_kN": float(with_inertia - with_wind)},
             {"name": "Offlead", "value_kN": float(with_offlead - with_inertia)},
-            {"name": "Side-lead", "value_kN": float(full - with_offlead)},
+            {"name": "Sidelead", "value_kN": float(full - with_offlead)},
         ]
         reconstructed = float(sum(float(t["value_kN"]) for t in terms))
+        demand_kN_raw = row_meta.get("demand_kN")
+        demand_kN = float(demand_kN_raw) if demand_kN_raw is not None else full
         return {
             "title": "Load Contribution Overview",
             "section": str(row_meta.get("kind") or "").title(),
             "row_name": str(row_meta.get("row_name") or ""),
             "unit": str(row_meta.get("unit") or "kN"),
-            "demand_kN": float(row_meta.get("demand_kN") or full),
+            "demand_kN": demand_kN,
             "limit_kN": row_meta.get("limit_kN"),
             "utilization_pct": row_meta.get("utilization_pct"),
             "terms": terms,
             "reconstructed_kN": reconstructed,
-            "delta_kN": reconstructed - float(row_meta.get("demand_kN") or full),
+            "delta_kN": reconstructed - demand_kN,
         }

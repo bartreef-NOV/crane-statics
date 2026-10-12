@@ -4,15 +4,24 @@ This module defines all the Pydantic models that enforce strict validation
 and normalization according to the handoff data contract.
 """
 
+import math
 from typing import Any, Optional
 from enum import Enum
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from copy import deepcopy
 
+from .authored_models import (
+    AuthoredDocument,
+    AUTHORED_SCHEMA_MAJOR_VERSION,
+    AUTHORED_SCHEMA_NAME,
+    AUTHORED_SCHEMA_VERSION,
+    BOOM_HOIST_ID,
+    authored_schema_major,
+    format_authored_validation_error,
+    hoist_node_prefix,
+)
 
 CANONICAL_BODIES = ["boom", "rear_leg", "front_leg", "platform"]
-AUTHORED_SCHEMA_NAME = "crane-statics"
-AUTHORED_SCHEMA_VERSION = "5.12.0"
 DEFAULT_GRAVITY_M_S2 = 9.81
 DEFAULT_AIR_DENSITY_KG_M3 = 1.225
 DEFAULT_VESSEL_MOTION = {
@@ -231,7 +240,7 @@ class Hoist(BaseModel):
     outreach_min_m: Optional[float] = Field(default=None, description="Minimum outreach")
     outreach_max_m: Optional[float] = Field(default=None, description="Maximum outreach")
     offlead_deg: float = Field(default=0.0, description="Offlead angle limit")
-    side_lead_deg: float = Field(default=0.0, description="Side lead angle limit")
+    sidelead_deg: float = Field(default=0.0, description="Sidelead angle limit")
     splitable_block: bool = Field(
         default=False, description="Whether the payload hook block can be split"
     )
@@ -242,16 +251,35 @@ class Hoist(BaseModel):
         default=None, description="Hook block mass in tonnes when split"
     )
     split_contractual_points: list[ContractualPoint] = Field(default_factory=list)
-    min_hook_travel_m: Optional[float] = Field(default=None, description="Minimum hook travel")
-    max_hook_travel_m: Optional[float] = Field(default=None, description="Maximum hook travel")
+    max_hook_travel_m: Optional[float] = Field(
+        default=None,
+        description="Maximum hook travel. Derived for payload hoists from the document's "
+        "hook_height_at_min_outreach_m; the minimum is always 0.0",
+    )
     contractual_points: list[ContractualPoint] = Field(default_factory=list)
     linear_mass_kg_m: float = Field(default=0.0, ge=0.0, description="Rope linear mass in kg/m")
+    drum_dead_turns: int = Field(
+        default=0,
+        ge=0,
+        description="Turns that stay on the drum at full payout; adds to the derived rope length",
+    )
+    drum_diameter_m: Optional[float] = Field(
+        default=None, gt=0.0, description="Mean wrap diameter of the dead turns in metres"
+    )
     rope_length_m: Optional[float] = Field(
         default=None,
         ge=0.0,
-        description="Total rope length in metres; None means reeved length at max hook travel "
-        "and 0 deg boom angle",
+        description="Total rope length in metres. Authored for the boom hoist; for payload hoists "
+        "derived as the reeved length at min outreach with the hook at the design height, plus "
+        "the dead turns",
     )
+
+    @property
+    def dead_turns_length_m(self) -> float:
+        """Rope that never leaves the drum: ``turns * pi * mean wrap diameter``."""
+        if self.drum_dead_turns <= 0 or self.drum_diameter_m is None:
+            return 0.0
+        return float(self.drum_dead_turns) * math.pi * float(self.drum_diameter_m)
 
     @field_validator("hook_daf")
     @classmethod
@@ -292,9 +320,6 @@ class Hoist(BaseModel):
 
         if self.outreach_min_m > self.outreach_max_m:
             raise ValueError("outreach_min_m must be <= outreach_max_m")
-        if self.min_hook_travel_m is not None and self.max_hook_travel_m is not None:
-            if self.min_hook_travel_m > self.max_hook_travel_m:
-                raise ValueError("min_hook_travel_m must be <= max_hook_travel_m")
 
         if self.split_hook_mass_t is not None and float(self.split_hook_mass_t) < 0.0:
             raise ValueError("split_hook_mass_t must be >= 0")
@@ -320,12 +345,14 @@ class SupportWidths(BaseModel):
     """Support widths used for left/right reaction splitting."""
 
     boom_width_m: float = Field(default=1.0, description="Boom support width")
-    slewing_bearing_diameter_m: float = Field(default=1.0, description="Slewing bearing diameter")
+    slewing_bearing_diameter_m: Optional[float] = Field(
+        default=None, description="Slewing bearing diameter; omit to skip bearing line load checks"
+    )
 
     @field_validator("boom_width_m", "slewing_bearing_diameter_m")
     @classmethod
-    def validate_positive_width(cls, v: float) -> float:
-        if v <= 0.0:
+    def validate_positive_width(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v <= 0.0:
             raise ValueError("Support width must be > 0")
         return v
 
@@ -337,6 +364,12 @@ class CraneDocument(BaseModel):
     model_type: str = Field(default="fixed_topology_crane_2d")
     metadata: Metadata = Field(default_factory=Metadata)
     environment: Environment = Field(default_factory=Environment)
+    hook_height_at_min_outreach_m: Optional[float] = Field(
+        default=None,
+        description="Absolute global Z the hook must reach at each payload hoist's minimum "
+        "outreach. Every payload hoist's max_hook_travel_m and rope_length_m derive from it. "
+        "Normalization fills it from environment.mean_sealevel_z_m when unauthored",
+    )
     bodies: list[Body] = Field(default_factory=list)
     nodes: list[Node] = Field(default_factory=list)
     ropes: list[Rope] = Field(default_factory=list)
@@ -392,58 +425,65 @@ def _is_authored_document(doc_data: dict[str, Any]) -> bool:
         return False
     return (
         schema.get("name") == AUTHORED_SCHEMA_NAME
-        and schema.get("version") == AUTHORED_SCHEMA_VERSION
+        and authored_schema_major(schema.get("version")) == AUTHORED_SCHEMA_MAJOR_VERSION
     )
 
 
-def _convert_authored_segments(segments_src: Any, ctx: str) -> list[dict[str, Any]]:
-    if not isinstance(segments_src, list):
-        raise ValueError(f"{ctx} must be an array")
+def _expand_reeving(
+    hoist_id: str, reeving: list[dict[str, Any]], ctx: str
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """Expand an authored reeving path into owned runtime nodes and rope segments.
+
+    Returns (nodes, segments, path) where nodes maps global node ID to a runtime
+    node record, segments are chained from/to/parts dicts, and path lists the
+    global node ID of each reeving entry in order."""
+    prefix = hoist_node_prefix(hoist_id)
+    owned = {e["node"] for e in reeving if e.get("body")}
+    nodes: dict[str, dict[str, Any]] = {}
+    path: list[str] = []
     segments: list[dict[str, Any]] = []
-    for idx, seg in enumerate(segments_src):
-        if not isinstance(seg, dict):
-            raise ValueError(f"{ctx}[{idx}] must be an object")
-        from_id = seg.get("from")
-        to_id = seg.get("to")
-        if from_id is None or to_id is None:
-            raise ValueError(f"{ctx}[{idx}] must include from and to")
-        parts = int(seg.get("parts", 1))
-        if parts < 1:
-            raise ValueError(f"{ctx}[{idx}].parts must be >= 1")
-        segments.append(
-            {
-                "from": str(from_id),
-                "to": str(to_id),
-                **({"parts": parts} if parts != 1 else {}),
-            }
-        )
-    return segments
+    for idx, entry in enumerate(reeving):
+        name = str(entry["node"])
+        global_id = f"{prefix}{name}" if name in owned else name
+        if entry.get("body"):
+            if entry["body"] == "boom":
+                coords = {"u_m": float(entry["u_m"]), "w_m": float(entry["w_m"])}
+            else:
+                coords = {"x_m": float(entry["x_m"]), "z_m": float(entry["z_m"])}
+            nodes[global_id] = {"body": entry["body"], **coords}
+        if idx > 0:
+            start = str(entry["from"]) if entry.get("from") else path[-1]
+            if start in owned:
+                start = f"{prefix}{start}"
+            parts = int(entry.get("parts") or 1)
+            segments.append(
+                {"from": start, "to": global_id, **({"parts": parts} if parts != 1 else {})}
+            )
+        path.append(global_id)
+    return nodes, segments, path
 
 
 def _infer_solve_load_node_id(segments: list[dict[str, Any]], ctx: str) -> str:
     """Infer runtime load-node placeholder for solve hoists from final segment endpoint."""
     if not segments:
-        raise ValueError(f"{ctx}.rope_segments must contain at least one segment")
+        raise ValueError(f"{ctx}.reeving must contain at least one segment")
     last = segments[-1]
     return str(last["to"])
 
 
 def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
     """Convert authored JSON into the normalized runtime document shape."""
-    # Structural key presence/unknown-key checks are owned by the JSON schema.
-    # Keep Python-side validation focused on semantic and cross-reference rules.
-    schema = doc_data.get("schema")
-    if not isinstance(schema, dict):
-        raise ValueError("schema must be an object")
-    if (
-        schema.get("name") != AUTHORED_SCHEMA_NAME
-        or schema.get("version") != AUTHORED_SCHEMA_VERSION
-    ):
-        raise ValueError("unsupported authored schema identifier")
+    # Structural key presence/unknown-key checks and cross-field business rules
+    # (e.g. split.falls <= falls) are owned by AuthoredDocument; this function
+    # focuses on cross-reference rules that span the whole document (node ids,
+    # topology synthesis) which aren't expressible as per-object validation.
+    try:
+        validated = AuthoredDocument.model_validate(doc_data)
+    except ValidationError as e:
+        raise ValueError(format_authored_validation_error(e)) from e
+    doc_data = validated.model_dump(mode="json", by_alias=True)
 
-    md = doc_data.get("model_definition")
-    if not isinstance(md, dict):
-        raise ValueError("model_definition must be an object")
+    md = doc_data["model_definition"]
 
     topology = md.get("topology")
     if topology is None:
@@ -509,11 +549,12 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             "nodes": nodes_out,
         }
 
+    structure = md["structure"]
     primary_out = {
-        "boom_heel": dict(md["boom_heel"]),
-        "upper_hinge": dict(md["upper_hinge"]),
-        "rear_hinge": dict(md["rear_hinge"]),
-        "front_hinge": dict(md["front_hinge"]),
+        "boom_heel": dict(structure["boom_heel"]),
+        "upper_hinge": dict(structure["upper_hinge"]),
+        "rear_hinge": dict(structure["rear_hinge"]),
+        "front_hinge": dict(structure["front_hinge"]),
     }
 
     components = {
@@ -542,6 +583,32 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
     )
     primary_nodes = _extract_primary_structure_nodes(primary_out)
 
+    boom_hoist_src = md.get("boom_hoist")
+    payload_hoists_src = md.get("payload_hoists")
+    if not isinstance(payload_hoists_src, dict) or not payload_hoists_src:
+        raise ValueError("model_definition.payload_hoists must contain at least one payload hoist")
+    if not isinstance(boom_hoist_src, dict):
+        raise ValueError("model_definition.boom_hoist must be an object")
+
+    boom_id = BOOM_HOIST_ID
+    expanded: dict[str, tuple[list[dict[str, Any]], list[str]]] = {}
+    for hoist_key, hoist_src in [(boom_id, boom_hoist_src), *payload_hoists_src.items()]:
+        ctx = (
+            "model_definition.boom_hoist"
+            if hoist_key == boom_id
+            else f"model_definition.payload_hoists[{hoist_key}]"
+        )
+        hoist_nodes, hoist_segments, hoist_path = _expand_reeving(
+            str(hoist_key), hoist_src["reeving"], f"{ctx}.reeving"
+        )
+        for node_id, node_rec in hoist_nodes.items():
+            if node_id in nodes_src or node_id in RESERVED_TOPOLOGY_NODE_IDS:
+                raise ValueError(
+                    f"{ctx}.reeving node {node_id!r} collides with an existing node id"
+                )
+            nodes_src[node_id] = node_rec
+        expanded[str(hoist_key)] = (hoist_segments, hoist_path)
+
     nodes_with_inferred_body: dict[str, Any] = {}
     for node_id, node in nodes_src.items():
         if not isinstance(node, dict):
@@ -562,22 +629,12 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
     nodes_with_inferred_body.update(primary_nodes)
     nodes_with_primary = _synthesize_primary_nodes_into_nodes_map(nodes_with_inferred_body)
 
-    payload_hoists_src = md.get("payload_hoists")
-    if not isinstance(payload_hoists_src, dict):
-        raise ValueError("model_definition.payload_hoists must be an object")
-    if not payload_hoists_src:
-        raise ValueError("model_definition.payload_hoists must contain at least one payload hoist")
+    for hoist_key, (_, hoist_path) in expanded.items():
+        for node_id in hoist_path:
+            if node_id not in nodes_with_primary:
+                raise ValueError(f"hoist {hoist_key!r} reeving references unknown node {node_id!r}")
 
-    boom_hoist_src = md.get("boom_hoist")
-    if not isinstance(boom_hoist_src, dict):
-        raise ValueError("model_definition.boom_hoist must be an object")
-
-    boom_id = "BH"
-
-    boom_segments = _convert_authored_segments(
-        boom_hoist_src.get("rope_segments"),
-        "model_definition.boom_hoist.rope_segments",
-    )
+    boom_segments = expanded[boom_id][0]
 
     metadata_src = doc_data.get("metadata")
     if not isinstance(metadata_src, dict):
@@ -593,56 +650,28 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(hoist, dict):
             raise ValueError(f"model_definition.payload_hoists[{hoist_key}] must be an object")
 
-        support_node_id = str(hoist.get("support_node_id") or "").strip()
-        if not support_node_id:
-            raise ValueError(
-                f"model_definition.payload_hoists[{hoist_key}].support_node_id must be "
-                "a non-empty string"
-            )
-        if support_node_id not in nodes_with_primary:
-            raise ValueError(
-                f"model_definition.payload_hoists[{hoist_key}].support_node_id references "
-                f"unknown node {support_node_id!r}"
-            )
-        normal_mode_obj = hoist
+        hoist_segments, hoist_path = expanded[hoist_key]
+        hoist_prefix = hoist_node_prefix(hoist_key)
+        support_name = hoist.get("support_node")
+        if support_name is None:
+            support_node_id = hoist_path[-1]
+        else:
+            candidates = {f"{hoist_prefix}{support_name}", str(support_name)}
+            matches = [n for n in hoist_path if n in candidates]
+            if not matches:
+                raise ValueError(
+                    f"model_definition.payload_hoists[{hoist_key}].support_node "
+                    f"{support_name!r} is not a node on the reeving path"
+                )
+            support_node_id = matches[0]
+        hook_src = hoist["hook"]
         split_mode_obj = hoist.get("split")
-        if split_mode_obj is not None and not isinstance(split_mode_obj, dict):
-            raise ValueError(
-                f"model_definition.payload_hoists[{hoist_key}].split must be an object"
-            )
-
-        normal_falls_raw = normal_mode_obj.get("falls")
-        normal_hook_mass_raw = normal_mode_obj.get("hook_mass_t")
-        if normal_falls_raw is None or normal_hook_mass_raw is None:
-            raise ValueError(
-                f"model_definition.payload_hoists[{hoist_key}] is missing falls or hook_mass_t"
-            )
-        normal_falls = int(normal_falls_raw)
-        if normal_falls < 1:
-            raise ValueError(f"model_definition.payload_hoists[{hoist_key}].falls must be >= 1")
+        normal_falls = int(hook_src["falls"])
+        # falls >= 1, split falls <= falls, and split hook mass <= hook mass are
+        # enforced by AuthoredPayloadHoist's validators above; only derive here.
         split_falls = normal_falls
         if split_mode_obj is not None:
-            split_falls_raw = split_mode_obj.get("falls")
-            split_hook_mass_raw = split_mode_obj.get("hook_mass_t")
-            if split_falls_raw is None or split_hook_mass_raw is None:
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].split is missing falls "
-                    "or hook_mass_t"
-                )
-            split_falls = int(split_falls_raw)
-            if split_falls < 1:
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].split.falls must be >= 1"
-                )
-            if split_falls > normal_falls:
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].split.falls must be <= falls"
-                )
-            if float(split_hook_mass_raw) > float(normal_hook_mass_raw):
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].split.hook_mass_t must be "
-                    "<= hook_mass_t"
-                )
+            split_falls = int(split_mode_obj["hook"]["falls"])
 
         managed_hook_node_id = _managed_hook_node_id(hoist_key)
         if managed_hook_node_id in nodes_with_primary and not _is_managed_hook_node_id(
@@ -656,7 +685,7 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         support_node = nodes_with_primary[support_node_id]
         if not isinstance(support_node, dict):
             raise ValueError(
-                f"model_definition.payload_hoists[{hoist_key}].support_node_id references "
+                f"model_definition.payload_hoists[{hoist_key}].support_node references "
                 f"invalid node record {support_node_id!r}"
             )
         support_body = str(support_node.get("body") or "boom")
@@ -666,51 +695,33 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             "drop_m": MANAGED_HOOK_FALLBACK_DROP_M,
         }
 
-        segs = _convert_authored_segments(
-            hoist.get("rope_segments"),
-            f"model_definition.payload_hoists[{hoist_key}].rope_segments",
-        )
-        if not any(support_node_id in (str(seg.get("from")), str(seg.get("to"))) for seg in segs):
-            raise ValueError(
-                f"model_definition.payload_hoists[{hoist_key}].rope_segments must include "
-                f"support node {support_node_id!r}"
-            )
-        segs.append(
+        segs = [
+            *hoist_segments,
             {
                 "from": support_node_id,
                 "to": managed_hook_node_id,
                 "parts": normal_falls,
-            }
-        )
+            },
+        ]
 
+        rope_src = hoist["rope"]
         runtime_rope_id = _runtime_rope_id_for_hoist(hoist_key)
         ropes_norm[runtime_rope_id] = {
             "tension_mode": "fixed",
             "segments": segs,
-            "linear_mass_kg_m": float(hoist.get("linear_mass_kg_m", 0.0)),
+            "linear_mass_kg_m": float(rope_src["linear_mass_kg_m"]),
         }
 
-        normal_curve_src = normal_mode_obj.get("contractual_points")
-        if not isinstance(normal_curve_src, list):
-            raise ValueError(
-                f"model_definition.payload_hoists[{hoist_key}].contractual_points must be an array"
-            )
         normal_curve = _normalize_contractual_curve_points(
-            normal_curve_src,
-            f"model_definition.payload_hoists[{hoist_key}].contractual_points",
+            hoist["load_chart"],
+            f"model_definition.payload_hoists[{hoist_key}].load_chart",
         )
 
         split_curve: list[dict[str, Any]] = []
         if split_mode_obj is not None:
-            split_curve_src = split_mode_obj.get("contractual_points")
-            if not isinstance(split_curve_src, list):
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].split.contractual_points "
-                    "must be an array"
-                )
             split_curve = _normalize_contractual_curve_points(
-                split_curve_src,
-                f"model_definition.payload_hoists[{hoist_key}].split.contractual_points",
+                split_mode_obj["load_chart"],
+                f"model_definition.payload_hoists[{hoist_key}].split.load_chart",
             )
 
         normal_min_outreach, normal_max_outreach = _hoist_curve_outreach_bounds(normal_curve)
@@ -729,15 +740,15 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             "splitable_block": split_mode_obj is not None,
             "split_falls": split_falls,
             "split_hook_mass_t": float(
-                split_mode_obj["hook_mass_t"]
+                split_mode_obj["hook"]["mass_t"]
                 if split_mode_obj is not None
-                else normal_mode_obj["hook_mass_t"]
+                else hook_src["mass_t"]
             ),
             "hook": {
-                "mass_t": float(normal_mode_obj["hook_mass_t"]),
-                "daf": float(hoist["hook_daf"]),
-                "offlead_deg_limit": float(hoist["offlead_deg"]),
-                "side_lead_deg_limit": float(hoist.get("side_lead_deg", hoist["offlead_deg"])),
+                "mass_t": float(hook_src["mass_t"]),
+                "daf": float(hook_src["daf"]),
+                "offlead_deg_limit": float(hook_src["offlead_deg"]),
+                "sidelead_deg_limit": float(hook_src["sidelead_deg"]),
             },
             "operating_envelope": {
                 "outreach_min_m": float(min_outreach),
@@ -745,30 +756,14 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             },
             "contractual_curve": normal_curve,
             "split_contractual_points": split_curve,
-            "linear_mass_kg_m": float(hoist.get("linear_mass_kg_m", 0.0)),
-            "rope_length_m": (
-                float(hoist["rope_length_m"]) if hoist.get("rope_length_m") is not None else None
+            "linear_mass_kg_m": float(rope_src["linear_mass_kg_m"]),
+            "drum_dead_turns": int(rope_src["drum_dead_turns"]),
+            "drum_diameter_m": (
+                float(rope_src["drum_diameter_m"])
+                if rope_src.get("drum_diameter_m") is not None
+                else None
             ),
         }
-        hook_travel = hoist.get("hook_travel")
-        min_tackle = max_tackle = None
-        if hook_travel is not None:
-            if not isinstance(hook_travel, dict):
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].hook_travel must be an object"
-                )
-            min_tackle = float(hook_travel["min_m"])
-            max_tackle = float(hook_travel["max_m"])
-            if min_tackle > max_tackle:
-                raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].hook_travel.min_m must "
-                    "be <= max_m"
-                )
-        if min_tackle is not None and max_tackle is not None:
-            hoists_norm[hoist_key]["hook_travel"] = {
-                "min_m": min_tackle,
-                "max_m": max_tackle,
-            }
 
     if boom_id in hoists_norm:
         raise ValueError("model_definition.payload_hoists cannot include the boom hoist id")
@@ -777,17 +772,17 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
     ropes_norm[boom_runtime_rope_id] = {
         "tension_mode": "solve",
         "segments": boom_segments,
-        "linear_mass_kg_m": float(boom_hoist_src.get("linear_mass_kg_m", 0.0)),
+        "linear_mass_kg_m": float(boom_hoist_src["rope"]["linear_mass_kg_m"]),
     }
     hoists_norm[boom_id] = {
         "rope_id": boom_runtime_rope_id,
         "load_node_id": _infer_solve_load_node_id(boom_segments, "model_definition.boom_hoist"),
-        "linear_mass_kg_m": float(boom_hoist_src.get("linear_mass_kg_m", 0.0)),
+        "linear_mass_kg_m": float(boom_hoist_src["rope"]["linear_mass_kg_m"]),
         "hook": {
             "mass_t": 0.0,
             "daf": 1.0,
             "offlead_deg_limit": 0.0,
-            "side_lead_deg_limit": 0.0,
+            "sidelead_deg_limit": 0.0,
         },
         "operating_envelope": {
             "outreach_min_m": 0.0,
@@ -795,8 +790,8 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         },
         "contractual_curve": [],
         "rope_length_m": (
-            float(boom_hoist_src["rope_length_m"])
-            if boom_hoist_src.get("rope_length_m") is not None
+            float(boom_hoist_src["rope"]["length_m"])
+            if boom_hoist_src["rope"].get("length_m") is not None
             else None
         ),
     }
@@ -807,8 +802,21 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(vessel_motion_src, dict):
         raise ValueError("model_definition.vessel_motion must be an object")
 
-    boom_width_m = float(md["boom_width_m"])
-    slewing_bearing_diameter_m = float(md["slewing_bearing_diameter_m"])
+    boom_width_m = float(structure["boom_width_m"])
+    slewing_bearing_diameter_m = (
+        float(structure["slewing_bearing_diameter_m"])
+        if structure.get("slewing_bearing_diameter_m") is not None
+        else None
+    )
+
+    # Unauthored design hook height means "the waterline": the duty every offshore
+    # crane states, and the only default that does not invent an elevation.
+    hook_height_src = md.get("hook_height_at_min_outreach_m")
+    hook_height_at_min_outreach_m = (
+        float(hook_height_src)
+        if hook_height_src is not None
+        else float(environment_src["mean_sealevel_z_m"])
+    )
 
     bodies: list[dict[str, Any]] = []
     for body_id in CANONICAL_BODIES:
@@ -1017,7 +1025,6 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             hoist,
             {"rope_id", "load_node_id", "hook", "operating_envelope", "contractual_curve"},
             {
-                "hook_travel",
                 "support_node_id",
                 "falls",
                 "splitable_block",
@@ -1025,6 +1032,8 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                 "split_hook_mass_t",
                 "split_contractual_points",
                 "linear_mass_kg_m",
+                "drum_dead_turns",
+                "drum_diameter_m",
                 "rope_length_m",
             },
             f"hoist[{hoist_id}]",
@@ -1032,13 +1041,12 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         hook = hoist["hook"]
         envl = hoist["operating_envelope"]
         curve = hoist["contractual_curve"]
-        hook_travel = hoist.get("hook_travel")
         if not isinstance(hook, dict) or not isinstance(envl, dict) or not isinstance(curve, list):
             raise ValueError(f"hoist[{hoist_id}] hook/envelope/curve have invalid types")
         _require_object_keys(
             hook,
             {"mass_t", "daf", "offlead_deg_limit"},
-            {"side_lead_deg_limit"},
+            {"sidelead_deg_limit"},
             f"hoist[{hoist_id}].hook",
         )
         _require_object_keys(
@@ -1047,16 +1055,6 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             set(),
             f"hoist[{hoist_id}].operating_envelope",
         )
-        min_hook_travel_m = None
-        max_hook_travel_m = None
-        if hook_travel is not None:
-            if not isinstance(hook_travel, dict):
-                raise ValueError(f"hoist[{hoist_id}].hook_travel must be an object")
-            _require_object_keys(
-                hook_travel, {"min_m", "max_m"}, set(), f"hoist[{hoist_id}].hook_travel"
-            )
-            min_hook_travel_m = float(hook_travel["min_m"])
-            max_hook_travel_m = float(hook_travel["max_m"])
         rope_id = str(hoist["rope_id"])
         load_node_id = str(hoist["load_node_id"])
         if rope_id not in rope_ids:
@@ -1075,7 +1073,7 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                 {"label"},
                 f"hoist[{hoist_id}].contractual_curve[{idx}]",
             )
-            cp_runtime = {
+            cp_runtime: dict[str, float | str] = {
                 "outreach_m": float(cp["outreach_m"]),
                 "load_t": float(cp["load_t"]),
             }
@@ -1097,13 +1095,13 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                 {"label"},
                 f"hoist[{hoist_id}].split_contractual_points[{idx}]",
             )
-            cp_runtime = {
+            split_cp_runtime: dict[str, float | str] = {
                 "outreach_m": float(cp["outreach_m"]),
                 "load_t": float(cp["load_t"]),
             }
             if "label" in cp:
-                cp_runtime["label"] = str(cp["label"])
-            split_cps.append(cp_runtime)
+                split_cp_runtime["label"] = str(cp["label"])
+            split_cps.append(split_cp_runtime)
         hoists.append(
             {
                 "id": str(hoist_id),
@@ -1118,13 +1116,17 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                 "hook_mass_t": float(hook["mass_t"]),
                 "hook_daf": float(hook["daf"]),
                 "offlead_deg": float(hook["offlead_deg_limit"]),
-                "side_lead_deg": float(hook.get("side_lead_deg_limit", hook["offlead_deg_limit"])),
+                "sidelead_deg": float(hook.get("sidelead_deg_limit", hook["offlead_deg_limit"])),
                 "outreach_min_m": float(envl["outreach_min_m"]),
                 "outreach_max_m": float(envl["outreach_max_m"]),
-                "min_hook_travel_m": min_hook_travel_m,
-                "max_hook_travel_m": max_hook_travel_m,
                 "contractual_points": cps,
                 "linear_mass_kg_m": float(hoist.get("linear_mass_kg_m", 0.0)),
+                "drum_dead_turns": int(hoist.get("drum_dead_turns", 0)),
+                "drum_diameter_m": (
+                    float(hoist["drum_diameter_m"])
+                    if hoist.get("drum_diameter_m") is not None
+                    else None
+                ),
                 "rope_length_m": (
                     float(hoist["rope_length_m"])
                     if hoist.get("rope_length_m") is not None
@@ -1189,6 +1191,7 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                 ),
             },
         },
+        "hook_height_at_min_outreach_m": hook_height_at_min_outreach_m,
         "support_widths": {
             "boom_width_m": boom_width_m,
             "slewing_bearing_diameter_m": slewing_bearing_diameter_m,
@@ -1596,12 +1599,14 @@ def normalize_document(doc_data: dict[str, Any]) -> CraneDocument:
         if _is_authored_document(doc_data):
             doc_data = _normalize_authored_document(doc_data)
         else:
-            schema = doc_data.get("schema") if isinstance(doc_data.get("schema"), dict) else {}
+            schema_obj = doc_data.get("schema")
+            schema = schema_obj if isinstance(schema_obj, dict) else {}
             found_name = schema.get("name")
             found_version = schema.get("version")
             raise ValueError(
-                "Only crane-statics schema version 5.12.0 is supported for authored input; "
-                f"found name={found_name!r}, version={found_version!r}"
+                f"Only crane-statics schema major version {AUTHORED_SCHEMA_MAJOR_VERSION} is "
+                f"supported for authored input; found name={found_name!r}, "
+                f"version={found_version!r}"
             )
 
     # Ensure required root fields exist
@@ -1700,7 +1705,38 @@ def normalize_document(doc_data: dict[str, Any]) -> CraneDocument:
     # Generate canonical connections (runtime only)
     doc.connections = generate_canonical_connections()
 
+    derive_payload_hoist_rope_geometry(doc)
+
     return doc
+
+
+def derive_payload_hoist_rope_geometry(doc: CraneDocument) -> None:
+    """Fill each payload hoist's ``max_hook_travel_m`` and ``rope_length_m`` in place.
+
+    Both are consequences of ``hook_height_at_min_outreach_m``, so they are
+    derived here rather than authored: a normalized document always carries them,
+    whether it arrived through the authored reader or straight from a dict.
+
+    ``calculation`` is imported lazily on purpose -- ``calculation.engine``
+    imports this module, so a module-level import would close the cycle.
+    """
+    from ..calculation.rope_mass import derive_hook_geometry
+
+    if doc.hook_height_at_min_outreach_m is None:
+        doc.hook_height_at_min_outreach_m = float(doc.environment.mean_sealevel_z_m)
+    hook_height_m = float(doc.hook_height_at_min_outreach_m)
+
+    payload_ids = set(payload_hoist_ids(doc))
+    if not payload_ids:
+        return
+    doc_dict = doc.model_dump()
+    for hoist in doc.hoists:
+        if hoist.id not in payload_ids:
+            continue
+        derived = derive_hook_geometry(doc_dict, hoist.id, hook_height_m, hoist.dead_turns_length_m)
+        if derived is None:
+            continue
+        hoist.max_hook_travel_m, hoist.rope_length_m = derived
 
 
 def generate_canonical_connections() -> list[dict[str, Any]]:
@@ -1714,6 +1750,59 @@ def generate_canonical_connections() -> list[dict[str, Any]]:
     ]
 
 
+def _authored_node_coords(node: dict[str, Any]) -> dict[str, float]:
+    """Authored coordinates for a runtime node: boom nodes use u/w, the rest use x/z."""
+    if node.get("body") == "boom" and node.get("local_x_m") is not None:
+        return {
+            "u_m": float(node.get("local_x_m", 0.0)),
+            "w_m": float(node.get("local_z_m", 0.0)),
+        }
+    return {"x_m": float(node.get("x_m", 0.0)), "z_m": float(node.get("z_m", 0.0))}
+
+
+def _authored_reeving(
+    hoist_id: str,
+    segments: list[dict[str, Any]],
+    nodes_by_id: dict[str, dict[str, Any]],
+    owned_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Convert ordered runtime rope segments into an authored reeving path.
+
+    Nodes in owned_ids are written inline (name without the hoist prefix, with body and
+    coordinates on first appearance); any other node is written by its global ID."""
+    prefix = hoist_node_prefix(hoist_id)
+
+    def _name(node_id: str) -> str:
+        return node_id[len(prefix) :] if node_id in owned_ids else node_id
+
+    reeving: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _entry(node_id: str) -> dict[str, Any]:
+        entry: dict[str, Any] = {"node": _name(node_id)}
+        if node_id in owned_ids and node_id not in seen:
+            node = nodes_by_id[node_id]
+            entry["body"] = str(node.get("body"))
+            entry.update(_authored_node_coords(node))
+        seen.add(node_id)
+        return entry
+
+    previous: Optional[str] = None
+    for seg in segments:
+        start, end = str(seg["from"]), str(seg["to"])
+        if previous is None:
+            reeving.append(_entry(start))
+        entry = _entry(end)
+        if start != (previous if previous is not None else start):
+            entry["from"] = _name(start)
+        parts = int(seg.get("parts", 1))
+        if parts != 1:
+            entry["parts"] = parts
+        reeving.append(entry)
+        previous = end
+    return reeving
+
+
 def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
     """
     Convert a normalized runtime document back to authored form for saving.
@@ -1721,29 +1810,14 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
     This removes:
     - Derived nodes
     - Canonical connections
-    - Topology-controlled body fields on structural nodes
-    - Internal segment IDs
+    - Managed hook nodes and hook spans
+
+    and folds each hoist's exclusive sheave/winch nodes into its own reeving path.
     """
     data = doc.model_dump(exclude={"connections"})
 
-    # Remove derived nodes
     derived_node_ids = {"front_top", "platform_rear", "platform_front", "platform_heel"}
     data["nodes"] = [n for n in data["nodes"] if n.get("id") not in derived_node_ids]
-
-    # Remove topology-controlled body fields
-    structural_nodes = {
-        "boom_heel": "boom",
-        "rear_base": "rear_leg",
-        "rear_top": "rear_leg",
-        "front_base": "front_leg",
-        "platform_base": "platform",
-    }
-
-    for node in data["nodes"]:
-        node_id = node.get("id")
-        if node_id in structural_nodes:
-            # Keep body for clarity in authored form, but note it's implicit
-            pass
 
     body_loads: dict[str, dict[str, list[dict[str, Any]]]] = {
         body_id: {"mass_points": [], "wind_areas": []} for body_id in CANONICAL_BODIES
@@ -1780,46 +1854,6 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
             "wind_areas": wind_areas,
         }
 
-    nodes_by_body_authored: dict[str, dict[str, Any]] = {
-        "boom": {},
-        "rear_leg": {},
-        "front_leg": {},
-        "platform": {},
-    }
-    for node in data.get("nodes", []):
-        node_id = node.get("id")
-        if node_id in {"front_top", "platform_rear", "platform_front", "platform_heel"}:
-            continue
-        if _is_managed_hook_node_id(str(node_id)):
-            continue
-        if node_id in PRIMARY_NODE_IDS:
-            continue
-        node_out: Any
-        if node.get("below_node_id"):
-            if not _is_managed_hook_node_id(str(node_id)):
-                raise ValueError(
-                    f"Cannot export arbitrary hanging node {node_id!r}; use a payload hoist "
-                    "support_node_id"
-                )
-            node_out = {"hang_from_node_id": str(node.get("below_node_id"))}
-            drop_val = node.get("hanging_drop_m")
-            if drop_val is not None:
-                node_out["drop_m"] = float(drop_val)
-        elif node.get("body") == "boom" and node.get("local_x_m") is not None:
-            node_out = {
-                "u_m": float(node.get("local_x_m", 0.0)),
-                "w_m": float(node.get("local_z_m", 0.0)),
-            }
-        else:
-            node_out = {
-                "x_m": float(node.get("x_m", 0.0)),
-                "z_m": float(node.get("z_m", 0.0)),
-            }
-        body_id = str(node.get("body") or "")
-        if body_id not in nodes_by_body_authored:
-            continue
-        nodes_by_body_authored[body_id][str(node_id)] = node_out
-
     authored_ropes: dict[str, dict[str, Any]] = {}
     for rope in data.get("ropes", []):
         rid = str(rope.get("id"))
@@ -1841,8 +1875,9 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
 
     ropes_by_id = dict(authored_ropes)
     nodes_by_id = {str(n.get("id")): n for n in data.get("nodes", []) if isinstance(n, dict)}
-    authored_payload_hoists: dict[str, dict[str, Any]] = {}
-    authored_boom_hoist: dict[str, Any] | None = None
+
+    # Pair every hoist with its rope, dropping the managed hook span of payload hoists.
+    hoist_segments: dict[str, list[dict[str, Any]]] = {}
     rope_owner_by_id: dict[str, str] = {}
     solve_hoist_ids: list[str] = []
     for hoist in data.get("hoists", []):
@@ -1859,31 +1894,105 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
                 f"{rope_owner_by_id[rope_id]!r} and {hid!r}"
             )
         rope_owner_by_id[rope_id] = hid
-
         if ropes_by_id[rope_id].get("tension_mode") == "solve":
             solve_hoist_ids.append(hid)
-            authored_boom_hoist = {
-                "rope_segments": ropes_by_id[rope_id]["segments"],
-            }
-            rope_length = hoist.get("rope_length_m")
-            if rope_length is not None:
-                authored_boom_hoist["rope_length_m"] = float(rope_length)
-            linear_mass = float(ropes_by_id[rope_id].get("linear_mass_kg_m", 0.0))
+        load_node_id = str(hoist.get("load_node_id") or "")
+        hoist_segments[hid] = [
+            seg
+            for seg in ropes_by_id[rope_id]["segments"]
+            if not (
+                _is_managed_hook_node_id(load_node_id)
+                and load_node_id in {str(seg.get("from")), str(seg.get("to"))}
+            )
+        ]
+
+    unowned_rope_ids = sorted(set(ropes_by_id.keys()) - set(rope_owner_by_id.keys()))
+    if unowned_rope_ids:
+        raise ValueError(
+            "Cannot export hoist-owned ropes: runtime ropes without hoist owner: "
+            + ", ".join(unowned_rope_ids)
+        )
+    if len(solve_hoist_ids) != 1:
+        raise ValueError(
+            "Cannot export authored form: expected exactly one solve-mode boom hoist, "
+            f"found {len(solve_hoist_ids)} "
+            f"({', '.join(solve_hoist_ids) if solve_hoist_ids else 'none'})"
+        )
+
+    # A node is owned by a hoist when it carries the hoist's prefix, sits on a fixed body
+    # and no other hoist's rope touches it. Owned nodes are written inline in that hoist.
+    users: dict[str, set[str]] = {}
+    for hid, segs in hoist_segments.items():
+        for seg in segs:
+            for end in (str(seg["from"]), str(seg["to"])):
+                users.setdefault(end, set()).add(hid)
+    owned_by_hoist: dict[str, set[str]] = {}
+    for hid, segs in hoist_segments.items():
+        prefix = hoist_node_prefix(hid)
+        path_ids = {str(seg[k]) for seg in segs for k in ("from", "to")}
+        owned = {
+            node_id
+            for node_id in path_ids
+            if node_id.startswith(prefix)
+            and len(node_id) > len(prefix)
+            and node_id not in PRIMARY_NODE_IDS
+            and not _is_managed_hook_node_id(node_id)
+            and users.get(node_id) == {hid}
+            and node_id in nodes_by_id
+            and not nodes_by_id[node_id].get("below_node_id")
+            and nodes_by_id[node_id].get("body") in CANONICAL_BODIES
+        }
+        # A shared node written by its global ID must not shadow an owned local name.
+        shared = path_ids - owned
+        owned = {n for n in owned if n[len(prefix) :] not in shared}
+        owned_by_hoist[hid] = owned
+    all_owned = set().union(*owned_by_hoist.values()) if owned_by_hoist else set()
+
+    nodes_by_body_authored: dict[str, dict[str, Any]] = {
+        body_id: {} for body_id in CANONICAL_BODIES
+    }
+    for node in data.get("nodes", []):
+        node_id = str(node.get("id"))
+        if (
+            node_id in derived_node_ids
+            or node_id in PRIMARY_NODE_IDS
+            or node_id in all_owned
+            or _is_managed_hook_node_id(node_id)
+        ):
+            continue
+        if node.get("below_node_id"):
+            raise ValueError(
+                f"Cannot export arbitrary hanging node {node_id!r}; use a payload hoist "
+                "support node"
+            )
+        body_id = str(node.get("body") or "")
+        if body_id not in nodes_by_body_authored:
+            continue
+        nodes_by_body_authored[body_id][node_id] = _authored_node_coords(node)
+
+    authored_payload_hoists: dict[str, dict[str, Any]] = {}
+    authored_boom_hoist: dict[str, Any] = {}
+    for hoist in data.get("hoists", []):
+        hid = str(hoist.get("id"))
+        rope = ropes_by_id[str(hoist["rope_id"])]
+        reeving = _authored_reeving(hid, hoist_segments[hid], nodes_by_id, owned_by_hoist[hid])
+
+        if rope.get("tension_mode") == "solve":
+            rope_out: dict[str, Any] = {}
+            linear_mass = float(rope.get("linear_mass_kg_m", 0.0))
             if linear_mass > 0.0:
-                authored_boom_hoist["linear_mass_kg_m"] = linear_mass
+                rope_out["linear_mass_kg_m"] = linear_mass
+            if hoist.get("rope_length_m") is not None:
+                rope_out["length_m"] = float(hoist["rope_length_m"])
+            authored_boom_hoist = {
+                **({"rope": rope_out} if rope_out else {}),
+                "reeving": reeving,
+            }
             continue
 
-        cps = []
-        for cp in hoist.get("contractual_points", []):
-            outreach = float(cp.get("outreach_m", 0.0))
-            load = float(cp.get("load_t", 0.0))
-            cps.append({"outreach_m": outreach, "load_t": load})
         hook_mass = float(hoist.get("hook_mass_t", 0.0))
-        hook_daf = float(hoist.get("hook_daf", 1.0))
         hook_offlead = float(hoist.get("offlead_deg", 0.0))
-        hook_side_lead = float(hoist.get("side_lead_deg", hook_offlead))
-        splitable_block = bool(hoist.get("splitable_block", False))
-
+        hook_sidelead = float(hoist.get("sidelead_deg", hook_offlead))
         load_node_id = str(hoist.get("load_node_id") or "")
         support_node_id = str(hoist.get("support_node_id") or "")
         if not support_node_id and load_node_id:
@@ -1893,123 +2002,119 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         if not support_node_id:
             support_node_id = load_node_id
 
-        rope_segments_out = []
-        for seg in ropes_by_id[rope_id]["segments"]:
-            if _is_managed_hook_node_id(load_node_id):
-                if load_node_id in {
-                    str(seg.get("from")),
-                    str(seg.get("to")),
-                }:
-                    continue
-            rope_segments_out.append(seg)
-
         falls = hoist.get("falls")
         if falls is None:
-            falls = _infer_falls_from_segments(
-                ropes_by_id[rope_id]["segments"], support_node_id, load_node_id
-            )
-        split_falls = hoist.get("split_falls")
-        if split_falls is None:
-            split_falls = falls
-        split_hook_mass_t = hoist.get("split_hook_mass_t")
-        if split_hook_mass_t is None:
-            split_hook_mass_t = hook_mass
+            falls = _infer_falls_from_segments(rope["segments"], support_node_id, load_node_id)
 
-        normal_points: list[dict[str, float]] = cps
-        split_points: list[dict[str, float]] = []
-        for cp in hoist.get("split_contractual_points", []):
-            split_points.append(
+        def _chart(points: list[dict[str, Any]]) -> list[dict[str, float]]:
+            return [
                 {
                     "outreach_m": float(cp.get("outreach_m", 0.0)),
                     "load_t": float(cp.get("load_t", 0.0)),
                 }
-            )
+                for cp in points
+            ]
 
-        authored_hoist: dict[str, Any] = {
+        hook_out: dict[str, Any] = {
+            "mass_t": hook_mass,
             "falls": int(falls),
-            "hook_mass_t": hook_mass,
-            "contractual_points": normal_points,
-        }
-        if splitable_block:
-            authored_hoist["split"] = {
-                "falls": int(split_falls),
-                "hook_mass_t": float(split_hook_mass_t),
-                "contractual_points": split_points,
-            }
-
-        authored_payload_hoists[hid] = {
-            "support_node_id": support_node_id,
-            "hook_daf": hook_daf,
+            "daf": float(hoist.get("hook_daf", 1.0)),
             "offlead_deg": hook_offlead,
-            "side_lead_deg": hook_side_lead,
-            **authored_hoist,
-            "rope_segments": rope_segments_out,
         }
-        rope_length = hoist.get("rope_length_m")
-        if rope_length is not None:
-            authored_payload_hoists[hid]["rope_length_m"] = float(rope_length)
-        linear_mass = float(ropes_by_id[rope_id].get("linear_mass_kg_m", 0.0))
+        if hook_sidelead:
+            hook_out["sidelead_deg"] = hook_sidelead
+        hoist_out: dict[str, Any] = {}
+
+        rope_out = {}
+        linear_mass = float(rope.get("linear_mass_kg_m", 0.0))
         if linear_mass > 0.0:
-            authored_payload_hoists[hid]["linear_mass_kg_m"] = linear_mass
-        min_travel = hoist.get("min_hook_travel_m")
-        max_travel = hoist.get("max_hook_travel_m")
-        if min_travel is not None and max_travel is not None:
-            authored_payload_hoists[hid]["hook_travel"] = {
-                "min_m": float(min_travel),
-                "max_m": float(max_travel),
+            rope_out["linear_mass_kg_m"] = linear_mass
+        dead_turns = int(hoist.get("drum_dead_turns", 0) or 0)
+        if dead_turns > 0:
+            rope_out["drum_dead_turns"] = dead_turns
+        if hoist.get("drum_diameter_m") is not None:
+            rope_out["drum_diameter_m"] = float(hoist["drum_diameter_m"])
+        # rope_length_m and hook_travel are derived from hook_height_at_min_outreach_m,
+        # so they are deliberately not written back out.
+        if rope_out:
+            hoist_out["rope"] = rope_out
+        hoist_out["reeving"] = reeving
+        last = reeving[-1]["node"] if reeving else ""
+        support_name = (
+            support_node_id[len(hoist_node_prefix(hid)) :]
+            if support_node_id in owned_by_hoist[hid]
+            else support_node_id
+        )
+        if support_name != last:
+            hoist_out["support_node"] = support_name
+        hoist_out["hook"] = hook_out
+        hoist_out["load_chart"] = _chart(hoist.get("contractual_points", []))
+        if bool(hoist.get("splitable_block", False)):
+            split_falls = hoist.get("split_falls")
+            split_mass = hoist.get("split_hook_mass_t")
+            hoist_out["split"] = {
+                "hook": {
+                    "mass_t": float(hook_mass if split_mass is None else split_mass),
+                    "falls": int(falls if split_falls is None else split_falls),
+                },
+                "load_chart": _chart(hoist.get("split_contractual_points", [])),
             }
+        authored_payload_hoists[hid] = hoist_out
 
-    unowned_rope_ids = sorted(set(ropes_by_id.keys()) - set(rope_owner_by_id.keys()))
-    if unowned_rope_ids:
-        raise ValueError(
-            "Cannot export hoist-owned ropes: runtime ropes without hoist owner: "
-            + ", ".join(unowned_rope_ids)
-        )
-
-    if len(solve_hoist_ids) != 1:
-        raise ValueError(
-            "Cannot export v5 authored form: expected exactly one solve-mode boom hoist, "
-            f"found {len(solve_hoist_ids)} "
-            f"({', '.join(solve_hoist_ids) if solve_hoist_ids else 'none'})"
-        )
-    if authored_boom_hoist is None:
-        raise ValueError("Cannot export v5 authored form: boom hoist data could not be assembled")
+    if not authored_boom_hoist:
+        raise ValueError("Cannot export authored form: boom hoist data could not be assembled")
 
     env = data.get("environment", {})
     vm = env.get("vessel_motion", {})
     metadata = data.get("metadata", {})
 
-    component_sections = {
-        "boom": {
-            **body_loads["boom"],
-            "nodes": nodes_by_body_authored["boom"],
-        },
-        "rear_leg": {
-            **body_loads["rear_leg"],
-            "nodes": nodes_by_body_authored["rear_leg"],
-        },
-        "front_leg": {
-            **body_loads["front_leg"],
-            "nodes": nodes_by_body_authored["front_leg"],
-        },
-        "platform": {
-            **body_loads["platform"],
-            "nodes": nodes_by_body_authored["platform"],
-        },
-    }
-
     def _primary_xy(node_id: str) -> dict[str, float]:
         node = nodes_by_id.get(node_id) or PRIMARY_NODE_DEFAULTS.get(node_id, {})
         return {"x_m": float(node.get("x_m", 0.0)), "z_m": float(node.get("z_m", 0.0))}
 
-    primary_structure_out = {
-        "boom_heel": _primary_xy("boom_heel"),
-        "upper_hinge": _primary_xy("rear_top"),
-        "rear_hinge": _primary_xy("rear_base"),
-        "front_hinge": _primary_xy("front_base"),
-    }
+    widths = data.get("support_widths") or {}
+    structure_out: dict[str, Any] = {"boom_width_m": float(widths.get("boom_width_m", 1.0))}
+    if widths.get("slewing_bearing_diameter_m") is not None:
+        structure_out["slewing_bearing_diameter_m"] = float(widths["slewing_bearing_diameter_m"])
+    structure_out.update(
+        {
+            "boom_heel": _primary_xy("boom_heel"),
+            "upper_hinge": _primary_xy("rear_top"),
+            "rear_hinge": _primary_xy("rear_base"),
+            "front_hinge": _primary_xy("front_base"),
+        }
+    )
 
-    authored_out = {
+    model_definition: dict[str, Any] = {
+        "environment": {
+            "gravity_m_s2": abs(float(env.get("gravity_m_s2", -9.81))),
+            "air_density_kg_m3": float(env.get("air_density_kg_m3", 1.225)),
+            "wind_profile_exponent": float(env.get("wind_profile_exponent", 0.143)),
+            "wind_reference_height_m_asl": float(env.get("wind_reference_height_m_asl", 10.0)),
+            "mean_sealevel_z_m": float(env.get("mean_sealevel_z_m", -35.0)),
+            "max_wind_speed_m_s": float(env.get("max_wind_speed_m_s", 20.0)),
+        },
+    }
+    vessel_motion_out = {key: float(vm.get(key, 0.0)) for key in DEFAULT_VESSEL_MOTION}
+    if any(vessel_motion_out.values()):
+        model_definition["vessel_motion"] = vessel_motion_out
+    hook_height = data.get("hook_height_at_min_outreach_m")
+    model_definition["hook_height_at_min_outreach_m"] = float(
+        hook_height if hook_height is not None else env.get("mean_sealevel_z_m", -35.0)
+    )
+    model_definition["structure"] = structure_out
+    for body_id in CANONICAL_BODIES:
+        section = {
+            **body_loads[body_id],
+            "nodes": nodes_by_body_authored[body_id],
+        }
+        section = {key: value for key, value in section.items() if value}
+        if section:
+            model_definition[body_id] = section
+    model_definition["boom_hoist"] = authored_boom_hoist
+    model_definition["payload_hoists"] = authored_payload_hoists
+
+    return {
         "schema": {
             "name": AUTHORED_SCHEMA_NAME,
             "version": AUTHORED_SCHEMA_VERSION,
@@ -2017,36 +2122,5 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         "metadata": {
             "name": metadata.get("name", "New Crane Model"),
         },
-        "model_definition": {
-            "environment": {
-                "gravity_m_s2": abs(float(env.get("gravity_m_s2", -9.81))),
-                "air_density_kg_m3": float(env.get("air_density_kg_m3", 1.225)),
-                "wind_profile_exponent": float(env.get("wind_profile_exponent", 0.143)),
-                "wind_reference_height_m_asl": float(env.get("wind_reference_height_m_asl", 10.0)),
-                "mean_sealevel_z_m": float(env.get("mean_sealevel_z_m", -35.0)),
-                "max_wind_speed_m_s": float(env.get("max_wind_speed_m_s", 20.0)),
-            },
-            "boom_width_m": float((data.get("support_widths") or {}).get("boom_width_m", 1.0)),
-            "slewing_bearing_diameter_m": float(
-                (data.get("support_widths") or {}).get("slewing_bearing_diameter_m", 1.0)
-            ),
-            **primary_structure_out,
-            "vessel_motion": {
-                "accel_x_m_s2": float(vm.get("accel_x_m_s2", 0.0)),
-                "accel_y_m_s2": float(vm.get("accel_y_m_s2", 0.0)),
-                "accel_z_m_s2": float(vm.get("accel_z_m_s2", 0.0)),
-                "pitch_angular_accel_rad_s2": float(vm.get("pitch_angular_accel_rad_s2", 0.0)),
-                "roll_angular_accel_rad_s2": float(vm.get("roll_angular_accel_rad_s2", 0.0)),
-                "reference_x_m": float(vm.get("reference_x_m", 0.0)),
-                "reference_z_m": float(vm.get("reference_z_m", 0.0)),
-            },
-            "boom": component_sections["boom"],
-            "rear_leg": component_sections["rear_leg"],
-            "front_leg": component_sections["front_leg"],
-            "platform": component_sections["platform"],
-            "boom_hoist": authored_boom_hoist,
-            "payload_hoists": authored_payload_hoists,
-        },
+        "model_definition": model_definition,
     }
-
-    return authored_out

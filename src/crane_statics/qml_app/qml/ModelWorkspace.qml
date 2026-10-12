@@ -3,15 +3,14 @@ import QtQuick.Controls.Fusion
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import "dialogs"
-import "../design" as Design
-import "components"
+import BF.DesignSystem
 
 Item {
     id: root
 
-    readonly property bool compact: width > 0 && width < Design.DesignTokens.layout.breakpointCompact
+    readonly property bool compact: width > 0 && width < Metrics.breakpointCompact
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.controlGap * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
     readonly property string bodyLabel: bodyTabs.currentIndex >= 0
         && bodyTabs.currentIndex < modelVm.bodyLabels.length
@@ -52,10 +51,10 @@ Item {
                     id: sectionTabs
                     Layout.fillWidth: true
 
-                    StyledTabButton { text: qsTr("Components") }
-                    StyledTabButton { text: qsTr("Hoists") }
-                    StyledTabButton { text: qsTr("Ropes") }
-                    StyledTabButton { text: qsTr("Load Charts") }
+                    TabButton { text: qsTr("Components"); Layout.fillWidth: true }
+                    TabButton { text: qsTr("Hoists"); Layout.fillWidth: true }
+                    TabButton { text: qsTr("Ropes"); Layout.fillWidth: true }
+                    TabButton { text: qsTr("Load Charts"); Layout.fillWidth: true }
                 }
 
                 Label {
@@ -88,9 +87,10 @@ Item {
 
                         Repeater {
                             model: modelVm.bodyLabels
-                            StyledTabButton {
+                            TabButton {
                                 required property string modelData
                                 text: modelData
+                                Layout.fillWidth: true
                             }
                         }
                     }
@@ -102,8 +102,8 @@ Item {
                         emptyText: qsTr("No nodes in this component.")
                         editable: true
                         model: modelVm.nodesModel
+                        editorChoices: modelVm.editableNodeIds
                         onAddRequested: nodeDialog.openFor(-1, null)
-                        onEditRequested: row => nodeDialog.openFor(row, modelVm.nodeFields(row))
                         onDeleteRequested: row => modelVm.deleteNode(row)
                     }
 
@@ -115,7 +115,6 @@ Item {
                         editable: true
                         model: modelVm.massPointsModel
                         onAddRequested: massPointDialog.openFor(-1, null)
-                        onEditRequested: row => massPointDialog.openFor(row, modelVm.massPointFields(row))
                         onDeleteRequested: row => modelVm.deleteMassPoint(row)
                     }
 
@@ -127,7 +126,6 @@ Item {
                         editable: true
                         model: modelVm.windAreasModel
                         onAddRequested: windAreaDialog.openFor(-1, null)
-                        onEditRequested: row => windAreaDialog.openFor(row, modelVm.windAreaFields(row))
                         onDeleteRequested: row => modelVm.deleteWindArea(row)
                     }
                 }
@@ -137,8 +135,8 @@ Item {
                     emptyText: qsTr("No hoists defined.")
                     editable: true
                     model: modelVm.hoistsModel
+                    editorChoices: modelVm.editableNodeIds
                     onAddRequested: hoistDialog.openFor(-1, null)
-                    onEditRequested: row => hoistDialog.openFor(row, modelVm.hoistFields(row))
                     onDeleteRequested: row => modelVm.deleteHoist(row)
                 }
 
@@ -154,8 +152,8 @@ Item {
                         emptyText: qsTr("No rope segments for this hoist.")
                         editable: true
                         model: modelVm.ropeSegmentsModel
+                        editorChoices: modelVm.editableNodeIds
                         onAddRequested: segmentDialog.openFor(-1, null)
-                        onEditRequested: row => segmentDialog.openFor(row, modelVm.ropeSegmentFields(row))
                         onDeleteRequested: row => modelVm.deleteRopeSegment(row)
                     }
                 }
@@ -199,7 +197,6 @@ Item {
                         editable: true
                         model: modelVm.contractualModel
                         onAddRequested: contractualDialog.openFor(-1, null)
-                        onEditRequested: row => contractualDialog.openFor(row, modelVm.contractualFields(row))
                         onDeleteRequested: row => modelVm.deleteContractualPoint(row)
                     }
                 }
@@ -227,49 +224,48 @@ Item {
         }
     }
 
+    /*  The dialogs only add here: an existing row is edited in its own cell, which
+        submits the same fields through the same validation. The dialogs still carry
+        the row index in their signal because the load chart workspace edits its
+        contractual points through one. */
+
     NodeDialog {
         id: nodeDialog
         bodyId: modelVm.selectedBodyId
         componentLabel: root.bodyLabel
         nodeIds: modelVm.editableNodeIds
-        onCommitted: (index, fields) => index < 0 ? modelVm.addNode(fields)
-                                                  : modelVm.updateNode(index, fields)
+        onCommitted: (index, fields) => modelVm.addNode(fields)
     }
 
     MassPointDialog {
         id: massPointDialog
         bodyId: modelVm.selectedBodyId
         componentLabel: root.bodyLabel
-        onCommitted: (index, fields) => index < 0 ? modelVm.addMassPoint(fields)
-                                                  : modelVm.updateMassPoint(index, fields)
+        onCommitted: (index, fields) => modelVm.addMassPoint(fields)
     }
 
     WindAreaDialog {
         id: windAreaDialog
         bodyId: modelVm.selectedBodyId
         componentLabel: root.bodyLabel
-        onCommitted: (index, fields) => index < 0 ? modelVm.addWindArea(fields)
-                                                  : modelVm.updateWindArea(index, fields)
+        onCommitted: (index, fields) => modelVm.addWindArea(fields)
     }
 
     HoistDialog {
         id: hoistDialog
         nodeIds: modelVm.editableNodeIds
-        onCommitted: (index, fields) => index < 0 ? modelVm.addHoist(fields)
-                                                  : modelVm.updateHoist(index, fields)
+        onCommitted: (index, fields) => modelVm.addHoist(fields)
     }
 
     SegmentDialog {
         id: segmentDialog
         nodeIds: modelVm.editableNodeIds
-        onCommitted: (index, fields) => index < 0 ? modelVm.addRopeSegment(fields)
-                                                  : modelVm.updateRopeSegment(index, fields)
+        onCommitted: (index, fields) => modelVm.addRopeSegment(fields)
     }
 
     ContractualPointDialog {
         id: contractualDialog
-        onCommitted: (index, fields) => index < 0 ? modelVm.addContractualPoint(fields)
-                                                  : modelVm.updateContractualPoint(index, fields)
+        onCommitted: (index, fields) => modelVm.addContractualPoint(fields)
     }
 
     MessageDialog {

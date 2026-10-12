@@ -1,20 +1,22 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import "../design" as Design
+import BF.DesignSystem
 
 Item {
     id: root
 
-    readonly property color surfaceColor: Design.DesignTokens.colors.surface
-    readonly property color borderColor: Design.DesignTokens.colors.border
-    readonly property color headerColor: Design.DesignTokens.colors.surfaceAlt
-    readonly property color headerTextColor: Design.DesignTokens.colors.textPrimary
-    readonly property color textColor: Design.DesignTokens.colors.textPrimary
-    readonly property color gridColor: Design.DesignTokens.colors.border
-    readonly property int tableRowHeight: Design.DesignTokens.layout.tableRowHeight
+    SystemPalette { id: sysPalette }
+
+    readonly property color surfaceColor: sysPalette.base
+    readonly property color borderColor: sysPalette.mid
+    readonly property color headerColor: sysPalette.alternateBase
+    readonly property color headerTextColor: sysPalette.text
+    readonly property color textColor: sysPalette.text
+    readonly property color gridColor: sysPalette.mid
+    readonly property int tableRowHeight: Metrics.tableRowHeight
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     property alias model: rowsList.model
@@ -37,11 +39,11 @@ Item {
             Layout.fillHeight: true
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: 1
+            border.width: Metrics.borderWidth
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 1
+                anchors.margins: Metrics.borderWidth
                 spacing: 0
 
                 Row {
@@ -60,12 +62,12 @@ Item {
                             height: root.tableRowHeight
                             color: root.headerColor
                             border.color: root.gridColor
-                            border.width: 1
+                            border.width: Metrics.borderWidth
                             Label {
                                 anchors.fill: parent
-                                anchors.leftMargin: 6
-                                anchors.rightMargin: 6
-                                anchors.bottomMargin: 2
+                                anchors.leftMargin: Metrics.spacing6
+                                anchors.rightMargin: Metrics.spacing6
+                                anchors.bottomMargin: Metrics.spacing2
                                 text: parent.modelData
                                 color: root.headerTextColor
                                 font.bold: true

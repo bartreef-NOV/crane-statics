@@ -2,8 +2,6 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Dialogs
 import QtQuick.Layouts
-import "../design" as Design
-import "components"
 
 ApplicationWindow {
     id: window
@@ -80,71 +78,7 @@ ApplicationWindow {
                 enabled: appVm.hasDocument
                 onTriggered: appVm.resetLayout()
             }
-            MenuSeparator {}
-            Menu {
-                title: qsTr("&Appearance")
-                ActionGroup { id: appearanceGroup }
-                Action {
-                    text: qsTr("Follow &System")
-                    checkable: true
-                    checked: appVm.colorScheme === "system"
-                    ActionGroup.group: appearanceGroup
-                    onTriggered: appVm.setColorScheme("system")
-                }
-                Action {
-                    text: qsTr("&Light")
-                    checkable: true
-                    checked: appVm.colorScheme === "light"
-                    ActionGroup.group: appearanceGroup
-                    onTriggered: appVm.setColorScheme("light")
-                }
-                Action {
-                    text: qsTr("&Dark")
-                    checkable: true
-                    checked: appVm.colorScheme === "dark"
-                    ActionGroup.group: appearanceGroup
-                    onTriggered: appVm.setColorScheme("dark")
-                }
-                MenuSeparator {}
-                Menu {
-                    title: qsTr("&Density")
-                    ActionGroup { id: densityGroup }
-                    Action {
-                        text: qsTr("&Relaxed")
-                        checkable: true
-                        checked: appVm.density === "relaxed"
-                        ActionGroup.group: densityGroup
-                        onTriggered: appVm.setDensity("relaxed")
-                    }
-                    Action {
-                        text: qsTr("&Normal")
-                        checkable: true
-                        checked: appVm.density === "normal"
-                        ActionGroup.group: densityGroup
-                        onTriggered: appVm.setDensity("normal")
-                    }
-                    Action {
-                        text: qsTr("&Compact")
-                        checkable: true
-                        checked: appVm.density === "compact"
-                        ActionGroup.group: densityGroup
-                        onTriggered: appVm.setDensity("compact")
-                    }
-                }
-            }
         }
-    }
-
-    Binding {
-        target: Design.DesignTokens.layout
-        property: "density"
-        value: appVm.density
-    }
-
-    Binding {
-        target: Design.DesignTokens
-        property: "colorScheme"
-        value: appVm.colorScheme
     }
 
     header: TabBar {
@@ -152,9 +86,9 @@ ApplicationWindow {
         objectName: "workspaceTabs"
         visible: appVm.hasDocument
 
-        StyledTabButton { text: qsTr("Scene"); fillWidth: true }
-        StyledTabButton { text: qsTr("Load Chart"); fillWidth: true }
-        StyledTabButton { text: qsTr("Model"); fillWidth: true }
+        TabButton { text: qsTr("Scene"); Layout.fillWidth: true }
+        TabButton { text: qsTr("Load Chart"); Layout.fillWidth: true }
+        TabButton { text: qsTr("Model"); Layout.fillWidth: true }
     }
 
     StackLayout {
@@ -195,7 +129,7 @@ ApplicationWindow {
     FileDialog {
         id: openDialog
         title: qsTr("Open Crane Model")
-        nameFilters: [qsTr("JSON Files (*.json)"), qsTr("All Files (*)")]
+        nameFilters: [qsTr("Crane Model Files (*.json *.yaml *.yml)"), qsTr("JSON Files (*.json)"), qsTr("YAML Files (*.yaml *.yml)"), qsTr("All Files (*)")]
         onAccepted: appVm.open(selectedFile)
     }
 
@@ -203,8 +137,8 @@ ApplicationWindow {
         id: saveDialog
         title: qsTr("Save Crane Model As")
         fileMode: FileDialog.SaveFile
-        defaultSuffix: "json"
-        nameFilters: [qsTr("JSON Files (*.json)"), qsTr("All Files (*)")]
+        defaultSuffix: "yaml"
+        nameFilters: [qsTr("YAML Files (*.yaml *.yml)"), qsTr("JSON Files (*.json)"), qsTr("All Files (*)")]
         onAccepted: {
             const saved = appVm.saveAs(selectedFile)
             if (!saved) {

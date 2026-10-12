@@ -19,7 +19,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import QEventLoop, QObject, QTimer, QUrl  # noqa: E402
+from PyQt6.QtCore import QEventLoop, QObject, Qt, QTimer, QUrl  # noqa: E402
 from PyQt6.QtGui import QGuiApplication  # noqa: E402
 from PyQt6.QtQml import QQmlApplicationEngine  # noqa: E402
 
@@ -28,6 +28,7 @@ from PyQt6.QtQml import QQmlApplicationEngine  # noqa: E402
 from PyQt6.QtQuick import QQuickWindow  # noqa: E402,F401
 
 from crane_statics.qml_app.app import (  # noqa: E402
+    DESIGN_DIR,
     QML_DIR,
     configure_controls_style,
     configure_surface_format,
@@ -40,7 +41,7 @@ from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel  # noqa: E4
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-DEFAULT_MODEL = REPO_ROOT / "examples" / "crane_input_22689.json"
+DEFAULT_MODEL = REPO_ROOT / "examples" / "crane_input_22689.yaml"
 WORKSPACE_INDEX = {"scene": 0, "chart": 1, "model": 2}
 
 
@@ -63,15 +64,18 @@ def main(argv: list[str] | None = None) -> int:
     configure_controls_style()
     configure_surface_format()
     app = QGuiApplication(sys.argv[:1])
+    hints = app.styleHints()
+    if hints is not None:
+        hints.setColorScheme(Qt.ColorScheme.Light)
 
     warnings: list[str] = []
     session = SessionState()
     engine = QQmlApplicationEngine(app)
     engine.warnings.connect(lambda errs: warnings.extend(e.toString() for e in errs))
     engine.addImportPath(str(QML_DIR))
+    engine.addImportPath(str(DESIGN_DIR))
 
     app_vm = AppViewModel(session, engine)
-    app_vm.applyColorScheme()
     model_vm = ModelViewModel(session, engine)
     scene_vm = SceneViewModel(session, engine)
     chart_vm = ChartViewModel(session, engine)

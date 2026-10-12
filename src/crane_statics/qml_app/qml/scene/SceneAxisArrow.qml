@@ -13,7 +13,6 @@ Item {
     y: axis.start_y - 5
     width: length + 4
     height: 10
-    antialiasing: true
     rotation: Math.atan2(dy, dx) * 180 / Math.PI
     transformOrigin: Item.Left
 

@@ -16,9 +16,12 @@ from crane_statics.presentation.formatters import (
 )
 from crane_statics.core.document_edit import DocumentEditor, build_contractual_point
 from crane_statics.core.limit_auto_set import (
+    ConnectionAutoSetResult,
+    RopeAutoSetResult,
     compute_required_connection_capacity_kN,
     compute_required_rope_capacity_kN,
 )
+from crane_statics.data.models import CraneDocument
 from crane_statics.qml_app.session import SessionState
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep
 
@@ -49,7 +52,14 @@ class _SweepWorker(QThread):
     failed = pyqtSignal(str)
     cancelled = pyqtSignal()
 
-    def __init__(self, doc, hoist_id, enabled_limits, outreach_step, limit_display_names):
+    def __init__(
+        self,
+        doc: CraneDocument,
+        hoist_id: str,
+        enabled_limits: dict,
+        outreach_step: float,
+        limit_display_names: dict,
+    ) -> None:
         super().__init__()
         self._args = (doc, hoist_id, enabled_limits, outreach_step, limit_display_names)
 
@@ -261,6 +271,7 @@ class ChartViewModel(QObject):
             self._set_status("Could not compute: no document loaded")
             return
 
+        auto: RopeAutoSetResult | ConnectionAutoSetResult
         if dl.kind == "rope":
             rope_id = limit_id[:-2] if limit_id.endswith("_T") else limit_id
             auto = compute_required_rope_capacity_kN(doc, rope_id)
@@ -314,7 +325,7 @@ class ChartViewModel(QObject):
 
     @pyqtSlot(QUrl, result=str)
     def toLocalPath(self, url: QUrl) -> str:
-        return url.toLocalFile() if url.isLocalFile() else url.toString()
+        return str(url.toLocalFile() if url.isLocalFile() else url.toString())
 
     def _contractual_points(self) -> list:
         return list(

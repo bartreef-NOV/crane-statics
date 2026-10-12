@@ -3,25 +3,33 @@
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import QObject, QCoreApplication, QUrl
+from PyQt6.QtCore import QObject, QUrl
 from PyQt6.QtTest import QTest
-from PyQt6.QtQml import QQmlApplicationEngine, QQmlComponent
+from PyQt6.QtQml import (
+    QJSValue,
+    QQmlApplicationEngine,
+    QQmlComponent,
+    QQmlEngine,
+    QQmlExpression,
+)
 from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtQuick import QQuickItem
 
 from crane_statics.qml_app.session import SessionState
-from crane_statics.qml_app.app import QML_DIR
+from crane_statics.qml_app.app import DESIGN_DIR, QML_DIR
 from crane_statics.qml_app.viewmodels.app_vm import AppViewModel
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.json"
+EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
 
 @pytest.fixture
 def qml_engine():
     engine = QQmlApplicationEngine()
     engine.addImportPath(str(QML_DIR))
+    engine.addImportPath(str(DESIGN_DIR))
 
     # Parent the view models to the engine so QML objects are torn down first.
     session = SessionState()
@@ -41,6 +49,10 @@ def qml_engine():
     yield engine, app_vm, model_vm, warnings
     for root in engine.rootObjects():
         root.deleteLater()
+    # Drain the deferred deletions before the next engine is built. Objects left
+    # pending are destroyed inside a later test's event loop, and a QML item torn
+    # down mid-frame takes the whole process down with it.
+    QTest.qWait(20)
 
 
 def test_main_qml_loads_without_warnings(qml_engine):
@@ -48,84 +60,6 @@ def test_main_qml_loads_without_warnings(qml_engine):
     engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
 
     assert engine.rootObjects(), "Main.qml failed to instantiate"
-    assert warnings == []
-
-
-def test_theme_menu_tracks_color_scheme_preference(qml_engine):
-    engine, app_vm, _model_vm, warnings = qml_engine
-    app_vm.setColorScheme("system")
-    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
-
-    root = engine.rootObjects()[-1]
-    actions = {
-        item.property("text").replace("&", ""): item
-        for item in root.findChildren(QObject)
-        if isinstance(item.property("text"), str) and item.property("text")
-    }
-    assert {"Follow System", "Light", "Dark"} <= set(actions)
-
-    app_vm.setColorScheme("dark")
-    QTest.qWait(50)
-    assert app_vm.colorScheme == "dark"
-    source = (QML_DIR / "Main.qml").read_text(encoding="utf-8")
-    assert 'checked: appVm.colorScheme === "dark"' in source
-    assert 'checked: appVm.colorScheme === "light"' in source
-    assert warnings == []
-
-
-def test_theme_override_changes_rendered_design_tokens(qml_engine):
-    engine, _app_vm, _model_vm, warnings = qml_engine
-    component = QQmlComponent(engine)
-    component.setData(
-        b"""import QtQuick
-import "../design" as Design
-Item {
-    id: root
-    property string scheme: "light"
-    property color surface: Design.DesignTokens.colors.surface
-    property color background: Design.DesignTokens.colors.background
-    property color text: Design.DesignTokens.colors.textPrimary
-    property color chartCanvas: Design.DesignTokens.colors.chartCanvasBackground
-    property color chartPlot: Design.DesignTokens.colors.chartPlotBackground
-    property color chartTooltip: Design.DesignTokens.colors.chartTooltipBackground
-    property color chartText: Design.DesignTokens.colors.chartAxisText
-    Binding { target: Design.DesignTokens; property: "colorScheme"; value: root.scheme }
-}""",
-        QUrl.fromLocalFile(str(QML_DIR / "theme_probe.qml")),
-    )
-    probe = component.create()
-
-    assert probe is not None
-    light = tuple(
-        probe.property(name).name()
-        for name in (
-            "surface",
-            "background",
-            "text",
-            "chartCanvas",
-            "chartPlot",
-            "chartTooltip",
-            "chartText",
-        )
-    )
-    probe.setProperty("scheme", "dark")
-    QCoreApplication.processEvents()
-    dark = tuple(
-        probe.property(name).name()
-        for name in (
-            "surface",
-            "background",
-            "text",
-            "chartCanvas",
-            "chartPlot",
-            "chartTooltip",
-            "chartText",
-        )
-    )
-
-    assert light == ("#ffffff", "#f7f8fa", "#202428", "#f7f8fa", "#ffffff", "#ffffff", "#4b5563")
-    assert dark == ("#24282d", "#1b1e22", "#f1f3f5", "#1b1e22", "#15181c", "#24282d", "#c4cdd6")
-    assert light != dark
     assert warnings == []
 
 
@@ -176,6 +110,7 @@ def test_chart_legend_handles_long_labels_and_toggles_visibility(qml_engine):
         "NumberField.qml",
         "NumericRow.qml",
         "DataTable.qml",
+        "CellEditor.qml",
         "NoDocumentPage.qml",
         "EnvironmentPanel.qml",
         "ModelWorkspace.qml",
@@ -195,11 +130,6 @@ def test_chart_legend_handles_long_labels_and_toggles_visibility(qml_engine):
         "dialogs/HoistDialog.qml",
         "dialogs/SegmentDialog.qml",
         "dialogs/ContractualPointDialog.qml",
-        "DesignSystemTokensDemo.qml",
-        "ComponentLibraryShowcase.qml",
-        "components/StyledCheckBox.qml",
-        "components/StyledRadioButton.qml",
-        "components/IconButton.qml",
     ],
 )
 def test_component_loads_without_warnings(qml_engine, qml_file):
@@ -209,6 +139,26 @@ def test_component_loads_without_warnings(qml_engine, qml_file):
     assert component.status() == QQmlComponent.Status.Ready, component.errorString()
     obj = component.create()
     assert obj is not None
+    assert warnings == []
+
+
+def test_environment_panel_nullable_field_shows_blank_when_unset(qml_engine):
+    """slewing_bearing_diameter_m is optional; with no document loaded it must
+    read as blank, not '0.000', while an ordinary field like boom_width_m
+    still shows its numeric default.
+    """
+    engine, _app_vm, _model_vm, warnings = qml_engine
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "EnvironmentPanel.qml")))
+    panel = component.create()
+    assert panel is not None, component.errorString()
+
+    nullable_field = panel.findChild(QObject, "envField_slewing_bearing_diameter_m")
+    ordinary_field = panel.findChild(QObject, "envField_boom_width_m")
+
+    assert nullable_field is not None, "NumberField for the nullable row must be discoverable"
+    assert ordinary_field is not None, "NumberField for an ordinary row must be discoverable"
+    assert nullable_field.property("text") == ""
+    assert ordinary_field.property("text") == "0.000"
     assert warnings == []
 
 
@@ -227,6 +177,135 @@ def test_delegate_component_compiles(qml_engine, qml_file):
 
     # Delegates declare required model roles, so they compile but cannot be built standalone.
     assert component.status() == QQmlComponent.Status.Ready, component.errorString()
+
+
+def test_scene_canvas_segment_delegates_are_antialiased(qml_engine):
+    """Booms and ropes are drawn at arbitrary angles; Qt only antialiases a
+    Rectangle by default when it has a radius, so these delegates need the
+    property set explicitly or their diagonal edges come out jagged.
+    """
+    engine, _app_vm, _model_vm, warnings = qml_engine
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_DIR / "scene/QuickSceneCanvas.qml"))
+    )
+    canvas = component.create()
+    assert canvas is not None, component.errorString()
+
+    canvas.setProperty(
+        "frame",
+        {
+            "structuralSegments": [
+                {
+                    "start_x": 0.0,
+                    "start_y": 0.0,
+                    "end_x": 10.0,
+                    "end_y": 6.0,
+                    "width": 4.0,
+                    "color": "#808080",
+                },
+            ],
+            "ropeSegments": [
+                {
+                    "start_x": 0.0,
+                    "start_y": 0.0,
+                    "end_x": 8.0,
+                    "end_y": -3.0,
+                    "width": 2.0,
+                    "color": "#c0c0c0",
+                },
+            ],
+        },
+    )
+    QTest.qWait(20)
+
+    def _iter_items(item: QQuickItem):
+        yield item
+        for child in item.childItems():
+            yield from _iter_items(child)
+
+    # Repeater delegates aren't in the QObject parent/child tree (their
+    # QObject parent is None; only the QQuickItem visual parentItem() chain
+    # reaches them), and an inline `Rectangle { ... }` delegate with extra
+    # properties gets a synthesized class name like "QQuickRectangle_QML_48"
+    # rather than the bare built-in name, so match by prefix.
+    segment_rects = [
+        item
+        for item in _iter_items(canvas)
+        if item.metaObject().className().startswith("QQuickRectangle")
+        and item.property("rotation") not in (0, 0.0, None)
+    ]
+    assert len(segment_rects) == 2, "expected one structural and one rope segment delegate"
+    assert all(rect.property("antialiasing") for rect in segment_rects)
+    assert warnings == []
+
+
+def _cell_editor(engine, **properties):
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "CellEditor.qml")))
+    assert component.status() == QQmlComponent.Status.Ready, component.errorString()
+    editor = component.createWithInitialProperties(properties)
+    assert editor is not None
+    return editor
+
+
+@pytest.mark.parametrize(
+    "kind, initial, expected",
+    [
+        ("text", "mh_winch", "mh_winch"),
+        ("number", "1.500", "1.500"),
+        ("int", 3, "3"),
+        ("bool", True, True),
+        ("node", "bh_winch", "bh_winch"),
+    ],
+)
+def test_cell_editor_reads_back_what_the_operator_left_in_it(qml_engine, kind, initial, expected):
+    engine, _app_vm, _model_vm, warnings = qml_engine
+
+    editor = _cell_editor(engine, kind=kind, initialValue=initial, choices=["bh_winch", "mh_winch"])
+
+    assert editor.property("value") == expected
+    assert warnings == []
+
+
+def test_cell_editor_offers_a_node_it_was_not_given(qml_engine):
+    """Ropes are reeved through primary-structure nodes the editable list leaves out.
+
+    The combo box has to keep such an id rather than snap to the first choice,
+    or opening the cell would silently re-route the rope.
+    """
+    engine, _app_vm, _model_vm, warnings = qml_engine
+
+    editor = _cell_editor(engine, kind="node", initialValue="boom_heel", choices=["mh_winch"])
+
+    assert editor.property("value") == "boom_heel"
+    assert warnings == []
+
+
+def test_cell_editor_commits_once_and_not_at_all_after_escape(qml_engine):
+    """Qt closes an editor for Return, for Escape and for losing focus alike.
+
+    Return commits and then drops focus, and Escape drops focus too, so the
+    editor has to remember which of the two happened.
+    """
+    engine, _app_vm, _model_vm, warnings = qml_engine
+    accepted = _cell_editor(engine, kind="number", initialValue="1.500")
+    commits: list[object] = []
+    accepted.commitRequested.connect(lambda: commits.append(accepted.property("value")))
+
+    _evaluate_in(accepted, "commit()")
+    _evaluate_in(accepted, "commit()")
+
+    assert commits == ["1.500"]
+
+    cancelled = _cell_editor(engine, kind="number", initialValue="2.500")
+    refused: list[int] = []
+    cancelled.commitRequested.connect(lambda: refused.append(1))
+
+    _evaluate_in(cancelled, "cancel()")
+    _evaluate_in(cancelled, "commit()")
+
+    assert refused == []
+    assert cancelled.property("cancelled") is True
+    assert warnings == []
 
 
 def test_model_workspace_tables_populate_from_document(qml_engine):
@@ -334,7 +413,22 @@ def test_quick_canvas_allocates_report_dialog_content(qml_engine):
     assert warnings == []
 
 
-def test_quick_canvas_contains_all_frame_tooltip_hit_sources(qml_engine):
+def _evaluate_in(canvas: QObject, script: str):
+    """Run a JS expression in the canvas's own QML scope and return its value."""
+    expression = QQmlExpression(QQmlEngine.contextForObject(canvas), canvas, script)
+    # PyQt returns (value, isUndefined); only the value is interesting here.
+    value, _undefined = expression.evaluate()
+    assert not expression.hasError(), expression.error().toString()
+    return value.toVariant() if isinstance(value, QJSValue) else value
+
+
+def test_quick_canvas_click_pins_one_tooltip_and_a_second_click_closes_it(qml_engine):
+    """Tooltips are pinned by a click, not raised by hovering.
+
+    The canvas holds a single ``pinnedTip``, so "one tooltip at a time" is a
+    property of the state rather than of the click handling: clicking the element
+    that already owns the tooltip closes it, and any new frame drops it.
+    """
     engine, app_vm, _model_vm, warnings = qml_engine
     app_vm.openPath(str(EXAMPLE))
     component = QQmlComponent(
@@ -343,8 +437,54 @@ def test_quick_canvas_contains_all_frame_tooltip_hit_sources(qml_engine):
     canvas = component.create()
 
     assert canvas is not None
-    frame = app_vm.session.model.get_active_hoist_state()
-    assert frame is not None
+    canvas.setProperty("width", 900.0)
+    canvas.setProperty("height", 700.0)
+
+    outcome = _evaluate_in(
+        canvas,
+        """
+        (function () {
+            const nodes = sceneVm.sceneFrame.nodes
+            for (let i = 0; i < nodes.length; ++i) {
+                const x = mapSceneX(nodes[i].scene_x)
+                const y = mapSceneY(nodes[i].scene_y)
+                if (dragTargetAt(x, y).length > 0 || pickAt(x, y) === null)
+                    continue
+                toggleTipAt(x, y)
+                const opened = pinnedTip === null ? "" : pinnedTip.text
+                toggleTipAt(x, y)
+                return [opened, pinnedTip === null ? "closed" : "still open"]
+            }
+            return ["", "no pickable node"]
+        })()
+        """,
+    )
+
+    assert outcome[0]
+    assert outcome[1] == "closed"
+
+    reopened = _evaluate_in(
+        canvas,
+        """
+        (function () {
+            const nodes = sceneVm.sceneFrame.nodes
+            for (let i = 0; i < nodes.length; ++i) {
+                const x = mapSceneX(nodes[i].scene_x)
+                const y = mapSceneY(nodes[i].scene_y)
+                if (dragTargetAt(x, y).length > 0 || pickAt(x, y) === null)
+                    continue
+                toggleTipAt(x, y)
+                return pinnedTip !== null
+            }
+            return false
+        })()
+        """,
+    )
+    assert reopened is True
+
+    # A new frame renumbers the keys the pinned tooltip was named by.
+    engine.rootContext().contextProperty("sceneVm").setAngle(40.0)
+    assert canvas.property("pinnedTip") is None
     assert warnings == []
 
 
@@ -405,19 +545,17 @@ def test_workspace_layout_fits_without_clipping(qml_engine, qml_file, width, hei
     assert warnings == []
 
 
-def test_density_changes_update_live_table_rows(qml_engine):
+def test_live_tables_use_the_shared_row_height_token(qml_engine):
     engine, app_vm, _model_vm, warnings = qml_engine
-    app_vm.setDensity("normal")
     app_vm.openPath(str(EXAMPLE))
-    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
 
-    root = engine.rootObjects()[-1]
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "ModelWorkspace.qml")))
+    assert component.status() == QQmlComponent.Status.Ready, component.errorString()
+    root = component.create()
+    assert root is not None
     root.setProperty("width", 1400)
     root.setProperty("height", 900)
-    tabs = root.findChild(QObject, "workspaceTabs")
-    assert tabs is not None
-    tabs.setProperty("currentIndex", 2)
-    QTest.qWait(100)
+    QTest.qWait(50)
 
     tables = [
         child
@@ -425,93 +563,8 @@ def test_density_changes_update_live_table_rows(qml_engine):
         if child.property("title") == "Nodes" and child.property("tableRowHeight") is not None
     ]
     assert len(tables) == 1
-    table = tables[0]
 
-    assert table.property("tableRowHeight") == 28
-    app_vm.setDensity("compact")
-    QTest.qWait(50)
-    assert table.property("tableRowHeight") == 24
-    app_vm.setDensity("relaxed")
-    QTest.qWait(50)
-    assert table.property("tableRowHeight") == 32
-    assert warnings == []
-
-
-def test_combo_popup_has_visible_row_height(qml_engine):
-    _engine, _app_vm, _model_vm, warnings = qml_engine
-    source = (QML_DIR / "components/ComboBox.qml").read_text(encoding="utf-8")
-
-    assert "root.count" in source
-    assert "DesignTokens.sizing.rowHeight" in source
-    assert "Math.min(" in source
-    assert warnings == []
-
-
-def _find_combo_list_view(item):
-    if item.property("objectName") == "comboPopupList":
-        return item
-    for child in item.children():
-        found = _find_combo_list_view(child)
-        if found is not None:
-            return found
-    return None
-
-
-def test_combo_popup_keeps_items_after_close_without_selecting(qml_engine):
-    engine, _app_vm, _model_vm, warnings = qml_engine
-    component = QQmlComponent(engine)
-    component.setData(
-        b"""
-        import QtQuick
-        import "components" as Components
-
-        Item {
-            id: probe
-            property alias combo: box
-            property int listViewCount: -1
-
-            Components.ComboBox {
-                id: box
-                model: ["Alpha", "Beta", "Gamma"]
-            }
-
-            function findListView(item) {
-                if (item.objectName === "comboPopupList")
-                    return item
-                for (var i = 0; i < item.children.length; i++) {
-                    var found = findListView(item.children[i])
-                    if (found)
-                        return found
-                }
-                return null
-            }
-
-            function refreshCount() {
-                var lv = box.popup.contentItem ? findListView(box.popup.contentItem) : null
-                listViewCount = lv ? lv.count : -1
-            }
-
-            function openPopup() { box.popup.open() }
-            function closePopup() { box.popup.close() }
-        }
-        """,
-        QUrl.fromLocalFile(str(QML_DIR / "_combo_probe.qml")),
-    )
-    probe = component.create()
-    assert probe is not None, component.errorString()
-
-    probe.openPopup()
-    QTest.qWait(50)
-    probe.refreshCount()
-    assert probe.property("listViewCount") == 3
-
-    probe.closePopup()
-    QTest.qWait(50)
-    probe.openPopup()
-    QTest.qWait(50)
-    probe.refreshCount()
-
-    assert probe.property("listViewCount") == 3
+    assert tables[0].property("tableRowHeight") == 28
     assert warnings == []
 
 
@@ -525,10 +578,33 @@ def test_combo_popup_keeps_items_after_close_without_selecting(qml_engine):
 )
 def test_data_entry_dialog_height_follows_content(qml_engine, qml_file, minimum_height):
     engine, _app_vm, _model_vm, warnings = qml_engine
-    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / qml_file)))
+    # Native Dialog only resolves Overlay.overlay (and therefore counts header/footer
+    # height) once it actually has a window ancestor to open into, matching how the
+    # app always instantiates dialogs as children of the ApplicationWindow.
+    dialog_url = QUrl.fromLocalFile(str(QML_DIR / qml_file)).toString()
+    component = QQmlComponent(engine)
+    component.setData(
+        f"""import QtQuick
+import QtQuick.Controls
+ApplicationWindow {{
+    visible: true
+    width: 800
+    height: 800
+    property var dialog: loader.item
+    Loader {{ id: loader; source: "{dialog_url}" }}
+}}""".encode(
+            "utf-8"
+        ),
+        QUrl.fromLocalFile(str(QML_DIR / "_dialog_height_probe.qml")),
+    )
 
     assert component.status() == QQmlComponent.Status.Ready, component.errorString()
-    dialog = component.create()
+    window = component.create()
+    assert window is not None
+    dialog = window.property("dialog")
     assert dialog is not None
+
+    dialog.open()
+    QTest.qWait(20)
     assert dialog.property("height") >= minimum_height
     assert warnings == []

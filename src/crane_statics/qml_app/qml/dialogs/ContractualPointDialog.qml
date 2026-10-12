@@ -2,10 +2,9 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
-import "../../design" as Design
-import "../components" as Components
+import BF.DesignSystem
 
-Components.Dialog {
+Dialog {
     id: root
 
     property int editIndex: -1
@@ -31,14 +30,14 @@ Components.Dialog {
 
     GridLayout {
         columns: 2
-        columnSpacing: Math.round(Design.DesignTokens.spacing.controlGap * Design.DesignTokens.layout.spacingMultiplier)
-        rowSpacing: Math.round(Design.DesignTokens.spacing.sm * Design.DesignTokens.layout.spacingMultiplier)
+        columnSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
+        rowSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
 
         Label { text: qsTr("Outreach (m):") }
-        NumberField { id: outreachField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth }
+        NumberField { id: outreachField; Layout.preferredWidth: Metrics.maxInputWidth }
 
         Label { text: qsTr("Load (t):") }
-        NumberField { id: loadField; Layout.preferredWidth: Design.DesignTokens.sizing.maxInputWidth }
+        NumberField { id: loadField; Layout.preferredWidth: Metrics.maxInputWidth }
     }
 }
 

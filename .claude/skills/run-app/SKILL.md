@@ -7,13 +7,13 @@ description: Launch the Crane Statics QML desktop app, or capture a screenshot o
 
 The app needs a model file to show anything — with no argument it opens on
 `NoDocumentPage`. The bundled fixture is
-[examples/crane_input_22689.json](../../../examples/crane_input_22689.json), the same
+[examples/crane_input_22689.yaml](../../../examples/crane_input_22689.yaml), the same
 one the acceptance and QML shell tests use.
 
 ## Interactive run (hands the window to the user)
 
 ```bash
-.venv/Scripts/python.exe -m crane_statics examples/crane_input_22689.json
+.venv/Scripts/python.exe -m crane_statics examples/crane_input_22689.yaml
 ```
 
 The `crane-statics` console script is equivalent. This blocks until the user closes
@@ -77,8 +77,9 @@ theme, scene rendering, chart shape — or when the user asked to see it.
 - **One application object per process.** `tests/conftest.py` supplies a
   session-scoped `QGuiApplication`; never construct a second one.
 - **Controls style is set before any control loads.** `configure_controls_style()`
-  sets `QT_QUICK_CONTROLS_STYLE=Fusion`. Don't override it — the design system is
-  Fusion/`SystemPalette`-native.
+  sets `QT_QUICK_CONTROLS_STYLE=Fusion` (Qt's "Windows"/"FluentWinUI3" native styles
+  are broken in this environment — missing native plugin dependencies). Don't
+  override it. The app is light-only (`Qt.ColorScheme.Light` is forced at startup).
 - **The scene canvas is bound after `Main.qml` loads**, via
   `scene_vm.bindCanvas(QuickSceneCanvasBacking(engine))`. Skip it and the Scene
   workspace comes up empty.

@@ -58,6 +58,10 @@ VESSEL_MOTION_KEYS = [
     "reference_z_m",
 ]
 SUPPORT_WIDTH_KEYS = ["boom_width_m", "slewing_bearing_diameter_m"]
+# Support-width keys that may be cleared back to "unset" via clearEnvironmentValue.
+NULLABLE_SUPPORT_WIDTH_KEYS = {"slewing_bearing_diameter_m"}
+# Document-level design duty: edited alongside the environment, stored on the document.
+DOCUMENT_KEYS = ["hook_height_at_min_outreach_m"]
 
 # Authored primary-structure points and the runtime nodes they map to.
 PRIMARY_STRUCTURE_BINDINGS = [
@@ -88,12 +92,24 @@ class ModelViewModel(QObject):
         self._selected_body_id: str = COMPONENT_ORDER[0]
         self._contractual_mode: str = "normal"
 
-        self._nodes_model = RecordTableModel(node_columns(self._selected_body_id), self)
-        self._mass_points_model = RecordTableModel(mass_point_columns(self._selected_body_id), self)
-        self._wind_areas_model = RecordTableModel(wind_area_columns(self._selected_body_id), self)
-        self._hoists_model = RecordTableModel(hoist_columns(self._is_boom_hoist), self)
-        self._rope_segments_model = RecordTableModel(rope_segment_columns(), self)
-        self._contractual_model = RecordTableModel(contractual_columns(), self)
+        self._nodes_model = RecordTableModel(
+            node_columns(self._selected_body_id), self, commit=self._commit_node_cell
+        )
+        self._mass_points_model = RecordTableModel(
+            mass_point_columns(self._selected_body_id), self, commit=self._commit_mass_point_cell
+        )
+        self._wind_areas_model = RecordTableModel(
+            wind_area_columns(self._selected_body_id), self, commit=self._commit_wind_area_cell
+        )
+        self._hoists_model = RecordTableModel(
+            hoist_columns(self._is_boom_hoist), self, commit=self._commit_hoist_cell
+        )
+        self._rope_segments_model = RecordTableModel(
+            rope_segment_columns(), self, commit=self._commit_rope_segment_cell
+        )
+        self._contractual_model = RecordTableModel(
+            contractual_columns(), self, commit=self._commit_contractual_cell
+        )
         self._primary_structure_model = DictListModel(PRIMARY_ROLES, self)
 
         self._session.document_changed.connect(lambda _doc: self.refresh())
@@ -124,9 +140,15 @@ class ModelViewModel(QObject):
             return
         self._selected_body_id = body_id
         # Column layout differs per body (global XZ vs boom-local UW).
-        self._nodes_model = RecordTableModel(node_columns(body_id), self)
-        self._mass_points_model = RecordTableModel(mass_point_columns(body_id), self)
-        self._wind_areas_model = RecordTableModel(wind_area_columns(body_id), self)
+        self._nodes_model = RecordTableModel(
+            node_columns(body_id), self, commit=self._commit_node_cell
+        )
+        self._mass_points_model = RecordTableModel(
+            mass_point_columns(body_id), self, commit=self._commit_mass_point_cell
+        )
+        self._wind_areas_model = RecordTableModel(
+            wind_area_columns(body_id), self, commit=self._commit_wind_area_cell
+        )
         self._refresh_component_tables()
         self.selectedBodyChanged.emit()
 
@@ -284,12 +306,22 @@ class ModelViewModel(QObject):
         doc = self._model.document
         if doc is None:
             return EnvironmentSettings.defaults().to_dict()
-        env_dict = {key: float(getattr(doc.environment, key)) for key in ENVIRONMENT_KEYS}
+        env_dict: dict[str, Optional[float]] = {
+            key: float(getattr(doc.environment, key)) for key in ENVIRONMENT_KEYS
+        }
         env_dict.update(
             {key: float(getattr(doc.environment.vessel_motion, key)) for key in VESSEL_MOTION_KEYS}
         )
         env_dict.update(
-            {key: float(getattr(doc.support_widths, key)) for key in SUPPORT_WIDTH_KEYS}
+            {
+                key: (float(raw) if (raw := getattr(doc.support_widths, key)) is not None else None)
+                for key in SUPPORT_WIDTH_KEYS
+            }
+        )
+        env_dict["hook_height_at_min_outreach_m"] = float(
+            doc.hook_height_at_min_outreach_m
+            if doc.hook_height_at_min_outreach_m is not None
+            else doc.environment.mean_sealevel_z_m
         )
         return EnvironmentSettings.from_dict(env_dict).to_dict()
 
@@ -298,17 +330,44 @@ class ModelViewModel(QObject):
         doc = self._model.document
         if doc is None:
             return
+        target: Any
         if key in ENVIRONMENT_KEYS:
             target = doc.environment
         elif key in VESSEL_MOTION_KEYS:
             target = doc.environment.vessel_motion
         elif key in SUPPORT_WIDTH_KEYS:
             target = doc.support_widths
+        elif key in DOCUMENT_KEYS:
+            target = doc
         else:
             return
-        if float(getattr(target, key)) == float(value):
+        previous = getattr(target, key)
+        if float(previous or 0.0) == float(value):
             return
         setattr(target, key, float(value))
+        if key in DOCUMENT_KEYS:
+            try:
+                DocumentEditor(doc).refresh_derived_geometry()
+            except ValueError as exc:
+                setattr(target, key, previous)
+                DocumentEditor(doc).refresh_derived_geometry()
+                self.editFailed.emit(str(exc))
+                return
+            self.refresh()
+        self._model.mark_content_changed()
+        self.environmentChanged.emit()
+        self.healthChanged.emit()
+        self.modelEdited.emit()
+
+    @pyqtSlot(str)
+    def clearEnvironmentValue(self, key: str) -> None:
+        doc = self._model.document
+        if doc is None or key not in NULLABLE_SUPPORT_WIDTH_KEYS:
+            return
+        target = doc.support_widths
+        if getattr(target, key) is None:
+            return
+        setattr(target, key, None)
         self._model.mark_content_changed()
         self.environmentChanged.emit()
         self.healthChanged.emit()
@@ -329,8 +388,10 @@ class ModelViewModel(QObject):
             return
         node.x_m = float(x_m)
         node.z_m = float(z_m)
+        DocumentEditor(doc).refresh_derived_geometry()
         self._model.mark_content_changed()
         self._refresh_primary_structure()
+        self.refresh()
         self.modelEdited.emit()
 
     def _refresh_primary_structure(self) -> None:
@@ -371,6 +432,7 @@ class ModelViewModel(QObject):
             return False
         try:
             mutate(editor)
+            editor.refresh_derived_geometry()
         except (DocumentEditError, ValueError) as exc:
             self.editFailed.emit(str(exc))
             return False
@@ -378,6 +440,58 @@ class ModelViewModel(QObject):
         self.refresh()
         self.modelEdited.emit()
         return True
+
+    # -- in-cell editing -----------------------------------------------
+    #
+    # A cell edit is a row edit with one field replaced, so it re-submits the whole
+    # record through the same builders and the same validation the Add dialogs use.
+    # There is no second, looser way into the document.
+
+    @staticmethod
+    def _commit_cell(fields: dict[str, Any], field: str, value: Any, submit) -> bool:
+        if not fields:
+            return False
+        fields[str(field)] = value
+        return bool(submit(fields))
+
+    def _commit_node_cell(self, row: int, field: str, value: Any) -> bool:
+        return self._commit_cell(
+            self.nodeFields(row), field, value, lambda fields: self.updateNode(row, fields)
+        )
+
+    def _commit_mass_point_cell(self, row: int, field: str, value: Any) -> bool:
+        return self._commit_cell(
+            self.massPointFields(row),
+            field,
+            value,
+            lambda fields: self.updateMassPoint(row, fields),
+        )
+
+    def _commit_wind_area_cell(self, row: int, field: str, value: Any) -> bool:
+        return self._commit_cell(
+            self.windAreaFields(row), field, value, lambda fields: self.updateWindArea(row, fields)
+        )
+
+    def _commit_hoist_cell(self, row: int, field: str, value: Any) -> bool:
+        return self._commit_cell(
+            self.hoistFields(row), field, value, lambda fields: self.updateHoist(row, fields)
+        )
+
+    def _commit_rope_segment_cell(self, row: int, field: str, value: Any) -> bool:
+        return self._commit_cell(
+            self.ropeSegmentFields(row),
+            field,
+            value,
+            lambda fields: self.updateRopeSegment(row, fields),
+        )
+
+    def _commit_contractual_cell(self, row: int, field: str, value: Any) -> bool:
+        return self._commit_cell(
+            self.contractualFields(row),
+            field,
+            value,
+            lambda fields: self.updateContractualPoint(row, fields),
+        )
 
     # -- nodes ---------------------------------------------------------
 
@@ -403,14 +517,14 @@ class ModelViewModel(QObject):
             lambda editor: editor.add_node(build_node(body_id, **_node_kwargs(fields)))
         )
 
-    @pyqtSlot(int, "QVariantMap")
-    def updateNode(self, row: int, fields: dict) -> None:
+    @pyqtSlot(int, "QVariantMap", result=bool)
+    def updateNode(self, row: int, fields: dict) -> bool:
         current = self._nodes_model.record_at(row)
         if current is None:
             self.editFailed.emit("Select a node first")
-            return
+            return False
         body_id = self._selected_body_id
-        self._apply_edit(
+        return self._apply_edit(
             lambda editor: editor.update_node(
                 current.id, build_node(body_id, **_node_kwargs(fields))
             )
@@ -451,10 +565,10 @@ class ModelViewModel(QObject):
             )
         )
 
-    @pyqtSlot(int, "QVariantMap")
-    def updateMassPoint(self, row: int, fields: dict) -> None:
+    @pyqtSlot(int, "QVariantMap", result=bool)
+    def updateMassPoint(self, row: int, fields: dict) -> bool:
         body_id = self._selected_body_id
-        self._apply_edit(
+        return self._apply_edit(
             lambda editor: editor.update_mass_point(
                 body_id, row, build_mass_point(body_id, **_mass_kwargs(fields))
             )
@@ -492,10 +606,10 @@ class ModelViewModel(QObject):
             )
         )
 
-    @pyqtSlot(int, "QVariantMap")
-    def updateWindArea(self, row: int, fields: dict) -> None:
+    @pyqtSlot(int, "QVariantMap", result=bool)
+    def updateWindArea(self, row: int, fields: dict) -> bool:
         body_id = self._selected_body_id
-        self._apply_edit(
+        return self._apply_edit(
             lambda editor: editor.update_wind_area(
                 body_id, row, build_wind_area(body_id, **_wind_kwargs(fields))
             )
@@ -530,9 +644,12 @@ class ModelViewModel(QObject):
             ),
             "hook_daf": float(hoist.hook_daf),
             "offlead_deg": float(hoist.offlead_deg),
-            "side_lead_deg": float(hoist.side_lead_deg),
-            "min_hook_travel_m": float(hoist.min_hook_travel_m or 0.0),
+            "sidelead_deg": float(hoist.sidelead_deg),
             "max_hook_travel_m": float(hoist.max_hook_travel_m or 0.0),
+            "drum_dead_turns": int(hoist.drum_dead_turns or 0),
+            "drum_diameter_m": (
+                None if hoist.drum_diameter_m is None else float(hoist.drum_diameter_m)
+            ),
         }
 
     def _is_boom_hoist(self, hoist: Any) -> bool:
@@ -548,13 +665,26 @@ class ModelViewModel(QObject):
             lambda editor: editor.add_hoist(build_payload_hoist(**_hoist_kwargs(fields)))
         )
 
-    @pyqtSlot(int, "QVariantMap")
-    def updateHoist(self, row: int, fields: dict) -> None:
+    @pyqtSlot(int, "QVariantMap", result=bool)
+    def updateHoist(self, row: int, fields: dict) -> bool:
         current = self._hoists_model.record_at(row)
         if current is None:
             self.editFailed.emit("Select a hoist first")
-            return
-        self._apply_edit(
+            return False
+        if self._is_boom_hoist(current):
+            rope_length_m = fields.get("rope_length_m")
+            return self._apply_edit(
+                lambda editor: editor.update_boom_hoist(
+                    current.id,
+                    linear_mass_kg_m=float(fields.get("linear_mass_kg_m", 0.0)),
+                    rope_length_m=(
+                        None
+                        if rope_length_m is None or rope_length_m == ""
+                        else float(rope_length_m)
+                    ),
+                )
+            )
+        return self._apply_edit(
             lambda editor: editor.update_hoist(
                 current.id, build_payload_hoist(**_hoist_kwargs(fields))
             )
@@ -590,10 +720,10 @@ class ModelViewModel(QObject):
             )
         )
 
-    @pyqtSlot(int, "QVariantMap")
-    def updateRopeSegment(self, row: int, fields: dict) -> None:
+    @pyqtSlot(int, "QVariantMap", result=bool)
+    def updateRopeSegment(self, row: int, fields: dict) -> bool:
         hoist_id = self._model.selected_editor_hoist_id
-        self._apply_edit(
+        return self._apply_edit(
             lambda editor: editor.update_rope_segment(
                 hoist_id, row, build_segment(**_segment_kwargs(fields))
             )
@@ -625,11 +755,11 @@ class ModelViewModel(QObject):
             )
         )
 
-    @pyqtSlot(int, "QVariantMap")
-    def updateContractualPoint(self, row: int, fields: dict) -> None:
+    @pyqtSlot(int, "QVariantMap", result=bool)
+    def updateContractualPoint(self, row: int, fields: dict) -> bool:
         hoist_id = self._model.selected_editor_hoist_id
         mode = self._contractual_mode
-        self._apply_edit(
+        return self._apply_edit(
             lambda editor: editor.update_contractual_point(
                 hoist_id,
                 row,
@@ -685,22 +815,25 @@ def _wind_kwargs(fields: dict) -> dict:
 
 def _hoist_kwargs(fields: dict) -> dict:
     splitable = bool(fields.get("splitable_block", False))
-    rope_length_m = fields.get("rope_length_m")
+    drum_diameter_m = fields.get("drum_diameter_m")
     return {
         "hoist_id": str(fields.get("id", "")),
         "support_node_id": str(fields.get("support_node_id", "")),
         "falls": int(fields.get("falls", 1)),
         "hook_mass_t": float(fields.get("hook_mass_t", 0.0)),
         "linear_mass_kg_m": max(0.0, float(fields.get("linear_mass_kg_m", 0.0))),
-        "rope_length_m": None if rope_length_m in (None, "") else max(0.0, float(rope_length_m)),
+        "drum_dead_turns": max(0, int(fields.get("drum_dead_turns", 0) or 0)),
+        "drum_diameter_m": (
+            None
+            if drum_diameter_m is None or drum_diameter_m == ""
+            else max(0.0, float(drum_diameter_m))
+        ),
         "splitable_block": splitable,
         "split_falls": int(fields.get("split_falls", 1)) if splitable else None,
         "split_hook_mass_t": float(fields.get("split_hook_mass_t", 0.0)) if splitable else None,
         "hook_daf": float(fields.get("hook_daf", 1.0)),
         "offlead_deg": float(fields.get("offlead_deg", 0.0)),
-        "side_lead_deg": float(fields.get("side_lead_deg", 0.0)),
-        "min_hook_travel_m": float(fields.get("min_hook_travel_m", 0.0)),
-        "max_hook_travel_m": float(fields.get("max_hook_travel_m", 0.0)),
+        "sidelead_deg": float(fields.get("sidelead_deg", 0.0)),
     }
 
 

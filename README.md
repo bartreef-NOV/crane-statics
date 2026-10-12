@@ -65,9 +65,11 @@ decisions that should not be re-litigated are in [docs/adr/](docs/adr/).
 
 ## Document Lifecycle
 
-Authored JSON input is strict `crane-statics` schema version `5.12.0`.
+Authored input (YAML or JSON) is strict `crane-statics` schema version `6.0.0`.
 
-The authored schema applies defaults for gravity, air density, and omitted vessel-motion values. Body load arrays and node maps may be omitted when empty, but every node referenced by a rope segment or payload `support_node_id` must be defined in its body section. The schema includes coordinate-frame examples and descriptions for schema-aware editors.
+Each hoist is self-contained: its `reeving` lists the rope path from the winch outwards, and an entry with `body` and coordinates defines a sheave or winch that belongs to that hoist (`boom` nodes use `u_m`/`w_m`, the others `x_m`/`z_m`). A hoist-local node `winch` in hoist `MH` becomes runtime node `mh_winch`. The last reeving entry is the support node the hook hangs from. Entries without coordinates pass through a node already defined (`boom_heel`, or a shared node under a body's `nodes`). Delete a hoist block to remove the hoist and its sheaves; copy one and rename its key to add a hoist.
+
+Defaults apply for gravity, air density and vessel motion. Body sections (`boom`, `rear_leg`, `front_leg`, `platform`) and their `mass_points`, `wind_areas` and `nodes` may be omitted when empty. The schema includes coordinate-frame examples and descriptions for schema-aware editors. See `examples/` for complete files.
 
 ### Load Path
 1. JSON file loaded from disk
@@ -96,7 +98,7 @@ For comparing floating-point results against reference outputs, a tolerance of *
 
 ## Example Model
 
-An example crane model is provided at `examples/crane_input_22689.json` with:
+An example crane model is provided at `examples/crane_input_22689.yaml` with:
 - 4 hoists (MH, AH, SH, BH)
 - Multiple contractual points
 - Full environment and structural definition
@@ -114,11 +116,7 @@ Keep QML declarative and route state changes through the owning view model. Add 
 
 ## References
 
-- `docs/crane-statics-v5.12.schema.json` - Authored JSON schema (Draft 2020-12)
-- `docs/QUICKSTART.md` - Design token quick start
-- `docs/DESIGN_SYSTEM.md` - Design token reference
-- `docs/COMPONENT_USAGE.md` - QML component patterns
-- `docs/THEME_VALIDATION_CHECKLIST.md` - Theme and accessibility validation
+- `src/crane_statics/schemas/crane-statics-v6.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
 
 ## License
 

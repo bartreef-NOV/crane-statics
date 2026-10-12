@@ -154,5 +154,5 @@ def test_drawn_load_model_is_qt_free_and_in_plane():
     # Out-of-plane inputs must not be silently accepted: they belong to the
     # left/right support split, not to X/Z equilibrium.
     fields = set(drawn_loads.LoadConditions.__dataclass_fields__)
-    for out_of_plane in ("accel_y_m_s2", "roll_accel_rad_s2", "side_lead_deg"):
+    for out_of_plane in ("accel_y_m_s2", "roll_accel_rad_s2", "sidelead_deg"):
         assert out_of_plane not in fields, f"{out_of_plane} is out-of-plane; not drawable in X/Z"

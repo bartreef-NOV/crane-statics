@@ -2,15 +2,14 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import "scene"
-import "../design" as Design
-import "components"
+import BF.DesignSystem
 
 Item {
     id: root
 
-    readonly property bool compact: width > 0 && width < Design.DesignTokens.layout.breakpointCompact
+    readonly property bool compact: width > 0 && width < Metrics.breakpointCompact
     readonly property int layoutSpacing: Math.round(
-        Design.DesignTokens.spacing.controlGap * Design.DesignTokens.layout.spacingMultiplier
+        Metrics.spacing8 * Metrics.spacingMultiplier
     )
 
     GridLayout {
@@ -55,11 +54,13 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
-                    border.width: 1
+                    border.width: Metrics.borderWidth
+                    border.color: Theme.border
                 }
 
                 Label {
-                    x: 8
+                    anchors.left: canvas.left
+                    anchors.leftMargin: Metrics.spacing8
                     y: canvas.mslLabelY - height - 2
                     text: canvas.mslLabelText
                     visible: canvas.mslLabelText.length > 0
