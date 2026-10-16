@@ -68,11 +68,11 @@ REACTION_SPECS: dict[str, dict[str, Any]] = {
 }
 
 # The synthetic support that carries a selected body's residual moment.
+# Supports that may carry a moment the solver does not report. Only the platform base is
+# fixed; the boom heel and the leg hinges are pins and carry no moment, so a synthetic
+# moment there would equal the body's residual and close any check by construction.
 _SYNTHETIC_SUPPORT_BY_BODY = {
     "platform": "platform_base",
-    "boom": "heel_point",
-    "rear_leg": "rear_hinge",
-    "front_leg": "front_hinge",
 }
 
 GRAVITY = "Gravity"

@@ -27,11 +27,6 @@ FREE_BODY_REFERENCE_NODES = {
     "rear_leg": "rear_base",
     "front_leg": "front_base",
 }
-# The boom heel and both leg hinges are pins: they carry no moment. drawn_loads reports a
-# "synthetic" support moment equal to the body's residual whenever the solver gives none,
-# so counting reaction moments would close these bodies by construction. Only the platform
-# base carries a real moment from the solver.
-PINNED_BODIES = {"boom", "rear_leg", "front_leg"}
 
 
 def _assert_free_bodies_close(inputs) -> None:
@@ -45,8 +40,7 @@ def _assert_free_bodies_close(inputs) -> None:
         sum_fz = sum(v.fz_kN for v in vectors)
         x0 = float(positions[ref_node]["x"])
         z0 = float(positions[ref_node]["z"])
-        moments = () if body in PINNED_BODIES else loads.moments
-        sum_m = dl.sum_moment_about(vectors, moments, x0, z0)
+        sum_m = dl.sum_moment_about(vectors, loads.moments, x0, z0)
         lever = max(1.0, max(abs(v.world_x - x0) + abs(v.world_z - z0) for v in vectors))
         assert abs(sum_fx) <= 1e-9 * scale, (body, sum_fx)
         assert abs(sum_fz) <= 1e-9 * scale, (body, sum_fz)
