@@ -212,69 +212,31 @@ def _connection_local_axes_for_nodes(
     return out
 
 
-def _resolve_boom_local_cg(
+def rotate_boom_local_point(
     local_x: float,
     local_z: float,
     node_pos: Dict[str, Tuple[float, float]],
+    boom_angle_deg: float,
 ) -> Tuple[float, float]:
-    """Resolve boom-local coordinates to global using a reference node.
+    """World position of a boom-local point: rotate it about the boom heel by the boom angle.
 
-    Uses mh_boom_sheave_3 (local_x=23.5, local_z=3.85) as primary reference,
-    matching the original solver convention.
+    The same transform as ``kinematics._resolve_nodes`` and ``drawn_loads._body_point``, so
+    the solver loads every boom mass and wind area where the scene draws it. (It used to
+    infer the angle from a hard-coded sheave list with one crane's local coordinates.)
     """
     heel = node_pos.get("boom_heel")
     if heel is None:
         return local_x, local_z
-
     heel_x, heel_z = heel
-    for ref_id, ref_lx, ref_lz in [
-        ("mh_boom_sheave_3", 23.5, 3.85),
-        ("bh_sheave_3", 153.0, 3.8),
-        ("mh_boom_sheave_4", 155.0, -6.05),
-        ("sh_boom_sheave_3", 155.6, 3.1),
-        ("mh_hook", 60.0, -2.0),
-        ("ah_hook", 50.0, -2.5),
-        ("sh_hook", 45.0, -3.0),
-    ]:
-        ref = node_pos.get(ref_id)
-        if ref is None:
-            continue
-        dx, dz = ref[0] - heel_x, ref[1] - heel_z
-        beta = math.atan2(dz, dx)
-        alpha = math.atan2(ref_lz, ref_lx)
-        theta = beta - alpha
-        gx = heel_x + local_x * math.cos(theta) - local_z * math.sin(theta)
-        gz = heel_z + local_x * math.sin(theta) + local_z * math.cos(theta)
-        return gx, gz
-
-    return local_x, local_z
+    theta = math.radians(boom_angle_deg)
+    gx = heel_x + local_x * math.cos(theta) - local_z * math.sin(theta)
+    gz = heel_z + local_x * math.sin(theta) + local_z * math.cos(theta)
+    return gx, gz
 
 
-def _boom_wind_projection_scale(node_pos: Dict[str, Tuple[float, float]]) -> float:
-    """Return |sin(boom_angle)| for wind area projection on a vertical surface.
-
-    Uses the same reference priority as _resolve_boom_local_cg (mh_boom_sheave_3 first).
-    """
-    heel = node_pos.get("boom_heel")
-    if heel is None:
-        return 1.0
-    heel_x, heel_z = heel
-    for ref_id, ref_lx, ref_lz in [
-        ("mh_boom_sheave_3", 23.5, 3.85),
-        ("bh_sheave_3", 153.0, 3.8),
-        ("mh_boom_sheave_4", 155.0, -6.05),
-        ("sh_boom_sheave_3", 155.6, 3.1),
-        ("mh_hook", 60.0, -2.0),
-    ]:
-        ref = node_pos.get(ref_id)
-        if ref is None:
-            continue
-        dx, dz = ref[0] - heel_x, ref[1] - heel_z
-        beta = math.atan2(dz, dx)
-        alpha = math.atan2(ref_lz, ref_lx)
-        theta = beta - alpha
-        return abs(math.sin(theta))
-    return 1.0
+def boom_wind_projection_scale(boom_angle_deg: float) -> float:
+    """Return |sin(boom angle)|: the boom's projected wind area on a vertical surface."""
+    return abs(math.sin(math.radians(boom_angle_deg)))
 
 
 def inertia_force(
@@ -435,6 +397,8 @@ def _accumulate_loads(
     solver_ctx: Dict[str, Any] | None = None,
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
     rope_mass_t_by_node: Dict[str, float] | None = None,
+    *,
+    boom_angle_deg: float,
 ) -> Tuple[Dict[str, dict], Dict[str, dict]]:
     ctx = solver_ctx or build_solver_static_context(doc_dict)
     body_ids: List[str] = ctx["body_ids"]
@@ -468,7 +432,7 @@ def _accumulate_loads(
         ld_m[bidx] += cx * fz - cz * fx
 
     for bidx, mass_t, lx, lz in ctx["mass_entries_local"]:
-        cx, cz = _resolve_boom_local_cg(lx, lz, node_pos)
+        cx, cz = rotate_boom_local_point(lx, lz, node_pos, boom_angle_deg)
         fx, fz = inertia_force(
             mass_t, cx, cz, accel_x_m_s2, accel_z_m_s2, pitch_rad_s2, ref_x, ref_z, gravity
         )
@@ -479,7 +443,7 @@ def _accumulate_loads(
     # Wind loads (power-law height profile, horizontal force only)
     wind_sign: float = math.copysign(1.0, wind_speed_m_s) if wind_speed_m_s != 0 else 0.0
     v_mag = abs(wind_speed_m_s)
-    boom_scale = _boom_wind_projection_scale(node_pos)
+    boom_scale = boom_wind_projection_scale(boom_angle_deg)
 
     def _wind_fx(area: float, cd: float, wz: float, is_boom_body: bool) -> float:
         eff_area = area * boom_scale if is_boom_body else area
@@ -500,7 +464,7 @@ def _accumulate_loads(
 
     for bidx, area_w, area_v, cd, lx, lz in ctx["wind_entries_local"]:
         _ = area_v
-        wcx, wcz = _resolve_boom_local_cg(lx, lz, node_pos)
+        wcx, wcz = rotate_boom_local_point(lx, lz, node_pos, boom_angle_deg)
         fx = _wind_fx(area_w, cd, wcz, body_ids[bidx] == "boom")
         ld_fx[bidx] += fx
         ld_m[bidx] += -wcz * fx
@@ -730,6 +694,8 @@ def _run_statics(
     solver_ctx: Dict[str, Any] | None = None,
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
     rope_mass_t_by_node: Dict[str, float] | None = None,
+    *,
+    boom_angle_deg: float,
 ) -> Dict[str, float]:
     """Solve 3-body statics sequentially: boom → rear/front leg frame → platform."""
     ld, bh = _accumulate_loads(
@@ -746,6 +712,7 @@ def _run_statics(
         solver_ctx,
         hoist_runtime_overrides,
         rope_mass_t_by_node,
+        boom_angle_deg=boom_angle_deg,
     )
 
     heel_x, heel_z = node_pos["boom_heel"]
@@ -915,6 +882,7 @@ def build_directional_response_basis(
         solver_ctx=ctx,
         hoist_runtime_overrides=hoist_runtime_overrides,
         rope_mass_t_by_node=rope_mass_t_by_node,
+        boom_angle_deg=boom_angle_deg,
     )
     if not dead_raw:
         return None
@@ -933,6 +901,7 @@ def build_directional_response_basis(
         solver_ctx=ctx,
         hoist_runtime_overrides=hoist_runtime_overrides,
         rope_mass_t_by_node=rope_mass_t_by_node,
+        boom_angle_deg=boom_angle_deg,
     )
     if not raw_hook_unit:
         return None
@@ -950,6 +919,7 @@ def build_directional_response_basis(
         solver_ctx=ctx,
         hoist_runtime_overrides=hoist_runtime_overrides,
         rope_mass_t_by_node=rope_mass_t_by_node,
+        boom_angle_deg=boom_angle_deg,
     )
     if not raw_offlead_lateral_unit:
         return None
@@ -973,6 +943,7 @@ def build_directional_response_basis(
             solver_ctx=ctx,
             hoist_runtime_overrides=hoist_runtime_overrides,
             rope_mass_t_by_node=rope_mass_t_by_node,
+            boom_angle_deg=boom_angle_deg,
         )
         return _subtract_raw(r, dead_raw) if r else None
 

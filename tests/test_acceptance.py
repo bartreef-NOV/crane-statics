@@ -1575,7 +1575,10 @@ class TestSplitModeAutosetAndChart:
         from crane_statics.core.sweep import run_capacity_sweep
 
         doc = self._example_doc()
-        result = run_capacity_sweep(doc, "MH", {}, 1.0, {})
+        # A real limit is needed: with none, capacity is unlimited and there is no curve
+        # (it used to be drawn at a made-up 1000 kN fallback).
+        limits = {"boom_hoist": {"T": 5000.0}}
+        result = run_capacity_sweep(doc, "MH", limits, 1.0, {})
         split_payload = result["modes"].get("split")
         assert split_payload is not None
         assert split_payload["n_points"] > 0
