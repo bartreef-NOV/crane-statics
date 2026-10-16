@@ -736,7 +736,7 @@ class CraneCalculator:
                             float(sens_map.get("Fx", 0.0)),
                             float(sens_map.get("Fz", 0.0)),
                         )
-                        if h_candidate > 0 and h_candidate < h_max_kN:
+                        if 0.0 <= h_candidate < h_max_kN:
                             h_max_kN = h_candidate
                             governing_limit_id = limit_key
                         continue
@@ -750,7 +750,7 @@ class CraneCalculator:
                             float(sens_map.get("Fx", 0.0)),
                             float(sens_map.get("Fy", 0.0)),
                         )
-                        if h_candidate > 0 and h_candidate < h_max_kN:
+                        if 0.0 <= h_candidate < h_max_kN:
                             h_max_kN = h_candidate
                             governing_limit_id = limit_key
                         continue
@@ -764,7 +764,7 @@ class CraneCalculator:
                             float(sens_map.get("Mx", 0.0)),
                             float(sens_map.get("My", sens_map.get("M", 0.0))),
                         )
-                        if h_candidate > 0 and h_candidate < h_max_kN:
+                        if 0.0 <= h_candidate < h_max_kN:
                             h_max_kN = h_candidate
                             governing_limit_id = limit_key
                         continue
@@ -787,7 +787,7 @@ class CraneCalculator:
                             ),
                             tolerance=self.TOLERANCE,
                         )
-                        if h_candidate > 0 and h_candidate < h_max_kN:
+                        if 0.0 <= h_candidate < h_max_kN:
                             h_max_kN = h_candidate
                             governing_limit_id = limit_key
                         continue
@@ -803,14 +803,17 @@ class CraneCalculator:
                 else:
                     continue
 
-                if abs(sens) > self.TOLERANCE:
+                if baseline > limit_kN:
+                    h_candidate = 0.0  # already exceeded with no hook load
+                elif abs(sens) > self.TOLERANCE:
                     h_candidate = (limit_kN - baseline) / sens
-                    if h_candidate > 0 and h_candidate < h_max_kN:
-                        h_max_kN = h_candidate
-                        governing_limit_id = limit_key
+                else:
+                    continue
+                if 0.0 <= h_candidate < h_max_kN:
+                    h_max_kN = h_candidate
+                    governing_limit_id = limit_key
 
-        if h_max_kN == float("inf"):
-            h_max_kN = 1000.0  # Default fallback
+        # No limit yields a candidate: the hook load is unlimited (inf), not 1000 kN.
 
         # Convert hook force to payload using DAF and gravity
         # Step 1: Remove DAF to get net hook force
