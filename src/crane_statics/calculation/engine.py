@@ -387,8 +387,9 @@ class CraneCalculator:
             )
             if comp_mass_t > 1e-12 and support_node_id and support_node_id in node_pos:
                 sx, sz = node_pos[support_node_id]
-                fy_comp = -comp_mass_t * gravity_abs
-                _accumulate_force(float(sx), 0.0, float(sz), fx=0.0, fy=fy_comp, fz=0.0)
+                # A weight: it acts downward (fz), not sideways.
+                fz_comp = -comp_mass_t * gravity_abs
+                _accumulate_force(float(sx), 0.0, float(sz), fx=0.0, fy=0.0, fz=fz_comp)
 
         widths = self.doc.support_widths
         boom_width = float(widths.boom_width_m)
