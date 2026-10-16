@@ -17,7 +17,9 @@ from .solver.crane_solver import (
     build_solver_static_context,
     build_directional_response_basis,
     compose_unit_basis_point,
+    boom_wind_projection_scale,
     compose_scalar_envelope_unit_basis_point,
+    rotate_boom_local_point,
 )
 from .capacity import solve_capacity_limit_kN, solve_radial_capacity_kN
 
@@ -102,22 +104,6 @@ WIND_SPEED_THRESHOLD = 1e-12  # Threshold for non-zero wind speed
 # Boom Rotation Reference Nodes
 # ─────────────────────────────────────────────────────────────────────────────
 # Priority list of nodes used to establish boom local rotation angle.
-# These are boom-mounted sheave nodes at known local positions.
-# The solver walks through this list in order and uses the first available node.
-# Format: (node_id, local_x_m, local_z_m) where local coords are in boom frame.
-#
-# Purpose: When boom rotates by angle θ, these known reference points establish
-# the rotation axis and angle. The boom's local coordinate frame is defined relative
-# to these sheave positions in the boom heel reference.
-
-BOOM_ROTATION_REFERENCE_NODES = [
-    ("mh_boom_sheave_3", 23.5, 3.85),  # Main hoist boom sheave
-    ("bh_sheave_3", 153.0, 3.8),  # Boom hoist sheave
-    ("mh_boom_sheave_4", 155.0, -6.05),  # Alternate main hoist sheave
-    ("sh_boom_sheave_3", 155.6, 3.1),  # Secondary hoist boom sheave
-]
-
-
 def normalize_wind_direction(direction: Optional[str]) -> str:
     raw = str(direction or "+X").strip().upper().replace(" ", "")
     return raw if raw in _WIND_DIRECTIONS else "+X"
@@ -288,47 +274,6 @@ class CraneCalculator:
             self.doc.connections = []
         return {str(c.get("id")): c for c in self.doc.connections}
 
-    @staticmethod
-    def _resolve_boom_local_point(
-        node_pos: dict[str, tuple[float, float]],
-        local_x: float,
-        local_z: float,
-    ) -> tuple[float, float]:
-        heel = node_pos.get("boom_heel")
-        if heel is None:
-            return float(local_x), float(local_z)
-        heel_x, heel_z = float(heel[0]), float(heel[1])
-        for ref_id, ref_lx, ref_lz in BOOM_ROTATION_REFERENCE_NODES:
-            ref = node_pos.get(ref_id)
-            if ref is None:
-                continue
-            dx = float(ref[0]) - heel_x
-            dz = float(ref[1]) - heel_z
-            beta = math.atan2(dz, dx)
-            alpha = math.atan2(float(ref_lz), float(ref_lx))
-            theta = beta - alpha
-            gx = heel_x + float(local_x) * math.cos(theta) - float(local_z) * math.sin(theta)
-            gz = heel_z + float(local_x) * math.sin(theta) + float(local_z) * math.cos(theta)
-            return gx, gz
-        return float(local_x), float(local_z)
-
-    def _boom_wind_projection_scale(self, node_pos: dict[str, tuple[float, float]]) -> float:
-        heel = node_pos.get("boom_heel")
-        if heel is None:
-            return 1.0
-        heel_x, heel_z = float(heel[0]), float(heel[1])
-        for ref_id, ref_lx, ref_lz in BOOM_ROTATION_REFERENCE_NODES:
-            ref = node_pos.get(ref_id)
-            if ref is None:
-                continue
-            dx = float(ref[0]) - heel_x
-            dz = float(ref[1]) - heel_z
-            beta = math.atan2(dz, dx)
-            alpha = math.atan2(float(ref_lz), float(ref_lx))
-            theta = beta - alpha
-            return abs(math.sin(theta))
-        return 1.0
-
     def _build_split_support_reactions(
         self,
         point: AnalysisPoint,
@@ -379,8 +324,8 @@ class CraneCalculator:
         for body in self.doc.bodies:
             for mp in body.mass_points:
                 if body.id == "boom" and mp.local_x_m is not None:
-                    xw, zw = self._resolve_boom_local_point(
-                        node_pos, float(mp.local_x_m), float(mp.local_z_m or 0.0)
+                    xw, zw = rotate_boom_local_point(
+                        float(mp.local_x_m), float(mp.local_z_m or 0.0), node_pos, boom_angle_deg
                     )
                     yw = float(mp.local_y_m or 0.0)
                 else:
@@ -397,13 +342,13 @@ class CraneCalculator:
         msl = float(env.mean_sealevel_z_m)
         wind_sign = 0.0 if abs(float(wind_y_m_s)) < 1e-12 else math.copysign(1.0, float(wind_y_m_s))
         wind_mag = abs(float(wind_y_m_s))
-        boom_proj = self._boom_wind_projection_scale(node_pos)
+        boom_proj = boom_wind_projection_scale(boom_angle_deg)
 
         for body in self.doc.bodies:
             for wa in body.wind_areas:
                 if body.id == "boom" and wa.local_x_m is not None:
-                    xw, zw = self._resolve_boom_local_point(
-                        node_pos, float(wa.local_x_m), float(wa.local_z_m or 0.0)
+                    xw, zw = rotate_boom_local_point(
+                        float(wa.local_x_m), float(wa.local_z_m or 0.0), node_pos, boom_angle_deg
                     )
                     area_proj = float(wa.area_v_m2) * boom_proj
                 else:
