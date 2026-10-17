@@ -418,9 +418,6 @@ def _accumulate_loads(
     vm = env.get("vessel_motion") or {}
     ref_x = float(vm.get("reference_x_m", 0.0))
     ref_z = float(vm.get("reference_z_m", 0.0))
-    wind_ref_h = env.get("wind_reference_height_m_asl", 10.0)
-    msl_z = env.get("mean_sealevel_z_m", 0.0)
-    wind_exp = env.get("wind_profile_exponent", 0.143)
 
     # Mass / inertia loads
     for bidx, mass_t, cx, cz in ctx["mass_entries_global"]:
@@ -440,32 +437,27 @@ def _accumulate_loads(
         ld_fz[bidx] += fz
         ld_m[bidx] += cx * fz - cz * fx
 
-    # Wind loads (power-law height profile, horizontal force only)
+    # Wind loads (constant over height, horizontal force only)
     wind_sign: float = math.copysign(1.0, wind_speed_m_s) if wind_speed_m_s != 0 else 0.0
     v_mag = abs(wind_speed_m_s)
     boom_scale = boom_wind_projection_scale(boom_angle_deg)
 
-    def _wind_fx(area: float, cd: float, wz: float, is_boom_body: bool) -> float:
+    def _wind_fx(area: float, cd: float, is_boom_body: bool) -> float:
         eff_area = area * boom_scale if is_boom_body else area
-        if v_mag > 0 and wind_ref_h > 0:
-            h_asl = wz - msl_z
-            v_h = v_mag * (max(h_asl / wind_ref_h, 1e-6) ** wind_exp)
-        else:
-            v_h = 0.0
-        return float(wind_sign * 0.5 * air_density * v_h**2 * cd * eff_area / 1000.0)
+        return float(wind_sign * 0.5 * air_density * v_mag**2 * cd * eff_area / 1000.0)
 
     # This basis composes X-axis wind effects only; Y-axis wind is handled by
     # the explicit directional scene-analysis path in engine.py.
     for bidx, area_w, area_v, cd, wcx, wcz in ctx["wind_entries_global"]:
         _ = area_v
-        fx = _wind_fx(area_w, cd, wcz, body_ids[bidx] == "boom")
+        fx = _wind_fx(area_w, cd, body_ids[bidx] == "boom")
         ld_fx[bidx] += fx
         ld_m[bidx] += -wcz * fx
 
     for bidx, area_w, area_v, cd, lx, lz in ctx["wind_entries_local"]:
         _ = area_v
         wcx, wcz = rotate_boom_local_point(lx, lz, node_pos, boom_angle_deg)
-        fx = _wind_fx(area_w, cd, wcz, body_ids[bidx] == "boom")
+        fx = _wind_fx(area_w, cd, body_ids[bidx] == "boom")
         ld_fx[bidx] += fx
         ld_m[bidx] += -wcz * fx
 

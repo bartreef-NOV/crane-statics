@@ -513,9 +513,6 @@ class _LoadBuilder:
             return ()
         wind = float(self._c.wind_speed_m_s)
         rho = float(self._env.get("air_density_kg_m3", 1.225))
-        z_ref = float(self._env.get("wind_reference_height_m_asl", 10.0))
-        exponent = float(self._env.get("wind_profile_exponent", 0.143))
-        msl = float(self._env.get("mean_sealevel_z_m", 0.0))
         angle = math.radians(self._c.boom_angle_deg)
 
         for body_id, body in self._bodies():
@@ -529,8 +526,7 @@ class _LoadBuilder:
                 is_boom_local = wind_area.get("local_x_m") is not None and body_id == "boom"
                 area_proj = area * abs(math.sin(angle)) if is_boom_local else area
 
-                h_asl = zw - msl
-                v_eff = abs(wind) * (max(h_asl, 0.1) / max(z_ref, 0.1)) ** exponent
+                v_eff = abs(wind)
                 force = 0.5 * rho * cd * area_proj * v_eff**2 / 1000.0
                 fx = force if direction == "+X" else -force
                 if abs(fx) < 1e-6:
