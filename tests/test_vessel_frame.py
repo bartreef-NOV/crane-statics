@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from crane_statics.core.vessel_frame import (
+from crane_statics.calculation.vessel_frame import (
     VesselInputs,
     crane_frame_motion,
     gravity_in_vessel_frame,

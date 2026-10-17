@@ -20,7 +20,7 @@ Essential terms for understanding the codebase structure. For the complete vocab
 
 **Scene state** — the operator's inputs for one hoist: boom angle, hook load, tackle length, offlead, sidelead, wind, vessel roll, vessel pitch, crane slewing angle, and accelerations. Accelerations are vessel-frame motion accelerations with gravity excluded.
 
-**Vessel frame / crane frame** — the vessel frame has x forward, y port, z up (pitch positive bow-down, roll positive to starboard). The crane frame is the vessel frame rotated about z by the slewing angle. `core/vessel_frame.py` turns vessel angles and accelerations into an equivalent crane-frame acceleration that the solver and `drawn_loads` both consume.
+**Vessel frame / crane frame** — the vessel frame has x forward, y port, z up (pitch positive bow-down, roll positive to starboard). The crane frame is the vessel frame rotated about z by the slewing angle. `calculation/vessel_frame.py` turns vessel angles and accelerations into an equivalent crane-frame acceleration that the solver and `drawn_loads` both consume.
 
 **Scene frame** — `core/scene_frame.py::SceneFrame`: immutable description of what the canvas shows (nodes, ropes, forces, labels, hit targets, mapping).
 

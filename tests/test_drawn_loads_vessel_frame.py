@@ -1,7 +1,7 @@
 """Drawn loads follow the crane-frame load vector the solver applies.
 
 Gravity stays the nominal ``-m*g`` arrow; the Inertia category carries ``-m*a_eq`` with
-the EQUIVALENT crane-frame accelerations (``core.vessel_frame.crane_frame_motion``), so
+the EQUIVALENT crane-frame accelerations (``calculation.vessel_frame.crane_frame_motion``), so
 Gravity + Inertia = m*k_c in plane -- exactly the load the solver applies to every mass,
 including idle hook blocks and the split-block support mass.
 """

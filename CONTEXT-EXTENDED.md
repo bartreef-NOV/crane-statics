@@ -70,7 +70,7 @@ intrinsic z-y-x rotation `Rz(yaw)·Ry(pitch)·Rx(roll)`. Gravity in the vessel f
 `g·(sinβ, −sinγ·cosβ, −cosγ·cosβ)` for pitch β and roll γ.
 
 **Crane frame** — the vessel frame rotated about z by the crane slewing angle. The
-solver works in this frame. `core/vessel_frame.py::crane_frame_motion` computes the
+solver works in this frame. `calculation/vessel_frame.py::crane_frame_motion` computes the
 load acceleration `k = g_vessel − a_vessel`, rotates it by −slew into the crane frame,
 and returns the *equivalent crane-frame acceleration* `a_eq = (0,0,−g) − k_crane`. That
 value feeds the solver's existing ax/ay/az/pitch/roll channels and `drawn_loads` alike,

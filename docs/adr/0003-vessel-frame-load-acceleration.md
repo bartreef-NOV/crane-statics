@@ -15,7 +15,7 @@ envelope, and the roll sign convention on the legacy Y path was left-handed.
 
 ## Decision
 
-`core/vessel_frame.py` is a pure transform, `crane_frame_motion(g, VesselInputs) ->
+`calculation/vessel_frame.py` is a pure transform, `crane_frame_motion(g, VesselInputs) ->
 CraneFrameMotion`. Vessel axes are x forward, y port, z up; pitch is positive
 bow-down, roll positive to starboard, orientation `Rz(yaw)·Ry(pitch)·Rx(roll)`.
 It forms the load acceleration `k_v = g_v − a_v` in the vessel frame, rotates it by

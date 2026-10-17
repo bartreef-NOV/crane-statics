@@ -15,7 +15,7 @@ from .demand_extraction import extract_connection_component_response
 from ..presentation.formatters import ConnectionFormatter, HoistFormatter, RopeFormatter
 from .drawn_loads import LoadConditions
 from .results import ResultRow
-from .vessel_frame import VesselInputs, crane_frame_motion
+from ..calculation.vessel_frame import VesselInputs, crane_frame_motion
 
 if TYPE_CHECKING:
     from ..calculation.engine import AllowableCapacity, AnalysisPoint

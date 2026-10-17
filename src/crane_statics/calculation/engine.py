@@ -9,7 +9,7 @@ This module implements the core mathematical solver for:
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Any, Sequence
+from typing import Optional, Any, Sequence
 import math
 from ..data.models import CraneDocument
 from .solver.kinematics import KinematicsAdapter
@@ -22,9 +22,7 @@ from .solver.crane_solver import (
     rotate_boom_local_point,
 )
 from .capacity import solve_capacity_limit_kN, solve_radial_capacity_kN
-
-if TYPE_CHECKING:
-    from ..core.vessel_frame import CraneFrameMotion
+from .vessel_frame import CraneFrameMotion, VesselInputs, crane_frame_motion
 
 
 @dataclass
@@ -581,7 +579,7 @@ class CraneCalculator:
 
         The motion inputs are **vessel-frame** values (accelerations exclude gravity); the
         vessel roll/pitch tilt gravity and the crane slewing angle rotates the result into
-        the crane frame (``core.vessel_frame``). Each input left ``None`` takes the document
+        the crane frame (``calculation.vessel_frame``). Each input left ``None`` takes the document
         ``vessel_motion`` default. All are exact signed values (no envelope).
 
         ``tackle_length_m`` is the rope paid out below the active hoist's sheave.
@@ -600,10 +598,6 @@ class CraneCalculator:
             )
             wind_dir = normalize_wind_direction(wind_direction)
             wind_x_ref, wind_y_ref = split_wind_speed_components(wind_ref, wind_dir)
-
-            # ``core`` imports this module (limit_auto_set, analysis_services), so the
-            # vessel-frame transform is imported here rather than at module level.
-            from ..core.vessel_frame import VesselInputs, crane_frame_motion
 
             def _vm_default(value: Optional[float], name: str) -> float:
                 if value is not None:
