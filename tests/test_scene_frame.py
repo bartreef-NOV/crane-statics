@@ -60,7 +60,6 @@ def test_builder_emits_immutable_monotonic_frame_revisions():
     )
     builder.add_label(kind="force", scene_x=30.0, scene_y=40.0, color="#00ff00", text="force")
     builder.add_guide(kind="outreach", scene_x=30.0, scene_y=40.0, label="R = 30.0 m")
-    builder.set_waterline(scene_y=100.0, elevation_z=0.0, label="MSL  z = 0.0 m")
     builder.add_hit_target(
         kind="outreach",
         start_x=30.0,
@@ -84,7 +83,7 @@ def test_builder_emits_immutable_monotonic_frame_revisions():
     assert first.moments[0].tooltip == "moment tooltip"
     assert first.labels[0].text == "force"
     assert first.guides[0].label == "R = 30.0 m"
-    assert first.waterline is not None
+    assert not hasattr(first, "waterline")
     assert first.hit_targets[0].kind == "outreach"
     assert second.revision == 2
     assert second.nodes == ()

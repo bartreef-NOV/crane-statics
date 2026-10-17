@@ -155,13 +155,12 @@ class TestSceneViewModelState:
         assert x_axis == pytest.approx((dx / axis_len, dz / axis_len), rel=1e-6, abs=1e-6)
         assert z_axis == pytest.approx((-dz / axis_len, dx / axis_len), rel=1e-6, abs=1e-6)
 
-    def test_canvas_publishes_guides_and_waterline(self, scene_vm):
+    def test_canvas_publishes_guides_and_no_waterline(self, scene_vm):
         frame = scene_vm._canvas.renderer.scene_frame
 
         assert {guide.kind for guide in frame.guides} == {"outreach", "hook_height"}
         assert all(guide.label for guide in frame.guides)
-        assert frame.waterline is not None
-        assert frame.waterline.label.startswith("MSL")
+        assert not hasattr(frame, "waterline")
         assert {target.kind for target in frame.hit_targets} == {
             "boom_angle",
             "outreach",
@@ -494,12 +493,11 @@ class TestSceneViewModelState:
 
         assert scene_vm._canvas.renderer.scene_frame.winch_spools == ()
 
-    def test_freebody_frame_hides_guides_and_waterline(self, scene_vm):
+    def test_freebody_frame_hides_guides(self, scene_vm):
         scene_vm.toggleFreebody("boom")
         frame = scene_vm._canvas.renderer.scene_frame
 
         assert frame.guides == ()
-        assert frame.waterline is None
         assert frame.hit_targets == ()
 
 

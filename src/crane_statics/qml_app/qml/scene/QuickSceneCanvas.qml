@@ -16,13 +16,7 @@ Item {
         height / Math.max(1, fitRect.height)
     )
     readonly property real effectiveScale: sceneScale * zoom
-    readonly property var waterline: frame && frame.waterline ? frame.waterline : null
     readonly property var status: frame && frame.status ? frame.status : null
-    readonly property string mslLabelText: waterline && waterline.scene_y !== undefined && waterline.z_msl !== undefined
-        ? `MSL  z = ${waterline.z_msl.toFixed(1)} m` : ""
-    readonly property int mslLabelY: waterline && waterline.scene_y !== undefined
-        ? Math.round(mapSceneY(waterline.scene_y)) : 0
-    readonly property color mslLabelColor: Theme.info
 
     Component.onDestruction: {
     }
@@ -185,26 +179,6 @@ Item {
         visible: root.status !== null
         text: root.status ? root.status.text : ""
         color: root.status ? root.status.color : "transparent"
-    }
-
-    Rectangle {
-        visible: root.waterline !== null
-        x: 0
-        y: root.waterline ? root.mapSceneY(root.waterline.scene_y) : 0
-        width: root.width
-        height: Math.max(0, root.height - y)
-        color: Theme.colorWithAlpha(Theme.info, 0.19)
-        z: -2
-    }
-
-    Rectangle {
-        visible: root.waterline !== null
-        x: 0
-        y: root.waterline ? root.mapSceneY(root.waterline.scene_y) : 0
-        width: root.width
-        height: 2
-        color: Theme.info
-        z: -1
     }
 
     Item {
@@ -386,15 +360,6 @@ Item {
             color: modelData.color
             font.pixelSize: 12
         }
-    }
-
-    Label {
-        x: 8
-        y: root.waterline ? root.mapSceneY(root.waterline.scene_y) - height - 2 : 0
-        text: root.waterline ? root.waterline.label : ""
-        visible: text.length > 0
-        color: Theme.info
-        padding: 2
     }
 
     // How much rope sits on each winch. Screen-space, so it neither pans nor scales

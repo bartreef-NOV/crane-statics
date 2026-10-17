@@ -375,8 +375,6 @@ class _SceneBuilder:
         self._guide_bottom_scene_y: Optional[float] = None
         self._outreach_label = ""
         self._hook_height_label = ""
-        self._msl_z: Optional[float] = None
-        self._msl_scene_y: Optional[float] = None
 
     # ------------------------------------------------------------------
     # Orchestration
@@ -408,13 +406,12 @@ class _SceneBuilder:
         if inputs.display.show_winch_spools:
             self._draw_winch_spools(positions, body_filter)
 
-        # Fit rect follows the node pins only: decorative extents (waterline fill,
-        # status text, long force arrows) must not inflate what the viewport frames.
+        # Fit rect follows the node pins only: decorative extents (status text,
+        # long force arrows) must not inflate what the viewport frames.
         self._fit_rect = self._mapping.fit_rect(
             self._scene_node_xy.values(), margin=self._layout.fit_margin
         )
 
-        self._draw_waterline()
         self._draw_hook_marker(positions)
         self._draw_hook_guide(positions)
         self._draw_boom_frame(positions)
@@ -438,12 +435,6 @@ class _SceneBuilder:
                     scene_y=float(self._guide_scene_y or 0.0),
                     label=label,
                 )
-        if self._msl_z is not None and self._msl_scene_y is not None:
-            self._frame.set_waterline(
-                scene_y=self._msl_scene_y,
-                elevation_z=self._msl_z,
-                label=f"MSL  z = {self._msl_z:.1f} m",
-            )
         radius = self._layout.hit_target_radius
         for start, end in self._boom_frame_segs:
             self._frame.add_hit_target(
@@ -724,17 +715,6 @@ class _SceneBuilder:
     # ------------------------------------------------------------------
     # Guides and annotation
     # ------------------------------------------------------------------
-
-    def _draw_waterline(self) -> None:
-        document = self._inputs.document_dict
-        if self._inputs.display.freebody_body is not None or not document:
-            return
-        elevation_z = document.get("environment", {}).get("mean_sealevel_z_m")
-        if elevation_z is None:
-            return
-        _, scene_y = self._to_scene(0.0, float(elevation_z))
-        self._msl_z = float(elevation_z)
-        self._msl_scene_y = scene_y
 
     def _hook_position(self, positions: Positions) -> Optional[dict[str, float]]:
         if self._inputs.display.freebody_body is not None:

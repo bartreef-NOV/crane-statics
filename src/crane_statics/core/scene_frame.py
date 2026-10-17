@@ -99,15 +99,6 @@ class SceneGuide:
 
 
 @dataclass(frozen=True)
-class SceneWaterline:
-    """A horizontal mean-sea-level overlay in scene coordinates."""
-
-    scene_y: float
-    elevation_z: float
-    label: str
-
-
-@dataclass(frozen=True)
 class SceneHitTarget:
     """A transformed scene-space target for canvas interaction."""
 
@@ -226,7 +217,6 @@ class SceneFrame:
     moments: tuple[SceneMoment, ...]
     labels: tuple[SceneLabel, ...]
     guides: tuple[SceneGuide, ...]
-    waterline: SceneWaterline | None
     hit_targets: tuple[SceneHitTarget, ...]
     boom_axes: tuple[SceneAxis, ...]
     winch_spools: tuple[SceneWinchSpool, ...]
@@ -257,7 +247,6 @@ class SceneFrameBuilder:
         self.guides: list[SceneGuide] = []
         self.hit_targets: list[SceneHitTarget] = []
         self.winch_spools: list[SceneWinchSpool] = []
-        self.waterline: SceneWaterline | None = None
         self.status: SceneStatus | None = None
 
     @staticmethod
@@ -631,10 +620,6 @@ class SceneFrameBuilder:
         self.winch_spools.append(spool)
         return spool
 
-    def set_waterline(self, *, scene_y: float, elevation_z: float, label: str) -> SceneWaterline:
-        self.waterline = SceneWaterline(scene_y, elevation_z, label)
-        return self.waterline
-
     def add_hit_target(
         self,
         *,
@@ -685,7 +670,6 @@ class SceneFrameBuilder:
             moments=tuple(self.moments),
             labels=tuple(self.labels),
             guides=tuple(self.guides),
-            waterline=self.waterline,
             hit_targets=tuple(self.hit_targets),
             boom_axes=tuple(self.boom_axes),
             winch_spools=tuple(self.winch_spools),
