@@ -289,6 +289,24 @@ class TestSceneViewModelState:
         assert scene_vm.angleMin == pytest.approx(0.0)
         assert scene_vm.angle == pytest.approx(0.0)
 
+    def test_auto_load_without_any_limit_keeps_the_hook_load(self, scene_vm):
+        """No enabled design limit means the allowable load is unlimited (inf).
+
+        Auto must not write an infinite hook load into the scene; it keeps the current
+        one and says why. (It used to report a made-up 1000 kN.)
+        """
+        for limit in scene_vm._model.design_limits:
+            limit.enabled = False
+        state = scene_vm._model.get_active_hoist_state()
+        before = state.scene_state.hook_load_kN
+        messages: list[str] = []
+        scene_vm.statusMessage.connect(messages.append)
+
+        scene_vm.recomputeAutoLoad()
+
+        assert state.scene_state.hook_load_kN == pytest.approx(before)
+        assert messages and "no design limit applies" in messages[-1]
+
     def test_hook_load_converts_to_kn(self, scene_vm):
         scene_vm.setHookLoadTonnes(10.0)
         state = scene_vm._model.get_active_hoist_state()

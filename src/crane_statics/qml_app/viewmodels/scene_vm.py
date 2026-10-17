@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any, Optional
 
 from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal, pyqtSlot
@@ -494,6 +495,11 @@ class SceneViewModel(QObject):
             self._after_state_changed()
             return
         if cap is None:
+            self._after_state_changed()
+            return
+        if not math.isfinite(cap.max_allowable_load_kN):
+            # No enabled limit constrains the hook load: keep the current one.
+            self.statusMessage.emit("Auto: no design limit applies")
             self._after_state_changed()
             return
         # Store both metrics: hook-force for internal state (scene visualization),
