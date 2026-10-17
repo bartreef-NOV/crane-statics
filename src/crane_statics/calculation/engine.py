@@ -100,6 +100,25 @@ VECTOR_MAGNITUDE_TOLERANCE = 1e-12  # Threshold for zero magnitude (unitless dir
 QUADRATIC_SOLVER_TOLERANCE = 1e-9  # Tolerance for quadratic equation solving
 WIND_SPEED_THRESHOLD = 1e-12  # Threshold for non-zero wind speed
 
+# Component suffixes stripped from limit ids ('rear_hinge_Fx' -> 'rear_hinge').
+_LIMIT_KEY_COMPONENTS = (
+    "T",
+    "Fx",
+    "Fy",
+    "Fz",
+    "M",
+    "Mx",
+    "My",
+    "fradial",
+    "mradial",
+    "resultant",
+    "boom_axial",
+    "boom_normal",
+    "leg_axial",
+    "leg_normal",
+    "max_bearing_line_load",
+)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Boom Rotation Reference Nodes
@@ -717,6 +736,38 @@ class CraneCalculator:
             angle_rad = math.radians(boom_angle_deg)
             return 100.0 + 50.0 * math.cos(angle_rad)
 
+    def resolve_limit_target(self, limit_key: str, component: str) -> tuple[str, str]:
+        """``(entity_id, rope_channel)`` that ``compute_allowable_load`` checks for a limit.
+
+        ``limit_key`` may be an entity id ('boom_hoist') or a limit id ('rear_hinge_Fx'):
+        a trailing ``_<component>`` suffix is stripped. For ``T`` limits the authored rope
+        id maps to its solver channel ('boom_hoist' for solved ropes).
+        """
+        entity_id = limit_key
+        for comp in _LIMIT_KEY_COMPONENTS:
+            suffix = f"_{comp}"
+            if limit_key.endswith(suffix):
+                entity_id = limit_key[: -len(suffix)]
+                break
+        if component != "T":
+            return entity_id, entity_id
+
+        rope_ids_to_try = [entity_id]
+        if entity_id.endswith("_rope") and not entity_id.endswith("__rope"):
+            rope_ids_to_try.append(f"{entity_id[:-5]}__rope")
+        if entity_id.endswith("__rope"):
+            rope_ids_to_try.append(f"{entity_id[:-6]}_rope")
+
+        for rid in rope_ids_to_try:
+            rope = next((r for r in self.doc.ropes if r.id == rid), None)
+            if rope is None:
+                continue
+            if rope.tension_mode == "solve":
+                return entity_id, "boom_hoist"
+            return entity_id, rid
+
+        return entity_id, entity_id
+
     def compute_allowable_load(
         self,
         point: AnalysisPoint,
@@ -736,60 +787,12 @@ class CraneCalculator:
         h_max_kN = float("inf")
         governing_limit_id = None
 
-        _known_components = {
-            "T",
-            "Fx",
-            "Fy",
-            "Fz",
-            "M",
-            "Mx",
-            "My",
-            "fradial",
-            "mradial",
-            "resultant",
-            "boom_axial",
-            "boom_normal",
-            "leg_axial",
-            "leg_normal",
-            "max_bearing_line_load",
-        }
-
-        def _resolve_entity(key: str) -> str:
-            """Strip trailing _Component suffix to get entity_id if key is a limit_id."""
-            for comp in _known_components:
-                suffix = f"_{comp}"
-                if key.endswith(suffix):
-                    return key[: -len(suffix)]
-            return key
-
-        def _resolve_rope_channel(entity_id: str, component: str) -> str:
-            """Map authored rope ids to the effective solver rope channel for this limit."""
-            if component != "T":
-                return entity_id
-
-            rope_ids_to_try = [entity_id]
-            if entity_id.endswith("_rope") and not entity_id.endswith("__rope"):
-                rope_ids_to_try.append(f"{entity_id[:-5]}__rope")
-            if entity_id.endswith("__rope"):
-                rope_ids_to_try.append(f"{entity_id[:-6]}_rope")
-
-            for rid in rope_ids_to_try:
-                rope = next((r for r in self.doc.ropes if r.id == rid), None)
-                if rope is None:
-                    continue
-                if rope.tension_mode == "solve":
-                    return "boom_hoist"
-                return rid
-
-            return entity_id
-
         for limit_key, components in design_limits.items():
-            entity_id = _resolve_entity(limit_key)
             for component, limit_kN in components.items():
                 if not limit_kN:
                     continue
 
-                rope_channel = _resolve_rope_channel(entity_id, component)
+                entity_id, rope_channel = self.resolve_limit_target(limit_key, component)
 
                 if entity_id in point.sensitivity_reactions:
                     if component == "resultant":

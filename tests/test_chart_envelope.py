@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+import copy
+import itertools
 import math
 import random
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 
-from crane_statics.calculation.engine import AnalysisPoint, CraneCalculator
+from tests.chart_reference import reference_capacities
+from crane_statics.calculation.engine import AllowableCapacity, AnalysisPoint, CraneCalculator
 from crane_statics.calculation.vessel_frame import VesselInputs
-from crane_statics.core import load_document
-from crane_statics.core.chart_envelope import build_probes, motion_channels, superpose
+from crane_statics.core import chart_envelope, load_document
+from crane_statics.core.analysis_cases import _signed_candidates, analysis_mode_by_name
+from crane_statics.core.chart_envelope import (
+    build_probes,
+    envelope_capacity,
+    motion_channels,
+    superpose,
+)
+from crane_statics.core.demand_extraction import extract_connection_component_response
+from crane_statics.core.lead_channels import compose_lead_channel_point
 from crane_statics.data.models import CraneDocument
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
@@ -29,6 +41,12 @@ LIMITS = {
     "vessel_pitch_deg": 2.5,
 }
 CASES = 20
+# Reference grid for the all-seven-limits oracle: with 128 sign cases, 5 deg steps in both
+# slew and wind are ~660k full solves (~10 min) per boom angle, so this test uses 15 deg
+# slew and 45 deg wind (axes and diagonals, ~25k solves); the fine-reference and
+# split-mode tests use 5 deg steps in both on two vessel limits (4 sign cases).
+REF_SLEW_STEP = 15.0
+REF_WIND_STEP = 45.0
 
 
 def _document(*, offset_boom_mass: bool) -> CraneDocument:
@@ -150,3 +168,282 @@ def test_zero_wind_probes_reuse_the_zero_point() -> None:
 def test_unknown_hoist_gives_no_probes() -> None:
     calc = CraneCalculator(_document(offset_boom_mass=False))
     assert build_probes(calc, "nope", BOOM_ANGLE_DEG, 10.0, None) is None
+
+
+# --- envelope_capacity ----------------------------------------------------------------
+
+ENVELOPE_LIMITS: list[dict[str, dict]] = [
+    {"boom_hoist": {"T": 5000.0}},
+    {"platform_base": {"fradial": 20000.0}},
+    {"platform_base": {"max_bearing_line_load": 3000.0}},
+    {"heel_point": {"Fx": 20000.0}},
+]
+LIMIT_IDS = ["boom_hoist_T", "fradial", "bearing_line_load", "heel_point_Fx"]
+WIND_M_S = 20.0
+UNSAFE_REL = 1e-6
+CONSERVATIVE_REL = 0.005
+_VESSEL_FIELDS = (
+    "accel_x_m_s2",
+    "accel_y_m_s2",
+    "accel_z_m_s2",
+    "roll_angular_accel_rad_s2",
+    "pitch_angular_accel_rad_s2",
+    "roll_deg",
+    "pitch_deg",
+)
+
+
+def _envelope_document(*, vessel_limits: dict[str, float] | None = None) -> CraneDocument:
+    """GT283 at 20 m/s wind with the given vessel limits (default: all seven nonzero)."""
+    doc = _document(offset_boom_mass=False)
+    doc.environment.max_wind_speed_m_s = WIND_M_S
+    if vessel_limits is not None:
+        vm = doc.environment.vessel_motion
+        for field in _VESSEL_FIELDS:
+            setattr(vm, field, float(vessel_limits.get(field, 0.0)))
+    return doc
+
+
+def _hoist(doc: CraneDocument) -> Any:
+    return next(h for h in doc.hoists if h.id == HOIST)
+
+
+def _fast(
+    calc: CraneCalculator,
+    doc: CraneDocument,
+    angle: float,
+    limits: dict[str, dict],
+    *,
+    overrides: dict[str, dict[str, Any]] | None = None,
+    hook_mass_t: float | None = None,
+) -> AllowableCapacity:
+    hoist = _hoist(doc)
+    probes = build_probes(calc, HOIST, angle, float(doc.environment.max_wind_speed_m_s), overrides)
+    assert probes is not None
+    return envelope_capacity(
+        calc,
+        probes,
+        limits,
+        vessel=doc.environment.vessel_motion,
+        offlead_deg=hoist.offlead_deg,
+        sidelead_deg=hoist.sidelead_deg,
+        hook_daf=hoist.hook_daf,
+        hook_mass_t=hoist.hook_mass_t if hook_mass_t is None else hook_mass_t,
+    )
+
+
+def _assert_within_band(fast: AllowableCapacity, ref: AllowableCapacity, label: str) -> None:
+    f, r = fast.max_allowable_load_kN, ref.max_allowable_load_kN
+    print(f"{label}: fast {f:.6f} ref {r:.6f} ratio {f / r if r else float('nan'):.8f}")
+    assert f <= r * (1.0 + UNSAFE_REL) + 1e-9, f"{label}: fast {f} above reference {r}"
+    assert f >= r * (1.0 - CONSERVATIVE_REL) - 1e-9, f"{label}: fast {f} too far below {r}"
+    assert fast.governing_limit_id == ref.governing_limit_id, label
+
+
+def _compare_with_reference(
+    doc: CraneDocument,
+    angle: float,
+    *,
+    slew_step_deg: float,
+    wind_step_deg: float,
+    overrides: dict[str, dict[str, Any]] | None = None,
+    hook_mass_t: float | None = None,
+) -> None:
+    calc = CraneCalculator(doc)
+    hoist = _hoist(doc)
+    mass = float(hoist.hook_mass_t if hook_mass_t is None else hook_mass_t)
+    refs = reference_capacities(
+        calc,
+        doc,
+        HOIST,
+        angle,
+        ENVELOPE_LIMITS,
+        hook_daf=hoist.hook_daf,
+        hook_mass_t=mass,
+        overrides=overrides,
+        slew_step_deg=slew_step_deg,
+        wind_step_deg=wind_step_deg,
+    )
+    for limit_id, limits, ref in zip(LIMIT_IDS, ENVELOPE_LIMITS, refs):
+        fast = _fast(calc, doc, angle, limits, overrides=overrides, hook_mass_t=mass)
+        _assert_within_band(fast, ref, f"{limit_id} @ {angle} deg")
+
+
+@pytest.mark.parametrize("angle", [20.0, 45.0, 70.0])
+def test_envelope_never_exceeds_the_reference(angle: float) -> None:
+    """All seven vessel limits, 20 m/s wind and the example's nonzero leads."""
+    doc = _envelope_document()
+    hoist = _hoist(doc)
+    assert hoist.offlead_deg != 0.0 and hoist.sidelead_deg != 0.0
+    vm = doc.environment.vessel_motion
+    assert all(getattr(vm, field) != 0.0 for field in _VESSEL_FIELDS)
+    _compare_with_reference(doc, angle, slew_step_deg=REF_SLEW_STEP, wind_step_deg=REF_WIND_STEP)
+
+
+@pytest.mark.parametrize("angle", [20.0])
+def test_envelope_matches_a_fine_reference(angle: float) -> None:
+    """5 deg slew and wind steps (off-axis wind included) on sway and roll angle."""
+    doc = _envelope_document(vessel_limits={"accel_y_m_s2": 0.6, "roll_deg": 4.0})
+    _compare_with_reference(doc, angle, slew_step_deg=5.0, wind_step_deg=5.0)
+
+
+def test_envelope_with_split_mode_overrides() -> None:
+    doc = _envelope_document(vessel_limits={"accel_x_m_s2": 0.8, "pitch_deg": 2.5})
+    split = _hoist(doc).model_copy(
+        update={"splitable_block": True, "split_falls": 10, "split_hook_mass_t": 30.0}
+    )
+    mode = analysis_mode_by_name(split, "split")
+    assert mode.name == "split" and mode.runtime_overrides
+    _compare_with_reference(
+        doc,
+        45.0,
+        slew_step_deg=5.0,
+        wind_step_deg=5.0,
+        overrides=mode.runtime_overrides,
+        hook_mass_t=mode.hook_mass_t,
+    )
+
+
+def _lead_cases(hoist: Any) -> list[tuple[float, float]]:
+    return list(
+        itertools.product(
+            _signed_candidates(hoist.offlead_deg), _signed_candidates(hoist.sidelead_deg)
+        )
+    )
+
+
+def test_zero_limits_and_no_wind_equal_the_single_solve() -> None:
+    doc = _envelope_document(vessel_limits={})
+    doc.environment.max_wind_speed_m_s = 0.0
+    calc = CraneCalculator(doc)
+    hoist = _hoist(doc)
+    pt = calc.compute_analysis_point(BOOM_ANGLE_DEG, 0.0, HOIST, wind_speed_m_s=0.0)
+    assert pt is not None
+    for limits in ENVELOPE_LIMITS:
+        expected = min(
+            (
+                calc.compute_allowable_load(
+                    compose_lead_channel_point(pt, off, side),
+                    limits,
+                    hook_daf=hoist.hook_daf,
+                    hook_mass_t=hoist.hook_mass_t,
+                )
+                for off, side in _lead_cases(hoist)
+            ),
+            key=lambda cap: cap.max_allowable_load_kN,
+        )
+        got = _fast(calc, doc, BOOM_ANGLE_DEG, limits)
+        assert got.max_allowable_load_kN == pytest.approx(
+            expected.max_allowable_load_kN, rel=1e-9
+        ), limits
+        assert got.max_allowable_load_t == pytest.approx(expected.max_allowable_load_t, rel=1e-9)
+        assert got.governing_limit_id == expected.governing_limit_id
+
+
+def test_zero_leads_collapse_to_one_case(monkeypatch: pytest.MonkeyPatch) -> None:
+    doc = _envelope_document()
+    calc = CraneCalculator(doc)
+    probes = build_probes(calc, HOIST, BOOM_ANGLE_DEG, WIND_M_S, None)
+    assert probes is not None
+    calls: list[tuple[float, float]] = []
+    original = chart_envelope.compose_lead_channel_point
+
+    def _counting(pt: AnalysisPoint, off: float, side: float) -> AnalysisPoint:
+        calls.append((off, side))
+        return original(pt, off, side)
+
+    monkeypatch.setattr(chart_envelope, "compose_lead_channel_point", _counting)
+    limits = {**ENVELOPE_LIMITS[0], **ENVELOPE_LIMITS[1], **ENVELOPE_LIMITS[3]}
+    envelope_capacity(
+        calc,
+        probes,
+        limits,
+        vessel=doc.environment.vessel_motion,
+        offlead_deg=0.0,
+        sidelead_deg=0.0,
+        hook_daf=1.1,
+        hook_mass_t=50.0,
+    )
+    assert calls == [(0.0, 0.0)]
+
+
+@pytest.mark.parametrize(
+    ("entity", "component"),
+    [
+        ("platform_base", "fradial"),
+        ("platform_base", "mradial"),
+        ("heel_point", "resultant"),
+        ("platform_base", "max_bearing_line_load"),
+    ],
+)
+def test_magnitude_rankings_match_compute_allowable_load(entity: str, component: str) -> None:
+    """The vectorised ranking closed forms agree with compute_allowable_load."""
+    doc = _envelope_document()
+    calc = CraneCalculator(doc)
+    probes = build_probes(calc, HOIST, BOOM_ANGLE_DEG, WIND_M_S, None)
+    assert probes is not None
+    quantities = chart_envelope._MAGNITUDE_QUANTITIES[component]
+    diameter = float(doc.support_widths.slewing_bearing_diameter_m or 1.0)
+    rng = random.Random(11)
+    seen = set()
+    for _ in range(80):
+        lead = compose_lead_channel_point(
+            probes.zero, rng.choice((-1.0, 1.0)), rng.choice((-2.5, 2.5))
+        )
+        channels = [rng.uniform(-3.0, 3.0) for _ in range(5)]
+        point = chart_envelope._case_point(
+            probes, lead, channels, rng.uniform(-1.0, 1.0), rng.uniform(-1.0, 1.0)
+        )
+        demand0 = extract_connection_component_response(point, 0.0, entity, component, diameter)
+        assert demand0 is not None
+        limit = rng.uniform(0.8, 3.0) * demand0
+        base = [
+            np.array([chart_envelope._read_component(point.baseline_reactions[entity], k, f)])
+            for k, f in quantities
+        ]
+        sens = [
+            chart_envelope._read_component(point.sensitivity_reactions[entity], k, f)
+            for k, f in quantities
+        ]
+        if component == "max_bearing_line_load":
+            ranked = chart_envelope._bearing_ranking(limit, diameter, *base, *sens)
+        else:
+            ranked = chart_envelope._radial_ranking(limit, *base, *sens)
+        exact = calc.compute_allowable_load(point, {entity: {component: limit}})
+        seen.add("zero" if exact.max_allowable_load_kN == 0.0 else "positive")
+        assert float(ranked[0]) == pytest.approx(exact.max_allowable_load_kN, rel=1e-6, abs=1e-6)
+    assert seen == {"zero", "positive"}
+
+
+def _lead_state(pt: AnalysisPoint) -> tuple[Any, ...]:
+    return copy.deepcopy(
+        (
+            pt.sensitivity_rope_tensions,
+            pt.sensitivity_reactions,
+            pt.baseline_rope_tensions,
+            pt.baseline_reactions,
+            pt.offlead_lateral_unit_rope_tensions,
+            pt.offlead_lateral_unit_reactions,
+            pt.sidelead_lateral_unit_reactions,
+        )
+    )
+
+
+def test_envelope_leaves_the_probe_lead_channels_unchanged() -> None:
+    doc = _envelope_document()
+    calc = CraneCalculator(doc)
+    probes = build_probes(calc, HOIST, BOOM_ANGLE_DEG, WIND_M_S, None)
+    assert probes is not None
+    before = _lead_state(probes.zero)
+    for limits in ENVELOPE_LIMITS:
+        envelope_capacity(
+            calc,
+            probes,
+            limits,
+            vessel=doc.environment.vessel_motion,
+            offlead_deg=1.0,
+            sidelead_deg=2.5,
+            hook_daf=1.1,
+            hook_mass_t=50.0,
+        )
+    assert _lead_state(probes.zero) == before
