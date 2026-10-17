@@ -13,7 +13,9 @@ from ..calculation.engine import get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
 from .demand_extraction import extract_connection_component_response
 from ..presentation.formatters import ConnectionFormatter, HoistFormatter, RopeFormatter
+from .drawn_loads import LoadConditions
 from .results import ResultRow
+from .vessel_frame import VesselInputs, crane_frame_motion
 
 if TYPE_CHECKING:
     from ..calculation.engine import AllowableCapacity, AnalysisPoint
@@ -260,6 +262,45 @@ class AnalysisCalculator:
             vessel_roll_deg=sc.vessel_roll_deg,
             vessel_pitch_deg=sc.vessel_pitch_deg,
             crane_slewing_angle_deg=sc.crane_slewing_angle_deg,
+        )
+
+    def drawn_load_conditions(self) -> LoadConditions:
+        """The in-plane conditions the drawn loads are evaluated at.
+
+        The scene's vessel-frame inputs are resolved exactly as ``compute_analysis_point``
+        resolves them: the accelerations handed to ``drawn_loads`` are the EQUIVALENT
+        crane-frame values, so nominal Gravity plus Inertia equals the tilted, slewed load
+        vector m*k_c the solver applies.
+        """
+        state = self._session.get_active_hoist_state()
+        doc = self._session.document
+        if state is None:
+            return LoadConditions()
+        sc = state.scene_state
+        gravity = 9.81 if doc is None else abs(float(doc.environment.gravity_m_s2))
+        motion = crane_frame_motion(
+            gravity,
+            VesselInputs(
+                accel_x_m_s2=float(sc.accel_x_m_s2),
+                accel_y_m_s2=float(sc.accel_y_m_s2),
+                accel_z_m_s2=float(sc.accel_z_m_s2),
+                roll_deg=float(sc.vessel_roll_deg),
+                pitch_deg=float(sc.vessel_pitch_deg),
+                slew_deg=float(sc.crane_slewing_angle_deg),
+                roll_accel_rad_s2=float(sc.roll_accel_rad_s2),
+                pitch_accel_rad_s2=float(sc.pitch_accel_rad_s2),
+            ),
+        )
+        return LoadConditions(
+            boom_angle_deg=float(sc.boom_angle_deg),
+            hook_load_kN=float(sc.hook_load_kN),
+            wind_speed_m_s=float(sc.wind_speed_m_s),
+            wind_direction=str(sc.wind_direction or "+X"),
+            accel_x_m_s2=motion.accel_x_m_s2,
+            accel_z_m_s2=motion.accel_z_m_s2,
+            pitch_accel_rad_s2=motion.pitch_accel_rad_s2,
+            offlead_deg=float(sc.offlead_deg),
+            split_mode_active=bool(state.split_mode_active),
         )
 
     def compute_result_rows(

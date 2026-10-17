@@ -422,26 +422,35 @@ class _LoadBuilder:
                     )
                 )
 
+        split_block = self._split_block_mass()
+        if split_block is not None:
+            support_mass_t, xw, zw = split_block
+            fz = -support_mass_t * g_kN_per_t
+            vectors.append(
+                LoadVector(
+                    world_x=xw,
+                    world_z=zw,
+                    fx_kN=0.0,
+                    fz_kN=fz,
+                    category=GRAVITY,
+                    label=f"Split block weight: {abs(fz):.1f} kN",
+                    detail=f"Split block weight\nFz={fz:.1f} kN",
+                )
+            )
+        return tuple(vectors)
+
+    def _split_block_mass(self) -> Optional[tuple[float, float, float]]:
+        """(mass_t, x, z) left at the support node by a split block, if drawn here."""
         support_mass_t = split_support_mass_t(
             self._hoist, split_mode_active=self._c.split_mode_active
         )
         support_node_id = str(self._hoist.get("support_node_id", "")).strip()
-        if support_mass_t is not None and support_node_id and support_node_id in self._positions:
-            if not self._filter.is_free_body or self._filter.owns_node(support_node_id):
-                position = self._positions[support_node_id]
-                fz = -float(support_mass_t) * g_kN_per_t
-                vectors.append(
-                    LoadVector(
-                        world_x=float(position["x"]),
-                        world_z=float(position["z"]),
-                        fx_kN=0.0,
-                        fz_kN=fz,
-                        category=GRAVITY,
-                        label=f"Split block weight: {abs(fz):.1f} kN",
-                        detail=f"Split block weight\nFz={fz:.1f} kN",
-                    )
-                )
-        return tuple(vectors)
+        if support_mass_t is None or not support_node_id or support_node_id not in self._positions:
+            return None
+        if self._filter.is_free_body and not self._filter.owns_node(support_node_id):
+            return None
+        position = self._positions[support_node_id]
+        return float(support_mass_t), float(position["x"]), float(position["z"])
 
     def rope_weight_node_masses(self) -> dict[str, RopeNodeMass]:
         """Rope self-weight lumped per node, filtered to the selected free body."""
@@ -545,6 +554,12 @@ class _LoadBuilder:
         return tuple(vectors)
 
     def inertia(self) -> tuple[LoadVector, ...]:
+        """D'Alembert inertia ``-m*a`` of every mass the Gravity/Idle hook categories weigh.
+
+        ``LoadConditions`` carries the EQUIVALENT crane-frame accelerations (vessel tilt
+        and slew already resolved), so the nominal weight plus this arrow is the tilted
+        load vector m*k_c the solver applies -- see ``crane_solver.inertia_force``.
+        """
         ax = float(self._c.accel_x_m_s2)
         az = float(self._c.accel_z_m_s2)
         pitch = float(self._c.pitch_accel_rad_s2)
@@ -555,7 +570,7 @@ class _LoadBuilder:
         ref_x = float(vessel_motion.get("reference_x_m", 0.0))
         ref_z = float(vessel_motion.get("reference_z_m", 0.0))
 
-        vectors: list[LoadVector] = []
+        masses: list[tuple[float, float, float, str]] = []
         for body_id, body in self._bodies():
             for mass_point in body.get("mass_points", []):
                 mass = float(mass_point.get("mass_t", 0.0))
@@ -564,25 +579,35 @@ class _LoadBuilder:
                 point = self._body_point(body_id, mass_point)
                 if point is None:
                     continue
-                xw, zw = point
-                dx, dz = xw - ref_x, zw - ref_z
-                ax_pt = ax + pitch * dz
-                az_pt = az - pitch * dx
-                # D'Alembert inertia; gravity is carried by the Gravity category.
-                fx, fz = -mass * ax_pt, -mass * az_pt
-                if abs(fx) < 1e-6 and abs(fz) < 1e-6:
-                    continue
-                vectors.append(
-                    LoadVector(
-                        world_x=xw,
-                        world_z=zw,
-                        fx_kN=fx,
-                        fz_kN=fz,
-                        category=INERTIA,
-                        label=f"Inertia {body_id}",
-                        detail=f"{body_id}\nFx={fx:.1f} kN  Fz={fz:.1f} kN",
-                    )
+                masses.append((mass, point[0], point[1], body_id))
+        for node_id, mass in self._idle_hook_masses():
+            position = self._positions[node_id]
+            name = f"idle hook @ {node_display_name(node_id)}"
+            masses.append((mass, float(position["x"]), float(position["z"]), name))
+        split_block = self._split_block_mass()
+        if split_block is not None:
+            masses.append((*split_block, "split block"))
+
+        vectors: list[LoadVector] = []
+        for mass, xw, zw, name in masses:
+            dx, dz = xw - ref_x, zw - ref_z
+            ax_pt = ax + pitch * dz
+            az_pt = az - pitch * dx
+            # D'Alembert inertia; gravity is carried by the Gravity category.
+            fx, fz = -mass * ax_pt, -mass * az_pt
+            if abs(fx) < 1e-6 and abs(fz) < 1e-6:
+                continue
+            vectors.append(
+                LoadVector(
+                    world_x=xw,
+                    world_z=zw,
+                    fx_kN=fx,
+                    fz_kN=fz,
+                    category=INERTIA,
+                    label=f"Inertia {name}",
+                    detail=f"{name}\nFx={fx:.1f} kN  Fz={fz:.1f} kN",
                 )
+            )
         return tuple(vectors)
 
     def hook_load(self) -> tuple[LoadVector, ...]:
@@ -720,14 +745,16 @@ class _LoadBuilder:
 
     # -- idle hook mass ---------------------------------------------------
 
-    def idle_hook_mass_node_forces(self) -> dict[str, tuple[float, float]]:
-        """Dead weight of every hook block except the active hoist's."""
-        node_forces: dict[str, list[float]] = {}
-        if not self._doc:
-            return {}
+    def _idle_hook_masses(self) -> list[tuple[str, float]]:
+        """(node_id, mass_t) of every hook block except the active hoist's.
 
-        g_kN_per_t = abs(float(self._env.get("gravity_m_s2", 9.81)))
+        The active hoist's block is part of the hook load carried by its rope, so it is
+        excluded here exactly as ``crane_solver.lumped_point_masses`` excludes it.
+        """
+        if not self._doc:
+            return []
         active_hoist_id = str(self._hoist.get("id", "")).strip()
+        masses: list[tuple[str, float]] = []
 
         for hoist in self._doc.get("hoists", []):
             if str(hoist.get("id", "")).strip() == active_hoist_id:
@@ -747,10 +774,19 @@ class _LoadBuilder:
                 hook_mass_t = 0.0
             if hook_mass_t <= 0.0:
                 continue
+            masses.append((node_id, hook_mass_t))
+        return masses
 
+    def idle_hook_mass_node_forces(self) -> dict[str, tuple[float, float]]:
+        """Dead weight of every hook block except the active hoist's.
+
+        Nominal weight only; the blocks' inertia (incl. vessel tilt) is in :meth:`inertia`.
+        """
+        g_kN_per_t = abs(float(self._env.get("gravity_m_s2", 9.81)))
+        node_forces: dict[str, list[float]] = {}
+        for node_id, hook_mass_t in self._idle_hook_masses():
             current = node_forces.setdefault(node_id, [0.0, 0.0])
             current[1] += -hook_mass_t * g_kN_per_t
-
         return {node_id: (values[0], values[1]) for node_id, values in node_forces.items()}
 
     def idle_hook_mass(self) -> tuple[LoadVector, ...]:

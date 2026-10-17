@@ -14,7 +14,7 @@ from crane_statics.core.analysis_services import (
     HoistStateService,
     KinematicsService,
 )
-from crane_statics.core.drawn_loads import LoadConditions, active_hoist_dict
+from crane_statics.core.drawn_loads import active_hoist_dict
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
 from crane_statics.qml_app.adapters.scene_adapter import SceneStateAdapter
 from crane_statics.qml_app.scene.scene_drag import DragEdit, DragLimits, SceneDrag
@@ -134,28 +134,10 @@ class SceneViewModel(QObject):
             kinematics=kinematics,
             hoist_id=hoist_id,
             hoist=active_hoist_dict(document_dict or {}, hoist_id),
-            conditions=self._load_conditions(state),
+            conditions=self._calculator.drawn_load_conditions(),
             display=self._display,
             analysis_point=self._analysis_point,
             tackle_length_m=max(tackle_min, min(tackle_max, tackle)),
-        )
-
-    @staticmethod
-    def _load_conditions(state) -> LoadConditions:
-        """The in-plane conditions the drawn loads are evaluated at."""
-        if state is None:
-            return LoadConditions()
-        sc = state.scene_state
-        return LoadConditions(
-            boom_angle_deg=float(sc.boom_angle_deg),
-            hook_load_kN=float(sc.hook_load_kN),
-            wind_speed_m_s=float(sc.wind_speed_m_s),
-            wind_direction=str(sc.wind_direction or "+X"),
-            accel_x_m_s2=float(sc.accel_x_m_s2),
-            accel_z_m_s2=float(sc.accel_z_m_s2),
-            pitch_accel_rad_s2=float(sc.pitch_accel_rad_s2),
-            offlead_deg=float(sc.offlead_deg),
-            split_mode_active=bool(state.split_mode_active),
         )
 
     def _publish_scene_frame(self) -> None:
