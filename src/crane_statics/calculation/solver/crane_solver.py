@@ -534,7 +534,9 @@ def _accumulate_loads(
                         n_parts_idle = max(1, int(override_falls_idle))
                     except (TypeError, ValueError):
                         pass
-                tension_kN = idle_hook_mass_t * gravity_abs / max(1, n_parts_idle)
+                # The falls carry the vertical load component at the hook, matching the
+                # z force applied at the hook node (accel_z is the crane-frame value).
+                tension_kN = idle_hook_mass_t * (gravity_abs + accel_z_m_s2) / max(1, n_parts_idle)
             else:
                 tension_kN = 0.0
 

@@ -264,6 +264,93 @@ def test_omnidirectional_capacity_forwards_vessel_kwargs(calc):
     assert slewed.max_allowable_load_kN != pytest.approx(plain.max_allowable_load_kN)
 
 
+def _expected_roll_fy(calc, roll_rad_s2):
+    """Hand sum of the lateral inertia force of the body mass points under a roll accel.
+
+    Roll is right-handed about +x: omega x r = (0, -omega*z, 0) for a point at height z
+    above the reference, so the point accelerates toward -y and its inertia force
+    -m*a_y = +m*omega*z points toward +y.
+    """
+    from crane_statics.calculation.solver.crane_solver import rotate_boom_local_point
+
+    positions = calc._kinematics.compute_all_node_positions(45.0)
+    node_pos = {n: (float(v["x"]), float(v["z"])) for n, v in positions.items()}
+    ref_z = float(calc.doc.environment.vessel_motion.reference_z_m)
+    total = 0.0
+    for body in calc.doc.bodies:
+        for mp in body.mass_points:
+            if body.id == "boom" and mp.local_x_m is not None:
+                _x, z = rotate_boom_local_point(
+                    float(mp.local_x_m), float(mp.local_z_m or 0.0), node_pos, 45.0
+                )
+            else:
+                z = float(mp.z_m)
+            total += float(mp.mass_t) * roll_rad_s2 * (z - ref_z)
+    return total
+
+
+def test_roll_acceleration_is_right_handed_about_x(calc):
+    level = _point(calc, wind_speed_m_s=0.0)
+    rolled = _point(calc, wind_speed_m_s=0.0, roll_accel_rad_s2=0.1)
+    expected = _expected_roll_fy(calc, 0.1)
+    assert expected > 0.0  # the GT283 masses sit above the reference point
+    fy = rolled.baseline_reactions["platform_base"]["Fy"]
+    assert fy - level.baseline_reactions["platform_base"]["Fy"] == pytest.approx(expected)
+
+
+def test_slew_90_swaps_roll_and_pitch_accelerations(calc):
+    # Vessel pitch accel 0.1 at slew 90 -> crane roll 0.1, crane pitch 0.
+    v_pitch = _point(calc, wind_speed_m_s=0.0, pitch_accel_rad_s2=0.1, crane_slewing_angle_deg=90.0)
+    c_roll = _point(calc, wind_speed_m_s=0.0, roll_accel_rad_s2=0.1)
+    assert _flat(v_pitch.baseline_reactions) == pytest.approx(_flat(c_roll.baseline_reactions))
+    assert v_pitch.baseline_reactions["platform_base"]["Fy"] == pytest.approx(
+        _expected_roll_fy(calc, 0.1)
+    )
+    # Vessel roll accel 0.1 at slew 90 -> crane roll 0, crane pitch -0.1.
+    v_roll = _point(calc, wind_speed_m_s=0.0, roll_accel_rad_s2=0.1, crane_slewing_angle_deg=90.0)
+    c_pitch = _point(calc, wind_speed_m_s=0.0, pitch_accel_rad_s2=-0.1)
+    assert _flat(v_roll.baseline_reactions) == pytest.approx(
+        _flat(c_pitch.baseline_reactions), abs=1e-9
+    )
+
+
+def _rear_leg_rope_load(calc, accel_x, accel_z):
+    """Load on the rear leg: it carries no mass, so only rope tensions land on it.
+
+    Only the AH idle hook keeps its mass (trolley zeroed, MH active at hook load 0), so the
+    rear-leg load is the AH rope tension times a fixed geometry factor.
+    """
+    d = calc._doc_dict
+    positions = calc._kinematics.compute_all_node_positions(45.0)
+    node_pos = {n: (float(v["x"]), float(v["z"])) for n, v in positions.items()}
+    body_map = {n["id"]: n.get("body", "") for n in d["nodes"]}
+    ld, _ = crane_solver._accumulate_loads(
+        d,
+        node_pos,
+        body_map,
+        "MH",
+        0.0,
+        0.0,
+        accel_x,
+        accel_z,
+        boom_angle_deg=45.0,
+        hoist_runtime_overrides={"trolley": {"hook_mass_t": 0.0}},
+    )
+    return ld["rear_leg"]
+
+
+def test_idle_rope_tension_carries_the_vertical_load_component(calc):
+    still = _rear_leg_rope_load(calc, 0.0, 0.0)
+    heave = _rear_leg_rope_load(calc, 0.0, 1.5)
+    surge = _rear_leg_rope_load(calc, 1.0, 0.0)
+    assert abs(still["Fx"]) + abs(still["Fz"]) > 1.0
+    ratio = (G + 1.5) / G
+    for k in ("Fx", "Fz", "M"):
+        assert heave[k] == pytest.approx(still[k] * ratio)
+        # accel_z = 0: the tension is the zero-motion value.
+        assert surge[k] == pytest.approx(still[k])
+
+
 def _session_services():
     from crane_statics.core.analysis_presenter import AnalysisPresenter
     from crane_statics.core.analysis_services import (

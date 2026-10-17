@@ -297,7 +297,7 @@ class CraneCalculator:
 
         All accelerations are the equivalent crane-frame values (``CraneFrameMotion``), so
         each mass carries the same in-plane (Fx, Fz) load as in the X-Z solve plus
-        ``Fy = -m * (accel_y + roll_accel * (z - reference_z))``.
+        ``Fy = -m * (accel_y - roll_accel * (z - reference_z))`` (roll right-handed about +x).
         """
         node_positions = self._kinematics.compute_all_node_positions(boom_angle_deg)
         node_pos = {nid: (float(v["x"]), float(v["z"])) for nid, v in node_positions.items()}
@@ -347,7 +347,9 @@ class CraneCalculator:
                 roll_ref_z,
                 gravity_abs,
             )
-            ay_pt = float(accel_y_m_s2) + float(roll_accel_rad_s2) * (zw - roll_ref_z)
+            # Roll is right-handed about +x (like the roll angle): omega x r gives
+            # a_y = -roll * (z - reference_z).
+            ay_pt = float(accel_y_m_s2) - float(roll_accel_rad_s2) * (zw - roll_ref_z)
             return fx, -mass_t * ay_pt, fz
 
         for body in self.doc.bodies:
