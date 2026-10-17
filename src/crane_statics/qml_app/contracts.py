@@ -100,12 +100,12 @@ class EnvironmentSettings:
     # Environment
     gravity_m_s2: float = 9.81
     max_wind_speed_m_s: float = 20.0
-    wind_reference_height_m_asl: float = 10.0
     air_density_kg_m3: float = 1.225
-    wind_profile_exponent: float = 0.2
-    mean_sealevel_z_m: float = 0.0
 
     # Vessel Motion
+    roll_deg: float = 0.0
+    pitch_deg: float = 0.0
+    crane_slewing_angle_deg: float = 0.0
     accel_x_m_s2: float = 0.0
     accel_y_m_s2: float = 0.0
     accel_z_m_s2: float = 0.0
@@ -126,10 +126,10 @@ class EnvironmentSettings:
         return {
             "gravity_m_s2": self.gravity_m_s2,
             "max_wind_speed_m_s": self.max_wind_speed_m_s,
-            "wind_reference_height_m_asl": self.wind_reference_height_m_asl,
             "air_density_kg_m3": self.air_density_kg_m3,
-            "wind_profile_exponent": self.wind_profile_exponent,
-            "mean_sealevel_z_m": self.mean_sealevel_z_m,
+            "roll_deg": self.roll_deg,
+            "pitch_deg": self.pitch_deg,
+            "crane_slewing_angle_deg": self.crane_slewing_angle_deg,
             "accel_x_m_s2": self.accel_x_m_s2,
             "accel_y_m_s2": self.accel_y_m_s2,
             "accel_z_m_s2": self.accel_z_m_s2,
@@ -148,10 +148,10 @@ class EnvironmentSettings:
         return cls(
             gravity_m_s2=float(data.get("gravity_m_s2", 9.81)),
             max_wind_speed_m_s=float(data.get("max_wind_speed_m_s", 20.0)),
-            wind_reference_height_m_asl=float(data.get("wind_reference_height_m_asl", 10.0)),
             air_density_kg_m3=float(data.get("air_density_kg_m3", 1.225)),
-            wind_profile_exponent=float(data.get("wind_profile_exponent", 0.2)),
-            mean_sealevel_z_m=float(data.get("mean_sealevel_z_m", 0.0)),
+            roll_deg=float(data.get("roll_deg", 0.0)),
+            pitch_deg=float(data.get("pitch_deg", 0.0)),
+            crane_slewing_angle_deg=float(data.get("crane_slewing_angle_deg", 0.0)),
             accel_x_m_s2=float(data.get("accel_x_m_s2", 0.0)),
             accel_y_m_s2=float(data.get("accel_y_m_s2", 0.0)),
             accel_z_m_s2=float(data.get("accel_z_m_s2", 0.0)),

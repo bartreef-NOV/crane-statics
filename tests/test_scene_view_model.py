@@ -327,6 +327,52 @@ class TestSceneViewModelState:
         assert sc.accel_x_m_s2 == pytest.approx(0.25)
         assert sc.pitch_accel_rad_s2 == pytest.approx(0.05)
 
+    @pytest.mark.parametrize(
+        ("prop", "setter", "field"),
+        [
+            ("vesselRoll", "setVesselRoll", "vessel_roll_deg"),
+            ("vesselPitch", "setVesselPitch", "vessel_pitch_deg"),
+            ("craneSlewingAngle", "setCraneSlewingAngle", "crane_slewing_angle_deg"),
+            ("accelX", "setAccelX", "accel_x_m_s2"),
+            ("accelY", "setAccelY", "accel_y_m_s2"),
+            ("accelZ", "setAccelZ", "accel_z_m_s2"),
+        ],
+    )
+    def test_vessel_motion_setters_are_signed_notify_and_reanalyse(
+        self, scene_vm, monkeypatch, prop, setter, field
+    ):
+        calls: list[int] = []
+        emitted: list[int] = []
+        monkeypatch.setattr(scene_vm, "_after_state_changed", lambda: calls.append(1))
+        monkeypatch.setattr(scene_vm, "recomputeAutoLoad", lambda: calls.append(1))
+        scene_vm.environmentChanged.connect(lambda: emitted.append(1))
+
+        getattr(scene_vm, setter)(-2.5)
+
+        sc = scene_vm._model.get_active_hoist_state().scene_state
+        assert getattr(sc, field) == pytest.approx(-2.5)
+        assert getattr(scene_vm, prop) == pytest.approx(-2.5)
+        assert emitted
+        assert calls
+
+    def test_document_vessel_motion_seeds_every_hoist_scene_state(self):
+        session = SessionState()
+        doc = load_document(EXAMPLE)
+        vm = doc.environment.vessel_motion
+        vm.roll_deg = 3.0
+        vm.pitch_deg = -2.0
+        vm.crane_slewing_angle_deg = 90.0
+        vm.accel_x_m_s2 = -1.0
+        session.model.set_document(doc)
+
+        assert session.model.hoist_states
+        for state in session.model.hoist_states.values():
+            sc = state.scene_state
+            assert sc.vessel_roll_deg == pytest.approx(3.0)
+            assert sc.vessel_pitch_deg == pytest.approx(-2.0)
+            assert sc.crane_slewing_angle_deg == pytest.approx(90.0)
+            assert sc.accel_x_m_s2 == pytest.approx(-1.0)
+
     def test_unknown_wind_direction_is_ignored(self, scene_vm):
         scene_vm.setWindDirection("sideways")
         assert scene_vm.windDirection in {"+X", "-X", "+Y", "-Y"}

@@ -222,7 +222,7 @@ ColumnLayout {
 
     GroupBox {
         Layout.fillWidth: true
-        title: qsTr("Accelerations")
+        title: qsTr("Vessel Motion")
         topPadding: Metrics.spacing24
         bottomPadding: Metrics.spacing6
         leftPadding: Metrics.spacing6
@@ -234,7 +234,37 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Surge (m/s²):")
+                label: qsTr("Roll (°):")
+                from: -30
+                to: 30
+                flippable: true
+                value: sceneVm.vesselRoll
+                onCommitted: newValue => sceneVm.setVesselRoll(newValue)
+            }
+
+            NumericRow {
+                Layout.fillWidth: true
+                label: qsTr("Pitch (°):")
+                from: -30
+                to: 30
+                flippable: true
+                value: sceneVm.vesselPitch
+                onCommitted: newValue => sceneVm.setVesselPitch(newValue)
+            }
+
+            NumericRow {
+                Layout.fillWidth: true
+                label: qsTr("Slew (°):")
+                from: -180
+                to: 180
+                flippable: true
+                value: sceneVm.craneSlewingAngle
+                onCommitted: newValue => sceneVm.setCraneSlewingAngle(newValue)
+            }
+
+            NumericRow {
+                Layout.fillWidth: true
+                label: qsTr("Vessel ax (excl. g):")
                 from: -10
                 to: 10
                 flippable: true
@@ -244,7 +274,7 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Sway (m/s²):")
+                label: qsTr("Vessel ay (excl. g):")
                 from: -10
                 to: 10
                 flippable: true
@@ -254,7 +284,7 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Heave (m/s²):")
+                label: qsTr("Vessel az (excl. g):")
                 from: -10
                 to: 10
                 flippable: true

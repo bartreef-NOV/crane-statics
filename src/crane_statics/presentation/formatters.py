@@ -447,10 +447,10 @@ class EnvironmentFormatter:
     _PROPERTY_LABELS = {
         "gravity_m_s2": "Gravity (m/s²)",
         "max_wind_speed_m_s": "Max Wind Speed (m/s)",
-        "wind_reference_height_m_asl": "Wind Ref Height (m ASL)",
         "air_density_kg_m3": "Air Density (kg/m³)",
-        "wind_profile_exponent": "Wind Profile Exponent",
-        "mean_sealevel_z_m": "Mean Sea Level Z (m)",
+        "roll_deg": "Vessel Roll (°)",
+        "pitch_deg": "Vessel Pitch (°)",
+        "crane_slewing_angle_deg": "Crane Slewing Angle (°)",
         "accel_x_m_s2": "Accel X (m/s²)",
         "accel_y_m_s2": "Accel Y (m/s²)",
         "accel_z_m_s2": "Accel Z (m/s²)",

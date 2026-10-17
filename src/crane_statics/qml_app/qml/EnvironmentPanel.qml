@@ -150,10 +150,7 @@ ColumnLayout {
 
             EnvRow { label: qsTr("Gravity (m/s²)"); fieldKey: "gravity_m_s2" }
             EnvRow { label: qsTr("Max Wind Speed (m/s)"); fieldKey: "max_wind_speed_m_s" }
-            EnvRow { label: qsTr("Wind Reference Height (m ASL)"); fieldKey: "wind_reference_height_m_asl" }
             EnvRow { label: qsTr("Air Density (kg/m³)"); fieldKey: "air_density_kg_m3" }
-            EnvRow { label: qsTr("Wind Profile Exponent"); fieldKey: "wind_profile_exponent" }
-            EnvRow { label: qsTr("Mean Sea Level Z (m)"); fieldKey: "mean_sealevel_z_m" }
         }
     }
 
@@ -177,6 +174,9 @@ ColumnLayout {
             anchors.fill: parent
             spacing: root.layoutSpacing
 
+            EnvRow { label: qsTr("Vessel Roll (°)"); fieldKey: "roll_deg" }
+            EnvRow { label: qsTr("Vessel Pitch (°)"); fieldKey: "pitch_deg" }
+            EnvRow { label: qsTr("Crane Slewing Angle (°)"); fieldKey: "crane_slewing_angle_deg" }
             EnvRow { label: qsTr("Surge (m/s²)"); fieldKey: "accel_x_m_s2" }
             EnvRow { label: qsTr("Sway (m/s²)"); fieldKey: "accel_y_m_s2" }
             EnvRow { label: qsTr("Heave (m/s²)"); fieldKey: "accel_z_m_s2" }

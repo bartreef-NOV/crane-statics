@@ -43,12 +43,12 @@ COMPONENT_ORDER = ["boom", "rear_leg", "front_leg", "platform"]
 ENVIRONMENT_KEYS = [
     "gravity_m_s2",
     "max_wind_speed_m_s",
-    "wind_reference_height_m_asl",
     "air_density_kg_m3",
-    "wind_profile_exponent",
-    "mean_sealevel_z_m",
 ]
 VESSEL_MOTION_KEYS = [
+    "roll_deg",
+    "pitch_deg",
+    "crane_slewing_angle_deg",
     "accel_x_m_s2",
     "accel_y_m_s2",
     "accel_z_m_s2",

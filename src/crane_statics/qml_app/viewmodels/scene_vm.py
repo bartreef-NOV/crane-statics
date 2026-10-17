@@ -593,6 +593,30 @@ class SceneViewModel(QObject):
     def setRollAccel(self, value: float) -> None:
         self._set_scene_field("roll_accel_rad_s2", float(value), self.environmentChanged)
 
+    @pyqtProperty(float, notify=environmentChanged)
+    def vesselRoll(self) -> float:
+        return self._scene_field("vessel_roll_deg")
+
+    @pyqtSlot(float)
+    def setVesselRoll(self, value: float) -> None:
+        self._set_scene_field("vessel_roll_deg", float(value), self.environmentChanged)
+
+    @pyqtProperty(float, notify=environmentChanged)
+    def vesselPitch(self) -> float:
+        return self._scene_field("vessel_pitch_deg")
+
+    @pyqtSlot(float)
+    def setVesselPitch(self, value: float) -> None:
+        self._set_scene_field("vessel_pitch_deg", float(value), self.environmentChanged)
+
+    @pyqtProperty(float, notify=environmentChanged)
+    def craneSlewingAngle(self) -> float:
+        return self._scene_field("crane_slewing_angle_deg")
+
+    @pyqtSlot(float)
+    def setCraneSlewingAngle(self, value: float) -> None:
+        self._set_scene_field("crane_slewing_angle_deg", float(value), self.environmentChanged)
+
     def _scene_field(self, name: str) -> float:
         state = self._model.get_active_hoist_state()
         return 0.0 if state is None else float(getattr(state.scene_state, name))
