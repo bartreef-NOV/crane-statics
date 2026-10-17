@@ -393,7 +393,11 @@ class CraneCalculator:
 
         hoist = self.hoists.get(hoist_id)
         if hoist is not None:
-            load_node = node_pos.get(str(hoist.load_node_id))
+            # The rope delivers the lateral load to the crane at the supporting sheave, not at
+            # the hook (a placeholder node parked below the sheave).
+            load_node = node_pos.get(str(getattr(hoist, "support_node_id", "") or ""))
+            if load_node is None:
+                load_node = node_pos.get(str(hoist.load_node_id))
             if load_node is not None:
                 _accumulate_force(
                     float(load_node[0]),

@@ -502,3 +502,22 @@ def test_load_breakdown_puts_tilt_and_slew_in_the_vessel_motion_step(monkeypatch
     ]
     # dead, hook, wind: level and unslewed; inertia, offlead, sidelead: the scene values.
     assert tilt == [(0.0, 0.0, 0.0)] * 3 + [(2.0, 10.0, 30.0)] * 3
+
+
+def test_sidelead_force_acts_at_the_support_node(calc):
+    """The rope delivers the lateral load at the sheave, not the placeholder hook node."""
+    point = _point(calc)
+
+    def platform(force_kN):
+        _, mx, fy = calc._build_out_of_plane_reactions(
+            point, "MH", 45.0, 0.0, 0.0, 0.0, 0.0, side_lateral_force_kN=force_kN
+        )
+        return mx, fy
+
+    mx0, fy0 = platform(0.0)
+    mx1, fy1 = platform(100.0)
+    nodes = calc._kinematics.compute_all_node_positions(45.0)
+    z_support = float(nodes[calc.hoists["MH"].support_node_id]["z"])
+    z_heel = float(nodes["platform_heel"]["z"])
+    assert fy1 - fy0 == pytest.approx(100.0)
+    assert mx1 - mx0 == pytest.approx(-(z_support - z_heel) * 100.0)
