@@ -53,6 +53,12 @@ class DirectionalResponseBasis:
     inactive_rope_baselines: Dict[str, float]
     pitch_sign: float
     connection_local_axes: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    # Idle hook mass per fall (t) by rope: the reported idle tension is
+    # mass_per_part * (g + accel_z), the same vertical load the solve applies.
+    inactive_rope_mass_per_part_t: Dict[str, float] = field(default_factory=dict)
+    # Hook block and rope self-weight masses lumped at nodes, as (mass_t, x, z): the
+    # out-of-plane pass applies them exactly as the X-Z solve does.
+    lumped_point_masses: Tuple[Tuple[float, float, float], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -285,12 +291,12 @@ def _active_rope_metadata(
     return rope_ids, active_rope_id, max(1, n)
 
 
-def _inactive_rope_baselines(
+def _inactive_rope_mass_per_part(
     active_hoist_id: str,
     solver_ctx: Dict[str, Any],
-    gravity_abs: float,
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
 ) -> Dict[str, float]:
+    """Idle hook mass per fall (t) by rope; the idle tension is this times (g + accel_z)."""
     baseline_by_rope: Dict[str, float] = {}
     for hoist in solver_ctx.get("hoists", []):
         hoist_runtime_id = str(hoist.get("id", "") or "")
@@ -307,7 +313,7 @@ def _inactive_rope_baselines(
                 parts = max(1, int(override_falls))
             except (TypeError, ValueError):
                 pass
-        baseline_by_rope[rope_id] = hook_mass_t * float(gravity_abs) / max(1, int(parts))
+        baseline_by_rope[rope_id] = hook_mass_t / max(1, int(parts))
     return baseline_by_rope
 
 
@@ -381,6 +387,55 @@ def _reactions_from_raw(raw: Dict[str, float], s: float = 1.0) -> Dict[str, Dict
 # ---------------------------------------------------------------------------
 # Load accumulation
 # ---------------------------------------------------------------------------
+
+
+def lumped_point_masses(
+    doc_dict: Dict[str, Any],
+    ctx: Dict[str, Any],
+    active_hoist_id: str,
+    node_pos: Dict[str, Tuple[float, float]],
+    node_body_map: Dict[str, str],
+    hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
+    rope_mass_t_by_node: Dict[str, float] | None = None,
+) -> List[Tuple[int, float, float, float]]:
+    """Masses lumped at nodes, as ``(body_index, mass_t, x, z)``.
+
+    - Idle hoists' hook blocks at their hook nodes. The active hoist's hook block is not
+      here: it is part of the hook load, carried through the rope.
+    - Rope self-weight from ``rope_mass.rope_mass_at_nodes``. It is dead load: no wind area,
+      no hook DAF, and it only ever lands on the right-hand side -- the boom-hoist
+      coefficients (bh_*) are the unknown's, and rope weight is not proportional to it.
+
+    The X-Z solve and the out-of-plane (Y) pass in the engine both apply exactly this list.
+    """
+    body_index: Dict[str, int] = ctx["body_index"]
+    overrides = hoist_runtime_overrides or {}
+    out: List[Tuple[int, float, float, float]] = []
+    for hoist_item in ctx.get("hoists", []):
+        if hoist_item.get("id") == active_hoist_id:
+            continue
+        node_id = str(hoist_item.get("load_node_id", ""))
+        if not node_id or node_id not in node_pos:
+            continue
+        hbody = body_index.get(node_body_map.get(node_id, "boom"), -1)
+        if hbody < 0:
+            continue
+        idle_override = overrides.get(str(hoist_item.get("id", "") or ""), {})
+        idle_mass_t = float(
+            idle_override.get("hook_mass_t", hoist_item.get("hook_mass_t", 0.0)) or 0.0
+        )
+        if idle_mass_t > 0:
+            hx, hz = node_pos[node_id]
+            out.append((hbody, idle_mass_t, float(hx), float(hz)))
+    for node_id, rope_mass_t in (rope_mass_t_by_node or {}).items():
+        position = node_pos.get(node_id)
+        if position is None or rope_mass_t <= 0.0:
+            continue
+        rbody = body_index.get(node_body_map.get(node_id, ""), -1)
+        if rbody < 0:
+            continue
+        out.append((rbody, float(rope_mass_t), float(position[0]), float(position[1])))
+    return out
 
 
 def _accumulate_loads(
@@ -640,52 +695,24 @@ def _accumulate_loads(
                         ld_fx[sbody_comp] += fx_comp
                         ld_fz[sbody_comp] += fz_comp
                         ld_m[sbody_comp] += sx_comp * fz_comp - sz_comp * fx_comp
-        else:
-            # Idle hoist: the hook block mass feels gravity and the vessel motion at the
-            # hook node, like any other mass point.
-            idle_id = str(hoist_item.get("id", "") or "")
-            idle_override = overrides.get(idle_id, {})
-            idle_mass_t = float(
-                idle_override.get("hook_mass_t", hoist_item.get("hook_mass_t", 0.0)) or 0.0
-            )
-            if idle_mass_t > 0:
-                fx, fz = inertia_force(
-                    idle_mass_t,
-                    hx,
-                    hz,
-                    accel_x_m_s2,
-                    accel_z_m_s2,
-                    pitch_rad_s2,
-                    ref_x,
-                    ref_z,
-                    gravity,
-                )
-                ld_fx[hbody] += fx
-                ld_fz[hbody] += fz
-                ld_m[hbody] += hx * fz - hz * fx
 
-    # Rope self-weight, lumped at the nodes by ``rope_mass.rope_mass_at_nodes``.
-    # It is dead load: it feels gravity and the vessel motion, carries no wind
-    # area and no hook DAF, and it only ever lands on the right-hand side -- the
-    # boom-hoist coefficients (bh_*) are the unknown's, and rope weight is not
-    # proportional to that unknown.
-    for node_id, rope_mass_t in (rope_mass_t_by_node or {}).items():
-        position = node_pos.get(node_id)
-        if position is None or rope_mass_t <= 0.0:
-            continue
-        rbody = node_body_cache.get(node_id)
-        if rbody is None:
-            rbody = body_index.get(node_body_map.get(node_id, ""), -1)
-            node_body_cache[node_id] = rbody
-        if rbody < 0:
-            continue
-        rx, rz = position
+    # Idle hook blocks and rope self-weight: masses lumped at nodes that feel gravity
+    # and the vessel motion like any other mass point (see ``lumped_point_masses``).
+    for lbody, lmass_t, lx, lz in lumped_point_masses(
+        doc_dict,
+        ctx,
+        hoist_id,
+        node_pos,
+        node_body_map,
+        hoist_runtime_overrides,
+        rope_mass_t_by_node,
+    ):
         fx, fz = inertia_force(
-            rope_mass_t, rx, rz, accel_x_m_s2, accel_z_m_s2, pitch_rad_s2, ref_x, ref_z, gravity
+            lmass_t, lx, lz, accel_x_m_s2, accel_z_m_s2, pitch_rad_s2, ref_x, ref_z, gravity
         )
-        ld_fx[rbody] += fx
-        ld_fz[rbody] += fz
-        ld_m[rbody] += rx * fz - rz * fx
+        ld_fx[lbody] += fx
+        ld_fz[lbody] += fz
+        ld_m[lbody] += lx * fz - lz * fx
 
     ld = {bid: {"Fx": ld_fx[i], "Fz": ld_fz[i], "M": ld_m[i]} for i, bid in enumerate(body_ids)}
     bh = {bid: {"Fx": bh_fx[i], "Fz": bh_fz[i], "M": bh_m[i]} for i, bid in enumerate(body_ids)}
@@ -995,11 +1022,24 @@ def build_directional_response_basis(
         hoist_runtime_overrides,
     )
     gravity_abs = abs(float((doc_dict.get("environment") or {}).get("gravity_m_s2", 9.81)))
-    inactive_rope_baselines = _inactive_rope_baselines(
-        hoist_id,
-        ctx,
-        gravity_abs,
-        hoist_runtime_overrides,
+    inactive_rope_mass_per_part_t = _inactive_rope_mass_per_part(
+        hoist_id, ctx, hoist_runtime_overrides
+    )
+    inactive_rope_baselines = {
+        rope_id: mass_per_part_t * gravity_abs
+        for rope_id, mass_per_part_t in inactive_rope_mass_per_part_t.items()
+    }
+    lumped = tuple(
+        (mass_t, x, z)
+        for _body, mass_t, x, z in lumped_point_masses(
+            doc_dict,
+            ctx,
+            hoist_id,
+            node_pos,
+            node_body_map,
+            hoist_runtime_overrides,
+            rope_mass_t_by_node,
+        )
     )
 
     return DirectionalResponseBasis(
@@ -1024,6 +1064,8 @@ def build_directional_response_basis(
         inactive_rope_baselines=inactive_rope_baselines,
         pitch_sign=(1.0 if pitch_rad_s2 > 0 else (-1.0 if pitch_rad_s2 < 0 else 0.0)),
         connection_local_axes=_connection_local_axes_for_nodes(node_pos),
+        inactive_rope_mass_per_part_t=inactive_rope_mass_per_part_t,
+        lumped_point_masses=lumped,
     )
 
 
@@ -1050,13 +1092,20 @@ def compose_unit_basis_point(
         offlead_scale,
     )
 
+    # Idle ropes carry the vertical hook load, m/parts * (g + accel_z), as in the solve.
+    accel_z_signed = accel_z_sign * basis.accel_z_ref_m_s2
+    inactive_ropes = {
+        rope_id: float(baseline_kN)
+        + accel_z_signed * float(basis.inactive_rope_mass_per_part_t.get(rope_id, 0.0))
+        for rope_id, baseline_kN in basis.inactive_rope_baselines.items()
+    }
     baseline_ropes, sensitivity_ropes = _build_rope_response_maps(
         basis.rope_ids,
         basis.active_rope_id,
         basis.active_rope_parts,
         raw["t_bh"],
         sensitivity_raw["t_bh"],
-        basis.inactive_rope_baselines,
+        inactive_ropes,
     )
     return {
         "boom_angle_deg": basis.boom_angle_deg,

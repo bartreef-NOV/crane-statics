@@ -9,7 +9,7 @@ This module implements the core mathematical solver for:
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Any
+from typing import TYPE_CHECKING, Optional, Any, Sequence
 import math
 from ..data.models import CraneDocument
 from .solver.kinematics import KinematicsAdapter
@@ -292,12 +292,15 @@ class CraneCalculator:
         accel_x_m_s2: float = 0.0,
         accel_z_m_s2: float = 0.0,
         pitch_accel_rad_s2: float = 0.0,
+        lumped_point_masses: Sequence[tuple[float, float, float]] = (),
     ) -> tuple[dict[str, dict[str, float]], float, float]:
         """Out-of-plane (Y) pass: left/right split, platform Fy and Mx.
 
         All accelerations are the equivalent crane-frame values (``CraneFrameMotion``), so
         each mass carries the same in-plane (Fx, Fz) load as in the X-Z solve plus
         ``Fy = -m * (accel_y - roll_accel * (z - reference_z))`` (roll right-handed about +x).
+        ``lumped_point_masses`` are the idle hook and rope masses ``(mass_t, x, z)`` from the
+        response basis; ``compute_analysis_point`` always passes them.
         """
         node_positions = self._kinematics.compute_all_node_positions(boom_angle_deg)
         node_pos = {nid: (float(v["x"]), float(v["z"])) for nid, v in node_positions.items()}
@@ -364,6 +367,13 @@ class CraneCalculator:
                     yw = float(mp.y_m)
                 fx, fy, fz = _mass_force(float(mp.mass_t), xw, zw)
                 _accumulate_force(xw, yw, zw, fx=fx, fy=fy, fz=fz)
+
+        # Idle hook blocks and rope self-weight, lumped at nodes on the crane centreline:
+        # the same masses at the same positions as the X-Z solve
+        # (``crane_solver.lumped_point_masses``, carried on the response basis).
+        for lmass_t, lx, lz in lumped_point_masses:
+            fx, fy, fz = _mass_force(float(lmass_t), float(lx), float(lz))
+            _accumulate_force(float(lx), 0.0, float(lz), fx=fx, fy=fy, fz=fz)
 
         rho = float(env.air_density_kg_m3)
         wind_sign = 0.0 if abs(float(wind_y_m_s)) < 1e-12 else math.copysign(1.0, float(wind_y_m_s))
@@ -456,6 +466,7 @@ class CraneCalculator:
         motion: "CraneFrameMotion",
         sidelead_deg: float,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
+        lumped_point_masses: Sequence[tuple[float, float, float]] = (),
     ) -> None:
         motion_kwargs: dict[str, Any] = {
             "accel_y_m_s2": motion.accel_y_m_s2,
@@ -463,6 +474,7 @@ class CraneCalculator:
             "accel_x_m_s2": motion.accel_x_m_s2,
             "accel_z_m_s2": motion.accel_z_m_s2,
             "pitch_accel_rad_s2": motion.pitch_accel_rad_s2,
+            "lumped_point_masses": lumped_point_masses,
         }
         split_at_zero, platform_mx_at_zero, platform_fy_at_zero = (
             self._build_split_support_reactions(
@@ -668,6 +680,7 @@ class CraneCalculator:
                 hoist_id,
                 wind_y_m_s=wind_y_ref,
                 motion=motion,
+                lumped_point_masses=basis.lumped_point_masses,
                 sidelead_deg=sidelead_ref,
                 hoist_runtime_overrides=hoist_runtime_overrides,
             )

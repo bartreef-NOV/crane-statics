@@ -264,19 +264,17 @@ def test_omnidirectional_capacity_forwards_vessel_kwargs(calc):
     assert slewed.max_allowable_load_kN != pytest.approx(plain.max_allowable_load_kN)
 
 
-def _expected_roll_fy(calc, roll_rad_s2):
-    """Hand sum of the lateral inertia force of the body mass points under a roll accel.
-
-    Roll is right-handed about +x: omega x r = (0, -omega*z, 0) for a point at height z
-    above the reference, so the point accelerates toward -y and its inertia force
-    -m*a_y = +m*omega*z points toward +y.
-    """
-    from crane_statics.calculation.solver.crane_solver import rotate_boom_local_point
+def _all_point_masses(calc):
+    """Every mass the solve applies, as (mass_t, z): body mass points, idle hook blocks and
+    rope self-weight (the latter two lumped at nodes, the same list the X-Z solve uses)."""
+    from crane_statics.calculation.solver.crane_solver import (
+        build_directional_response_basis,
+        rotate_boom_local_point,
+    )
 
     positions = calc._kinematics.compute_all_node_positions(45.0)
     node_pos = {n: (float(v["x"]), float(v["z"])) for n, v in positions.items()}
-    ref_z = float(calc.doc.environment.vessel_motion.reference_z_m)
-    total = 0.0
+    masses = []
     for body in calc.doc.bodies:
         for mp in body.mass_points:
             if body.id == "boom" and mp.local_x_m is not None:
@@ -285,8 +283,89 @@ def _expected_roll_fy(calc, roll_rad_s2):
                 )
             else:
                 z = float(mp.z_m)
-            total += float(mp.mass_t) * roll_rad_s2 * (z - ref_z)
-    return total
+            masses.append((float(mp.mass_t), z))
+    basis = build_directional_response_basis(
+        calc._doc_dict, calc._kinematics, "MH", 45.0, solver_ctx=calc._solver_ctx
+    )
+    assert basis is not None
+    masses.extend((m, z) for m, _x, z in basis.lumped_point_masses)
+    return masses
+
+
+def _expected_roll_fy(calc, roll_rad_s2):
+    """Hand sum of the lateral inertia force of every mass under a roll accel.
+
+    Roll is right-handed about +x: omega x r = (0, -omega*z, 0) for a point at height z
+    above the reference, so the point accelerates toward -y and its inertia force
+    -m*a_y = +m*omega*z points toward +y.
+    """
+    ref_z = float(calc.doc.environment.vessel_motion.reference_z_m)
+    return sum(m * roll_rad_s2 * (z - ref_z) for m, z in _all_point_masses(calc))
+
+
+IDLE_HOOKS = (("AH", 7.0), ("trolley", 7.7))
+
+
+def _idle_hook_heights_above_platform(calc):
+    positions = calc._kinematics.compute_all_node_positions(45.0)
+    z_platform = float(positions["platform_heel"]["z"])
+    return [(m, float(positions[f"__hook__{h}"]["z"]) - z_platform) for h, m in IDLE_HOOKS]
+
+
+def test_roll_tilt_loads_idle_hooks_and_rope_masses_out_of_plane(calc):
+    """Roll 5 deg: crane-frame accel_y = g*sin(5 deg), so each mass gets Fy = -m*g*sin(5 deg).
+
+    Idle hooks: 7.0 + 7.7 = 14.7 t -> dFy = -14.7 * 9.81 * 0.0871557 = -12.568 kN, and
+    dMx = sum(-(z - z_platform) * fy) = sum((z - z_platform) * m) * 9.81 * 0.0871557.
+    """
+    s = math.sin(math.radians(5.0))
+    with_hooks = _point(calc, wind_speed_m_s=0.0, vessel_roll_deg=5.0)
+    no_hooks = _point(
+        calc, wind_speed_m_s=0.0, vessel_roll_deg=5.0, hoist_runtime_overrides=NO_IDLE_HOOKS
+    )
+    pb, pb0 = (
+        with_hooks.baseline_reactions["platform_base"],
+        no_hooks.baseline_reactions["platform_base"],
+    )
+    assert pb["Fy"] - pb0["Fy"] == pytest.approx(-14.7 * G * s)
+    assert pb["Fy"] - pb0["Fy"] == pytest.approx(-12.568, abs=1e-3)
+    arm_mass = sum(m * dz for m, dz in _idle_hook_heights_above_platform(calc))
+    assert pb["Mx"] - pb0["Mx"] == pytest.approx(arm_mass * G * s)
+    # Every mass (points, idle hooks, rope self-weight) is pushed to starboard.
+    total_t = sum(m for m, _z in _all_point_masses(calc))
+    assert pb["Fy"] == pytest.approx(-total_t * G * s)
+
+
+def test_slew_90_vessel_ax_loads_idle_hooks_out_of_plane(calc):
+    """Vessel ax = 1 at slew 90 is crane accel_y = -1: each mass gets Fy = +m * 1.
+
+    Idle hooks: dFy = +14.7 kN, dMx = -sum((z - z_platform) * m).
+    """
+    with_hooks = _point(calc, wind_speed_m_s=0.0, accel_x_m_s2=1.0, crane_slewing_angle_deg=90.0)
+    no_hooks = _point(
+        calc,
+        wind_speed_m_s=0.0,
+        accel_x_m_s2=1.0,
+        crane_slewing_angle_deg=90.0,
+        hoist_runtime_overrides=NO_IDLE_HOOKS,
+    )
+    pb, pb0 = (
+        with_hooks.baseline_reactions["platform_base"],
+        no_hooks.baseline_reactions["platform_base"],
+    )
+    assert pb["Fy"] - pb0["Fy"] == pytest.approx(14.7)
+    arm_mass = sum(m * dz for m, dz in _idle_hook_heights_above_platform(calc))
+    assert pb["Mx"] - pb0["Mx"] == pytest.approx(-arm_mass)
+    total_t = sum(m for m, _z in _all_point_masses(calc))
+    assert pb["Fy"] == pytest.approx(total_t)
+
+
+def test_reported_idle_rope_tension_carries_heave(calc):
+    # AH: 7.0 t on 6 falls.
+    still = _point(calc, wind_speed_m_s=0.0)
+    heave = _point(calc, wind_speed_m_s=0.0, accel_z_m_s2=1.5)
+    assert still.baseline_rope_tensions["AH__rope"] == pytest.approx(7.0 * G / 6)
+    assert heave.baseline_rope_tensions["AH__rope"] == pytest.approx(7.0 * (G + 1.5) / 6)
 
 
 def test_roll_acceleration_is_right_handed_about_x(calc):
