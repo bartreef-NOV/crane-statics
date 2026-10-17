@@ -51,3 +51,28 @@ Other decisions in the same change:
     ropes and runtime overrides.
   - The hook load direction is not recomputed from the resultant load; offlead and
     sidelead remain user-entered.
+
+## Load chart envelope
+
+The load chart no longer follows Scene inputs. It reports the worst case over every slew
+angle (0-360), wind from any direction, both signs of the hoist's authored offlead and
+sidelead, and both signs of the seven Model vessel-motion limits (three accelerations, two
+angular accelerations, roll and pitch angles). The Model has no slewing angle (schema v8);
+only the Scene keeps one. Wind at angle θ uses per-axis squared components (Fx from
+`area_w` with (V cos θ)², Fy from `area_v` with (V sin θ)²), and the sidelead force acts at
+the supporting sheave.
+
+Capacity is evaluated on analysis points that are exactly affine in the crane-frame load
+channels (surge, sway, heave, pitch and roll acceleration, wind-x, wind-y), so 8 probe
+solves per boom angle (fewer when a vessel limit is zero) replace 512 full solves
+(`core/chart_envelope.py`, `core/sweep.py::run_capacity_sweep`). Linear limits use the
+closed form (slew: B0 + sqrt(P² + Q²); wind: the larger of the two axis responses).
+Magnitude limits (resultant, fradial, mradial, bearing line load) use a polygon bound that
+is never above the true minimum, and every reported number comes from
+`compute_allowable_load`. Slow oracle tests (`pytest -m slow`) compare against the brute
+force in `tests/chart_reference.py`.
+
+Benchmark (GT283, hoist MH, outreach step 2.0 m, limits `{"boom_hoist": {"T": 5000.0}}`,
+vessel limits accel 1,1,1 / angular 0.1,0.1 / angles 5,5): 3.7-4.6 s before (128 sign
+cases x 4 axis winds through full solves), about 0.11 s after (about 40x). With all vessel
+limits zero: 0.021 s before, 0.019 s after.

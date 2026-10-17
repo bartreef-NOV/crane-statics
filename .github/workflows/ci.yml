@@ -33,3 +33,6 @@ jobs:
 
       - name: Run tests with coverage
         run: pytest tests/ -v
+
+      - name: Run slow oracle tests
+        run: pytest tests/ -m slow -v --no-cov

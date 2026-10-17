@@ -118,7 +118,10 @@ place rather than a divergence between two (see
 crane-frame gravity (tilted by vessel roll/pitch and slew), constant wind, and X/Z D'Alembert inertia of the vessel accelerations rotated into the crane frame. Lateral acceleration, roll
 acceleration, sidelead and Y-axis wind are deliberately *absent*: they produce only
 out-of-plane forces, so they have no drawable vector and no effect on in-plane
-equilibrium.
+equilibrium. (The Scene keeps a slewing angle; the Model has none.) The load chart does
+not use these Scene inputs: it takes the worst case over slew 0-360, any wind angle, and
+both signs of the authored leads and Model vessel-motion limits, from a few probe solves
+per boom angle (see [ADR-0003](docs/adr/0003-vessel-frame-load-acceleration.md)).
 
 **Free body** — one body isolated with the loads acting on it, including the
 reactions from its neighbours: `platform`, `boom`, `front_leg`, `rear_leg`, or
