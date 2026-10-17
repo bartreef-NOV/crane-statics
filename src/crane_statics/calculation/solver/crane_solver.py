@@ -624,20 +624,43 @@ def _accumulate_loads(
                         sbody_comp = body_index.get(node_body_map.get(support_node_id, "boom"), -1)
                         node_body_cache[support_node_id] = sbody_comp
                     if sbody_comp >= 0:
-                        fz_comp = -comp_mass_t * gravity_abs
+                        fx_comp, fz_comp = inertia_force(
+                            comp_mass_t,
+                            sx_comp,
+                            sz_comp,
+                            accel_x_m_s2,
+                            accel_z_m_s2,
+                            pitch_rad_s2,
+                            ref_x,
+                            ref_z,
+                            gravity,
+                        )
+                        ld_fx[sbody_comp] += fx_comp
                         ld_fz[sbody_comp] += fz_comp
-                        ld_m[sbody_comp] += sx_comp * fz_comp
+                        ld_m[sbody_comp] += sx_comp * fz_comp - sz_comp * fx_comp
         else:
-            # Idle hoist: apply hook block mass downward at hook node
+            # Idle hoist: the hook block mass feels gravity and the vessel motion at the
+            # hook node, like any other mass point.
             idle_id = str(hoist_item.get("id", "") or "")
             idle_override = overrides.get(idle_id, {})
             idle_mass_t = float(
                 idle_override.get("hook_mass_t", hoist_item.get("hook_mass_t", 0.0)) or 0.0
             )
             if idle_mass_t > 0:
-                fz = -idle_mass_t * gravity_abs
+                fx, fz = inertia_force(
+                    idle_mass_t,
+                    hx,
+                    hz,
+                    accel_x_m_s2,
+                    accel_z_m_s2,
+                    pitch_rad_s2,
+                    ref_x,
+                    ref_z,
+                    gravity,
+                )
+                ld_fx[hbody] += fx
                 ld_fz[hbody] += fz
-                ld_m[hbody] += hx * fz
+                ld_m[hbody] += hx * fz - hz * fx
 
     # Rope self-weight, lumped at the nodes by ``rope_mass.rope_mass_at_nodes``.
     # It is dead load: it feels gravity and the vessel motion, carries no wind
@@ -1052,65 +1075,5 @@ def compose_unit_basis_point(
             "accel_z": accel_z_sign,
             "pitch": pitch_sign,
         },
-        "connection_local_axes": dict(basis.connection_local_axes),
-    }
-
-
-def compose_scalar_envelope_unit_basis_point(
-    basis: DirectionalResponseBasis,
-    offlead_deg: float | None = None,
-) -> Dict:
-    """Compose worst-case baseline by adding |env_contribution| in the direction of the dead load.
-
-    Each environmental channel is added in the same sign as the dead-load response,
-    giving the scalar worst-case envelope per component.
-    """
-    raw = dict(basis.dead_raw)
-    keys = (
-        set(raw)
-        | set(basis.wind_raw)
-        | set(basis.accel_x_raw)
-        | set(basis.accel_z_raw)
-        | set(basis.pitch_raw)
-    )
-    for key in keys:
-        dead = float(basis.dead_raw.get(key, 0.0))
-        env_abs = (
-            basis.wind_speed_ref_m_s * abs(float(basis.wind_raw.get(key, 0.0)))
-            + basis.accel_x_ref_m_s2 * abs(float(basis.accel_x_raw.get(key, 0.0)))
-            + basis.accel_z_ref_m_s2 * abs(float(basis.accel_z_raw.get(key, 0.0)))
-            + basis.pitch_ref_rad_s2 * abs(float(basis.pitch_raw.get(key, 0.0)))
-        )
-        raw[key] = dead + (math.copysign(env_abs, dead) if dead != 0.0 else env_abs)
-
-    active_offlead_deg = basis.default_offlead_deg if offlead_deg is None else float(offlead_deg)
-    sensitivity_raw = _add_scaled_raw(
-        basis.hook_sensitivity_raw,
-        basis.offlead_lateral_sensitivity_raw,
-        math.sin(math.radians(active_offlead_deg)),
-    )
-
-    baseline_ropes, sensitivity_ropes = _build_rope_response_maps(
-        basis.rope_ids,
-        basis.active_rope_id,
-        basis.active_rope_parts,
-        raw["t_bh"],
-        sensitivity_raw["t_bh"],
-        basis.inactive_rope_baselines,
-    )
-    return {
-        "boom_angle_deg": basis.boom_angle_deg,
-        "outreach_m": basis.outreach_m,
-        "baseline_rope_tensions": baseline_ropes,
-        "baseline_reactions": _reactions_from_raw(raw),
-        "sensitivity_rope_tensions": sensitivity_ropes,
-        "sensitivity_reactions": _reactions_from_raw(sensitivity_raw),
-        "offlead_lateral_unit_rope_tensions": _build_rope_channel_map(
-            basis.rope_ids, basis.offlead_lateral_sensitivity_raw.get("t_bh", 0.0)
-        ),
-        "offlead_lateral_unit_reactions": _reactions_from_raw(
-            basis.offlead_lateral_sensitivity_raw
-        ),
-        "governing_signs": {},
         "connection_local_axes": dict(basis.connection_local_axes),
     }

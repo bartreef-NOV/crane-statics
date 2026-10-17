@@ -229,6 +229,9 @@ class AnalysisPresenter:
         accel_z_m_s2: float,
         pitch_accel_rad_s2: float,
         roll_accel_rad_s2: float,
+        vessel_roll_deg: float,
+        vessel_pitch_deg: float,
+        crane_slewing_angle_deg: float,
         offlead_deg: float,
         sidelead_deg: float,
         boom_angle_deg: float,
@@ -257,6 +260,9 @@ class AnalysisPresenter:
             sidelead_deg=sidelead_deg,
             hoist_runtime_overrides=hoist_runtime_overrides,
             tackle_length_m=tackle_length_m,
+            vessel_roll_deg=vessel_roll_deg,
+            vessel_pitch_deg=vessel_pitch_deg,
+            crane_slewing_angle_deg=crane_slewing_angle_deg,
         )
         if point is None:
             return None
@@ -292,6 +298,9 @@ class AnalysisPresenter:
             accel_z_m_s2=0.0,
             pitch_accel_rad_s2=0.0,
             roll_accel_rad_s2=0.0,
+            vessel_roll_deg=0.0,
+            vessel_pitch_deg=0.0,
+            crane_slewing_angle_deg=0.0,
             offlead_deg=0.0,
             sidelead_deg=0.0,
         )
@@ -305,6 +314,11 @@ class AnalysisPresenter:
             accel_z_m_s2=float(sc.accel_z_m_s2),
             pitch_accel_rad_s2=float(sc.pitch_accel_rad_s2),
             roll_accel_rad_s2=float(sc.roll_accel_rad_s2),
+            # Tilt and slew change how the vessel motion and gravity load the crane, so
+            # they belong to the vessel-motion step of the breakdown.
+            vessel_roll_deg=float(sc.vessel_roll_deg),
+            vessel_pitch_deg=float(sc.vessel_pitch_deg),
+            crane_slewing_angle_deg=float(sc.crane_slewing_angle_deg),
         )
         offlead_env = dict(inertia_env, offlead_deg=float(sc.offlead_deg))
         full_env = dict(offlead_env, sidelead_deg=float(sc.sidelead_deg))

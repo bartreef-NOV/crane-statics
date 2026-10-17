@@ -31,6 +31,9 @@ class SceneState:
     accel_z_m_s2: float = 0.0
     pitch_accel_rad_s2: float = 0.0
     roll_accel_rad_s2: float = 0.0
+    vessel_roll_deg: float = 0.0
+    vessel_pitch_deg: float = 0.0
+    crane_slewing_angle_deg: float = 0.0
 
 
 @dataclass

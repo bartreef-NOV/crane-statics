@@ -80,3 +80,13 @@ def test_angular_accelerations_rotate_with_slew():
     )
     assert m90.roll_accel_rad_s2 == pytest.approx(0.2)
     assert m90.pitch_accel_rad_s2 == pytest.approx(-0.1)
+
+
+def test_angular_accelerations_rotate_at_intermediate_slew():
+    roll, pitch, slew = 0.1, 0.2, 30.0
+    m = crane_frame_motion(
+        G, VesselInputs(roll_accel_rad_s2=roll, pitch_accel_rad_s2=pitch, slew_deg=slew)
+    )
+    c, s = math.cos(math.radians(slew)), math.sin(math.radians(slew))
+    assert m.roll_accel_rad_s2 == pytest.approx(c * roll + s * pitch)
+    assert m.pitch_accel_rad_s2 == pytest.approx(-s * roll + c * pitch)

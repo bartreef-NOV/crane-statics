@@ -257,6 +257,9 @@ class AnalysisCalculator:
             sidelead_deg=sc.sidelead_deg,
             hoist_runtime_overrides=overrides,
             tackle_length_m=sc.tackle_length_m,
+            vessel_roll_deg=sc.vessel_roll_deg,
+            vessel_pitch_deg=sc.vessel_pitch_deg,
+            crane_slewing_angle_deg=sc.crane_slewing_angle_deg,
         )
 
     def compute_result_rows(
@@ -497,6 +500,9 @@ class AnalysisCalculator:
             offlead_deg=abs(float(sc.offlead_deg)),
             sidelead_deg=sc.sidelead_deg,
             hoist_runtime_overrides=self._hoist.active_hoist_runtime_overrides(),
+            vessel_roll_deg=sc.vessel_roll_deg,
+            vessel_pitch_deg=sc.vessel_pitch_deg,
+            crane_slewing_angle_deg=sc.crane_slewing_angle_deg,
         )
 
     def resolve_row_demand(
