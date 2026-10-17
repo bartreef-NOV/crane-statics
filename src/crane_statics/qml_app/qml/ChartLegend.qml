@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import BF.DesignSystem
 
 Frame {
     id: root
@@ -11,7 +10,7 @@ Frame {
     signal toggleRequested(string key)
 
     readonly property int layoutSpacing: Math.round(
-        Metrics.spacing8 * Metrics.spacingMultiplier
+        8
     )
 
     padding: 8

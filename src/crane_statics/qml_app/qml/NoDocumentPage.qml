@@ -1,7 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import BF.DesignSystem
 
 Item {
     id: root
@@ -11,8 +10,8 @@ Item {
 
     ColumnLayout {
         anchors.centerIn: parent
-        width: Math.min(520, root.width - 2 * Metrics.spacing8)
-        spacing: Metrics.spacing16
+        width: Math.min(520, root.width - 2 * 8)
+        spacing: 16
 
         Label {
             Layout.fillWidth: true
@@ -31,7 +30,7 @@ Item {
 
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            spacing: Metrics.spacing8
+            spacing: 8
 
             Button {
                 text: qsTr("Choose File")

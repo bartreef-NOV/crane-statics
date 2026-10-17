@@ -1,13 +1,12 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import BF.DesignSystem
 
 ColumnLayout {
     id: root
 
     readonly property int layoutSpacing: Math.round(
-        Metrics.spacing8 * Metrics.spacingMultiplier
+        8
     )
 
     spacing: root.layoutSpacing

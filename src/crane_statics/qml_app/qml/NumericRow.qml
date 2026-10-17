@@ -1,7 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import BF.DesignSystem
 
 RowLayout {
     id: root
@@ -20,15 +19,13 @@ RowLayout {
     Accessible.name: root.label
     Accessible.description: qsTr("Numeric input")
 
-    spacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
+    spacing: 8
 
     onValueChanged: if (!field.activeFocus) field.setValue(value)
     Component.onCompleted: field.setValue(value)
 
     Label {
         Layout.fillWidth: true
-        Layout.minimumHeight: Math.max(Metrics.compactControlHeight, implicitHeight)
-        Layout.maximumHeight: Math.round(42 * Metrics.spacingMultiplier)
         text: root.label
         wrapMode: Text.WordWrap
     }

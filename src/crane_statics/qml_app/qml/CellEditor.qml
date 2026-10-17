@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls.Fusion
-import BF.DesignSystem
 
 /*!
     The editor a DataTable cell puts over itself while it is being edited.
@@ -120,7 +119,6 @@ FocusScope {
             focus: true
             editable: true
             model: root.choices
-            font.pixelSize: Typography.body
             Component.onCompleted: {
                 const index = model ? model.indexOf(root.initialText()) : -1
                 if (index >= 0)

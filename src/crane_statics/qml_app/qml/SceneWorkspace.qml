@@ -2,14 +2,15 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import "scene"
-import BF.DesignSystem
 
 Item {
     id: root
 
-    readonly property bool compact: width > 0 && width < Metrics.breakpointCompact
+    SystemPalette { id: sysPalette }
+
+    readonly property bool compact: width > 0 && width < 1240
     readonly property int layoutSpacing: Math.round(
-        Metrics.spacing8 * Metrics.spacingMultiplier
+        8
     )
 
     GridLayout {
@@ -54,8 +55,8 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
-                    border.width: Metrics.borderWidth
-                    border.color: Theme.border
+                    border.width: 1
+                    border.color: sysPalette.mid
                 }
             }
 

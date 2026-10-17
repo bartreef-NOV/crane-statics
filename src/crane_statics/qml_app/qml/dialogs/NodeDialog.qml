@@ -2,7 +2,6 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
-import BF.DesignSystem
 
 Dialog {
     id: root
@@ -47,13 +46,13 @@ Dialog {
 
     GridLayout {
         columns: 2
-        columnSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
-        rowSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
+        columnSpacing: Math.round(8)
+        rowSpacing: Math.round(8)
 
         Label { text: qsTr("ID:") }
         TextField {
             id: idField
-            Layout.preferredWidth: Metrics.maxInputWidth
+            Layout.preferredWidth: 200
             placeholderText: qsTr("e.g. boom_tip")
             selectByMouse: true
         }
@@ -67,23 +66,23 @@ Dialog {
         Label { text: qsTr("Hang From Node ID:"); visible: hangingCheck.checked }
         ComboBox {
             id: hangFromCombo
-            Layout.preferredWidth: Metrics.maxInputWidth
+            Layout.preferredWidth: 200
             visible: hangingCheck.checked
             editable: true
             model: root.nodeIds
         }
 
         Label { text: qsTr("X (m):"); visible: !hangingCheck.checked && !root.boomBody }
-        NumberField { id: xField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !hangingCheck.checked && !root.boomBody }
+        NumberField { id: xField; Layout.preferredWidth: 200; visible: !hangingCheck.checked && !root.boomBody }
 
         Label { text: qsTr("Z (m):"); visible: !hangingCheck.checked && !root.boomBody }
-        NumberField { id: zField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !hangingCheck.checked && !root.boomBody }
+        NumberField { id: zField; Layout.preferredWidth: 200; visible: !hangingCheck.checked && !root.boomBody }
 
         Label { text: qsTr("Local U (m):"); visible: !hangingCheck.checked && root.boomBody }
-        NumberField { id: uField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !hangingCheck.checked && root.boomBody }
+        NumberField { id: uField; Layout.preferredWidth: 200; visible: !hangingCheck.checked && root.boomBody }
 
         Label { text: qsTr("Local W (m):"); visible: !hangingCheck.checked && root.boomBody }
-        NumberField { id: wField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !hangingCheck.checked && root.boomBody }
+        NumberField { id: wField; Layout.preferredWidth: 200; visible: !hangingCheck.checked && root.boomBody }
     }
 }
 

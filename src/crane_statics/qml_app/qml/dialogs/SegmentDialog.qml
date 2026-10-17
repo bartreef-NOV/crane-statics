@@ -2,7 +2,6 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
-import BF.DesignSystem
 
 Dialog {
     id: root
@@ -33,17 +32,17 @@ Dialog {
 
     GridLayout {
         columns: 2
-        columnSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
-        rowSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
+        columnSpacing: Math.round(8)
+        rowSpacing: Math.round(8)
 
         Label { text: qsTr("From Node:") }
-        ComboBox { id: fromCombo; Layout.preferredWidth: Metrics.maxInputWidth; editable: true; model: root.nodeIds }
+        ComboBox { id: fromCombo; Layout.preferredWidth: 200; editable: true; model: root.nodeIds }
 
         Label { text: qsTr("To Node:") }
-        ComboBox { id: toCombo; Layout.preferredWidth: Metrics.maxInputWidth; editable: true; model: root.nodeIds }
+        ComboBox { id: toCombo; Layout.preferredWidth: 200; editable: true; model: root.nodeIds }
 
         Label { text: qsTr("Mult:") }
-        SpinBox { id: multSpin; Layout.preferredWidth: Metrics.maxInputWidth; from: 1; to: 99; value: 1 }
+        SpinBox { id: multSpin; Layout.preferredWidth: 200; from: 1; to: 99; value: 1 }
     }
 }
 

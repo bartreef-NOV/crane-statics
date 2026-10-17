@@ -2,13 +2,14 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Shapes
 import ".."
-import BF.DesignSystem
 
 Item {
     id: root
 
+    SystemPalette { id: pal }
+
     property var frame: sceneVm.sceneFrame
-    property color backgroundColor: Theme.surface
+    property color backgroundColor: pal.base
     readonly property var fitRect: frame && frame.fitRect
         ? frame.fitRect : { "x": 0, "y": 0, "width": 1, "height": 1 }
     readonly property real sceneScale: Math.min(
@@ -289,7 +290,7 @@ Item {
                 height: Math.max(0, guideLabel.y - y)
 
                 ShapePath {
-                    strokeColor: Theme.textMuted
+                    strokeColor: pal.placeholderText
                     strokeWidth: 1
                     strokeStyle: ShapePath.DashLine
                     dashPattern: [4, 3]
@@ -308,7 +309,7 @@ Item {
                 height: 2
 
                 ShapePath {
-                    strokeColor: Theme.textMuted
+                    strokeColor: pal.placeholderText
                     strokeWidth: 1
                     strokeStyle: ShapePath.DashLine
                     dashPattern: [4, 3]
@@ -333,15 +334,15 @@ Item {
                 width: guideText.implicitWidth + paddingX * 2
                 height: guideText.implicitHeight + paddingY * 2
                 radius: 4
-                color: Theme.surfaceSubtle
-                border.color: Theme.border
+                color: pal.alternateBase
+                border.color: pal.mid
                 border.width: 1
 
                 Text {
                     id: guideText
                     anchors.centerIn: parent
                     text: parent.parent.modelData.label
-                    color: Theme.text
+                    color: pal.text
                     font.bold: true
                     font.pixelSize: 12
                 }
@@ -379,8 +380,8 @@ Item {
         width: winchSpoolContent.implicitWidth + paddingX * 2
         height: winchSpoolContent.implicitHeight + paddingY * 2
         radius: 4
-        color: Theme.surfaceSubtle
-        border.color: Theme.border
+        color: pal.alternateBase
+        border.color: pal.mid
         border.width: 1
 
         // Widest value string, so the value column can be right-aligned without
@@ -407,7 +408,7 @@ Item {
 
             Text {
                 text: qsTr("Rope on winches")
-                color: Theme.text
+                color: pal.text
                 font.bold: true
                 font.pixelSize: 12
             }
@@ -422,7 +423,7 @@ Item {
                         delegate: Text {
                             required property var modelData
                             text: modelData.hoist_id
-                            color: Theme.textMuted
+                            color: pal.placeholderText
                             font.pixelSize: 12
                         }
                     }
@@ -437,7 +438,7 @@ Item {
                         delegate: Text {
                             required property var modelData
                             text: modelData.value_text
-                            color: Theme.text
+                            color: pal.text
                             font.pixelSize: 12
                             width: Math.max(winchSpoolValueMetrics.width, implicitWidth)
                             horizontalAlignment: Text.AlignRight

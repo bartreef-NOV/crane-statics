@@ -1,7 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import BF.DesignSystem
 
 Item {
     id: root
@@ -14,9 +13,9 @@ Item {
     readonly property color headerTextColor: sysPalette.text
     readonly property color textColor: sysPalette.text
     readonly property color gridColor: sysPalette.mid
-    readonly property int tableRowHeight: Metrics.tableRowHeight
+    readonly property int tableRowHeight: 28
     readonly property int layoutSpacing: Math.round(
-        Metrics.spacing8 * Metrics.spacingMultiplier
+        8
     )
 
     property alias model: limitsList.model
@@ -36,11 +35,11 @@ Item {
             Layout.fillHeight: true
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: Metrics.borderWidth
+            border.width: 1
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: Metrics.borderWidth
+                anchors.margins: 1
                 spacing: 0
 
                 Row {
@@ -57,12 +56,12 @@ Item {
                             height: root.tableRowHeight
                             color: root.headerColor
                             border.color: root.gridColor
-                            border.width: Metrics.borderWidth
+                            border.width: 1
                             Label {
                                 anchors.fill: parent
-                                leftPadding: Metrics.spacing6
-                                rightPadding: Metrics.spacing6
-                                bottomPadding: Metrics.spacing2
+                                leftPadding: 6
+                                rightPadding: 6
+                                bottomPadding: 2
                                 text: parent.modelData
                                 color: root.headerTextColor
                                 font.bold: true
@@ -101,7 +100,7 @@ Item {
                             color: limitRow.index % 2 === 0
                                 ? "transparent" : sysPalette.alternateBase
                             border.color: root.gridColor
-                            border.width: Metrics.borderWidth
+                            border.width: 1
                         }
 
                         Row {
@@ -110,7 +109,7 @@ Item {
                             Label {
                                 width: root.width * 0.38
                                 height: parent.height
-                                leftPadding: Metrics.spacing6
+                                leftPadding: 6
                                 text: limitRow.name
                                 verticalAlignment: Text.AlignVCenter
                                 elide: Text.ElideRight
@@ -119,7 +118,7 @@ Item {
                                     anchors.top: parent.top
                                     anchors.bottom: parent.bottom
                                     anchors.right: parent.right
-                                    width: Metrics.borderWidth
+                                    width: 1
                                     color: root.gridColor
                                 }
                             }
@@ -127,7 +126,7 @@ Item {
                             Label {
                                 width: root.width * 0.15
                                 height: parent.height
-                                leftPadding: Metrics.spacing6
+                                leftPadding: 6
                                 text: limitRow.unit
                                 verticalAlignment: Text.AlignVCenter
 
@@ -135,7 +134,7 @@ Item {
                                     anchors.top: parent.top
                                     anchors.bottom: parent.bottom
                                     anchors.right: parent.right
-                                    width: Metrics.borderWidth
+                                    width: 1
                                     color: root.gridColor
                                 }
                             }

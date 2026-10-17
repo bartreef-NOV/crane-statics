@@ -1,7 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import BF.DesignSystem
 
 Dialog {
     id: root
@@ -18,13 +17,13 @@ Dialog {
     title: overview.title !== undefined ? overview.title : qsTr("Load Contribution Overview")
     modal: true
     anchors.centerIn: Overlay.overlay
-    width: Metrics.dialogWidth
+    width: 480
     standardButtons: Dialog.Close
 
     ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        spacing: Metrics.spacing8
+        spacing: 8
 
         Label {
             Layout.fillWidth: true

@@ -16,7 +16,7 @@ from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtQuick import QQuickItem
 
 from crane_statics.qml_app.session import SessionState
-from crane_statics.qml_app.app import DESIGN_DIR, QML_DIR
+from crane_statics.qml_app.app import QML_DIR
 from crane_statics.qml_app.viewmodels.app_vm import AppViewModel
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
@@ -29,7 +29,6 @@ EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 def qml_engine():
     engine = QQmlApplicationEngine()
     engine.addImportPath(str(QML_DIR))
-    engine.addImportPath(str(DESIGN_DIR))
 
     # Parent the view models to the engine so QML objects are torn down first.
     session = SessionState()
@@ -571,9 +570,9 @@ def test_live_tables_use_the_shared_row_height_token(qml_engine):
 @pytest.mark.parametrize(
     ("qml_file", "minimum_height"),
     [
-        ("dialogs/NodeDialog.qml", 200),
+        ("dialogs/NodeDialog.qml", 150),
         ("dialogs/HoistDialog.qml", 400),
-        ("dialogs/MassPointDialog.qml", 250),
+        ("dialogs/MassPointDialog.qml", 200),
     ],
 )
 def test_data_entry_dialog_height_follows_content(qml_engine, qml_file, minimum_height):

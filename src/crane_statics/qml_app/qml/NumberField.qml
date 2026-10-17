@@ -1,6 +1,5 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
-import BF.DesignSystem
 
 TextField {
     id: field
@@ -10,11 +9,9 @@ TextField {
     readonly property real value: parseFloat(text) || 0
     signal flipDirectionRequested()
 
-    implicitHeight: Metrics.controlHeight
-    implicitWidth: Metrics.maxInputWidth
-    leftPadding: Metrics.spacing8
-    rightPadding: Metrics.spacing8
-    font.pixelSize: Typography.body
+    implicitWidth: 200
+    leftPadding: 8
+    rightPadding: 8
 
     function setValue(newValue) {
         text = Number(newValue).toFixed(decimals)

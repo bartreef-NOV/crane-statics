@@ -1,7 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import BF.DesignSystem
 
 Item {
     id: root
@@ -14,9 +13,9 @@ Item {
     readonly property color headerTextColor: sysPalette.text
     readonly property color textColor: sysPalette.text
     readonly property color gridColor: sysPalette.mid
-    readonly property int tableRowHeight: Metrics.tableRowHeight
+    readonly property int tableRowHeight: 28
     readonly property int layoutSpacing: Math.round(
-        Metrics.spacing8 * Metrics.spacingMultiplier
+        8
     )
 
     property alias model: rowsList.model
@@ -39,11 +38,11 @@ Item {
             Layout.fillHeight: true
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: Metrics.borderWidth
+            border.width: 1
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: Metrics.borderWidth
+                anchors.margins: 1
                 spacing: 0
 
                 Row {
@@ -62,12 +61,12 @@ Item {
                             height: root.tableRowHeight
                             color: root.headerColor
                             border.color: root.gridColor
-                            border.width: Metrics.borderWidth
+                            border.width: 1
                             Label {
                                 anchors.fill: parent
-                                anchors.leftMargin: Metrics.spacing6
-                                anchors.rightMargin: Metrics.spacing6
-                                anchors.bottomMargin: Metrics.spacing2
+                                anchors.leftMargin: 6
+                                anchors.rightMargin: 6
+                                anchors.bottomMargin: 2
                                 text: parent.modelData
                                 color: root.headerTextColor
                                 font.bold: true

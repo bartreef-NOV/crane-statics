@@ -36,8 +36,6 @@ where = ["src"]
 [tool.setuptools.package-data]
 crane_statics = [
     "schemas/*.json",
-    "qml_app/design/*.qml",
-    "qml_app/design/qmldir",
     "qml_app/qml/**/*.qml",
     "qml_app/qml/**/qmldir",
 ]

@@ -1,8 +1,12 @@
 import QtQuick
-import BF.DesignSystem
 
 Item {
     id: root
+
+    SystemPalette { id: pal }
+    readonly property color passColor: "#2e7d32"
+    readonly property color failColor: "#c62828"
+    readonly property color pendingColor: "#ef6c00"
 
     property var visibilityByKey: ({})
     property var legendItems: []
@@ -21,7 +25,7 @@ Item {
     readonly property real plotBottom: 50
     readonly property real plotWidth: Math.max(1, width - plotLeft - plotRight)
     readonly property real plotHeight: Math.max(1, height - plotTop - plotBottom)
-    readonly property color plotBackgroundColor: Theme.chartPlotBackground
+    readonly property color plotBackgroundColor: pal.base
 
     function seriesKeyVisible(key) {
         return visibilityByKey[key] !== false
@@ -47,11 +51,11 @@ Item {
 
     function chartSeriesColor(series) {
         if (series.id === "capacity")
-            return Theme.primary
+            return pal.highlight
         if (series.id === "contractual")
-            return Theme.chartContractual
+            return root.passColor
         if (!series.color)
-            return Theme.chartSeriesFallback
+            return pal.placeholderText
         return series.color
     }
 
@@ -63,15 +67,15 @@ Item {
                 series.push(Object.assign({}, limits[i], { color: chartSeriesColor(limits[i]) }))
         }
         if (seriesKeyVisible("capacity"))
-            series.push({ id: "capacity", label: qsTr("Capacity"), color: Theme.primary, points: chartVm.curvePoints || [] })
+            series.push({ id: "capacity", label: qsTr("Capacity"), color: pal.highlight, points: chartVm.curvePoints || [] })
         return series
     }
 
     function collectLegendSeries() {
         const series = []
         const limits = chartVm.limitSeries || []
-        series.push({ id: "capacity", label: qsTr("Capacity"), color: Theme.primary, points: chartVm.curvePoints || [] })
-        series.push({ id: "contractual", label: qsTr("Contractual"), color: Theme.chartContractual, points: chartVm.markers || [] })
+        series.push({ id: "capacity", label: qsTr("Capacity"), color: pal.highlight, points: chartVm.curvePoints || [] })
+        series.push({ id: "contractual", label: qsTr("Contractual"), color: root.passColor, points: chartVm.markers || [] })
         for (let i = 0; i < limits.length; ++i)
             series.push(Object.assign({}, limits[i], { color: chartSeriesColor(limits[i]) }))
         return series
@@ -172,7 +176,7 @@ Item {
                 const py = mapY(points[i][1], ranges, plotTop, plotHeight)
                 candidates.push({
                     x: px, y: py, outreach: points[i][0], load: points[i][1],
-                    label: series[s].label, color: series[s].color || Theme.chartSeriesFallback,
+                    label: series[s].label, color: series[s].color || pal.placeholderText,
                     distance: Math.hypot(px - x, py - y)
                 })
             }
@@ -185,7 +189,7 @@ Item {
                 candidates.push({
                     x: px, y: py, outreach: markers[i].outreach, load: markers[i].load,
                     label: qsTr("Contractual (%1)").arg(markers[i].status),
-                    color: markers[i].status === "pass" ? Theme.chartPass : (markers[i].status === "fail" ? Theme.chartFail : Theme.chartPending),
+                    color: markers[i].status === "pass" ? root.passColor : (markers[i].status === "fail" ? root.failColor : root.pendingColor),
                     distance: Math.hypot(px - x, py - y)
                 })
             }
@@ -213,13 +217,13 @@ Item {
 
     function drawMarker(context, marker, ranges, left, top, plotWidth, plotHeight) {
         const colors = {
-            pass: Theme.chartPass,
-            fail: Theme.chartFail,
-            pending: Theme.chartPending
+            pass: root.passColor,
+            fail: root.failColor,
+            pending: root.pendingColor
         }
         const x = mapX(marker.outreach, ranges, left, plotWidth)
         const y = mapY(marker.load, ranges, top, plotHeight)
-        context.fillStyle = colors[marker.status] || Theme.chartSeriesFallback
+        context.fillStyle = colors[marker.status] || pal.placeholderText
         context.beginPath()
         context.arc(x, y, 5, 0, 2 * Math.PI)
         context.fill()
@@ -240,7 +244,7 @@ Item {
             const plotHeight = root.plotHeight
 
             context.reset()
-            context.fillStyle = Theme.chartCanvasBackground
+            context.fillStyle = pal.window
             context.fillRect(0, 0, width, height)
             context.fillStyle = root.plotBackgroundColor
             context.fillRect(left, top, plotWidth, plotHeight)
@@ -248,8 +252,8 @@ Item {
             const yStep = niceStep(ranges.yMax - ranges.yMin, Math.max(4, Math.floor(plotHeight / 55)))
             const xTicks = majorTicks(ranges.xMin, ranges.xMax, Math.max(4, Math.floor(plotWidth / 110)))
             const yTicks = majorTicks(ranges.yMin, ranges.yMax, Math.max(4, Math.floor(plotHeight / 55)))
-            context.strokeStyle = Theme.chartGrid
-            context.fillStyle = Theme.chartAxisText
+            context.strokeStyle = pal.midlight
+            context.fillStyle = pal.placeholderText
             context.font = "11px sans-serif"
             context.textBaseline = "top"
             context.textAlign = "center"
@@ -271,7 +275,7 @@ Item {
                 context.stroke()
                 context.fillText(formatTick(yTicks[i], yStep), left - 8, y)
             }
-            context.strokeStyle = Theme.chartAxisBorder
+            context.strokeStyle = pal.mid
             context.lineWidth = 1
             context.strokeRect(left, top, plotWidth, plotHeight)
 
@@ -290,7 +294,7 @@ Item {
 
             const series = root.collectSeries()
             for (let i = 0; i < series.length; ++i) {
-                context.strokeStyle = series[i].color || Theme.chartSeriesFallback
+                context.strokeStyle = series[i].color || pal.placeholderText
                 context.lineWidth = series[i].id === "capacity" ? 2.5 : 1.25
                 root.drawLineSeries(context, series[i].points, ranges, left, top, plotWidth, plotHeight)
             }
@@ -304,7 +308,7 @@ Item {
 
             const inspected = root.pinnedPoint || root.hoveredPoint
             if (inspected) {
-                context.strokeStyle = Theme.chartCrosshair
+                context.strokeStyle = pal.placeholderText
                 context.lineWidth = 1
                 context.setLineDash([4, 4])
                 context.beginPath()
@@ -319,7 +323,7 @@ Item {
                 context.beginPath()
                 context.arc(inspected.x, inspected.y, root.pinnedPoint ? 6 : 5, 0, 2 * Math.PI)
                 context.fill()
-                context.strokeStyle = Theme.chartPlotBackground
+                context.strokeStyle = pal.base
                 context.lineWidth = 2
                 context.stroke()
 
@@ -330,12 +334,12 @@ Item {
                     ? left + 8 : left + plotWidth - boxWidth - 8
                 const boxY = inspected.y < top + boxHeight + 8
                     ? top + plotHeight - boxHeight - 8 : top + 8
-                context.fillStyle = Theme.chartTooltipBackground
-                context.strokeStyle = Theme.chartTooltipBorder
+                context.fillStyle = pal.base
+                context.strokeStyle = pal.mid
                 context.lineWidth = 1
                 context.fillRect(boxX, boxY, boxWidth, boxHeight)
                 context.strokeRect(boxX, boxY, boxWidth, boxHeight)
-                context.fillStyle = Theme.chartTooltipText
+                context.fillStyle = pal.text
                 context.font = "11px sans-serif"
                 context.textAlign = "left"
                 context.textBaseline = "top"

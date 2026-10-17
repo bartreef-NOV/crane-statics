@@ -1,7 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import BF.DesignSystem
 
 Item {
     id: root
@@ -16,9 +15,9 @@ Item {
     readonly property color selectedColor: sysPalette.highlight
     readonly property color selectedTextColor: sysPalette.highlightedText
     readonly property color gridColor: sysPalette.mid
-    readonly property int tableRowHeight: Metrics.tableRowHeight
+    readonly property int tableRowHeight: 28
     readonly property int layoutSpacing: Math.round(
-        Metrics.spacing8 * Metrics.spacingMultiplier
+        8
     )
 
     property alias model: pointsList.model
@@ -44,9 +43,9 @@ Item {
                 font.bold: true
             }
 
-            Button { text: "+"; ToolTip.visible: hovered; ToolTip.text: qsTr("Add"); implicitWidth: Metrics.controlHeight; implicitHeight: Metrics.controlHeight; padding: 0; onClicked: root.addRequested() }
-            Button { text: "\u270e"; ToolTip.visible: hovered; ToolTip.text: qsTr("Edit"); implicitWidth: Metrics.controlHeight; implicitHeight: Metrics.controlHeight; padding: 0; enabled: root.hasSelection; onClicked: root.editRequested(root.currentRow) }
-            Button { text: "\u00d7"; ToolTip.visible: hovered; ToolTip.text: qsTr("Delete"); implicitWidth: Metrics.controlHeight; implicitHeight: Metrics.controlHeight; padding: 0; enabled: root.hasSelection; onClicked: root.deleteRequested(root.currentRow) }
+            Button { text: "+"; ToolTip.visible: hovered; ToolTip.text: qsTr("Add"); padding: 0; onClicked: root.addRequested() }
+            Button { text: "\u270e"; ToolTip.visible: hovered; ToolTip.text: qsTr("Edit"); padding: 0; enabled: root.hasSelection; onClicked: root.editRequested(root.currentRow) }
+            Button { text: "\u00d7"; ToolTip.visible: hovered; ToolTip.text: qsTr("Delete"); padding: 0; enabled: root.hasSelection; onClicked: root.deleteRequested(root.currentRow) }
         }
 
         Rectangle {
@@ -54,11 +53,11 @@ Item {
             Layout.fillHeight: true
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: Metrics.borderWidth
+            border.width: 1
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: Metrics.borderWidth
+                anchors.margins: 1
                 spacing: 0
 
                 Row {
@@ -75,12 +74,12 @@ Item {
                             height: root.tableRowHeight
                             color: root.headerColor
                             border.color: root.gridColor
-                            border.width: Metrics.borderWidth
+                            border.width: 1
                             Label {
                                 anchors.fill: parent
-                                leftPadding: Metrics.spacing6
-                                rightPadding: Metrics.spacing6
-                                bottomPadding: Metrics.spacing2
+                                leftPadding: 6
+                                rightPadding: 6
+                                bottomPadding: 2
                                 text: parent.modelData
                                 color: root.headerTextColor
                                 font.bold: true
@@ -120,7 +119,7 @@ Item {
                             ? root.selectedColor
                             : (pointRow.index % 2 === 0 ? root.surfaceColor : sysPalette.alternateBase)
                         border.color: root.gridColor
-                        border.width: Metrics.borderWidth
+                        border.width: 1
 
                         Row {
                             anchors.fill: parent
@@ -133,7 +132,7 @@ Item {
                                     required property int index
                                     width: root.width / 4
                                     height: root.tableRowHeight
-                                    leftPadding: Metrics.spacing6
+                                    leftPadding: 6
                                     text: modelData
                                     color: pointRow.selected ? root.selectedTextColor : root.textColor
                                     verticalAlignment: Text.AlignVCenter
@@ -143,7 +142,7 @@ Item {
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
                                         anchors.right: parent.right
-                                        width: Metrics.borderWidth
+                                        width: 1
                                         color: root.gridColor
                                     }
                                 }

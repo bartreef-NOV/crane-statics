@@ -3,14 +3,13 @@ import QtQuick.Controls.Fusion
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import "dialogs"
-import BF.DesignSystem
 
 Item {
     id: root
 
-    readonly property bool compact: width > 0 && width < Metrics.breakpointCompact
+    readonly property bool compact: width > 0 && width < 1240
     readonly property int layoutSpacing: Math.round(
-        Metrics.spacing8 * Metrics.spacingMultiplier
+        8
     )
 
     GridLayout {

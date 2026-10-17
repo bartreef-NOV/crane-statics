@@ -1,7 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import BF.DesignSystem
 
 Item {
     id: root
@@ -15,9 +14,9 @@ Item {
     readonly property color selectedColor: sysPalette.highlight
     readonly property color selectedTextColor: sysPalette.highlightedText
     readonly property color gridColor: sysPalette.mid
-    readonly property int tableRowHeight: Metrics.tableRowHeight
+    readonly property int tableRowHeight: 28
     readonly property int layoutSpacing: Math.round(
-        Metrics.spacing8 * Metrics.spacingMultiplier
+        8
     )
 
     property alias model: table.model
@@ -104,8 +103,6 @@ Item {
                 text: "+"
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Add")
-                implicitWidth: Metrics.controlHeight
-                implicitHeight: Metrics.controlHeight
                 padding: 0
                 visible: root.editable
                 onClicked: root.addRequested()
@@ -115,8 +112,6 @@ Item {
                 text: "\u00d7"
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Delete")
-                implicitWidth: Metrics.controlHeight
-                implicitHeight: Metrics.controlHeight
                 padding: 0
                 visible: root.editable
                 enabled: root.hasSelection
@@ -131,11 +126,11 @@ Item {
             implicitHeight: root.tableRowHeight * 8
             color: root.surfaceColor
             border.color: root.gridColor
-            border.width: Metrics.borderWidth
+            border.width: 1
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: Metrics.borderWidth
+                anchors.margins: 1
                 spacing: 0
 
                 HorizontalHeaderView {
@@ -152,16 +147,15 @@ Item {
                         implicitHeight: root.tableRowHeight
                         color: root.headerColor
                         border.color: root.gridColor
-                        border.width: Metrics.borderWidth
+                        border.width: 1
 
                         Label {
                             anchors.fill: parent
-                            anchors.leftMargin: Metrics.spacing8
-                            anchors.rightMargin: Metrics.spacing8
-                            anchors.bottomMargin: Metrics.spacing2
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            anchors.bottomMargin: 2
                             text: headerCell.display
                             color: root.headerTextColor
-                            font.pixelSize: Typography.caption
                             font.bold: true
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
@@ -211,7 +205,7 @@ Item {
                         readonly property bool current: selected && column === root.currentColumn
                         property bool hovered: false
 
-                        implicitWidth: Math.max(80, cellText.implicitWidth + 2 * Metrics.spacing8)
+                        implicitWidth: Math.max(80, cellText.implicitWidth + 2 * 8)
                         implicitHeight: root.tableRowHeight
                         color: cell.selected
                             ? root.selectedColor
@@ -224,16 +218,15 @@ Item {
                         border.color: cell.current && root.activeFocus
                             ? sysPalette.highlight
                             : root.gridColor
-                        border.width: Metrics.borderWidth
+                        border.width: 1
 
                         Label {
                             id: cellText
                             anchors.fill: parent
-                            anchors.leftMargin: Metrics.spacing8
-                            anchors.rightMargin: Metrics.spacing8
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
                             text: cell.display
                             color: cell.selected ? root.selectedTextColor : root.textColor
-                            font.pixelSize: Typography.body
                             elide: Text.ElideRight
                             verticalAlignment: Text.AlignVCenter
                             horizontalAlignment: cell.numeric ? Text.AlignRight : Text.AlignLeft

@@ -2,7 +2,6 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
-import BF.DesignSystem
 
 Dialog {
     id: root
@@ -30,14 +29,14 @@ Dialog {
 
     GridLayout {
         columns: 2
-        columnSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
-        rowSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
+        columnSpacing: Math.round(8)
+        rowSpacing: Math.round(8)
 
         Label { text: qsTr("Outreach (m):") }
-        NumberField { id: outreachField; Layout.preferredWidth: Metrics.maxInputWidth }
+        NumberField { id: outreachField; Layout.preferredWidth: 200 }
 
         Label { text: qsTr("Load (t):") }
-        NumberField { id: loadField; Layout.preferredWidth: Metrics.maxInputWidth }
+        NumberField { id: loadField; Layout.preferredWidth: 200 }
     }
 }
 

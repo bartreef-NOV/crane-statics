@@ -1,6 +1,6 @@
 ---
 name: qml-ui-development
-description: Rules and patterns for building the Crane Statics Qt Quick/QML front end — native Qt Quick Controls (Fusion) styling, Metrics/Typography spacing/font tokens, the view-model/context-property bridge, QAbstractItemModel table models, the QQuickItem scene canvas, and keeping the Qt event loop unblocked. Use when editing anything under src/crane_statics/qml_app/ or any .qml file, adding a view model property or signal, wiring a new QML view, or debugging a frozen UI, a QML warning, or a binding loop.
+description: Rules and patterns for building the Crane Statics Qt Quick/QML front end — native Qt Quick Controls (Fusion) styling with SystemPalette colors, the view-model/context-property bridge, QAbstractItemModel table models, the QQuickItem scene canvas, and keeping the Qt event loop unblocked. Use when editing anything under src/crane_statics/qml_app/ or any .qml file, adding a view model property or signal, wiring a new QML view, or debugging a frozen UI, a QML warning, or a binding loop.
 ---
 
 # Crane Statics QML UI Development
@@ -23,7 +23,6 @@ point is `QGuiApplication` (not `QApplication`) in
 | `qml_app/items/quick_scene_canvas.py` | `QQuickItem` backing for the scene canvas |
 | `qml_app/scene/` | `scene_renderer.py` (shows the published frame) and `scene_drag.py` (the pointer gesture) |
 | `qml_app/qml/` | Views (`Main.qml`, the three workspaces, tables, dialogs, `scene/`) |
-| `qml_app/design/BF/DesignSystem/` | `Theme`/`Metrics`/`Typography` singletons, exposed as module `BF.DesignSystem` |
 
 ## Iron laws
 
@@ -38,27 +37,17 @@ style (Fusion, see below) render it. Do not reintroduce a `background:`/
 unless there is no other way to express something the style genuinely can't —
 that's exactly the pattern that made the UI look custom-skinned before.
 
-**`Metrics`/`Typography` are still the source for spacing, sizing and font
-tokens** (`Metrics.spacing16`, `Metrics.controlHeight`, `Typography.body`, …) —
-those are layout-only and don't fight the native look:
+**No design-system module.** There are no `Theme`/`Metrics`/`Typography`
+singletons (the `BF.DesignSystem` module was deleted). Use literal spacing/margins
+(`spacing: 8`), let controls take their implicit Fusion size and the default app
+font, and don't set `font.family`/`font.pixelSize` unless it carries meaning.
 
-```qml
-import BF.DesignSystem
+**Colors come from `SystemPalette`.** Custom-painted surfaces (`QuickChartPlot.qml`,
+`scene/QuickSceneCanvas.qml`, the utilization bar in `ResultRowDelegate.qml`) use a
+local `SystemPalette { id: pal }`; only the pass/fail/pending status colors are
+inline constants.
 
-Label {
-    anchors.margins: Metrics.spacing16
-    font.pixelSize: Typography.body
-}
-```
-
-**`Theme` is deliberately minimal now** — it only supplies colors for the two
-custom-painted (non-Controls) surfaces: the Load Chart canvas
-(`QuickChartPlot.qml`) and the 3D scene canvas (`scene/QuickSceneCanvas.qml`),
-plus the brand-accent utilization bar in `ResultRowDelegate.qml`. Don't reach
-for `Theme.*` to color a native control's background/border/text — that's a
-`SystemPalette` or default-style concern now.
-
-**Hand-rolled tables use `SystemPalette`, not `Theme`.** `DataTable.qml`,
+**Hand-rolled tables use `SystemPalette`.** `DataTable.qml`,
 `ContractualTable.qml`, `DesignLimitsTable.qml`, `ResultsTable.qml`, and
 `ResultRowDelegate.qml` are bespoke `TableView`+`Rectangle`-delegate grids (no
 native "data grid" control exists to fall back to). They source their zebra-

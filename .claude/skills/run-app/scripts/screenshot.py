@@ -28,7 +28,6 @@ from PyQt6.QtQml import QQmlApplicationEngine  # noqa: E402
 from PyQt6.QtQuick import QQuickWindow  # noqa: E402,F401
 
 from crane_statics.qml_app.app import (  # noqa: E402
-    DESIGN_DIR,
     QML_DIR,
     configure_controls_style,
     configure_surface_format,
@@ -73,7 +72,6 @@ def main(argv: list[str] | None = None) -> int:
     engine = QQmlApplicationEngine(app)
     engine.warnings.connect(lambda errs: warnings.extend(e.toString() for e in errs))
     engine.addImportPath(str(QML_DIR))
-    engine.addImportPath(str(DESIGN_DIR))
 
     app_vm = AppViewModel(session, engine)
     model_vm = ModelViewModel(session, engine)

@@ -1,6 +1,5 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
-import BF.DesignSystem
 
 Dialog {
     id: root
@@ -26,7 +25,7 @@ Dialog {
 
         header: Row {
             width: reportList.width
-            height: Metrics.tableRowHeight
+            height: 28
 
             Repeater {
                 model: [qsTr("Item"), qsTr("Fx"), qsTr("Fz"), qsTr("|F|"), qsTr("X"), qsTr("Z"), qsTr("M")]
@@ -35,7 +34,7 @@ Dialog {
                     required property string modelData
                     required property int index
                     width: index === 0 ? reportList.width * 0.34 : reportList.width * 0.11
-                    height: Metrics.tableRowHeight
+                    height: 28
                     color: sysPalette.alternateBase
                     border.color: sysPalette.mid
                     border.width: 1
@@ -68,7 +67,7 @@ Dialog {
             required property int index
 
             width: reportList.width
-            height: Metrics.tableRowHeight
+            height: 28
 
             readonly property bool section: kind === "section"
             Rectangle {
@@ -110,7 +109,7 @@ Dialog {
                     Label {
                         required property string modelData
                         width: reportList.width * 0.11
-                        height: Metrics.tableRowHeight
+                        height: 28
                         rightPadding: 6
                         text: modelData
                         horizontalAlignment: Text.AlignRight

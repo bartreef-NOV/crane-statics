@@ -2,7 +2,6 @@
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
-import BF.DesignSystem
 
 Dialog {
     id: root
@@ -47,32 +46,32 @@ Dialog {
 
     GridLayout {
         columns: 2
-        columnSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
-        rowSpacing: Math.round(Metrics.spacing8 * Metrics.spacingMultiplier)
+        columnSpacing: Math.round(8)
+        rowSpacing: Math.round(8)
 
         Label { text: qsTr("ID:") }
-        TextField { id: idField; Layout.preferredWidth: Metrics.maxInputWidth; selectByMouse: true }
+        TextField { id: idField; Layout.preferredWidth: 200; selectByMouse: true }
 
         Label { text: qsTr("Mass (t):") }
-        NumberField { id: massField; Layout.preferredWidth: Metrics.maxInputWidth }
+        NumberField { id: massField; Layout.preferredWidth: 200 }
 
         Label { text: qsTr("X (m):"); visible: !root.boomBody }
-        NumberField { id: xField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.boomBody }
+        NumberField { id: xField; Layout.preferredWidth: 200; visible: !root.boomBody }
 
         Label { text: qsTr("Y (m):"); visible: !root.boomBody }
-        NumberField { id: yField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.boomBody }
+        NumberField { id: yField; Layout.preferredWidth: 200; visible: !root.boomBody }
 
         Label { text: qsTr("Z (m):"); visible: !root.boomBody }
-        NumberField { id: zField; Layout.preferredWidth: Metrics.maxInputWidth; visible: !root.boomBody }
+        NumberField { id: zField; Layout.preferredWidth: 200; visible: !root.boomBody }
 
         Label { text: qsTr("Local U (m):"); visible: root.boomBody }
-        NumberField { id: uField; Layout.preferredWidth: Metrics.maxInputWidth; visible: root.boomBody }
+        NumberField { id: uField; Layout.preferredWidth: 200; visible: root.boomBody }
 
         Label { text: qsTr("Local V (m):"); visible: root.boomBody }
-        NumberField { id: vField; Layout.preferredWidth: Metrics.maxInputWidth; visible: root.boomBody }
+        NumberField { id: vField; Layout.preferredWidth: 200; visible: root.boomBody }
 
         Label { text: qsTr("Local W (m):"); visible: root.boomBody }
-        NumberField { id: wField; Layout.preferredWidth: Metrics.maxInputWidth; visible: root.boomBody }
+        NumberField { id: wField; Layout.preferredWidth: 200; visible: root.boomBody }
     }
 }
 

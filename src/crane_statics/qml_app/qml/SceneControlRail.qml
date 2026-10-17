@@ -1,13 +1,12 @@
 ﻿import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
-import BF.DesignSystem
 
 ColumnLayout {
     id: root
 
     readonly property int layoutSpacing: Math.round(
-        Metrics.spacing8 * Metrics.spacingMultiplier
+        8
     )
 
     spacing: root.layoutSpacing
@@ -15,10 +14,10 @@ ColumnLayout {
     GroupBox {
         Layout.fillWidth: true
         title: qsTr("Active Hoist")
-        topPadding: Metrics.spacing24
-        bottomPadding: Metrics.spacing6
-        leftPadding: Metrics.spacing6
-        rightPadding: Metrics.spacing6
+        topPadding: 24
+        bottomPadding: 6
+        leftPadding: 6
+        rightPadding: 6
 
         Flow {
             anchors.fill: parent
@@ -42,10 +41,10 @@ ColumnLayout {
         Layout.fillWidth: true
         title: qsTr("Hook Configuration")
         visible: sceneVm.splitable
-        topPadding: Metrics.spacing24
-        bottomPadding: Metrics.spacing6
-        leftPadding: Metrics.spacing6
-        rightPadding: Metrics.spacing6
+        topPadding: 24
+        bottomPadding: 6
+        leftPadding: 6
+        rightPadding: 6
 
         RowLayout {
             anchors.fill: parent
@@ -72,10 +71,10 @@ ColumnLayout {
     GroupBox {
         Layout.fillWidth: true
         title: qsTr("Geometry")
-        topPadding: Metrics.spacing24
-        bottomPadding: Metrics.spacing6
-        leftPadding: Metrics.spacing6
-        rightPadding: Metrics.spacing6
+        topPadding: 24
+        bottomPadding: 6
+        leftPadding: 6
+        rightPadding: 6
 
         ColumnLayout {
             anchors.fill: parent
@@ -113,10 +112,10 @@ ColumnLayout {
     GroupBox {
         Layout.fillWidth: true
         title: qsTr("Load")
-        topPadding: Metrics.spacing24
-        bottomPadding: Metrics.spacing6
-        leftPadding: Metrics.spacing6
-        rightPadding: Metrics.spacing6
+        topPadding: 24
+        bottomPadding: 6
+        leftPadding: 6
+        rightPadding: 6
 
         ColumnLayout {
             anchors.fill: parent
@@ -172,10 +171,10 @@ ColumnLayout {
     GroupBox {
         Layout.fillWidth: true
         title: qsTr("Wind")
-        topPadding: Metrics.spacing24
-        bottomPadding: Metrics.spacing6
-        leftPadding: Metrics.spacing6
-        rightPadding: Metrics.spacing6
+        topPadding: 24
+        bottomPadding: 6
+        leftPadding: 6
+        rightPadding: 6
 
         ColumnLayout {
             anchors.fill: parent
@@ -223,10 +222,10 @@ ColumnLayout {
     GroupBox {
         Layout.fillWidth: true
         title: qsTr("Vessel Motion")
-        topPadding: Metrics.spacing24
-        bottomPadding: Metrics.spacing6
-        leftPadding: Metrics.spacing6
-        rightPadding: Metrics.spacing6
+        topPadding: 24
+        bottomPadding: 6
+        leftPadding: 6
+        rightPadding: 6
 
         ColumnLayout {
             anchors.fill: parent
