@@ -6,7 +6,6 @@ from dataclasses import fields, replace
 from pathlib import Path
 import json
 from importlib import resources
-import crane_statics.core.limit_auto_set as limit_auto_set_module
 from jsonschema import Draft202012Validator
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -22,6 +21,7 @@ from crane_statics.core.limit_auto_set import (
     compute_required_connection_capacity_kN,
 )
 from crane_statics.core.analysis_cases import iter_wind_lead_directional_cases
+from crane_statics.core.lead_channels import compose_lead_channel_point
 from crane_statics.core import drawn_loads as dl
 from crane_statics.schemas.generate_schema import SCHEMA_FILENAME
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
@@ -1336,9 +1336,10 @@ class TestSplitModeAutosetAndChart:
                 offlead_deg=case.offlead_deg,
                 sidelead_deg=case.sidelead_deg,
             )
-            composed = limit_auto_set_module._compose_lead_channel_point(
+            composed = compose_lead_channel_point(
                 zero_lead_points[case.wind_direction],
-                case,
+                float(case.offlead_deg or 0.0),
+                float(case.sidelead_deg or 0.0),
             )
 
             assert legacy is not None
