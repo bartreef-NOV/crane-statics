@@ -85,7 +85,11 @@ class Metadata(BaseModel):
 
 
 class VesselMotion(BaseModel):
-    """Vessel motion definition under environment (signed, vessel-frame, gravity excluded)."""
+    """Vessel motion limits under environment (vessel-frame, gravity excluded).
+
+    Each value is a ± limit: the load chart ignores its sign and takes the worst case over
+    both signs. The reference point fields are positions, not limits.
+    """
 
     accel_x_m_s2: float = Field(default=0.0, description="Vessel-frame X acceleration")
     accel_y_m_s2: float = Field(default=0.0, description="Vessel-frame Y acceleration")

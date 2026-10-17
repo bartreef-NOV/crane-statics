@@ -33,8 +33,9 @@ rotate with slew as one right-handed vector; roll acceleration is right-handed a
 Other decisions in the same change:
 
 - Wind is constant: no height profile, no mean sea level.
-- Inputs are exact and signed. There is no +/- envelope for accelerations or angles.
-  Wind direction enumeration is unchanged.
+- Scene inputs are exact and signed: the Scene solves the one case it is given. The
+  Model's vessel-motion values are ± limits, and the load chart takes the worst case over
+  both signs and over any wind angle (see "Load chart envelope" below).
 - The waterline is removed from the scene.
 - Idle hooks, support compensation and rope masses all feel the load vector, in the
   in-plane solve and in the out-of-plane (split-support) pass. Reported idle rope

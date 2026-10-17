@@ -28,7 +28,7 @@ def test_slewing_angle_is_not_a_model_field():
 def test_saved_documents_are_version_8(tmp_path):
     from crane_statics.core.io import load_document, save_document
 
-    doc = load_document(Path("examples/crane_input_GT283.yaml"))
+    doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml")
     out = tmp_path / "out.yaml"
     save_document(doc, out)
     saved = yaml.safe_load(out.read_text(encoding="utf-8"))
@@ -48,7 +48,8 @@ def test_authored_environment_rejects_removed_wind_fields():
         AuthoredEnvironment(max_wind_speed_m_s=20.0, mean_sealevel_z_m=-35.0)
 
 
-def test_runtime_models_have_signed_motion_and_no_wind_profile():
+def test_runtime_models_have_motion_limits_and_no_wind_profile():
+    # Motion values are ± limits; a negative value is kept (the load chart ignores the sign).
     vm = VesselMotion(accel_z_m_s2=-0.5, roll_deg=2.0)
     assert vm.accel_z_m_s2 == -0.5
     env = Environment()

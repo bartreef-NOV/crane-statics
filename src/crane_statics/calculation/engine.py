@@ -661,7 +661,9 @@ class CraneCalculator:
                     accel_z_m_s2=_vm_default(accel_z_m_s2, "accel_z_m_s2"),
                     roll_deg=_vm_default(vessel_roll_deg, "roll_deg"),
                     pitch_deg=_vm_default(vessel_pitch_deg, "pitch_deg"),
-                    slew_deg=_vm_default(crane_slewing_angle_deg, "crane_slewing_angle_deg"),
+                    slew_deg=(
+                        0.0 if crane_slewing_angle_deg is None else float(crane_slewing_angle_deg)
+                    ),
                     roll_accel_rad_s2=_vm_default(roll_accel_rad_s2, "roll_angular_accel_rad_s2"),
                     pitch_accel_rad_s2=_vm_default(
                         pitch_accel_rad_s2, "pitch_angular_accel_rad_s2"
