@@ -128,7 +128,7 @@ def motion_channels(gravity: float, inputs: VesselInputs) -> np.ndarray:
 
 def superpose(
     probes: ProbeSet,
-    channels: Sequence[float],
+    channels: Sequence[float] | np.ndarray,
     wind_x_scale: float,
     wind_y_scale: float,
 ) -> AnalysisPoint:
@@ -198,6 +198,8 @@ _MAGNITUDE_QUANTITIES: dict[str, tuple[tuple[str, Optional[str]], ...]] = {
 _SLEW_POLYGON_SIDES = 360
 # Coarse slew ring used to drop sign cases that cannot hold a magnitude limit's minimum.
 _COARSE_SIDES = 36
+# Relative floor of the ranking-error allowance used to prune and to stop evaluating.
+_RANK_ERROR_FLOOR = 1e-6
 # Fewest magnitude-limit candidates evaluated through compute_allowable_load.
 _EXACT_CANDIDATES = 20
 
@@ -291,7 +293,7 @@ def _affine(basis: _UnitBasis, read: _Reader) -> Optional[_Affine]:
 def _case_point(
     probes: ProbeSet,
     lead_point: AnalysisPoint,
-    channels: Sequence[float],
+    channels: Sequence[float] | np.ndarray,
     wind_x_scale: float,
     wind_y_scale: float,
 ) -> AnalysisPoint:
@@ -471,6 +473,16 @@ def _bearing_ranking(
     return np.asarray(np.where(demand0 > limit, 0.0, h))
 
 
+def _rank_margin(rank_error: float, capacity_kN: float) -> float:
+    """Allowance for ranking error: the largest error seen, at least ``_RANK_ERROR_FLOOR``.
+
+    The floor (relative to the capacity, plus 1e-9 kN) covers proxy errors on vertices that
+    were never evaluated; the ranking closed forms match compute_allowable_load to rounding
+    (tests/test_chart_envelope.py checks rel 1e-6).
+    """
+    return max(rank_error, _RANK_ERROR_FLOOR * abs(capacity_kN) + 1e-9)
+
+
 def _ring(sides: int, *, outer: bool) -> tuple[np.ndarray, np.ndarray]:
     """(cos, sin) of ``sides`` slews: points on the ellipse, or the circumscribing N-gon."""
     if not outer:
@@ -536,6 +548,7 @@ def _magnitude_capacity(
         assert affine is not None  # _read always returns a value
         affines.append(affine)
 
+    diameter = 1.0
     if component == "max_bearing_line_load":
         diameter = float(getattr(ctx.calc.doc.support_widths, "slewing_bearing_diameter_m", 1.0))
         if diameter <= 0.0:
@@ -587,6 +600,7 @@ def _magnitude_capacity(
         cap = ctx.capacity(point, single_limit)
         exact = cap.max_allowable_load_kN
         if math.isinf(rank) and not math.isinf(exact):
+            # The ranking missed a finite capacity: no pruning, every fine vertex is evaluated.
             rank_error = math.inf
         elif not math.isinf(exact):
             rank_error = max(rank_error, abs(exact - rank))
@@ -611,15 +625,15 @@ def _magnitude_capacity(
         )
         bounds.append(_rank(sens, coarse).min(axis=(1, 2)))
     assert best is not None
-    # A sign case is dropped only if its bound, less the rank error seen, is above a
+    # A sign case is dropped only if its bound, less the rank error allowance, is above a
     # capacity that a real case reaches.
-    cutoff = best.max_allowable_load_kN + rank_error + 1e-9 * abs(best.max_allowable_load_kN)
+    cutoff = best.max_allowable_load_kN + _rank_margin(rank_error, best.max_allowable_load_kN)
 
     # Stage 2: fine N-gon vertices of the sign cases that can still hold the minimum.
     fine_cos, fine_sin = _ring(_SLEW_POLYGON_SIDES, outer=True)
     ranks_parts, index_parts = [], []
     for lead, sens in enumerate(sens_by_lead):
-        keep = np.nonzero(bounds[lead] <= cutoff + 1e-9)[0]
+        keep = np.nonzero(bounds[lead] <= cutoff)[0]
         if keep.size == 0:
             continue
         ranks = _rank(
@@ -637,7 +651,8 @@ def _magnitude_capacity(
     order = np.argsort(all_ranks, kind="stable")
     for position, flat in enumerate(order):
         rank = float(all_ranks[flat])
-        if position >= _EXACT_CANDIDATES and not rank - rank_error < best.max_allowable_load_kN:
+        current = best.max_allowable_load_kN
+        if position >= _EXACT_CANDIDATES and not rank - _rank_margin(rank_error, current) < current:
             break
         lead, case, side, corner = (int(i) for i in all_index[flat])
         _evaluate(lead, case, float(fine_cos[side]), float(fine_sin[side]), corner, rank)
@@ -707,5 +722,8 @@ def envelope_capacity(
                     )
     if best is None:
         # No limit applies: compute_allowable_load reports the unlimited capacity.
-        return ctx.capacity(probes.zero, limits)
+        best = ctx.capacity(probes.zero, limits)
+    # The worst case is over all wind angles, not one direction; the field would otherwise
+    # carry the zero probe's direction.
+    best.governing_wind_direction = None
     return best

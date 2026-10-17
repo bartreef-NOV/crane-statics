@@ -68,7 +68,10 @@ disallow_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "--cov=crane_statics --cov-report=term-missing --cov-report=lcov:lcov.info"
+addopts = "--cov=crane_statics --cov-report=term-missing --cov-report=lcov:lcov.info -m 'not slow'"
+markers = [
+    "slow: brute-force oracle tests (minutes); run with -m slow",
+]
 
 [tool.pyright]
 include = ["src"]

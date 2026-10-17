@@ -193,9 +193,11 @@ _VESSEL_FIELDS = (
 )
 
 
-def _envelope_document(*, vessel_limits: dict[str, float] | None = None) -> CraneDocument:
+def _envelope_document(
+    *, vessel_limits: dict[str, float] | None = None, offset_boom_mass: bool = False
+) -> CraneDocument:
     """GT283 at 20 m/s wind with the given vessel limits (default: all seven nonzero)."""
-    doc = _document(offset_boom_mass=False)
+    doc = _document(offset_boom_mass=offset_boom_mass)
     doc.environment.max_wind_speed_m_s = WIND_M_S
     if vessel_limits is not None:
         vm = doc.environment.vessel_motion
@@ -234,6 +236,7 @@ def _fast(
 
 def _assert_within_band(fast: AllowableCapacity, ref: AllowableCapacity, label: str) -> None:
     f, r = fast.max_allowable_load_kN, ref.max_allowable_load_kN
+    assert r > 0.0, f"{label}: reference capacity is zero, the comparison would be vacuous"
     print(f"{label}: fast {f:.6f} ref {r:.6f} ratio {f / r if r else float('nan'):.8f}")
     assert f <= r * (1.0 + UNSAFE_REL) + 1e-9, f"{label}: fast {f} above reference {r}"
     assert f >= r * (1.0 - CONSERVATIVE_REL) - 1e-9, f"{label}: fast {f} too far below {r}"
@@ -269,6 +272,7 @@ def _compare_with_reference(
         _assert_within_band(fast, ref, f"{limit_id} @ {angle} deg")
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("angle", [20.0, 45.0, 70.0])
 def test_envelope_never_exceeds_the_reference(angle: float) -> None:
     """All seven vessel limits, 20 m/s wind and the example's nonzero leads."""
@@ -280,13 +284,20 @@ def test_envelope_never_exceeds_the_reference(angle: float) -> None:
     _compare_with_reference(doc, angle, slew_step_deg=REF_SLEW_STEP, wind_step_deg=REF_WIND_STEP)
 
 
-@pytest.mark.parametrize("angle", [20.0])
-def test_envelope_matches_a_fine_reference(angle: float) -> None:
-    """5 deg slew and wind steps (off-axis wind included) on sway and roll angle."""
-    doc = _envelope_document(vessel_limits={"accel_y_m_s2": 0.6, "roll_deg": 4.0})
-    _compare_with_reference(doc, angle, slew_step_deg=5.0, wind_step_deg=5.0)
+@pytest.mark.slow
+@pytest.mark.parametrize("offset_boom_mass", [False, True], ids=["example", "boom_mass_y"])
+def test_envelope_matches_a_fine_reference(offset_boom_mass: bool) -> None:
+    """5 deg slew and wind steps (off-axis wind included) on sway and roll angle.
+
+    ``boom_mass_y`` gives the boom mass a y offset, so sway/roll signs are not mirrors.
+    """
+    doc = _envelope_document(
+        vessel_limits={"accel_y_m_s2": 0.6, "roll_deg": 4.0}, offset_boom_mass=offset_boom_mass
+    )
+    _compare_with_reference(doc, 20.0, slew_step_deg=5.0, wind_step_deg=5.0)
 
 
+@pytest.mark.slow
 def test_envelope_with_split_mode_overrides() -> None:
     doc = _envelope_document(vessel_limits={"accel_x_m_s2": 0.8, "pitch_deg": 2.5})
     split = _hoist(doc).model_copy(
