@@ -105,7 +105,6 @@ class EnvironmentSettings:
     # Vessel Motion
     roll_deg: float = 0.0
     pitch_deg: float = 0.0
-    crane_slewing_angle_deg: float = 0.0
     accel_x_m_s2: float = 0.0
     accel_y_m_s2: float = 0.0
     accel_z_m_s2: float = 0.0
@@ -129,7 +128,6 @@ class EnvironmentSettings:
             "air_density_kg_m3": self.air_density_kg_m3,
             "roll_deg": self.roll_deg,
             "pitch_deg": self.pitch_deg,
-            "crane_slewing_angle_deg": self.crane_slewing_angle_deg,
             "accel_x_m_s2": self.accel_x_m_s2,
             "accel_y_m_s2": self.accel_y_m_s2,
             "accel_z_m_s2": self.accel_z_m_s2,
@@ -151,7 +149,6 @@ class EnvironmentSettings:
             air_density_kg_m3=float(data.get("air_density_kg_m3", 1.225)),
             roll_deg=float(data.get("roll_deg", 0.0)),
             pitch_deg=float(data.get("pitch_deg", 0.0)),
-            crane_slewing_angle_deg=float(data.get("crane_slewing_angle_deg", 0.0)),
             accel_x_m_s2=float(data.get("accel_x_m_s2", 0.0)),
             accel_y_m_s2=float(data.get("accel_y_m_s2", 0.0)),
             accel_z_m_s2=float(data.get("accel_z_m_s2", 0.0)),

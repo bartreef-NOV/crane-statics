@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/schemas/crane-statics-v7.schema.json",
+  "$id": "https://example.com/schemas/crane-statics-v8.schema.json",
   "title": "AuthoredDocument",
   "$defs": {
     "AuthoredBoomBody": {
@@ -790,7 +790,7 @@
           "type": "string"
         },
         "version": {
-          "pattern": "^7\\.\\d+\\.\\d+$",
+          "pattern": "^8\\.\\d+\\.\\d+$",
           "title": "Version",
           "type": "string"
         }
@@ -899,7 +899,7 @@
     },
     "AuthoredVesselMotion": {
       "additionalProperties": false,
-      "description": "Optional vessel motion limits: surge, sway, heave (accelerations, gravity excluded),\nroll and pitch (angular accelerations), roll angle and pitch angle, plus the crane\nslewing angle. Each motion value is a \u00b1 limit (its sign is ignored); the load chart takes\nthe worst case over \u00b1. The slewing angle is a signed orientation. Omitted values are zero.",
+      "description": "Optional vessel motion limits: surge, sway, heave (accelerations, gravity excluded),\nroll and pitch (angular accelerations), roll angle and pitch angle. Each motion value is\na \u00b1 limit (its sign is ignored); the load chart takes the worst case over \u00b1. The crane\nis fully revolving, so there is no slewing angle in the Model. Omitted values are zero.",
       "properties": {
         "accel_x_m_s2": {
           "default": 0.0,
@@ -924,11 +924,6 @@
         "pitch_deg": {
           "default": 0.0,
           "title": "Pitch Deg",
-          "type": "number"
-        },
-        "crane_slewing_angle_deg": {
-          "default": 0.0,
-          "title": "Crane Slewing Angle Deg",
           "type": "number"
         },
         "pitch_angular_accel_rad_s2": {
@@ -1132,7 +1127,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "7.1.0"
+        "version": "8.0.0"
       }
     }
   ],

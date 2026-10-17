@@ -230,7 +230,6 @@ def test_document_defaults_are_applied_as_signed_values():
     vm.accel_z_m_s2 = 0.3
     vm.pitch_deg = 4.0
     vm.roll_deg = -3.0
-    vm.crane_slewing_angle_deg = 30.0
     defaults_calc = CraneCalculator(doc)
     implicit = _point(defaults_calc)
     explicit = _point(
@@ -241,7 +240,6 @@ def test_document_defaults_are_applied_as_signed_values():
         accel_z_m_s2=0.3,
         vessel_pitch_deg=4.0,
         vessel_roll_deg=-3.0,
-        crane_slewing_angle_deg=30.0,
     )
     assert _flat(implicit.baseline_reactions) == pytest.approx(_flat(explicit.baseline_reactions))
     assert implicit.governing_signs is not None

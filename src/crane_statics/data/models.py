@@ -30,7 +30,6 @@ DEFAULT_VESSEL_MOTION = {
     "accel_z_m_s2": 0.0,
     "roll_deg": 0.0,
     "pitch_deg": 0.0,
-    "crane_slewing_angle_deg": 0.0,
     "pitch_angular_accel_rad_s2": 0.0,
     "roll_angular_accel_rad_s2": 0.0,
     "reference_x_m": 0.0,
@@ -93,7 +92,6 @@ class VesselMotion(BaseModel):
     accel_z_m_s2: float = Field(default=0.0, description="Vessel-frame Z acceleration")
     roll_deg: float = Field(default=0.0, description="Vessel roll angle (gravity tilt)")
     pitch_deg: float = Field(default=0.0, description="Vessel pitch angle (gravity tilt)")
-    crane_slewing_angle_deg: float = Field(default=0.0, description="Crane slewing angle")
     reference_x_m: float = Field(default=0.0, description="Pitch rotation reference X")
     reference_z_m: float = Field(default=0.0, description="Pitch rotation reference Z")
     pitch_angular_accel_rad_s2: float = Field(default=0.0, description="Pitch angular acceleration")
@@ -1144,11 +1142,6 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                 ),
                 "pitch_deg": float(
                     vessel_motion_src.get("pitch_deg", DEFAULT_VESSEL_MOTION["pitch_deg"])
-                ),
-                "crane_slewing_angle_deg": float(
-                    vessel_motion_src.get(
-                        "crane_slewing_angle_deg", DEFAULT_VESSEL_MOTION["crane_slewing_angle_deg"]
-                    )
                 ),
                 "reference_x_m": float(
                     vessel_motion_src.get("reference_x_m", DEFAULT_VESSEL_MOTION["reference_x_m"])

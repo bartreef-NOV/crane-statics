@@ -167,18 +167,6 @@ ColumnLayout {
 
     GroupBox {
         Layout.fillWidth: true
-        title: qsTr("Crane Orientation")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: root.layoutSpacing
-
-            EnvRow { label: qsTr("Slewing Angle (°)"); fieldKey: "crane_slewing_angle_deg" }
-        }
-    }
-
-    GroupBox {
-        Layout.fillWidth: true
         title: qsTr("Vessel Motion (± limits)")
 
         ColumnLayout {

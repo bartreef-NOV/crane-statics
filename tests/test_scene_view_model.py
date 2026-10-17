@@ -397,7 +397,6 @@ class TestSceneViewModelState:
         vm = doc.environment.vessel_motion
         vm.roll_deg = 3.0
         vm.pitch_deg = -2.0
-        vm.crane_slewing_angle_deg = 90.0
         vm.accel_x_m_s2 = 1.0
         session.model.set_document(doc)
 
@@ -406,7 +405,7 @@ class TestSceneViewModelState:
             sc = state.scene_state
             assert sc.vessel_roll_deg == pytest.approx(3.0)
             assert sc.vessel_pitch_deg == pytest.approx(2.0)  # seeded at +limit
-            assert sc.crane_slewing_angle_deg == pytest.approx(90.0)
+            assert sc.crane_slewing_angle_deg == 0.0
             assert sc.accel_x_m_s2 == pytest.approx(1.0)
 
     def test_unknown_wind_direction_is_ignored(self, scene_vm):

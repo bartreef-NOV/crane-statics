@@ -131,7 +131,7 @@ class SessionModel:
                         # The Model's vessel motion values are ± limits; the Scene starts at +limit.
                         vessel_roll_deg=vessel_limit(vessel_motion, "roll_deg"),
                         vessel_pitch_deg=vessel_limit(vessel_motion, "pitch_deg"),
-                        crane_slewing_angle_deg=float(vessel_motion.crane_slewing_angle_deg),
+                        crane_slewing_angle_deg=0.0,
                         accel_x_m_s2=vessel_limit(vessel_motion, "accel_x_m_s2"),
                         accel_y_m_s2=vessel_limit(vessel_motion, "accel_y_m_s2"),
                         accel_z_m_s2=vessel_limit(vessel_motion, "accel_z_m_s2"),

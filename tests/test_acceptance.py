@@ -608,7 +608,7 @@ class TestAuthoredSchemaPolicy:
 
     def _minimal_v6(self) -> dict:
         return {
-            "schema": {"name": "crane-statics", "version": "7.0.0"},
+            "schema": {"name": "crane-statics", "version": "8.0.0"},
             "metadata": {"name": "V6 Minimal"},
             "model_definition": {
                 "environment": {
@@ -688,13 +688,13 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "3.2.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 7 is supported"
+            ValueError, match="Only crane-statics schema major version 8 is supported"
         ):
             normalize_document(data)
 
     def test_v6_minor_version_bump_is_accepted_by_normalizer(self):
         data = self._minimal_v6()
-        data["schema"]["version"] = "7.1.0"
+        data["schema"]["version"] = "8.1.0"
         doc = normalize_document(data)
         assert doc is not None
 
@@ -702,7 +702,7 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "5.13.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 7 is supported"
+            ValueError, match="Only crane-statics schema major version 8 is supported"
         ):
             normalize_document(data)
 
@@ -1245,7 +1245,7 @@ class TestAuthoredSchemaPolicy:
 
         saved = json.loads(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "7.1.0"
+        assert saved["schema"]["version"] == "8.0.0"
         assert "model_definition" in saved
         assert "ropes" not in saved["model_definition"]
         assert "nodes" not in saved["model_definition"]

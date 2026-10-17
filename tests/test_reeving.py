@@ -14,7 +14,7 @@ EXAMPLES = sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
 
 def _authored() -> dict:
     return {
-        "schema": {"name": "crane-statics", "version": "7.0.0"},
+        "schema": {"name": "crane-statics", "version": "8.0.0"},
         "metadata": {"name": "Reeving"},
         "model_definition": {
             "environment": {

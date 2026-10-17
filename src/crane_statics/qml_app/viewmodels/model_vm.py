@@ -48,7 +48,6 @@ ENVIRONMENT_KEYS = [
 VESSEL_MOTION_KEYS = [
     "roll_deg",
     "pitch_deg",
-    "crane_slewing_angle_deg",
     "accel_x_m_s2",
     "accel_y_m_s2",
     "accel_z_m_s2",

@@ -450,7 +450,6 @@ class EnvironmentFormatter:
         "air_density_kg_m3": "Air Density (kg/m³)",
         "roll_deg": "Roll angle (°)",
         "pitch_deg": "Pitch angle (°)",
-        "crane_slewing_angle_deg": "Slewing Angle (°)",
         "accel_x_m_s2": "Surge (m/s²)",
         "accel_y_m_s2": "Sway (m/s²)",
         "accel_z_m_s2": "Heave (m/s²)",
