@@ -7,7 +7,7 @@ module returns.
 
 Scope: this module models the **X/Z plane only**. Lateral acceleration
 (``accel_y_m_s2``), roll acceleration, sidelead and Y-axis wind produce purely
-out-of-plane (Y) forces -- see ``engine._build_split_support_reactions``, which
+out-of-plane (Y) forces -- see ``engine._build_out_of_plane_reactions``, which
 routes them into ``fy`` alone -- so they have no drawable vector here and no
 effect on in-plane equilibrium. They are deliberately absent from
 :class:`LoadConditions` rather than silently dropped.

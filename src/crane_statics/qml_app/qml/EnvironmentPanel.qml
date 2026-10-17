@@ -167,20 +167,31 @@ ColumnLayout {
 
     GroupBox {
         Layout.fillWidth: true
-        title: qsTr("Accelerations")
+        title: qsTr("Crane Orientation")
 
         ColumnLayout {
             anchors.fill: parent
             spacing: root.layoutSpacing
 
-            EnvRow { label: qsTr("Vessel Roll (°)"); fieldKey: "roll_deg" }
-            EnvRow { label: qsTr("Vessel Pitch (°)"); fieldKey: "pitch_deg" }
-            EnvRow { label: qsTr("Crane Slewing Angle (°)"); fieldKey: "crane_slewing_angle_deg" }
+            EnvRow { label: qsTr("Slewing Angle (°)"); fieldKey: "crane_slewing_angle_deg" }
+        }
+    }
+
+    GroupBox {
+        Layout.fillWidth: true
+        title: qsTr("Vessel Motion (± limits)")
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: root.layoutSpacing
+
             EnvRow { label: qsTr("Surge (m/s²)"); fieldKey: "accel_x_m_s2" }
             EnvRow { label: qsTr("Sway (m/s²)"); fieldKey: "accel_y_m_s2" }
             EnvRow { label: qsTr("Heave (m/s²)"); fieldKey: "accel_z_m_s2" }
             EnvRow { label: qsTr("Roll (rad/s²)"); fieldKey: "roll_angular_accel_rad_s2" }
             EnvRow { label: qsTr("Pitch (rad/s²)"); fieldKey: "pitch_angular_accel_rad_s2" }
+            EnvRow { label: qsTr("Roll angle (°)"); fieldKey: "roll_deg" }
+            EnvRow { label: qsTr("Pitch angle (°)"); fieldKey: "pitch_deg" }
             EnvRow { label: qsTr("Reference X (m)"); fieldKey: "reference_x_m" }
             EnvRow { label: qsTr("Reference Z (m)"); fieldKey: "reference_z_m" }
         }

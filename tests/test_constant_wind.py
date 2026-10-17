@@ -57,7 +57,7 @@ def _wind_fy_total(z_m: float) -> float:
     )
 
     def _fy(wind: float) -> float:
-        return calc._build_split_support_reactions(point, "MH", 45.0, 0.0, wind, 0.0, 0.0, 0.0)[2]
+        return calc._build_out_of_plane_reactions(point, "MH", 45.0, 0.0, wind, 0.0, 0.0, 0.0)[2]
 
     return _fy(20.0) - _fy(0.0)
 

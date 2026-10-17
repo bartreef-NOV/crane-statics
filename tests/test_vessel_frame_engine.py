@@ -185,7 +185,7 @@ def test_slew_90_moves_vessel_ax_out_of_the_xz_solve(calc):
     assert _in_plane(at0.baseline_reactions) != pytest.approx(_in_plane(level.baseline_reactions))
 
 
-def test_slew_90_vessel_ax_loads_the_split_supports(calc):
+def test_slew_90_vessel_ax_loads_the_left_right_supports(calc):
     level = _point(calc, wind_speed_m_s=0.0)
     at90 = _point(calc, wind_speed_m_s=0.0, accel_x_m_s2=1.0, crane_slewing_angle_deg=90.0)
     equiv = _point(calc, wind_speed_m_s=0.0, accel_y_m_s2=-1.0)
@@ -198,7 +198,7 @@ def test_slew_90_vessel_ax_loads_the_split_supports(calc):
     assert _flat(at90.baseline_reactions) == pytest.approx(_flat(equiv.baseline_reactions))
 
 
-def test_roll_tilts_gravity_into_the_split_supports(calc):
+def test_roll_tilts_gravity_into_the_left_right_supports(calc):
     gamma = math.radians(5.0)
     rolled = _point(calc, wind_speed_m_s=0.0, vessel_roll_deg=5.0)
     equiv = _point(

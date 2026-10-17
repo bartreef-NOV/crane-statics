@@ -275,7 +275,7 @@ class CraneCalculator:
             self.doc.connections = []
         return {str(c.get("id")): c for c in self.doc.connections}
 
-    def _build_split_support_reactions(
+    def _build_out_of_plane_reactions(
         self,
         point: AnalysisPoint,
         hoist_id: str,
@@ -456,7 +456,7 @@ class CraneCalculator:
             split[right_entity] = {"Fx": 0.5 * total_fx - d_fx, "Fz": 0.5 * total_fz - d_fz}
         return split, float(moments["platform_base"]["Mx"]), float(total_fy_platform)
 
-    def _augment_point_with_split_supports(
+    def _augment_point_with_out_of_plane_loads(
         self,
         point: AnalysisPoint,
         hoist_id: str,
@@ -466,6 +466,11 @@ class CraneCalculator:
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
         lumped_point_masses: Sequence[tuple[float, float, float]] = (),
     ) -> None:
+        """Apply the out-of-plane (Y) loads -- sway, roll, sidelead, wind Y -- to the supports.
+
+        Runs for every document. Rewrites the left/right support reactions and platform base
+        ``Fy``/``Mx``; hinge totals, rope tensions and member loads stay in-plane.
+        """
         motion_kwargs: dict[str, Any] = {
             "accel_y_m_s2": motion.accel_y_m_s2,
             "roll_accel_rad_s2": motion.roll_accel_rad_s2,
@@ -475,7 +480,7 @@ class CraneCalculator:
             "lumped_point_masses": lumped_point_masses,
         }
         split_at_zero, platform_mx_at_zero, platform_fy_at_zero = (
-            self._build_split_support_reactions(
+            self._build_out_of_plane_reactions(
                 point,
                 hoist_id,
                 point.boom_angle_deg,
@@ -486,7 +491,7 @@ class CraneCalculator:
                 hoist_runtime_overrides=hoist_runtime_overrides,
             )
         )
-        split_at_one, platform_mx_at_one, platform_fy_at_one = self._build_split_support_reactions(
+        split_at_one, platform_mx_at_one, platform_fy_at_one = self._build_out_of_plane_reactions(
             point,
             hoist_id,
             point.boom_angle_deg,
@@ -497,7 +502,7 @@ class CraneCalculator:
             hoist_runtime_overrides=hoist_runtime_overrides,
         )
         split_at_side_unit, platform_mx_at_side_unit, platform_fy_at_side_unit = (
-            self._build_split_support_reactions(
+            self._build_out_of_plane_reactions(
                 point,
                 hoist_id,
                 point.boom_angle_deg,
@@ -669,7 +674,7 @@ class CraneCalculator:
                 governing_signs=composed.get("governing_signs"),
                 governing_wind_direction=(wind_dir if wind_ref > self.TOLERANCE else None),
             )
-            self._augment_point_with_split_supports(
+            self._augment_point_with_out_of_plane_loads(
                 point,
                 hoist_id,
                 wind_y_m_s=wind_y_ref,

@@ -106,6 +106,16 @@ ColumnLayout {
                 value: sceneVm.tackle
                 onCommitted: newValue => sceneVm.setTackle(newValue)
             }
+
+            NumericRow {
+                Layout.fillWidth: true
+                label: qsTr("Slewing Angle (deg):")
+                from: -180
+                to: 180
+                flippable: true
+                value: sceneVm.craneSlewingAngle
+                onCommitted: newValue => sceneVm.setCraneSlewingAngle(newValue)
+            }
         }
     }
 
@@ -233,39 +243,9 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Roll (°):")
-                from: -30
-                to: 30
-                flippable: true
-                value: sceneVm.vesselRoll
-                onCommitted: newValue => sceneVm.setVesselRoll(newValue)
-            }
-
-            NumericRow {
-                Layout.fillWidth: true
-                label: qsTr("Pitch (°):")
-                from: -30
-                to: 30
-                flippable: true
-                value: sceneVm.vesselPitch
-                onCommitted: newValue => sceneVm.setVesselPitch(newValue)
-            }
-
-            NumericRow {
-                Layout.fillWidth: true
-                label: qsTr("Slew (°):")
-                from: -180
-                to: 180
-                flippable: true
-                value: sceneVm.craneSlewingAngle
-                onCommitted: newValue => sceneVm.setCraneSlewingAngle(newValue)
-            }
-
-            NumericRow {
-                Layout.fillWidth: true
-                label: qsTr("Vessel ax (excl. g):")
-                from: -10
-                to: 10
+                label: qsTr("Surge (m/s²):")
+                from: -sceneVm.accelXMax
+                to: sceneVm.accelXMax
                 flippable: true
                 value: sceneVm.accelX
                 onCommitted: newValue => sceneVm.setAccelX(newValue)
@@ -273,9 +253,9 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Vessel ay (excl. g):")
-                from: -10
-                to: 10
+                label: qsTr("Sway (m/s²):")
+                from: -sceneVm.accelYMax
+                to: sceneVm.accelYMax
                 flippable: true
                 value: sceneVm.accelY
                 onCommitted: newValue => sceneVm.setAccelY(newValue)
@@ -283,9 +263,9 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Vessel az (excl. g):")
-                from: -10
-                to: 10
+                label: qsTr("Heave (m/s²):")
+                from: -sceneVm.accelZMax
+                to: sceneVm.accelZMax
                 flippable: true
                 value: sceneVm.accelZ
                 onCommitted: newValue => sceneVm.setAccelZ(newValue)
@@ -294,8 +274,8 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Roll (rad/s²):")
-                from: -5
-                to: 5
+                from: -sceneVm.rollAccelMax
+                to: sceneVm.rollAccelMax
                 flippable: true
                 value: sceneVm.rollAccel
                 onCommitted: newValue => sceneVm.setRollAccel(newValue)
@@ -304,11 +284,31 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Pitch (rad/s²):")
-                from: -5
-                to: 5
+                from: -sceneVm.pitchAccelMax
+                to: sceneVm.pitchAccelMax
                 flippable: true
                 value: sceneVm.pitchAccel
                 onCommitted: newValue => sceneVm.setPitchAccel(newValue)
+            }
+
+            NumericRow {
+                Layout.fillWidth: true
+                label: qsTr("Roll angle (°):")
+                from: -sceneVm.vesselRollMax
+                to: sceneVm.vesselRollMax
+                flippable: true
+                value: sceneVm.vesselRoll
+                onCommitted: newValue => sceneVm.setVesselRoll(newValue)
+            }
+
+            NumericRow {
+                Layout.fillWidth: true
+                label: qsTr("Pitch angle (°):")
+                from: -sceneVm.vesselPitchMax
+                to: sceneVm.vesselPitchMax
+                flippable: true
+                value: sceneVm.vesselPitch
+                onCommitted: newValue => sceneVm.setVesselPitch(newValue)
             }
         }
     }

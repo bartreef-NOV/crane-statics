@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
 AUTHORED_SCHEMA_MAJOR_VERSION = 7
-AUTHORED_SCHEMA_VERSION = "7.0.0"
+AUTHORED_SCHEMA_VERSION = "7.1.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -63,8 +63,10 @@ class AuthoredMetadata(BaseModel):
 
 
 class AuthoredVesselMotion(BaseModel):
-    """Optional vessel-frame accelerations (gravity excluded), roll/pitch, crane slewing
-    angle. Omitted values default to zero; all values are signed."""
+    """Optional vessel motion limits: surge, sway, heave (accelerations, gravity excluded),
+    roll and pitch (angular accelerations), roll angle and pitch angle, plus the crane
+    slewing angle. Each motion value is a ± limit (its sign is ignored); the load chart takes
+    the worst case over ±. The slewing angle is a signed orientation. Omitted values are zero."""
 
     model_config = ConfigDict(extra="forbid")
 

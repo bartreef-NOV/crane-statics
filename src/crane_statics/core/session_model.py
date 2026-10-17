@@ -12,6 +12,7 @@ from crane_statics.data import CraneDocument, Hoist, payload_hoist_ids
 
 from .limit_components import validate_limit_component
 from .limit_factory import DesignLimitFactory
+from .vessel_envelope import vessel_limit
 
 
 @dataclass
@@ -127,16 +128,17 @@ class SessionModel:
                         sidelead_deg=float(getattr(hoist, "sidelead_deg", hoist.offlead_deg)),
                         wind_speed_m_s=float(env.max_wind_speed_m_s),
                         wind_direction="+X",
-                        vessel_roll_deg=float(vessel_motion.roll_deg),
-                        vessel_pitch_deg=float(vessel_motion.pitch_deg),
+                        # The Model's vessel motion values are ± limits; the Scene starts at +limit.
+                        vessel_roll_deg=vessel_limit(vessel_motion, "roll_deg"),
+                        vessel_pitch_deg=vessel_limit(vessel_motion, "pitch_deg"),
                         crane_slewing_angle_deg=float(vessel_motion.crane_slewing_angle_deg),
-                        accel_x_m_s2=float(vessel_motion.accel_x_m_s2),
-                        accel_y_m_s2=float(getattr(vessel_motion, "accel_y_m_s2", 0.0)),
-                        accel_z_m_s2=float(vessel_motion.accel_z_m_s2),
-                        pitch_accel_rad_s2=float(vessel_motion.pitch_angular_accel_rad_s2),
-                        roll_accel_rad_s2=float(
-                            getattr(vessel_motion, "roll_angular_accel_rad_s2", 0.0)
+                        accel_x_m_s2=vessel_limit(vessel_motion, "accel_x_m_s2"),
+                        accel_y_m_s2=vessel_limit(vessel_motion, "accel_y_m_s2"),
+                        accel_z_m_s2=vessel_limit(vessel_motion, "accel_z_m_s2"),
+                        pitch_accel_rad_s2=vessel_limit(
+                            vessel_motion, "pitch_angular_accel_rad_s2"
                         ),
+                        roll_accel_rad_s2=vessel_limit(vessel_motion, "roll_angular_accel_rad_s2"),
                     ),
                 )
             visible_payload_hoists = payload_hoist_ids(doc)

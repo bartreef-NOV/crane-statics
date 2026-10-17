@@ -899,7 +899,7 @@
     },
     "AuthoredVesselMotion": {
       "additionalProperties": false,
-      "description": "Optional vessel-frame accelerations (gravity excluded), roll/pitch, crane slewing\nangle. Omitted values default to zero; all values are signed.",
+      "description": "Optional vessel motion limits: surge, sway, heave (accelerations, gravity excluded),\nroll and pitch (angular accelerations), roll angle and pitch angle, plus the crane\nslewing angle. Each motion value is a \u00b1 limit (its sign is ignored); the load chart takes\nthe worst case over \u00b1. The slewing angle is a signed orientation. Omitted values are zero.",
       "properties": {
         "accel_x_m_s2": {
           "default": 0.0,
@@ -1132,7 +1132,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "7.0.0"
+        "version": "7.1.0"
       }
     }
   ],

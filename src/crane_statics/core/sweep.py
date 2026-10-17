@@ -15,6 +15,7 @@ from .demand_extraction import (
     rope_tension_responds_to_hook_load,
 )
 from .limit_components import KNOWN_LIMIT_COMPONENTS
+from .vessel_envelope import vessel_motion_cases
 
 _LOG = logging.getLogger(__name__)
 
@@ -72,6 +73,8 @@ def run_capacity_sweep(
     calc = get_calculator(doc)
     kin = KinematicsAdapter(doc.model_dump())
     wind_speed = float(doc.environment.max_wind_speed_m_s)
+    # The Model's vessel motion values are ± limits; the chart reports the worst case.
+    motion_cases = vessel_motion_cases(doc.environment.vessel_motion)
 
     solve_rope_ids = {
         str(r.id).strip()
@@ -90,16 +93,18 @@ def run_capacity_sweep(
     def _wind_points(angle: float, hoist_runtime_overrides: dict[str, dict[str, Any]]) -> list:
         points = []
         for case in iter_wind_directional_cases(hoist, wind_speed):
-            pt = calc.compute_analysis_point(
-                angle,
-                0.0,
-                hoist_id,
-                wind_speed_m_s=wind_speed,
-                wind_direction=case.wind_direction,
-                hoist_runtime_overrides=hoist_runtime_overrides,
-            )
-            if pt is not None:
-                points.append(pt)
+            for motion in motion_cases:
+                pt = calc.compute_analysis_point(
+                    angle,
+                    0.0,
+                    hoist_id,
+                    wind_speed_m_s=wind_speed,
+                    wind_direction=case.wind_direction,
+                    hoist_runtime_overrides=hoist_runtime_overrides,
+                    **motion,
+                )
+                if pt is not None:
+                    points.append(pt)
         return points
 
     def _min_capacity(

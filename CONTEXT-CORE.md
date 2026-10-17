@@ -18,7 +18,7 @@ Essential terms for understanding the codebase structure. For the complete vocab
 
 **Session** — the loaded document plus changes since load. Held by pure `core/session_model.py::SessionModel`.
 
-**Scene state** — the operator's inputs for one hoist: boom angle, hook load, tackle length, offlead, sidelead, wind, vessel roll, vessel pitch, crane slewing angle, and accelerations. Accelerations are vessel-frame motion accelerations with gravity excluded.
+**Scene state** — the operator's inputs for one hoist: boom angle, hook load, tackle length, offlead, sidelead, wind, vessel motion (surge, sway, heave, roll, pitch, roll angle, pitch angle), and crane slewing angle. Surge, sway and heave are vessel-frame accelerations with gravity excluded. Scene vessel motion is clamped to the ± limits in the Model; the load chart uses only the Model limits and takes the worst case over ±.
 
 **Vessel frame / crane frame** — the vessel frame has x forward, y port, z up (pitch positive bow-down, roll positive to starboard). The crane frame is the vessel frame rotated about z by the slewing angle. `calculation/vessel_frame.py` turns vessel angles and accelerations into an equivalent crane-frame acceleration that the solver and `drawn_loads` both consume.
 

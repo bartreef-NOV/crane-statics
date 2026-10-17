@@ -315,6 +315,8 @@ class TestSceneViewModelState:
         assert scene_vm.hookLoadTonnes == pytest.approx(10.0)
 
     def test_environment_setters_write_through_to_session(self, scene_vm):
+        vm = scene_vm._model.document.environment.vessel_motion
+        vm.accel_x_m_s2 = vm.pitch_angular_accel_rad_s2 = 1.0
         scene_vm.setWindSpeed(12.5)
         scene_vm.setWindDirection("-Y")
         scene_vm.setAccelX(0.25)
@@ -327,32 +329,67 @@ class TestSceneViewModelState:
         assert sc.pitch_accel_rad_s2 == pytest.approx(0.05)
 
     @pytest.mark.parametrize(
-        ("prop", "setter", "field"),
+        ("prop", "setter", "field", "limit_prop", "limit_field"),
         [
-            ("vesselRoll", "setVesselRoll", "vessel_roll_deg"),
-            ("vesselPitch", "setVesselPitch", "vessel_pitch_deg"),
-            ("craneSlewingAngle", "setCraneSlewingAngle", "crane_slewing_angle_deg"),
-            ("accelX", "setAccelX", "accel_x_m_s2"),
-            ("accelY", "setAccelY", "accel_y_m_s2"),
-            ("accelZ", "setAccelZ", "accel_z_m_s2"),
+            ("vesselRoll", "setVesselRoll", "vessel_roll_deg", "vesselRollMax", "roll_deg"),
+            ("vesselPitch", "setVesselPitch", "vessel_pitch_deg", "vesselPitchMax", "pitch_deg"),
+            ("accelX", "setAccelX", "accel_x_m_s2", "accelXMax", "accel_x_m_s2"),
+            ("accelY", "setAccelY", "accel_y_m_s2", "accelYMax", "accel_y_m_s2"),
+            ("accelZ", "setAccelZ", "accel_z_m_s2", "accelZMax", "accel_z_m_s2"),
+            (
+                "rollAccel",
+                "setRollAccel",
+                "roll_accel_rad_s2",
+                "rollAccelMax",
+                "roll_angular_accel_rad_s2",
+            ),
+            (
+                "pitchAccel",
+                "setPitchAccel",
+                "pitch_accel_rad_s2",
+                "pitchAccelMax",
+                "pitch_angular_accel_rad_s2",
+            ),
         ],
     )
-    def test_vessel_motion_setters_are_signed_notify_and_reanalyse(
-        self, scene_vm, monkeypatch, prop, setter, field
+    def test_vessel_motion_setters_clamp_to_model_limits_notify_and_reanalyse(
+        self, scene_vm, monkeypatch, prop, setter, field, limit_prop, limit_field
     ):
+        setattr(scene_vm._model.document.environment.vessel_motion, limit_field, -3.0)
         calls: list[int] = []
         emitted: list[int] = []
         monkeypatch.setattr(scene_vm, "_after_state_changed", lambda: calls.append(1))
         monkeypatch.setattr(scene_vm, "recomputeAutoLoad", lambda: calls.append(1))
         scene_vm.environmentChanged.connect(lambda: emitted.append(1))
-
-        getattr(scene_vm, setter)(-2.5)
-
         sc = scene_vm._model.get_active_hoist_state().scene_state
+
+        assert getattr(scene_vm, limit_prop) == pytest.approx(3.0)  # limit is a magnitude
+        getattr(scene_vm, setter)(-2.5)
         assert getattr(sc, field) == pytest.approx(-2.5)
         assert getattr(scene_vm, prop) == pytest.approx(-2.5)
         assert emitted
         assert calls
+
+        getattr(scene_vm, setter)(10.0)
+        assert getattr(sc, field) == pytest.approx(3.0)
+        getattr(scene_vm, setter)(-10.0)
+        assert getattr(sc, field) == pytest.approx(-3.0)
+
+    def test_crane_slewing_angle_is_not_limited_by_vessel_motion(self, scene_vm):
+        scene_vm.setCraneSlewingAngle(-90.0)
+        sc = scene_vm._model.get_active_hoist_state().scene_state
+        assert sc.crane_slewing_angle_deg == pytest.approx(-90.0)
+
+    def test_model_limit_edit_pulls_scene_values_back_inside(self, scene_vm):
+        vm = scene_vm._model.document.environment.vessel_motion
+        vm.roll_deg = 10.0
+        scene_vm.setVesselRoll(8.0)
+        sc = scene_vm._model.get_active_hoist_state().scene_state
+
+        vm.roll_deg = 5.0
+        scene_vm.reload()
+
+        assert sc.vessel_roll_deg == pytest.approx(5.0)
 
     def test_document_vessel_motion_seeds_every_hoist_scene_state(self):
         session = SessionState()
@@ -361,16 +398,16 @@ class TestSceneViewModelState:
         vm.roll_deg = 3.0
         vm.pitch_deg = -2.0
         vm.crane_slewing_angle_deg = 90.0
-        vm.accel_x_m_s2 = -1.0
+        vm.accel_x_m_s2 = 1.0
         session.model.set_document(doc)
 
         assert session.model.hoist_states
         for state in session.model.hoist_states.values():
             sc = state.scene_state
             assert sc.vessel_roll_deg == pytest.approx(3.0)
-            assert sc.vessel_pitch_deg == pytest.approx(-2.0)
+            assert sc.vessel_pitch_deg == pytest.approx(2.0)  # seeded at +limit
             assert sc.crane_slewing_angle_deg == pytest.approx(90.0)
-            assert sc.accel_x_m_s2 == pytest.approx(-1.0)
+            assert sc.accel_x_m_s2 == pytest.approx(1.0)
 
     def test_unknown_wind_direction_is_ignored(self, scene_vm):
         scene_vm.setWindDirection("sideways")

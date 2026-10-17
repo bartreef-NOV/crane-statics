@@ -26,6 +26,7 @@ from crane_statics.core import drawn_loads as dl
 from crane_statics.schemas.generate_schema import SCHEMA_FILENAME
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
 from crane_statics.core.session_model import SessionModel
+from crane_statics.core.vessel_envelope import SCENE_FIELD_LIMITS, vessel_limit
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.scene.scene_renderer import CraneSceneRenderer
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
@@ -131,8 +132,16 @@ class SceneHarness:
         """Write scene-state fields, then run the full refresh pipeline."""
         state = self.state
         assert state is not None
+        vessel_motion = self.model.document.environment.vessel_motion
         for key, value in scene_state.items():
             setattr(state.scene_state, key, value)
+            limit_field = SCENE_FIELD_LIMITS.get(key)
+            if limit_field is not None:  # the Scene clamps to the Model's ± limits
+                setattr(
+                    vessel_motion,
+                    limit_field,
+                    max(vessel_limit(vessel_motion, limit_field), abs(value)),
+                )
         self.vm.reload()
 
     @property
@@ -1236,7 +1245,7 @@ class TestAuthoredSchemaPolicy:
 
         saved = json.loads(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "7.0.0"
+        assert saved["schema"]["version"] == "7.1.0"
         assert "model_definition" in saved
         assert "ropes" not in saved["model_definition"]
         assert "nodes" not in saved["model_definition"]

@@ -16,6 +16,7 @@ from crane_statics.core.analysis_services import (
 )
 from crane_statics.core.drawn_loads import active_hoist_dict
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
+from crane_statics.core.vessel_envelope import SCENE_FIELD_LIMITS, clamp_to_limit, vessel_limit
 from crane_statics.qml_app.adapters.scene_adapter import SceneStateAdapter
 from crane_statics.qml_app.scene.scene_drag import DragEdit, DragLimits, SceneDrag
 from crane_statics.qml_app.session import SessionState
@@ -609,6 +610,52 @@ class SceneViewModel(QObject):
     def setVesselPitch(self, value: float) -> None:
         self._set_scene_field("vessel_pitch_deg", float(value), self.environmentChanged)
 
+    # Scene vessel motion inputs are clamped to the ± limits defined in the Model.
+    @pyqtProperty(float, notify=environmentChanged)
+    def accelXMax(self) -> float:
+        return self._vessel_limit("accel_x_m_s2")
+
+    @pyqtProperty(float, notify=environmentChanged)
+    def accelYMax(self) -> float:
+        return self._vessel_limit("accel_y_m_s2")
+
+    @pyqtProperty(float, notify=environmentChanged)
+    def accelZMax(self) -> float:
+        return self._vessel_limit("accel_z_m_s2")
+
+    @pyqtProperty(float, notify=environmentChanged)
+    def rollAccelMax(self) -> float:
+        return self._vessel_limit("roll_accel_rad_s2")
+
+    @pyqtProperty(float, notify=environmentChanged)
+    def pitchAccelMax(self) -> float:
+        return self._vessel_limit("pitch_accel_rad_s2")
+
+    @pyqtProperty(float, notify=environmentChanged)
+    def vesselRollMax(self) -> float:
+        return self._vessel_limit("vessel_roll_deg")
+
+    @pyqtProperty(float, notify=environmentChanged)
+    def vesselPitchMax(self) -> float:
+        return self._vessel_limit("vessel_pitch_deg")
+
+    def _vessel_limit(self, scene_field: str) -> float:
+        doc = self._model.document
+        if doc is None:
+            return 0.0
+        return vessel_limit(doc.environment.vessel_motion, SCENE_FIELD_LIMITS[scene_field])
+
+    def _clamp_vessel_motion(self) -> None:
+        """Pull every hoist's Scene vessel motion back inside the Model's ± limits."""
+        for hoist_state in self._model.hoist_states.values():
+            for field in SCENE_FIELD_LIMITS:
+                current = float(getattr(hoist_state.scene_state, field))
+                setattr(
+                    hoist_state.scene_state,
+                    field,
+                    clamp_to_limit(current, self._vessel_limit(field)),
+                )
+
     @pyqtProperty(float, notify=environmentChanged)
     def craneSlewingAngle(self) -> float:
         return self._scene_field("crane_slewing_angle_deg")
@@ -625,6 +672,8 @@ class SceneViewModel(QObject):
         state = self._model.get_active_hoist_state()
         if state is None:
             return
+        if name in SCENE_FIELD_LIMITS:
+            value = clamp_to_limit(value, self._vessel_limit(name))
         setattr(state.scene_state, name, value)
         notify.emit()
         if state.scene_state.hook_load_auto:
@@ -811,6 +860,7 @@ class SceneViewModel(QObject):
     @pyqtSlot()
     def reload(self) -> None:
         doc = self._model.document
+        self._clamp_vessel_motion()
         self._kinematics.invalidate_kinematics()
         self._kinematics.recompute_angle_bounds(doc)
 

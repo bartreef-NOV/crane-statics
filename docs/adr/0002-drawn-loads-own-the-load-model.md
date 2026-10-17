@@ -46,7 +46,7 @@ screen.
 
 **Scope is the X/Z plane, stated in the interface.** Lateral acceleration
 (`accel_y_m_s2`), roll acceleration, sidelead and Y-axis wind produce purely
-out-of-plane forces in the solver — `engine.py::_build_split_support_reactions`
+out-of-plane forces in the solver — `engine.py::_build_out_of_plane_reactions`
 routes them into `fy` alone, never into X/Z equilibrium. They are therefore
 deliberately *absent* from `LoadConditions` rather than accepted and silently
 dropped. A caller passing them would be making an error the type system should
