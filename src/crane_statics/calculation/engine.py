@@ -124,6 +124,16 @@ def split_wind_speed_components(
     return 0.0, -magnitude
 
 
+def split_wind_angle_components(
+    wind_speed_m_s: float, wind_angle_deg: float
+) -> tuple[float, float]:
+    """Wind speed components ``(V cos, V sin)`` for a wind angle from +X toward +Y."""
+    magnitude = abs(float(wind_speed_m_s))
+    angle = math.radians(float(wind_angle_deg))
+    x, y = magnitude * math.cos(angle), magnitude * math.sin(angle)
+    return (0.0 if abs(x) < 1e-12 else x, 0.0 if abs(y) < 1e-12 else y)
+
+
 def candidate_wind_directions(wind_speed_m_s: Optional[float]) -> tuple[str, ...]:
     if wind_speed_m_s is None or abs(float(wind_speed_m_s)) <= WIND_SPEED_THRESHOLD:
         return ("+X",)
@@ -583,8 +593,12 @@ class CraneCalculator:
         vessel_roll_deg: Optional[float] = None,
         vessel_pitch_deg: Optional[float] = None,
         crane_slewing_angle_deg: Optional[float] = None,
+        wind_angle_deg: Optional[float] = None,
     ) -> Optional[AnalysisPoint]:
         """Full linear response at one boom angle.
+
+        ``wind_angle_deg`` (degrees from +X toward +Y), when given, overrides
+        ``wind_direction``; the per-axis components then drive the X and Y responses.
 
         The motion inputs are **vessel-frame** values (accelerations exclude gravity); the
         vessel roll/pitch tilt gravity and the crane slewing angle rotates the result into
@@ -605,8 +619,13 @@ class CraneCalculator:
             wind_ref = (
                 env.max_wind_speed_m_s if wind_speed_m_s is None else abs(float(wind_speed_m_s))
             )
-            wind_dir = normalize_wind_direction(wind_direction)
-            wind_x_ref, wind_y_ref = split_wind_speed_components(wind_ref, wind_dir)
+            wind_dir: Optional[str]
+            if wind_angle_deg is not None:
+                wind_dir = None
+                wind_x_ref, wind_y_ref = split_wind_angle_components(wind_ref, wind_angle_deg)
+            else:
+                wind_dir = normalize_wind_direction(wind_direction)
+                wind_x_ref, wind_y_ref = split_wind_speed_components(wind_ref, wind_dir)
 
             def _vm_default(value: Optional[float], name: str) -> float:
                 if value is not None:
