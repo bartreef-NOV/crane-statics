@@ -9,13 +9,13 @@ from typing import Any, Callable, Optional
 from ..calculation.engine import AllowableCapacity, AnalysisPoint, get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
 from ..data.models import CraneDocument
-from .analysis_cases import analysis_mode_by_name, iter_wind_directional_cases
+from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
+from .chart_envelope import ProbeSet, build_probes, envelope_capacity
 from .demand_extraction import (
     connection_component_responds_to_hook_load,
     rope_tension_responds_to_hook_load,
 )
 from .limit_components import KNOWN_LIMIT_COMPONENTS
-from .vessel_envelope import vessel_motion_cases
 
 _LOG = logging.getLogger(__name__)
 
@@ -73,8 +73,11 @@ def run_capacity_sweep(
     calc = get_calculator(doc)
     kin = KinematicsAdapter(doc.model_dump())
     wind_speed = float(doc.environment.max_wind_speed_m_s)
-    # The Model's vessel motion values are ± limits; the chart reports the worst case.
-    motion_cases = vessel_motion_cases(doc.environment.vessel_motion)
+    # The Model's vessel motion values are ± limits and the hoist's leads are taken with
+    # both signs; the chart reports the worst case over them, every slew and wind angle.
+    vessel = doc.environment.vessel_motion
+    offlead_deg = float(getattr(hoist, "offlead_deg", 0.0))
+    sidelead_deg = float(getattr(hoist, "sidelead_deg", offlead_deg))
 
     solve_rope_ids = {
         str(r.id).strip()
@@ -90,37 +93,37 @@ def run_capacity_sweep(
         if str(h.rope_id).strip()
     }
 
-    def _wind_points(angle: float, hoist_runtime_overrides: dict[str, dict[str, Any]]) -> list:
-        points = []
-        for case in iter_wind_directional_cases(hoist, wind_speed):
-            for motion in motion_cases:
-                pt = calc.compute_analysis_point(
-                    angle,
-                    0.0,
-                    hoist_id,
-                    wind_speed_m_s=wind_speed,
-                    wind_direction=case.wind_direction,
-                    hoist_runtime_overrides=hoist_runtime_overrides,
-                    **motion,
-                )
-                if pt is not None:
-                    points.append(pt)
-        return points
+    def _capacity(
+        probes: ProbeSet, design_limits_map: dict[str, dict], hook_mass_t: float
+    ) -> AllowableCapacity:
+        return envelope_capacity(
+            calc,
+            probes,
+            design_limits_map,
+            vessel=vessel,
+            offlead_deg=offlead_deg,
+            sidelead_deg=sidelead_deg,
+            hook_daf=hoist.hook_daf,
+            hook_mass_t=hook_mass_t,
+        )
 
-    def _min_capacity(
-        points: list, design_limits_map: dict[str, dict], hook_mass_t: float
-    ) -> Optional[AllowableCapacity]:
-        best = None
-        for pt in points:
-            cap = calc.compute_allowable_load(
-                pt,
-                design_limits_map,
-                hook_daf=hoist.hook_daf,
-                hook_mass_t=hook_mass_t,
+    # Stage 2 revisits the contractual outreaches of stage 1; their solves are reused.
+    envelope_cache: dict[tuple[float, str], Optional[tuple[ProbeSet, AllowableCapacity]]] = {}
+
+    def _envelope(
+        angle: float, mode: HoistAnalysisMode
+    ) -> Optional[tuple[ProbeSet, AllowableCapacity]]:
+        key = (round(float(angle), 10), mode.name)
+        if key not in envelope_cache:
+            probes = build_probes(
+                calc, hoist_id, angle, wind_speed, mode.runtime_overrides, vessel=vessel
             )
-            if best is None or cap.max_allowable_load_kN < best.max_allowable_load_kN:
-                best = cap
-        return best
+            envelope_cache[key] = (
+                None
+                if probes is None
+                else (probes, _capacity(probes, enabled_limits, mode.hook_mass_t))
+            )
+        return envelope_cache[key]
 
     def _resolve_entity(limit_key: str) -> str:
         for comp in KNOWN_LIMIT_COMPONENTS:
@@ -174,7 +177,6 @@ def run_capacity_sweep(
         check_cancelled()
         mode = analysis_mode_by_name(hoist, mode_name)
         mode_hook_mass_t = mode.hook_mass_t
-        hoist_runtime_overrides = mode.runtime_overrides
         mode_contractual_points = mode.contractual_points
         if mode_name == "split" and not mode_contractual_points:
             return {
@@ -203,14 +205,11 @@ def run_capacity_sweep(
             if angle is None:
                 contractual_results.append((cp, None, None))
                 continue
-            pts = _wind_points(angle, hoist_runtime_overrides)
-            if not pts:
+            envelope = _envelope(angle, mode)
+            if envelope is None:
                 contractual_results.append((cp, None, None))
                 continue
-            cap = _min_capacity(pts, enabled_limits, mode_hook_mass_t)
-            if cap is None:
-                contractual_results.append((cp, None, None))
-                continue
+            _probes, cap = envelope
             contractual_results.append(
                 (cp, cap.max_allowable_load_t, cp.load_t <= cap.max_allowable_load_t)
             )
@@ -227,21 +226,22 @@ def run_capacity_sweep(
                     angle = kin.outreach_to_angle(outreach, hoist_id)
                     if angle is None:
                         continue
-                    pts = _wind_points(angle, hoist_runtime_overrides)
-                    if not pts:
+                    envelope = _envelope(angle, mode)
+                    if envelope is None:
                         continue
-                    cap = _min_capacity(pts, enabled_limits, mode_hook_mass_t)
-                    if cap is None:
-                        continue
+                    probes, cap = envelope
                     if math.isfinite(cap.max_allowable_load_t):
                         curve_outreach.append(outreach)
                         curve_load_t.append(cap.max_allowable_load_t)
                     for lid, comps in enabled_limits.items():
-                        if not any(_affects_hook_load(pt, lid, comps) for pt in pts):
+                        # Sensitivities do not depend on motion or wind: the zero probe's do.
+                        if not _affects_hook_load(probes.zero, lid, comps):
                             continue
-                        cap_limit = _min_capacity(pts, {lid: comps}, mode_hook_mass_t)
-                        if cap_limit is None:
-                            continue
+                        cap_limit = (
+                            cap
+                            if len(enabled_limits) == 1
+                            else _capacity(probes, {lid: comps}, mode_hook_mass_t)
+                        )
                         # CRITICAL: Use max_allowable_load_t (payload domain) for curves, not kN.
                         # Chart Y-axis shows payload tonnes, not hook-force.
                         if math.isfinite(cap_limit.max_allowable_load_t):

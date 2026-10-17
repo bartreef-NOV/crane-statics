@@ -34,15 +34,6 @@ def _signed_candidates(value: float) -> tuple[float, ...]:
     return (-magnitude, magnitude)
 
 
-def iter_wind_directional_cases(
-    hoist: Any,
-    wind_speed_m_s: float,
-) -> Iterator[DirectionalAnalysisCase]:
-    """Yield wind-direction-only cases for chart sweeps."""
-    for wind_direction in candidate_wind_directions(wind_speed_m_s):
-        yield DirectionalAnalysisCase(wind_direction, None, None)
-
-
 def iter_wind_lead_directional_cases(
     hoist: Any,
     wind_speed_m_s: float,

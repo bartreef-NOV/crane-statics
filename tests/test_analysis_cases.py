@@ -4,7 +4,6 @@ from pathlib import Path
 
 from crane_statics.core.analysis_cases import (
     iter_wind_lead_directional_cases,
-    iter_wind_directional_cases,
     iter_hoist_analysis_modes,
 )
 from crane_statics.core.io import load_document
@@ -21,7 +20,6 @@ def test_example_modes_and_directional_case_counts():
     assert [mode.name for mode in mh_modes] == ["normal", "split"]
     assert len(list(iter_wind_lead_directional_cases(mh, 15.1))) == 16
     assert len(list(iter_wind_lead_directional_cases(wh, 15.1))) == 16
-    assert len(list(iter_wind_directional_cases(mh, 15.1))) == 4
 
 
 def test_zero_wind_has_one_directional_case_per_lead_combination():

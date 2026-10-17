@@ -128,6 +128,7 @@ def test_superposition_matches_direct_solve(
             wind_angle_deg=wind_angle,
             crane_slewing_angle_deg=slew,
             hoist_runtime_overrides=overrides,
+            offlead_deg=0.0,
             **motion,
         )
         assert direct is not None
@@ -168,6 +169,59 @@ def test_zero_wind_probes_reuse_the_zero_point() -> None:
 def test_unknown_hoist_gives_no_probes() -> None:
     calc = CraneCalculator(_document(offset_boom_mass=False))
     assert build_probes(calc, "nope", BOOM_ANGLE_DEG, 10.0, None) is None
+
+
+def test_probes_are_zero_lead_points() -> None:
+    """The authored offlead must not be in the probes: envelope_capacity adds both signs."""
+    doc = _document(offset_boom_mass=False)
+    assert _hoist(doc).offlead_deg != 0.0
+    calc = CraneCalculator(doc)
+    probes = build_probes(calc, HOIST, BOOM_ANGLE_DEG, 0.0, None)
+    assert probes is not None
+    no_motion: dict[str, Any] = dict.fromkeys(LIMITS, 0.0)
+    zero_lead = calc.compute_analysis_point(
+        BOOM_ANGLE_DEG,
+        0.0,
+        HOIST,
+        wind_speed_m_s=0.0,
+        offlead_deg=0.0,
+        sidelead_deg=0.0,
+        crane_slewing_angle_deg=0.0,
+        **no_motion,
+    )
+    assert zero_lead is not None
+    assert probes.zero.sensitivity_rope_tensions == zero_lead.sensitivity_rope_tensions
+    assert probes.zero.sensitivity_reactions == zero_lead.sensitivity_reactions
+
+
+def test_vessel_limits_skip_probes_of_unused_channels() -> None:
+    doc = _envelope_document(vessel_limits={"accel_z_m_s2": 1.1})
+    calc = CraneCalculator(doc)
+    vm = doc.environment.vessel_motion
+    full = build_probes(calc, HOIST, BOOM_ANGLE_DEG, WIND_M_S, None)
+    lean = build_probes(calc, HOIST, BOOM_ANGLE_DEG, WIND_M_S, None, vessel=vm)
+    assert full is not None and lean is not None
+    # Only heave is set: accel x, y and the angular channels stay zero at every slew.
+    used = [p is not lean.zero for p in lean.motion]
+    assert used == [False, False, True, False, False]
+    hoist = _hoist(doc)
+    for limits in ENVELOPE_LIMITS:
+        caps = [
+            envelope_capacity(
+                calc,
+                probes,
+                limits,
+                vessel=vm,
+                offlead_deg=hoist.offlead_deg,
+                sidelead_deg=hoist.sidelead_deg,
+                hook_daf=hoist.hook_daf,
+                hook_mass_t=hoist.hook_mass_t,
+            )
+            for probes in (full, lean)
+        ]
+        assert caps[1].max_allowable_load_kN == pytest.approx(
+            caps[0].max_allowable_load_kN, rel=1e-12, abs=1e-12
+        )
 
 
 # --- envelope_capacity ----------------------------------------------------------------
@@ -328,7 +382,9 @@ def test_zero_limits_and_no_wind_equal_the_single_solve() -> None:
     doc.environment.max_wind_speed_m_s = 0.0
     calc = CraneCalculator(doc)
     hoist = _hoist(doc)
-    pt = calc.compute_analysis_point(BOOM_ANGLE_DEG, 0.0, HOIST, wind_speed_m_s=0.0)
+    pt = calc.compute_analysis_point(
+        BOOM_ANGLE_DEG, 0.0, HOIST, wind_speed_m_s=0.0, offlead_deg=0.0, sidelead_deg=0.0
+    )
     assert pt is not None
     for limits in ENVELOPE_LIMITS:
         expected = min(

@@ -84,6 +84,9 @@ def reference_capacities(
                     wind_angle_deg=wind_angle,
                     crane_slewing_angle_deg=slew,
                     hoist_runtime_overrides=overrides,
+                    # Zero-lead point: the signed leads are composed below.
+                    offlead_deg=0.0,
+                    sidelead_deg=0.0,
                     **motion,
                 )
                 if pt is None:

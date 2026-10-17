@@ -59,13 +59,31 @@ def build_probes(
     boom_angle_deg: float,
     wind_speed_m_s: float,
     overrides: Optional[dict[str, dict[str, Any]]],
+    *,
+    vessel: Optional[VesselMotion] = None,
 ) -> Optional[ProbeSet]:
     """Solve the zero, unit-motion and wind probes on a level vessel at slew 0.
 
     On a level vessel at slew 0 the vessel-frame inputs equal the crane-frame channels, so
     each motion probe sets one input to +1 (m/s² or rad/s²). Returns ``None`` if any probe
     fails; with zero wind speed the wind probes are the zero probe.
+
+    The probes are zero-lead points (offlead and sidelead 0): ``envelope_capacity`` adds
+    the signed leads itself. Given ``vessel``, a motion probe whose channel is exactly zero
+    in every sign case and slew of those limits is not solved (the zero probe stands in);
+    such a probe would only ever be superposed with a zero weight.
     """
+    needed = [True] * len(_PROBE_KWARGS)
+    if vessel is not None:
+        harmonics = _slew_harmonics(abs(float(calc.doc.environment.gravity_m_s2)), vessel)
+        needed = [
+            bool(
+                np.any(harmonics.mean[:, j])
+                or np.any(harmonics.cos_part[:, j])
+                or np.any(harmonics.sin_part[:, j])
+            )
+            for j in range(len(_PROBE_KWARGS))
+        ]
 
     def _solve(
         wind_speed: float = 0.0, wind_angle: float = 0.0, **motion: float
@@ -79,6 +97,8 @@ def build_probes(
             wind_speed_m_s=wind_speed,
             wind_angle_deg=wind_angle,
             hoist_runtime_overrides=overrides,
+            offlead_deg=0.0,
+            sidelead_deg=0.0,
             crane_slewing_angle_deg=0.0,
             vessel_roll_deg=0.0,
             vessel_pitch_deg=0.0,
@@ -88,7 +108,10 @@ def build_probes(
     zero = _solve()
     if zero is None:
         return None
-    motion = [_solve(**{name: _PROBE_VALUE}) for name in _PROBE_KWARGS]
+    motion = [
+        _solve(**{name: _PROBE_VALUE}) if need else zero
+        for name, need in zip(_PROBE_KWARGS, needed)
+    ]
     if abs(float(wind_speed_m_s)) <= _WIND_ZERO:
         wind_x: Optional[AnalysisPoint] = zero
         wind_y: Optional[AnalysisPoint] = zero
