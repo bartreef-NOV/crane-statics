@@ -28,6 +28,9 @@ DEFAULT_VESSEL_MOTION = {
     "accel_x_m_s2": 0.0,
     "accel_y_m_s2": 0.0,
     "accel_z_m_s2": 0.0,
+    "roll_deg": 0.0,
+    "pitch_deg": 0.0,
+    "crane_slewing_angle_deg": 0.0,
     "pitch_angular_accel_rad_s2": 0.0,
     "roll_angular_accel_rad_s2": 0.0,
     "reference_x_m": 0.0,
@@ -83,28 +86,18 @@ class Metadata(BaseModel):
 
 
 class VesselMotion(BaseModel):
-    """Vessel motion definition under environment."""
+    """Vessel motion definition under environment (signed, vessel-frame, gravity excluded)."""
 
-    accel_x_m_s2: float = Field(default=0.0, description="Translational X acceleration")
-    accel_y_m_s2: float = Field(default=0.0, description="Translational Y acceleration")
-    accel_z_m_s2: float = Field(default=0.0, description="Translational Z acceleration")
+    accel_x_m_s2: float = Field(default=0.0, description="Vessel-frame X acceleration")
+    accel_y_m_s2: float = Field(default=0.0, description="Vessel-frame Y acceleration")
+    accel_z_m_s2: float = Field(default=0.0, description="Vessel-frame Z acceleration")
+    roll_deg: float = Field(default=0.0, description="Vessel roll angle (gravity tilt)")
+    pitch_deg: float = Field(default=0.0, description="Vessel pitch angle (gravity tilt)")
+    crane_slewing_angle_deg: float = Field(default=0.0, description="Crane slewing angle")
     reference_x_m: float = Field(default=0.0, description="Pitch rotation reference X")
     reference_z_m: float = Field(default=0.0, description="Pitch rotation reference Z")
     pitch_angular_accel_rad_s2: float = Field(default=0.0, description="Pitch angular acceleration")
     roll_angular_accel_rad_s2: float = Field(default=0.0, description="Roll angular acceleration")
-
-    @field_validator(
-        "accel_x_m_s2",
-        "accel_y_m_s2",
-        "accel_z_m_s2",
-        "pitch_angular_accel_rad_s2",
-        "roll_angular_accel_rad_s2",
-    )
-    @classmethod
-    def validate_non_negative(cls, v: float) -> float:
-        if v < 0.0:
-            raise ValueError("Value must be >= 0")
-        return v
 
 
 class Environment(BaseModel):
@@ -112,14 +105,7 @@ class Environment(BaseModel):
 
     gravity_m_s2: float = Field(default=-9.81, description="Gravity acceleration")
     max_wind_speed_m_s: float = Field(default=20.0, description="Maximum wind speed")
-    wind_reference_height_m_asl: float = Field(
-        default=10.0, description="Wind reference height ASL"
-    )
     air_density_kg_m3: float = Field(default=1.225, description="Air density")
-    wind_profile_exponent: float = Field(
-        default=0.143, description="Wind profile power-law exponent"
-    )
-    mean_sealevel_z_m: float = Field(default=-35.0, description="Mean sea level Z coordinate")
     vessel_motion: VesselMotion = Field(default_factory=VesselMotion)
 
     @field_validator("gravity_m_s2")
@@ -136,7 +122,7 @@ class Environment(BaseModel):
             raise ValueError("max_wind_speed_m_s must be > 0")
         return v
 
-    @field_validator("wind_reference_height_m_asl", "air_density_kg_m3", "wind_profile_exponent")
+    @field_validator("air_density_kg_m3")
     @classmethod
     def validate_positive(cls, v: float) -> float:
         if v <= 0.0:
@@ -368,7 +354,7 @@ class CraneDocument(BaseModel):
         default=None,
         description="Absolute global Z the hook must reach at each payload hoist's minimum "
         "outreach. Every payload hoist's max_hook_travel_m and rope_length_m derive from it. "
-        "Normalization fills it from environment.mean_sealevel_z_m when unauthored",
+        "Normalization fills it with crane-frame z = 0 when unauthored",
     )
     bodies: list[Body] = Field(default_factory=list)
     nodes: list[Node] = Field(default_factory=list)
@@ -809,14 +795,9 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         else None
     )
 
-    # Unauthored design hook height means "the waterline": the duty every offshore
-    # crane states, and the only default that does not invent an elevation.
+    # Unauthored design hook height defaults to the crane-frame origin (z = 0).
     hook_height_src = md.get("hook_height_at_min_outreach_m")
-    hook_height_at_min_outreach_m = (
-        float(hook_height_src)
-        if hook_height_src is not None
-        else float(environment_src["mean_sealevel_z_m"])
-    )
+    hook_height_at_min_outreach_m = float(hook_height_src) if hook_height_src is not None else 0.0
 
     bodies: list[dict[str, Any]] = []
     for body_id in CANONICAL_BODIES:
@@ -1145,26 +1126,28 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         "environment": {
             "gravity_m_s2": -abs(float(environment_src.get("gravity_m_s2", DEFAULT_GRAVITY_M_S2))),
             "max_wind_speed_m_s": abs(float(environment_src["max_wind_speed_m_s"])),
-            "wind_reference_height_m_asl": float(environment_src["wind_reference_height_m_asl"]),
             "air_density_kg_m3": float(
                 environment_src.get("air_density_kg_m3", DEFAULT_AIR_DENSITY_KG_M3)
             ),
-            "wind_profile_exponent": float(environment_src["wind_profile_exponent"]),
-            "mean_sealevel_z_m": float(environment_src["mean_sealevel_z_m"]),
             "vessel_motion": {
-                "accel_x_m_s2": abs(
-                    float(
-                        vessel_motion_src.get("accel_x_m_s2", DEFAULT_VESSEL_MOTION["accel_x_m_s2"])
-                    )
+                "accel_x_m_s2": float(
+                    vessel_motion_src.get("accel_x_m_s2", DEFAULT_VESSEL_MOTION["accel_x_m_s2"])
                 ),
-                "accel_y_m_s2": abs(
-                    float(
-                        vessel_motion_src.get("accel_y_m_s2", DEFAULT_VESSEL_MOTION["accel_y_m_s2"])
-                    )
+                "accel_y_m_s2": float(
+                    vessel_motion_src.get("accel_y_m_s2", DEFAULT_VESSEL_MOTION["accel_y_m_s2"])
                 ),
-                "accel_z_m_s2": abs(
-                    float(
-                        vessel_motion_src.get("accel_z_m_s2", DEFAULT_VESSEL_MOTION["accel_z_m_s2"])
+                "accel_z_m_s2": float(
+                    vessel_motion_src.get("accel_z_m_s2", DEFAULT_VESSEL_MOTION["accel_z_m_s2"])
+                ),
+                "roll_deg": float(
+                    vessel_motion_src.get("roll_deg", DEFAULT_VESSEL_MOTION["roll_deg"])
+                ),
+                "pitch_deg": float(
+                    vessel_motion_src.get("pitch_deg", DEFAULT_VESSEL_MOTION["pitch_deg"])
+                ),
+                "crane_slewing_angle_deg": float(
+                    vessel_motion_src.get(
+                        "crane_slewing_angle_deg", DEFAULT_VESSEL_MOTION["crane_slewing_angle_deg"]
                     )
                 ),
                 "reference_x_m": float(
@@ -1173,20 +1156,16 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                 "reference_z_m": float(
                     vessel_motion_src.get("reference_z_m", DEFAULT_VESSEL_MOTION["reference_z_m"])
                 ),
-                "pitch_angular_accel_rad_s2": abs(
-                    float(
-                        vessel_motion_src.get(
-                            "pitch_angular_accel_rad_s2",
-                            DEFAULT_VESSEL_MOTION["pitch_angular_accel_rad_s2"],
-                        )
+                "pitch_angular_accel_rad_s2": float(
+                    vessel_motion_src.get(
+                        "pitch_angular_accel_rad_s2",
+                        DEFAULT_VESSEL_MOTION["pitch_angular_accel_rad_s2"],
                     )
                 ),
-                "roll_angular_accel_rad_s2": abs(
-                    float(
-                        vessel_motion_src.get(
-                            "roll_angular_accel_rad_s2",
-                            DEFAULT_VESSEL_MOTION["roll_angular_accel_rad_s2"],
-                        )
+                "roll_angular_accel_rad_s2": float(
+                    vessel_motion_src.get(
+                        "roll_angular_accel_rad_s2",
+                        DEFAULT_VESSEL_MOTION["roll_angular_accel_rad_s2"],
                     )
                 ),
             },
@@ -1723,7 +1702,7 @@ def derive_payload_hoist_rope_geometry(doc: CraneDocument) -> None:
     from ..calculation.rope_mass import derive_hook_geometry
 
     if doc.hook_height_at_min_outreach_m is None:
-        doc.hook_height_at_min_outreach_m = float(doc.environment.mean_sealevel_z_m)
+        doc.hook_height_at_min_outreach_m = 0.0
     hook_height_m = float(doc.hook_height_at_min_outreach_m)
 
     payload_ids = set(payload_hoist_ids(doc))
@@ -2089,9 +2068,6 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         "environment": {
             "gravity_m_s2": abs(float(env.get("gravity_m_s2", -9.81))),
             "air_density_kg_m3": float(env.get("air_density_kg_m3", 1.225)),
-            "wind_profile_exponent": float(env.get("wind_profile_exponent", 0.143)),
-            "wind_reference_height_m_asl": float(env.get("wind_reference_height_m_asl", 10.0)),
-            "mean_sealevel_z_m": float(env.get("mean_sealevel_z_m", -35.0)),
             "max_wind_speed_m_s": float(env.get("max_wind_speed_m_s", 20.0)),
         },
     }
@@ -2100,7 +2076,7 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         model_definition["vessel_motion"] = vessel_motion_out
     hook_height = data.get("hook_height_at_min_outreach_m")
     model_definition["hook_height_at_min_outreach_m"] = float(
-        hook_height if hook_height is not None else env.get("mean_sealevel_z_m", -35.0)
+        hook_height if hook_height is not None else 0.0
     )
     model_definition["structure"] = structure_out
     for body_id in CANONICAL_BODIES:

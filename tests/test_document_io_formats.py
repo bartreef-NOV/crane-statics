@@ -11,15 +11,12 @@ from crane_statics.core.io import DocumentIOError, save_document
 
 def _minimal_v6() -> dict:
     return {
-        "schema": {"name": "crane-statics", "version": "6.0.0"},
+        "schema": {"name": "crane-statics", "version": "7.0.0"},
         "metadata": {"name": "V6 Minimal"},
         "model_definition": {
             "environment": {
                 "gravity_m_s2": 9.81,
                 "air_density_kg_m3": 1.225,
-                "wind_profile_exponent": 0.143,
-                "wind_reference_height_m_asl": 10.0,
-                "mean_sealevel_z_m": -35.0,
                 "max_wind_speed_m_s": 20.0,
             },
             "structure": {
@@ -165,3 +162,30 @@ def test_load_document_reports_invalid_encoding_as_document_io_error(tmp_path):
 
     with pytest.raises(DocumentIOError, match="Failed to read file"):
         load_document(path)
+
+
+def test_load_document_rejects_schema_v6(tmp_path):
+    data = _minimal_v6()
+    data["schema"]["version"] = "6.0.0"
+    path = tmp_path / "model.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(DocumentIOError, match="Unsupported authored schema version"):
+        load_document(path)
+
+
+def test_signed_vessel_motion_round_trips(tmp_path):
+    data = _minimal_v6()
+    data["model_definition"]["vessel_motion"] = {"accel_x_m_s2": -1.0, "roll_deg": -3.0}
+    path = tmp_path / "model.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    doc = load_document(path)
+    out = tmp_path / "out.json"
+    save_document(doc, out)
+    saved = json.loads(out.read_text(encoding="utf-8"))
+
+    vm = saved["model_definition"]["vessel_motion"]
+    assert vm["accel_x_m_s2"] == -1.0
+    assert vm["roll_deg"] == -3.0
+    assert load_document(out).environment.vessel_motion.roll_deg == -3.0

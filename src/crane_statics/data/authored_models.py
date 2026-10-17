@@ -23,8 +23,8 @@ from typing import Annotated, Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
-AUTHORED_SCHEMA_MAJOR_VERSION = 6
-AUTHORED_SCHEMA_VERSION = "6.0.0"
+AUTHORED_SCHEMA_MAJOR_VERSION = 7
+AUTHORED_SCHEMA_VERSION = "7.0.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -63,22 +63,26 @@ class AuthoredMetadata(BaseModel):
 
 
 class AuthoredVesselMotion(BaseModel):
-    """Optional vessel accelerations and rotation reference. Omitted values default to zero."""
+    """Optional vessel-frame accelerations (gravity excluded), roll/pitch, crane slewing
+    angle. Omitted values default to zero; all values are signed."""
 
     model_config = ConfigDict(extra="forbid")
 
-    accel_x_m_s2: float = Field(default=0.0, ge=0)
-    accel_y_m_s2: float = Field(default=0.0, ge=0)
-    accel_z_m_s2: float = Field(default=0.0, ge=0)
-    pitch_angular_accel_rad_s2: float = Field(default=0.0, ge=0)
-    roll_angular_accel_rad_s2: float = Field(default=0.0, ge=0)
+    accel_x_m_s2: float = 0.0
+    accel_y_m_s2: float = 0.0
+    accel_z_m_s2: float = 0.0
+    roll_deg: float = 0.0
+    pitch_deg: float = 0.0
+    crane_slewing_angle_deg: float = 0.0
+    pitch_angular_accel_rad_s2: float = 0.0
+    roll_angular_accel_rad_s2: float = 0.0
     reference_x_m: float = 0.0
     reference_z_m: float = 0.0
 
 
 class AuthoredEnvironment(BaseModel):
-    """Environmental constants. Gravity and air density have defaults; wind
-    profile and sea-level reference values are required."""
+    """Environmental constants. Gravity and air density have defaults; the maximum
+    wind speed (constant over height) is required."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -89,11 +93,6 @@ class AuthoredEnvironment(BaseModel):
     )
     max_wind_speed_m_s: float = Field(gt=0, description="Positive maximum wind speed in m/s.")
     air_density_kg_m3: float = Field(default=1.225, gt=0)
-    wind_profile_exponent: float = Field(gt=0, description="Power-law wind profile exponent.")
-    wind_reference_height_m_asl: float = Field(
-        gt=0, description="Reference height above mean sea level in metres."
-    )
-    mean_sealevel_z_m: float = Field(description="Mean sea-level elevation in global Z metres.")
 
 
 class AuthoredGlobalPosition2D(BaseModel):
@@ -527,7 +526,7 @@ class AuthoredModelDefinition(BaseModel):
         default=None,
         description="Absolute global Z the hook must reach at each payload hoist's minimum "
         "outreach. Every payload hoist's maximum hook travel and total rope length are "
-        "derived from it. Omit to default to environment.mean_sealevel_z_m.",
+        "derived from it. Omit to default to crane-frame z = 0.",
     )
     structure: AuthoredStructure
     boom: AuthoredBoomBody = Field(
@@ -577,9 +576,6 @@ EXAMPLE_DOCUMENT: dict = {
         "environment": {
             "gravity_m_s2": 9.81,
             "air_density_kg_m3": 1.225,
-            "wind_profile_exponent": 0.143,
-            "wind_reference_height_m_asl": 10.0,
-            "mean_sealevel_z_m": -35.0,
             "max_wind_speed_m_s": 20.0,
         },
         "structure": {

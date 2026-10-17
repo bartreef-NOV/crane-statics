@@ -1,13 +1,7 @@
-schema: {name: crane-statics, version: 6.0.0}
+schema: {name: crane-statics, version: 7.0.0}
 metadata: {name: Crane Statics Example GT283}
 model_definition:
-  environment:
-    gravity_m_s2: 9.81
-    air_density_kg_m3: 1.226
-    wind_profile_exponent: 0.12
-    wind_reference_height_m_asl: 10.0
-    mean_sealevel_z_m: -57.0
-    max_wind_speed_m_s: 0.01
+  environment: {gravity_m_s2: 9.81, air_density_kg_m3: 1.226, max_wind_speed_m_s: 0.01}
   hook_height_at_min_outreach_m: -53.0
   structure:
     boom_width_m: 10.0

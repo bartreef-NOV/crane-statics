@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/schemas/crane-statics-v6.schema.json",
+  "$id": "https://example.com/schemas/crane-statics-v7.schema.json",
   "title": "AuthoredDocument",
   "$defs": {
     "AuthoredBoomBody": {
@@ -151,7 +151,7 @@
     },
     "AuthoredEnvironment": {
       "additionalProperties": false,
-      "description": "Environmental constants. Gravity and air density have defaults; wind\nprofile and sea-level reference values are required.",
+      "description": "Environmental constants. Gravity and air density have defaults; the maximum\nwind speed (constant over height) is required.",
       "properties": {
         "gravity_m_s2": {
           "default": 9.81,
@@ -171,30 +171,10 @@
           "exclusiveMinimum": 0,
           "title": "Air Density Kg M3",
           "type": "number"
-        },
-        "wind_profile_exponent": {
-          "description": "Power-law wind profile exponent.",
-          "exclusiveMinimum": 0,
-          "title": "Wind Profile Exponent",
-          "type": "number"
-        },
-        "wind_reference_height_m_asl": {
-          "description": "Reference height above mean sea level in metres.",
-          "exclusiveMinimum": 0,
-          "title": "Wind Reference Height M Asl",
-          "type": "number"
-        },
-        "mean_sealevel_z_m": {
-          "description": "Mean sea-level elevation in global Z metres.",
-          "title": "Mean Sealevel Z M",
-          "type": "number"
         }
       },
       "required": [
-        "max_wind_speed_m_s",
-        "wind_profile_exponent",
-        "wind_reference_height_m_asl",
-        "mean_sealevel_z_m"
+        "max_wind_speed_m_s"
       ],
       "title": "AuthoredEnvironment",
       "type": "object"
@@ -489,7 +469,7 @@
             }
           ],
           "default": null,
-          "description": "Absolute global Z the hook must reach at each payload hoist's minimum outreach. Every payload hoist's maximum hook travel and total rope length are derived from it. Omit to default to environment.mean_sealevel_z_m.",
+          "description": "Absolute global Z the hook must reach at each payload hoist's minimum outreach. Every payload hoist's maximum hook travel and total rope length are derived from it. Omit to default to crane-frame z = 0.",
           "title": "Hook Height At Min Outreach M"
         },
         "structure": {
@@ -810,7 +790,7 @@
           "type": "string"
         },
         "version": {
-          "pattern": "^6\\.\\d+\\.\\d+$",
+          "pattern": "^7\\.\\d+\\.\\d+$",
           "title": "Version",
           "type": "string"
         }
@@ -919,35 +899,45 @@
     },
     "AuthoredVesselMotion": {
       "additionalProperties": false,
-      "description": "Optional vessel accelerations and rotation reference. Omitted values default to zero.",
+      "description": "Optional vessel-frame accelerations (gravity excluded), roll/pitch, crane slewing\nangle. Omitted values default to zero; all values are signed.",
       "properties": {
         "accel_x_m_s2": {
           "default": 0.0,
-          "minimum": 0,
           "title": "Accel X M S2",
           "type": "number"
         },
         "accel_y_m_s2": {
           "default": 0.0,
-          "minimum": 0,
           "title": "Accel Y M S2",
           "type": "number"
         },
         "accel_z_m_s2": {
           "default": 0.0,
-          "minimum": 0,
           "title": "Accel Z M S2",
+          "type": "number"
+        },
+        "roll_deg": {
+          "default": 0.0,
+          "title": "Roll Deg",
+          "type": "number"
+        },
+        "pitch_deg": {
+          "default": 0.0,
+          "title": "Pitch Deg",
+          "type": "number"
+        },
+        "crane_slewing_angle_deg": {
+          "default": 0.0,
+          "title": "Crane Slewing Angle Deg",
           "type": "number"
         },
         "pitch_angular_accel_rad_s2": {
           "default": 0.0,
-          "minimum": 0,
           "title": "Pitch Angular Accel Rad S2",
           "type": "number"
         },
         "roll_angular_accel_rad_s2": {
           "default": 0.0,
-          "minimum": 0,
           "title": "Roll Angular Accel Rad S2",
           "type": "number"
         },
@@ -1090,10 +1080,7 @@
         "environment": {
           "air_density_kg_m3": 1.225,
           "gravity_m_s2": 9.81,
-          "max_wind_speed_m_s": 20.0,
-          "mean_sealevel_z_m": -35.0,
-          "wind_profile_exponent": 0.143,
-          "wind_reference_height_m_asl": 10.0
+          "max_wind_speed_m_s": 20.0
         },
         "payload_hoists": {
           "MH": {
@@ -1145,7 +1132,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "6.0.0"
+        "version": "7.0.0"
       }
     }
   ],

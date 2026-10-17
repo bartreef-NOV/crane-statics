@@ -337,9 +337,9 @@ class CraneCalculator:
                 _accumulate_force(xw, yw, zw, fx=0.0, fy=fy_acc, fz=fz_weight)
 
         rho = float(env.air_density_kg_m3)
-        z_ref = float(env.wind_reference_height_m_asl)
-        exp = float(env.wind_profile_exponent)
-        msl = float(env.mean_sealevel_z_m)
+        z_ref = 10.0  # removed field; Task 3 replaces wind profile
+        exp = 0.143
+        msl = 0.0
         wind_sign = 0.0 if abs(float(wind_y_m_s)) < 1e-12 else math.copysign(1.0, float(wind_y_m_s))
         wind_mag = abs(float(wind_y_m_s))
         boom_proj = boom_wind_projection_scale(boom_angle_deg)

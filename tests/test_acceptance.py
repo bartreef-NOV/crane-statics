@@ -203,9 +203,7 @@ class TestA2InvalidStrictFieldRejected:
             "environment": {
                 "gravity_m_s2": -9.81,
                 "max_wind_speed_m_s": 0.0,  # Invalid!
-                "wind_reference_height_m_asl": 10.0,
                 "air_density_kg_m3": 1.225,
-                "wind_profile_exponent": 0.143,
             },
             "bodies": [],
             "nodes": [],
@@ -601,15 +599,12 @@ class TestAuthoredSchemaPolicy:
 
     def _minimal_v6(self) -> dict:
         return {
-            "schema": {"name": "crane-statics", "version": "6.0.0"},
+            "schema": {"name": "crane-statics", "version": "7.0.0"},
             "metadata": {"name": "V6 Minimal"},
             "model_definition": {
                 "environment": {
                     "gravity_m_s2": 9.81,
                     "air_density_kg_m3": 1.225,
-                    "wind_profile_exponent": 0.143,
-                    "wind_reference_height_m_asl": 10.0,
-                    "mean_sealevel_z_m": -35.0,
                     "max_wind_speed_m_s": 20.0,
                 },
                 "vessel_motion": {
@@ -684,13 +679,13 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "3.2.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 6 is supported"
+            ValueError, match="Only crane-statics schema major version 7 is supported"
         ):
             normalize_document(data)
 
     def test_v6_minor_version_bump_is_accepted_by_normalizer(self):
         data = self._minimal_v6()
-        data["schema"]["version"] = "6.1.0"
+        data["schema"]["version"] = "7.1.0"
         doc = normalize_document(data)
         assert doc is not None
 
@@ -698,7 +693,7 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "5.13.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 6 is supported"
+            ValueError, match="Only crane-statics schema major version 7 is supported"
         ):
             normalize_document(data)
 
@@ -814,9 +809,9 @@ class TestAuthoredSchemaPolicy:
         assert dead_mh.max_hook_travel_m == pytest.approx(bare_mh.max_hook_travel_m)
         assert dead_mh.rope_length_m - bare_mh.rope_length_m == pytest.approx(4 * math.pi * 1.5)
 
-    def test_v6_hook_height_defaults_to_mean_sea_level(self):
+    def test_v6_hook_height_defaults_to_crane_frame_zero(self):
         doc = normalize_document(self._minimal_v6())
-        assert doc.hook_height_at_min_outreach_m == pytest.approx(-35.0)
+        assert doc.hook_height_at_min_outreach_m == pytest.approx(0.0)
 
     def test_v6_authored_hook_height_drives_the_derived_travel(self):
         data = self._reachable_v6()
@@ -827,7 +822,7 @@ class TestAuthoredSchemaPolicy:
         deeper_mh = next(h for h in deeper.hoists if h.id == "MH")
         shallower_mh = next(h for h in shallower.hoists if h.id == "MH")
 
-        assert deeper_mh.max_hook_travel_m - shallower_mh.max_hook_travel_m == pytest.approx(25.0)
+        assert deeper_mh.max_hook_travel_m - shallower_mh.max_hook_travel_m == pytest.approx(60.0)
         assert deeper_mh.rope_length_m > shallower_mh.rope_length_m
 
     def test_v6_directional_wind_area_fields_round_trip(self):
@@ -1241,7 +1236,7 @@ class TestAuthoredSchemaPolicy:
 
         saved = json.loads(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "6.0.0"
+        assert saved["schema"]["version"] == "7.0.0"
         assert "model_definition" in saved
         assert "ropes" not in saved["model_definition"]
         assert "nodes" not in saved["model_definition"]

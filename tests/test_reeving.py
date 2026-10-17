@@ -14,14 +14,11 @@ EXAMPLES = sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
 
 def _authored() -> dict:
     return {
-        "schema": {"name": "crane-statics", "version": "6.0.0"},
+        "schema": {"name": "crane-statics", "version": "7.0.0"},
         "metadata": {"name": "Reeving"},
         "model_definition": {
             "environment": {
                 "max_wind_speed_m_s": 20.0,
-                "wind_profile_exponent": 0.143,
-                "wind_reference_height_m_asl": 10.0,
-                "mean_sealevel_z_m": -35.0,
             },
             "structure": {
                 "boom_width_m": 1.0,

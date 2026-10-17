@@ -321,7 +321,7 @@ class ModelViewModel(QObject):
         env_dict["hook_height_at_min_outreach_m"] = float(
             doc.hook_height_at_min_outreach_m
             if doc.hook_height_at_min_outreach_m is not None
-            else doc.environment.mean_sealevel_z_m
+            else 0.0
         )
         return EnvironmentSettings.from_dict(env_dict).to_dict()
 
