@@ -10,7 +10,7 @@ from ..calculation.engine import AllowableCapacity, AnalysisPoint, get_calculato
 from ..calculation.solver.kinematics import KinematicsAdapter
 from ..data.models import CraneDocument
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
-from .chart_envelope import ProbeSet, build_probes, envelope_capacity
+from .chart_envelope import ProbeSet, build_probes, envelope_capacity, lead_points
 from .demand_extraction import (
     connection_component_responds_to_hook_load,
     rope_tension_responds_to_hook_load,
@@ -233,9 +233,11 @@ def run_capacity_sweep(
                     if math.isfinite(cap.max_allowable_load_t):
                         curve_outreach.append(outreach)
                         curve_load_t.append(cap.max_allowable_load_t)
+                    # Sensitivities do not depend on motion or wind, but the lead channels
+                    # add to them: a limit responds if it does at any lead sign case.
+                    leads = lead_points(probes, offlead_deg, sidelead_deg)
                     for lid, comps in enabled_limits.items():
-                        # Sensitivities do not depend on motion or wind: the zero probe's do.
-                        if not _affects_hook_load(probes.zero, lid, comps):
+                        if not any(_affects_hook_load(pt, lid, comps) for pt in leads):
                             continue
                         cap_limit = (
                             cap

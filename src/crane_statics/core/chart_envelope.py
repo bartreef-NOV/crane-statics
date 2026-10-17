@@ -45,12 +45,17 @@ _WIND_ZERO = 1e-12
 
 @dataclass(frozen=True)
 class ProbeSet:
-    """Probe solves at one boom angle; ``motion``: accel x, y, z, pitch accel, roll accel."""
+    """Probe solves at one boom angle; ``motion``: accel x, y, z, pitch accel, roll accel.
+
+    ``solved[j]`` is False where motion probe ``j`` was not solved (the zero probe stands
+    in); ``envelope_capacity`` rejects a vessel that moves such a channel.
+    """
 
     zero: AnalysisPoint
     motion: tuple[AnalysisPoint, AnalysisPoint, AnalysisPoint, AnalysisPoint, AnalysisPoint]
     wind_x: AnalysisPoint
     wind_y: AnalysisPoint
+    solved: tuple[bool, ...] = (True,) * len(_PROBE_KWARGS)
 
 
 def build_probes(
@@ -71,19 +76,13 @@ def build_probes(
     The probes are zero-lead points (offlead and sidelead 0): ``envelope_capacity`` adds
     the signed leads itself. Given ``vessel``, a motion probe whose channel is exactly zero
     in every sign case and slew of those limits is not solved (the zero probe stands in);
-    such a probe would only ever be superposed with a zero weight.
+    such a probe would only ever be superposed with a zero weight. The returned set records
+    which probes were solved, so it must only be used with those limits.
     """
     needed = [True] * len(_PROBE_KWARGS)
     if vessel is not None:
         harmonics = _slew_harmonics(abs(float(calc.doc.environment.gravity_m_s2)), vessel)
-        needed = [
-            bool(
-                np.any(harmonics.mean[:, j])
-                or np.any(harmonics.cos_part[:, j])
-                or np.any(harmonics.sin_part[:, j])
-            )
-            for j in range(len(_PROBE_KWARGS))
-        ]
+        needed = _used_channels(harmonics)
 
     def _solve(
         wind_speed: float = 0.0, wind_angle: float = 0.0, **motion: float
@@ -123,7 +122,13 @@ def build_probes(
         return None
     if wind_x is None or wind_y is None:
         return None
-    return ProbeSet(zero=zero, motion=(m0, m1, m2, m3, m4), wind_x=wind_x, wind_y=wind_y)
+    return ProbeSet(
+        zero=zero,
+        motion=(m0, m1, m2, m3, m4),
+        wind_x=wind_x,
+        wind_y=wind_y,
+        solved=tuple(needed),
+    )
 
 
 def _channel_vector(motion: CraneFrameMotion) -> np.ndarray:
@@ -144,8 +149,9 @@ def motion_channels(gravity: float, inputs: VesselInputs) -> np.ndarray:
 
     Gravity tilt is folded in: a tilted vessel shows up as crane-frame acceleration.
     """
-    return _channel_vector(crane_frame_motion(gravity, inputs)) - _channel_vector(
-        crane_frame_motion(gravity, VesselInputs())
+    return np.asarray(
+        _channel_vector(crane_frame_motion(gravity, inputs))
+        - _channel_vector(crane_frame_motion(gravity, VesselInputs()))
     )
 
 
@@ -241,7 +247,9 @@ class _SlewHarmonics:
     sin_part: np.ndarray
 
     def channels(self, case: int, cos_phi: float, sin_phi: float) -> np.ndarray:
-        return self.mean[case] + cos_phi * self.cos_part[case] + sin_phi * self.sin_part[case]
+        return np.asarray(
+            self.mean[case] + cos_phi * self.cos_part[case] + sin_phi * self.sin_part[case]
+        )
 
 
 def _slew_harmonics(gravity: float, vessel: VesselMotion) -> _SlewHarmonics:
@@ -256,6 +264,27 @@ def _slew_harmonics(gravity: float, vessel: VesselMotion) -> _SlewHarmonics:
         cos_parts.append(0.5 * (c0 - c180))
         sin_parts.append(0.5 * (c90 - c270))
     return _SlewHarmonics(np.array(means), np.array(cos_parts), np.array(sin_parts))
+
+
+def _used_channels(harmonics: _SlewHarmonics) -> list[bool]:
+    """Whether each motion channel is nonzero in some sign case at some slew."""
+    return [
+        bool(
+            np.any(harmonics.mean[:, j])
+            or np.any(harmonics.cos_part[:, j])
+            or np.any(harmonics.sin_part[:, j])
+        )
+        for j in range(len(_PROBE_KWARGS))
+    ]
+
+
+def lead_points(probes: ProbeSet, offlead_deg: float, sidelead_deg: float) -> list[AnalysisPoint]:
+    """The zero probe composed with every lead sign case (one point for zero leads)."""
+    return [
+        compose_lead_channel_point(probes.zero, offlead, sidelead)
+        for offlead in _signed_candidates(offlead_deg)
+        for sidelead in _signed_candidates(sidelead_deg)
+    ]
 
 
 @dataclass(frozen=True)
@@ -709,19 +738,26 @@ def envelope_capacity(
     ``governing_limit_id``.
     """
     gravity = abs(float(calc.doc.environment.gravity_m_s2))
+    harmonics = _slew_harmonics(gravity, vessel)
+    missing = [
+        name
+        for name, used, solved in zip(_PROBE_KWARGS, _used_channels(harmonics), probes.solved)
+        if used and not solved
+    ]
+    if missing:
+        raise ValueError(
+            "probes were built for other vessel-motion limits; unsolved channels: "
+            + ", ".join(missing)
+        )
     ctx = _LimitContext(
         calc=calc,
         probes=probes,
         basis=_unit_basis(probes),
-        harmonics=_slew_harmonics(gravity, vessel),
+        harmonics=harmonics,
         hook_daf=float(hook_daf),
         hook_mass_t=float(hook_mass_t),
     )
-    lead_points = [
-        compose_lead_channel_point(probes.zero, offlead, sidelead)
-        for offlead in _signed_candidates(offlead_deg)
-        for sidelead in _signed_candidates(sidelead_deg)
-    ]
+    leads = lead_points(probes, offlead_deg, sidelead_deg)
     best: Optional[AllowableCapacity] = None
     for limit_key, components in limits.items():
         for component, limit_value in components.items():
@@ -730,7 +766,7 @@ def envelope_capacity(
             single_limit = {limit_key: {component: limit_value}}
             entity_id, _ = calc.resolve_limit_target(limit_key, component)
             # Which branch compute_allowable_load takes depends on sensitivity keys only.
-            magnitude = [lead for lead in lead_points if _is_magnitude(lead, entity_id, component)]
+            magnitude = [lead for lead in leads if _is_magnitude(lead, entity_id, component)]
             if magnitude:
                 best = _lower(
                     best,
@@ -738,7 +774,7 @@ def envelope_capacity(
                         ctx, magnitude, entity_id, component, float(limit_value), single_limit
                     ),
                 )
-            for lead in lead_points:
+            for lead in leads:
                 if not _is_magnitude(lead, entity_id, component):
                     best = _lower(
                         best, _linear_capacity(ctx, lead, limit_key, component, single_limit)

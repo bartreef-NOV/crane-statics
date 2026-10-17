@@ -98,8 +98,13 @@ def test_sweep_matches_reference_curve() -> None:
         assert load_t >= r * (1.0 - CONSERVATIVE_REL), (outreach, load_t, r)
 
 
+@pytest.mark.slow
 def test_sweep_meets_the_benchmark() -> None:
-    """GT283 / MH / 2 m step with all seven vessel limits set: 10x faster than 3.7 s."""
+    """GT283 / MH / 2 m step with all seven vessel limits set: 10x faster than 3.7 s.
+
+    The threshold is for an uninstrumented run (``-m slow --no-cov``); coverage tracing
+    roughly doubles the time.
+    """
     doc = _set_vessel(load_document(GT283), BENCHMARK_LIMITS)
     run_capacity_sweep(doc, HOIST, LIMITS, 2.0, {})  # warm-up
     start = time.perf_counter()
@@ -180,3 +185,22 @@ def test_limit_series_only_for_hook_load_responsive_limits() -> None:
     assert set(series) == {"boom_hoist"}
     # One limit responds, so its series is the capacity curve itself.
     assert series["boom_hoist"][3] == pytest.approx(_curve(result))
+
+
+def test_limit_series_for_limits_that_respond_only_through_the_leads() -> None:
+    """platform_base Fy takes hook load only via the leads: with GT283's leads it has a series."""
+    doc = load_document(GT283)
+    hoist = next(h for h in doc.hoists if h.id == HOIST)
+    assert hoist.offlead_deg != 0.0 and hoist.sidelead_deg != 0.0
+    limits: dict[str, Any] = {**LIMITS, "platform_base": {"Fy": 1.0e4}}
+
+    result = run_capacity_sweep(doc, HOIST, limits, 4.0, {})
+    series = {row[0]: row for row in result["modes"]["normal"]["limit_series"]}
+    assert set(series) == {"boom_hoist", "platform_base"}
+    assert series["platform_base"][3]
+
+    hoist.offlead_deg = 0.0
+    hoist.sidelead_deg = 0.0
+    result = run_capacity_sweep(doc, HOIST, limits, 4.0, {})
+    series = {row[0]: row for row in result["modes"]["normal"]["limit_series"]}
+    assert set(series) == {"boom_hoist"}

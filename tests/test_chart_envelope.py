@@ -141,6 +141,35 @@ def test_superposition_matches_direct_solve(
             assert got_flat[key] == pytest.approx(value, rel=1e-9, abs=1e-9), (key, motion, slew)
         assert got.sensitivity_rope_tensions == probes.zero.sensitivity_rope_tensions
         assert got.sensitivity_reactions == probes.zero.sensitivity_reactions
+        # Load-bearing: the direct solve's hook sensitivities and lead unit channels do not
+        # depend on motion, slew or wind, so the zero probe's stand in for every case.
+        for name in _MOTION_INDEPENDENT:
+            direct_channel = _flat_channel(getattr(direct, name))
+            zero_channel = _flat_channel(getattr(probes.zero, name))
+            assert set(zero_channel) == set(direct_channel), name
+            for ck, value in direct_channel.items():
+                assert zero_channel[ck] == pytest.approx(value, rel=1e-9, abs=1e-9), (name, ck)
+
+
+_MOTION_INDEPENDENT = (
+    "sensitivity_rope_tensions",
+    "sensitivity_reactions",
+    "offlead_lateral_unit_rope_tensions",
+    "offlead_lateral_unit_reactions",
+    "sidelead_lateral_unit_reactions",
+)
+
+
+def _flat_channel(channel: Any) -> dict[tuple[str, ...], float]:
+    """Flatten a rope ({id: value}) or reaction ({id: {comp: value}}) channel; None -> {}."""
+    flat: dict[tuple[str, ...], float] = {}
+    for key, value in (channel or {}).items():
+        if isinstance(value, dict):
+            for comp, v in value.items():
+                flat[(key, comp)] = float(v)
+        else:
+            flat[(key,)] = float(value)
+    return flat
 
 
 def test_motion_channels_are_zero_for_zero_inputs() -> None:
@@ -221,6 +250,30 @@ def test_vessel_limits_skip_probes_of_unused_channels() -> None:
         ]
         assert caps[1].max_allowable_load_kN == pytest.approx(
             caps[0].max_allowable_load_kN, rel=1e-12, abs=1e-12
+        )
+
+
+def test_probes_for_other_vessel_limits_are_rejected() -> None:
+    """Lean probes for a heave-only vessel must not silently drop the full vessel's motion."""
+    doc = _envelope_document(vessel_limits={"accel_z_m_s2": 1.1})
+    calc = CraneCalculator(doc)
+    lean = build_probes(
+        calc, HOIST, BOOM_ANGLE_DEG, WIND_M_S, None, vessel=doc.environment.vessel_motion
+    )
+    assert lean is not None
+    assert lean.solved == (False, False, True, False, False)
+    full_vessel = _envelope_document().environment.vessel_motion
+    hoist = _hoist(doc)
+    with pytest.raises(ValueError, match="unsolved channels"):
+        envelope_capacity(
+            calc,
+            lean,
+            ENVELOPE_LIMITS[0],
+            vessel=full_vessel,
+            offlead_deg=hoist.offlead_deg,
+            sidelead_deg=hoist.sidelead_deg,
+            hook_daf=hoist.hook_daf,
+            hook_mass_t=hoist.hook_mass_t,
         )
 
 
