@@ -1,11 +1,11 @@
-## Token Optimization: RTK
+## Commands
 
-See `@RTK.md` for automatic command filtering that compresses bash output by 91%. RTK is integrated via a `PreBashExecution` hook and has saved 401K tokens. Common commands automatically rewritten:
-- `git status`, `git diff`, `git show` → filtered versions
-- Test runs, formatters, linters → compact output mode
-- File operations → condensed listings
+Use the project venv (`.venv/Scripts/python.exe` on Windows, `.venv/bin/python` elsewhere); the global `python` lacks the dev tools.
 
-Run `rtk gain` to see current savings or `rtk discover` to find missed opportunities.
+- Tests: `.venv/Scripts/python.exe -m pytest` (add `--no-cov` for a single file; `pythonpath = ["src"]` is configured)
+- Lint/type/boundaries: `.venv/Scripts/python.exe -m pre_commit run --all-files` (black, flake8, mypy, `tests/test_architecture.py`)
+- Run or screenshot the app: use the `run-app` skill
+- `rtk` (if installed) filters bash output via a hook; no action needed.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

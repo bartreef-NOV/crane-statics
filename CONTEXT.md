@@ -4,6 +4,4 @@
 
 **See `CONTEXT-EXTENDED.md`** for the complete vocabulary and detailed definitions.
 
-Architecture vocabulary (**module**, **interface**, **depth**, **seam**, **adapter**,
-**leverage**, **locality**) lives in `.claude/skills/codebase-design/SKILL.md`.
 Decisions that should not be re-litigated live in [docs/adr/](docs/adr/).

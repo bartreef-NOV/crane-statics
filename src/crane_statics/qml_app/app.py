@@ -66,10 +66,11 @@ def main(argv: list[str] | None = None) -> int:
     app.aboutToQuit.connect(cleanup)
     engine.addImportPath(str(QML_DIR))
     context = engine.rootContext()
-    context.setContextProperty("appVm", app_vm)
-    context.setContextProperty("modelVm", model_vm)
-    context.setContextProperty("sceneVm", scene_vm)
-    context.setContextProperty("chartVm", chart_vm)
+    if context is not None:
+        context.setContextProperty("appVm", app_vm)
+        context.setContextProperty("modelVm", model_vm)
+        context.setContextProperty("sceneVm", scene_vm)
+        context.setContextProperty("chartVm", chart_vm)
 
     engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
     if not engine.rootObjects():

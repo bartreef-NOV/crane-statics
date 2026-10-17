@@ -8,8 +8,6 @@ after mechanism: `core/drawn_loads.py`, `core/scene_build.py`, `core/session_mod
 isn't here, add it here first; if you find yourself needing a word that isn't defined,
 that is usually the sign a module is named after its mechanism.
 
-Architecture vocabulary (**module**, **interface**, **depth**, **seam**, **adapter**,
-**leverage**, **locality**) lives in `.claude/skills/codebase-design/SKILL.md`.
 Decisions that should not be re-litigated live in [docs/adr/](docs/adr/).
 
 ---
