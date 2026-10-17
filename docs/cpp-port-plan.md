@@ -14,10 +14,10 @@ Python remains the oracle. Each layer is accepted only when it matches Python ou
 ### Phase 0 - Scaffolding and golden data
 - Add `cpp/` with CMake presets, `vcpkg.json`, a `crane_core` static library, a `crane_app` executable and a `tests/` target.
 - Write a Python script (under `tools/`, not `src/`) that runs each example in `examples/*.yaml` (22689, 13778_retracted, GT283) through the solver and exports golden JSON: inputs, solver outputs, scene frames, drawn loads and model-health results. Check the output into `cpp/tests/golden/`.
-- Reuse `schemas/crane-statics-v6.schema.json` as the shared contract; C++ validates documents against it.
+- Reuse `schemas/crane-statics-v7.schema.json` as the shared contract; C++ validates documents against it.
 
 ### Phase 1 - data + io (`data/`, `core/io.py`)
-- Port `data/authored_models.py` and `data/models.py` to C++ structs with explicit validation and normalization (pydantic has no C++ equivalent). Keep the v6 schema version table from `core/io.py`.
+- Port `data/authored_models.py` and `data/models.py` to C++ structs with explicit validation and normalization (pydantic has no C++ equivalent). Keep the v7 schema version table from `core/io.py`.
 - YAML via yaml-cpp, JSON via nlohmann/json. Watch the YAML 1.1 int ambiguity fixed in commit 3f140f1.
 - Gate: all example YAMLs load and re-serialize; schema validation passes; invalid-document cases from `tests/` behave the same.
 
@@ -26,7 +26,7 @@ Python remains the oracle. Each layer is accepted only when it matches Python ou
 - Gate: solver outputs match golden JSON within a stated tolerance; port the ~121 `test_acceptance.py` cases as parameterized tests.
 
 ### Phase 3 - core (no Qt)
-- Port order: `drawn_loads` (single source of loads per ADR-0002) -> `scene_frame` / `scene_build` -> `session_model` -> `document_edit`, `model_health`, `limit_auto_set`, `sweep`, `analysis_*`.
+- Port order: `vessel_frame` (pure vessel/crane-frame transform, ADR-0003) -> `drawn_loads` (single source of loads per ADR-0002) -> `scene_frame` / `scene_build` -> `session_model` -> `document_edit`, `model_health`, `limit_auto_set`, `sweep`, `analysis_*`.
 - Keep `SessionModel` pure with named change events (ADR-0001); Qt signals are added only at the QObject boundary.
 - Port `presentation/formatters.py` alongside.
 - Gate: scene frames and drawn loads match golden JSON; port `test_document_edit`, `test_scene_frame`, `test_model_health`, and an include-rule check equivalent to `test_architecture`.

@@ -59,8 +59,23 @@ hoist, per-hoist state, derived design limits, and a named change-event registry
 
 **Scene state** — `SessionModel`'s `SceneState`: what the operator has dialled in for
 one hoist. Boom angle, hook load, tackle length, offlead, sidelead, wind speed and
-direction, and the three linear plus two angular accelerations. This is the *input*
+direction, vessel roll, vessel pitch, crane slewing angle, and the three linear plus
+two angular accelerations. The accelerations are vessel-frame motion accelerations
+and exclude gravity. Wind is a constant speed (no height profile). This is the *input*
 to everything drawn and everything solved.
+
+**Vessel frame** — the ship's axes: x forward, y port, z up. Pitch is positive
+bow-down, roll positive to starboard (right-handed about +x). Orientation is the
+intrinsic z-y-x rotation `Rz(yaw)·Ry(pitch)·Rx(roll)`. Gravity in the vessel frame is
+`g·(sinβ, −sinγ·cosβ, −cosγ·cosβ)` for pitch β and roll γ.
+
+**Crane frame** — the vessel frame rotated about z by the crane slewing angle. The
+solver works in this frame. `core/vessel_frame.py::crane_frame_motion` computes the
+load acceleration `k = g_vessel − a_vessel`, rotates it by −slew into the crane frame,
+and returns the *equivalent crane-frame acceleration* `a_eq = (0,0,−g) − k_crane`. That
+value feeds the solver's existing ax/ay/az/pitch/roll channels and `drawn_loads` alike,
+so both agree under tilt and slew. Roll and pitch angular accelerations rotate with the
+slew as one right-handed vector.
 
 **Hoist state** — `HoistState`: one hoist's scene state plus its UI-adjacent state —
 split mode flag, chart mode, selected contractual index, cached sweep data.
@@ -102,7 +117,7 @@ place rather than a divergence between two (see
 [ADR-0002](docs/adr/0002-drawn-loads-own-the-load-model.md)).
 
 **Load conditions** — the in-plane subset of scene state that produces drawn loads:
-gravity, wind profile, and X/Z D'Alembert inertia. Lateral acceleration, roll
+gravity, constant wind, and X/Z D'Alembert inertia using the equivalent crane-frame accelerations. Lateral acceleration, roll
 acceleration, sidelead and Y-axis wind are deliberately *absent*: they produce only
 out-of-plane forces, so they have no drawable vector and no effect on in-plane
 equilibrium.
@@ -126,7 +141,7 @@ same values the scene draws.
 
 **Scene frame** — `core/scene_frame.py::SceneFrame`: an immutable value describing
 everything the canvas shows, in *scene* coordinates. Nodes, rope segments,
-structural members, markers, force arrows, moments, labels, guides, waterline, hit
+structural members, markers, force arrows, moments, labels, guides, hit
 targets, boom axes, fit rect, mapping, status, revision. Colours are hex strings, not
 Qt types, so the frame travels to QML unchanged.
 

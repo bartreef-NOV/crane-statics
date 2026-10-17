@@ -5,7 +5,7 @@
 
 ## Context
 
-The crane's in-plane load model — self weight, hook and payload weight, wind profile,
+The crane's in-plane load model — self weight, hook and payload weight, wind,
 X/Z D'Alembert inertia, rope interface forces, and the reactions between bodies — was
 implemented twice.
 
