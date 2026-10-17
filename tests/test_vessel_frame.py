@@ -90,3 +90,34 @@ def test_angular_accelerations_rotate_at_intermediate_slew():
     c, s = math.cos(math.radians(slew)), math.sin(math.radians(slew))
     assert m.roll_accel_rad_s2 == pytest.approx(c * roll + s * pitch)
     assert m.pitch_accel_rad_s2 == pytest.approx(-s * roll + c * pitch)
+
+
+def test_level_unslewed_crane_gravity_and_accel_are_the_vessel_values():
+    m = crane_frame_motion(G, VesselInputs(accel_x_m_s2=0.4, accel_y_m_s2=-0.2, accel_z_m_s2=0.3))
+    assert m.gravity_crane == (0.0, 0.0, -G)
+    assert m.accel_crane == pytest.approx((0.4, -0.2, 0.3), rel=1e-15)
+
+
+def test_slew_90_maps_vessel_x_to_negative_crane_y_for_gravity_and_accel():
+    m = crane_frame_motion(G, VesselInputs(pitch_deg=10.0, accel_x_m_s2=1.0, slew_deg=90.0))
+    beta = math.radians(10.0)
+    assert m.gravity_crane == pytest.approx(
+        (0.0, -G * math.sin(beta), -G * math.cos(beta)), abs=1e-12
+    )
+    assert m.accel_crane == pytest.approx((0.0, -1.0, 0.0), abs=1e-12)
+
+
+def test_crane_gravity_keeps_magnitude_g():
+    m = crane_frame_motion(G, VesselInputs(roll_deg=7.0, pitch_deg=-12.0, slew_deg=33.0))
+    assert math.sqrt(sum(c * c for c in m.gravity_crane)) == pytest.approx(G, rel=1e-12)
+
+
+def test_crane_gravity_minus_crane_accel_is_the_load_accel():
+    m = crane_frame_motion(
+        G,
+        VesselInputs(
+            roll_deg=5.0, pitch_deg=8.0, slew_deg=30.0, accel_x_m_s2=0.4, accel_z_m_s2=0.3
+        ),
+    )
+    k = tuple(g - a for g, a in zip(m.gravity_crane, m.accel_crane))
+    assert k == pytest.approx(m.load_accel, abs=1e-12)

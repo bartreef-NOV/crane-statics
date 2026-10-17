@@ -117,7 +117,7 @@ place rather than a divergence between two (see
 [ADR-0002](docs/adr/0002-drawn-loads-own-the-load-model.md)).
 
 **Load conditions** — the in-plane subset of scene state that produces drawn loads:
-gravity, constant wind, and X/Z D'Alembert inertia using the equivalent crane-frame accelerations. Lateral acceleration, roll
+crane-frame gravity (tilted by vessel roll/pitch and slew), constant wind, and X/Z D'Alembert inertia of the vessel accelerations rotated into the crane frame. Lateral acceleration, roll
 acceleration, sidelead and Y-axis wind are deliberately *absent*: they produce only
 out-of-plane forces, so they have no drawable vector and no effect on in-plane
 equilibrium.

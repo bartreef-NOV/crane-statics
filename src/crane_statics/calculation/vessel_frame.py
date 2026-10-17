@@ -32,6 +32,10 @@ class CraneFrameMotion:
     accel_z_m_s2: float
     pitch_accel_rad_s2: float
     roll_accel_rad_s2: float
+    # Gravity and the vessel's own linear acceleration, each rotated into the crane frame;
+    # gravity_crane - accel_crane == load_accel. Drawn loads use this split.
+    gravity_crane: tuple[float, float, float]
+    accel_crane: tuple[float, float, float]
 
 
 def gravity_in_vessel_frame(
@@ -63,6 +67,8 @@ def crane_frame_motion(g: float, inputs: VesselInputs) -> CraneFrameMotion:
     ky_v = gy - inputs.accel_y_m_s2
     kz = gz - inputs.accel_z_m_s2
     kx, ky = _vessel_to_crane(kx_v, ky_v, inputs.slew_deg)
+    gx_c, gy_c = _vessel_to_crane(gx, gy, inputs.slew_deg)
+    ax_c, ay_c = _vessel_to_crane(inputs.accel_x_m_s2, inputs.accel_y_m_s2, inputs.slew_deg)
     roll_c, pitch_c = _vessel_to_crane(
         inputs.roll_accel_rad_s2, inputs.pitch_accel_rad_s2, inputs.slew_deg
     )
@@ -73,4 +79,6 @@ def crane_frame_motion(g: float, inputs: VesselInputs) -> CraneFrameMotion:
         accel_z_m_s2=-g - kz,
         pitch_accel_rad_s2=pitch_c,
         roll_accel_rad_s2=roll_c,
+        gravity_crane=(gx_c, gy_c, gz),
+        accel_crane=(ax_c, ay_c, float(inputs.accel_z_m_s2)),
     )

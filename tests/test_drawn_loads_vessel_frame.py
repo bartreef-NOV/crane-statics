@@ -1,9 +1,10 @@
 """Drawn loads follow the crane-frame load vector the solver applies.
 
-Gravity stays the nominal ``-m*g`` arrow; the Inertia category carries ``-m*a_eq`` with
-the EQUIVALENT crane-frame accelerations (``calculation.vessel_frame.crane_frame_motion``), so
-Gravity + Inertia = m*k_c in plane -- exactly the load the solver applies to every mass,
-including idle hook blocks and the split-block support mass.
+Gravity arrows show the tilted crane-frame gravity ``m*g_c``; the Inertia category carries
+only the vessel accelerations ``-m*a_c`` rotated into the crane frame
+(``calculation.vessel_frame.crane_frame_motion``), so Gravity + Inertia = m*k_c in plane --
+exactly the load the solver applies to every mass, including idle hook blocks and the
+split-block support mass.
 """
 
 from __future__ import annotations
@@ -85,10 +86,11 @@ def test_pitch_ten_degrees_tilts_gravity_plus_inertia() -> None:
     assert sum_fx == pytest.approx(total_t * G * math.sin(beta), rel=1e-9)  # 1337.57 kN
     assert sum_fz == pytest.approx(-total_t * G * math.cos(beta), rel=1e-9)  # -7585.64 kN
 
-    # The Gravity arrows stay nominal; the tilt lives in Inertia.
+    # The tilt lives in the Gravity arrows; a pure tilt draws no Inertia.
+    assert loads.category(dl.INERTIA) == ()
     gravity = loads.vectors(dl.GRAVITY, dl.IDLE_HOOK_MASS)
-    assert sum(v.fx_kN for v in gravity) == 0.0
-    assert sum(v.fz_kN for v in gravity) == pytest.approx(-total_t * G, rel=1e-12)
+    assert sum(v.fx_kN for v in gravity) == pytest.approx(total_t * G * math.sin(beta), rel=1e-9)
+    assert sum(v.fz_kN for v in gravity) == pytest.approx(-total_t * G * math.cos(beta), rel=1e-9)
 
     # Rope self-weight carries its own gravity + inertia: tilted by the same 10 deg.
     rope = loads.vectors(dl.ROPE_WEIGHT)
@@ -125,18 +127,69 @@ def test_idle_hook_blocks_carry_inertia() -> None:
     ]
 
 
-def test_conditions_carry_equivalent_crane_frame_accelerations() -> None:
-    """Pitch 10 deg: a_eq = (0, 0, -g) - k_c with k_c = (g sin10, -g cos10).
-
-    So a_eq = (-g sin10, g cos10 - g): the tilt reads as a forward-down acceleration
-    that relieves part of the vertical weight (hand values).
-    """
+def test_conditions_carry_tilted_gravity_and_vessel_accelerations() -> None:
+    """Pitch 10 deg, no accelerations: g_c = (g sin10, -g cos10), a_c = 0 (hand values)."""
     harness = _harness("crane_input_GT283", "MH", vessel_pitch_deg=10.0)
     conditions = harness.inputs.conditions
     beta = math.radians(10.0)
-    assert conditions.accel_x_m_s2 == pytest.approx(-G * math.sin(beta), rel=1e-12)
-    assert conditions.accel_z_m_s2 == pytest.approx(G * math.cos(beta) - G, rel=1e-12)
+    assert conditions.gravity_x_m_s2 == pytest.approx(G * math.sin(beta), rel=1e-12)
+    assert conditions.gravity_z_m_s2 == pytest.approx(-G * math.cos(beta), rel=1e-12)
+    assert conditions.accel_x_m_s2 == 0.0
+    assert conditions.accel_z_m_s2 == 0.0
     assert conditions.pitch_accel_rad_s2 == 0.0
+
+
+GT283_MASS_POINTS_T = 770.5
+GT283_TOTAL_T = 770.5 + 7.0 + 7.7  # mass points + idle AH and trolley hook blocks
+
+
+def _sums(vectors) -> tuple[float, float]:
+    return sum(v.fx_kN for v in vectors), sum(v.fz_kN for v in vectors)
+
+
+def test_pure_pitch_draws_tilted_gravity_and_no_inertia() -> None:
+    loads = _harness("crane_input_GT283", "MH", vessel_pitch_deg=10.0).loads("none")
+    beta = math.radians(10.0)
+    inertia_fx, inertia_fz = _sums(loads.category(dl.INERTIA))
+    assert inertia_fx == pytest.approx(0.0, abs=1e-9)
+    assert inertia_fz == pytest.approx(0.0, abs=1e-9)
+    fx, fz = _sums(loads.category(dl.GRAVITY))
+    assert fx == pytest.approx(GT283_MASS_POINTS_T * G * math.sin(beta), rel=1e-9)  # 1312.5
+    assert fz == pytest.approx(-GT283_MASS_POINTS_T * G * math.cos(beta), rel=1e-9)  # -7443.7
+    fx, fz = _sums(loads.vectors(dl.GRAVITY, dl.IDLE_HOOK_MASS))
+    assert fx == pytest.approx(GT283_TOTAL_T * G * math.sin(beta), rel=1e-9)  # 1337.57
+    assert fz == pytest.approx(-GT283_TOTAL_T * G * math.cos(beta), rel=1e-9)  # -7585.64
+
+
+def test_pitch_with_slew_ninety_draws_no_out_of_plane_gravity() -> None:
+    """Slew 90: the pitch's forward gravity component points along crane -y, not drawn."""
+    loads = _harness(
+        "crane_input_GT283", "MH", vessel_pitch_deg=10.0, crane_slewing_angle_deg=90.0
+    ).loads("none")
+    beta = math.radians(10.0)
+    fx, fz = _sums(loads.vectors(dl.GRAVITY, dl.IDLE_HOOK_MASS))
+    assert fx == pytest.approx(0.0, abs=1e-9)
+    assert fz == pytest.approx(-GT283_TOTAL_T * G * math.cos(beta), rel=1e-9)
+    assert _sums(loads.category(dl.INERTIA)) == pytest.approx((0.0, 0.0), abs=1e-9)
+
+
+def test_level_surge_keeps_nominal_gravity_and_draws_vessel_inertia() -> None:
+    loads = _harness("crane_input_GT283", "MH", accel_x_m_s2=0.4).loads("none")
+    fx, fz = _sums(loads.vectors(dl.GRAVITY, dl.IDLE_HOOK_MASS))
+    assert fx == 0.0
+    assert fz == pytest.approx(-GT283_TOTAL_T * G, rel=1e-12)
+    fx, fz = _sums(loads.category(dl.INERTIA))
+    assert fx == pytest.approx(-GT283_TOTAL_T * 0.4, rel=1e-9)  # -314.08 kN
+    assert fz == pytest.approx(0.0, abs=1e-9)
+
+
+def test_surge_at_slew_ninety_leaves_the_plane() -> None:
+    loads = _harness(
+        "crane_input_GT283", "MH", accel_x_m_s2=0.4, crane_slewing_angle_deg=90.0
+    ).loads("none")
+    fx, fz = _sums(loads.category(dl.INERTIA))
+    assert fx == pytest.approx(0.0, abs=1e-9)
+    assert fz == pytest.approx(0.0, abs=1e-9)
 
 
 def test_slew_ninety_swaps_roll_accel_into_pitch() -> None:

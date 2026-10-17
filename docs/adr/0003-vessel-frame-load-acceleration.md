@@ -21,9 +21,13 @@ bow-down, roll positive to starboard, orientation `Rz(yaw)·Ry(pitch)·Rx(roll)`
 It forms the load acceleration `k_v = g_v − a_v` in the vessel frame, rotates it by
 −slew about z into the crane frame, and returns the equivalent crane-frame
 acceleration `a_eq = (0,0,−g) − k_c`. That feeds the solver's existing
-ax/ay/az/pitch/roll channels, and `drawn_loads` (via
-`AnalysisCalculator.drawn_load_conditions()`) consumes the same values, so the
-Equilibrium Check holds under tilt and slew. Roll and pitch angular accelerations
+ax/ay/az/pitch/roll channels. `drawn_loads` (via
+`AnalysisCalculator.drawn_load_conditions()`) gets the same motion split for drawing:
+the Gravity arrows show the in-plane part of the tilted gravity `m·g_c` (`gravity_crane`),
+and Inertia carries only the vessel accelerations `−m·a_c` rotated by −slew
+(`accel_crane`) plus the pitch-acceleration lever terms. A pure tilt therefore draws a
+tilted Gravity arrow and no Inertia; `g_c − a_c = k_c`, so the totals equal what the
+solver applies and the Equilibrium Check holds under tilt and slew. Roll and pitch angular accelerations
 rotate with slew as one right-handed vector; roll acceleration is right-handed about +x.
 
 Other decisions in the same change:

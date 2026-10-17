@@ -268,9 +268,10 @@ class AnalysisCalculator:
         """The in-plane conditions the drawn loads are evaluated at.
 
         The scene's vessel-frame inputs are resolved exactly as ``compute_analysis_point``
-        resolves them: the accelerations handed to ``drawn_loads`` are the EQUIVALENT
-        crane-frame values, so nominal Gravity plus Inertia equals the tilted, slewed load
-        vector m*k_c the solver applies.
+        resolves them, split for drawing: ``drawn_loads`` gets the crane-frame gravity g_c
+        (tilted Gravity arrows) and the vessel accelerations a_c rotated into the crane
+        frame (Inertia), so Gravity plus Inertia equals the tilted, slewed load vector
+        m*k_c = m*(g_c - a_c) the solver applies.
         """
         state = self._session.get_active_hoist_state()
         doc = self._session.document
@@ -296,11 +297,13 @@ class AnalysisCalculator:
             hook_load_kN=float(sc.hook_load_kN),
             wind_speed_m_s=float(sc.wind_speed_m_s),
             wind_direction=str(sc.wind_direction or "+X"),
-            accel_x_m_s2=motion.accel_x_m_s2,
-            accel_z_m_s2=motion.accel_z_m_s2,
+            accel_x_m_s2=motion.accel_crane[0],
+            accel_z_m_s2=motion.accel_crane[2],
             pitch_accel_rad_s2=motion.pitch_accel_rad_s2,
             offlead_deg=float(sc.offlead_deg),
             split_mode_active=bool(state.split_mode_active),
+            gravity_x_m_s2=motion.gravity_crane[0],
+            gravity_z_m_s2=motion.gravity_crane[2],
         )
 
     def compute_result_rows(

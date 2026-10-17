@@ -162,6 +162,11 @@ class LoadConditions:
 
     Out-of-plane inputs (lateral/roll acceleration, sidelead, Y-wind) are
     absent by design -- see the module docstring.
+
+    ``gravity_x/z_m_s2`` are the crane-frame gravity components (vessel tilt and slew
+    resolved); ``None`` means the nominal ``(0, -g)`` of the document environment.
+    ``accel_x/z_m_s2`` and ``pitch_accel_rad_s2`` are the vessel's own accelerations
+    rotated into the crane frame -- gravity is not folded into them.
     """
 
     boom_angle_deg: float = 0.0
@@ -173,6 +178,8 @@ class LoadConditions:
     pitch_accel_rad_s2: float = 0.0
     offlead_deg: float = 0.0
     split_mode_active: bool = False
+    gravity_x_m_s2: Optional[float] = None
+    gravity_z_m_s2: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -393,11 +400,26 @@ class _LoadBuilder:
                 continue
             yield str(body_id), body
 
+    def _gravity_kN_per_t(self) -> tuple[float, float]:
+        """In-plane crane-frame gravity (x, z) in kN per tonne."""
+        nominal = abs(float(self._env.get("gravity_m_s2", 9.81)))
+        gx = self._c.gravity_x_m_s2
+        gz = self._c.gravity_z_m_s2
+        return (
+            0.0 if gx is None else float(gx),
+            -nominal if gz is None else float(gz),
+        )
+
+    @staticmethod
+    def _force_text(fx: float, fz: float) -> str:
+        return f"Fz={fz:.1f} kN" if fx == 0.0 else f"Fx={fx:.1f} kN  Fz={fz:.1f} kN"
+
     # -- categories -------------------------------------------------------
 
     def gravity(self) -> tuple[LoadVector, ...]:
+        """Weight ``m*g_c`` of every mass point, tilted with the vessel."""
         vectors: list[LoadVector] = []
-        g_kN_per_t = abs(float(self._env.get("gravity_m_s2", 9.81)))
+        gx, gz = self._gravity_kN_per_t()
 
         for body_id, body in self._bodies():
             for mass_point in body.get("mass_points", []):
@@ -408,33 +430,33 @@ class _LoadBuilder:
                 if point is None:
                     continue
                 xw, zw = point
-                fz = -mass * g_kN_per_t
+                fx, fz = mass * gx, mass * gz
                 label = mass_point_label(mass_point)
                 vectors.append(
                     LoadVector(
                         world_x=xw,
                         world_z=zw,
-                        fx_kN=0.0,
+                        fx_kN=fx,
                         fz_kN=fz,
                         category=GRAVITY,
-                        label=f"Weight {label}: {abs(fz):.1f} kN",
-                        detail=f"Weight {label} ({body_id})\nFz={fz:.1f} kN",
+                        label=f"Weight {label}: {math.hypot(fx, fz):.1f} kN",
+                        detail=f"Weight {label} ({body_id})\n{self._force_text(fx, fz)}",
                     )
                 )
 
         split_block = self._split_block_mass()
         if split_block is not None:
             support_mass_t, xw, zw = split_block
-            fz = -support_mass_t * g_kN_per_t
+            fx, fz = support_mass_t * gx, support_mass_t * gz
             vectors.append(
                 LoadVector(
                     world_x=xw,
                     world_z=zw,
-                    fx_kN=0.0,
+                    fx_kN=fx,
                     fz_kN=fz,
                     category=GRAVITY,
-                    label=f"Split block weight: {abs(fz):.1f} kN",
-                    detail=f"Split block weight\nFz={fz:.1f} kN",
+                    label=f"Split block weight: {math.hypot(fx, fz):.1f} kN",
+                    detail=f"Split block weight\n{self._force_text(fx, fz)}",
                 )
             )
         return tuple(vectors)
@@ -480,7 +502,7 @@ class _LoadBuilder:
         one arrow per node rather than split across the Gravity and Inertia
         categories -- the detail text names the reeved and spooled shares.
         """
-        g_kN_per_t = abs(float(self._env.get("gravity_m_s2", 9.81)))
+        gx, gz = self._gravity_kN_per_t()
         vessel_motion = self._env.get("vessel_motion", {}) or {}
         ref_x = float(vessel_motion.get("reference_x_m", 0.0))
         ref_z = float(vessel_motion.get("reference_z_m", 0.0))
@@ -494,8 +516,9 @@ class _LoadBuilder:
             xw, zw = float(position["x"]), float(position["z"])
             mass_t = float(entry.mass_t)
             # Rope carries no wind area and no hook DAF: dead mass on a moving vessel.
-            fx = -mass_t * (ax + pitch * (zw - ref_z))
-            fz = -mass_t * (g_kN_per_t + az - pitch * (xw - ref_x))
+            # = -m*(ax + pitch*dz - gx); ordered so all-zero inputs keep the signed zeros.
+            fx = -mass_t * pitch * (zw - ref_z) - mass_t * (ax - gx)
+            fz = -mass_t * (-gz + az - pitch * (xw - ref_x))
             name = node_display_name(node_id)
             vectors.append(
                 LoadVector(
@@ -554,11 +577,12 @@ class _LoadBuilder:
         return tuple(vectors)
 
     def inertia(self) -> tuple[LoadVector, ...]:
-        """D'Alembert inertia ``-m*a`` of every mass the Gravity/Idle hook categories weigh.
+        """D'Alembert inertia ``-m*a_c`` of every mass the Gravity/Idle hook categories weigh.
 
-        ``LoadConditions`` carries the EQUIVALENT crane-frame accelerations (vessel tilt
-        and slew already resolved), so the nominal weight plus this arrow is the tilted
-        load vector m*k_c the solver applies -- see ``crane_solver.inertia_force``.
+        ``LoadConditions`` carries the vessel's own accelerations rotated into the crane
+        frame; the tilt lives in the Gravity arrows, so a pure tilt draws no Inertia and
+        the tilted weight ``m*g_c`` plus this arrow is the load vector m*k_c the solver
+        applies -- see ``crane_solver.inertia_force``.
         """
         ax = float(self._c.accel_x_m_s2)
         az = float(self._c.accel_z_m_s2)
@@ -780,13 +804,14 @@ class _LoadBuilder:
     def idle_hook_mass_node_forces(self) -> dict[str, tuple[float, float]]:
         """Dead weight of every hook block except the active hoist's.
 
-        Nominal weight only; the blocks' inertia (incl. vessel tilt) is in :meth:`inertia`.
+        Tilted weight ``m*g_c`` only; the blocks' vessel inertia is in :meth:`inertia`.
         """
-        g_kN_per_t = abs(float(self._env.get("gravity_m_s2", 9.81)))
+        gx, gz = self._gravity_kN_per_t()
         node_forces: dict[str, list[float]] = {}
         for node_id, hook_mass_t in self._idle_hook_masses():
             current = node_forces.setdefault(node_id, [0.0, 0.0])
-            current[1] += -hook_mass_t * g_kN_per_t
+            current[0] += hook_mass_t * gx
+            current[1] += hook_mass_t * gz
         return {node_id: (values[0], values[1]) for node_id, values in node_forces.items()}
 
     def idle_hook_mass(self) -> tuple[LoadVector, ...]:
@@ -804,7 +829,7 @@ class _LoadBuilder:
                     fx_kN=fx,
                     fz_kN=fz,
                     category=IDLE_HOOK_MASS,
-                    label=f"Idle hook mass @ {name}: {abs(fz):.1f} kN",
+                    label=f"Idle hook mass @ {name}: {math.hypot(fx, fz):.1f} kN",
                     detail=f"Inactive hook mass @ {name}\nFx={fx:.1f} kN  Fz={fz:.1f} kN",
                 )
             )
