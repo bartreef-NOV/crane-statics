@@ -42,9 +42,11 @@ Other decisions in the same change:
 
 ## Consequences
 
-- Authored schema major is 7. v6 files are rejected; there is no migration.
+- Authored schema major is now 8 (it was 7 when this ADR was written; the Model slewing
+  angle was later removed). v7 and older files are rejected; there is no migration.
 - The solver's scalar-gravity sites are replaced by the equivalent accelerations.
-  Scene state gains vessel roll, pitch and crane slewing angle.
+  Scene state gains vessel roll, pitch and crane slewing angle; the Model has no slewing
+  angle and keeps roll angle, pitch angle and the accelerations as ± limits.
 - `vessel_frame` is a Qt-free leaf of the pure core and joins the C++ port list.
 - Known gaps:
   - `drawn_loads` selects idle-hook masses differently from the solver for boom-hoist
