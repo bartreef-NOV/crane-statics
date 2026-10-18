@@ -6,7 +6,7 @@ import logging
 import math
 from typing import Any, Callable, Optional
 
-from ..calculation.engine import AllowableCapacity, AnalysisPoint, get_calculator
+from ..calculation.engine import AllowableCapacity, AnalysisPoint, CraneCalculator
 from ..calculation.solver.kinematics import KinematicsAdapter
 from ..data.models import CraneDocument
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
@@ -52,16 +52,32 @@ def build_absolute_outreach_grid(lo_out: float, hi_out: float, outreach_step: fl
     return sorted(set(values))
 
 
-def run_capacity_sweep(
+def _split_applies(hoist: Any) -> bool:
+    return (
+        bool(getattr(hoist, "splitable_block", False))
+        and getattr(hoist, "split_hook_mass_t", None) is not None
+        and getattr(hoist, "split_falls", None) is not None
+    )
+
+
+def run_mode_sweep(
     doc: CraneDocument,
     hoist_id: str,
+    mode_name: str,
     enabled_limits: dict,
     outreach_step: float,
     limit_display_names: dict,
     progress: Optional[Callable[[str], None]] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
-) -> dict:
-    """Compute capacity curves, contractual verdicts and per-limit series for a hoist."""
+    on_points: Optional[Callable[[list[tuple[float, float]]], None]] = None,
+    batch_points: int = 20,
+) -> Optional[dict[str, Any]]:
+    """Compute one analysis mode's curve, contractual verdicts and per-limit series.
+
+    Returns None when the mode does not apply to the hoist (split without a split block).
+    ``on_points`` receives the finite (outreach, load_t) pairs in ascending outreach, in
+    batches of at most ``batch_points``; the batches concatenate to ``curve_data``.
+    """
     report = progress if progress is not None else (lambda _msg: None)
     cancel_requested = should_cancel if should_cancel is not None else (lambda: False)
 
@@ -70,7 +86,11 @@ def run_capacity_sweep(
             raise SweepCancelled()
 
     hoist = next(h for h in doc.hoists if h.id == hoist_id)
-    calc = get_calculator(doc)
+    if mode_name == "split" and not _split_applies(hoist):
+        return None
+    # A private calculator: the shared get_calculator cache never evicts, so every sweep
+    # would leak a document copy.
+    calc = CraneCalculator(doc)
     kin = KinematicsAdapter(doc.model_dump())
     wind_speed = float(doc.environment.max_wind_speed_m_s)
     # The Model's vessel motion values are ± limits and the hoist's leads are taken with
@@ -218,6 +238,12 @@ def run_capacity_sweep(
         curve_outreach: list[float] = []
         curve_load_t: list[float] = []
         limit_series_map: dict[str, list] = {lid: [] for lid in enabled_limits}
+        pending: list[tuple[float, float]] = []
+
+        def _flush() -> None:
+            if pending and on_points is not None:
+                on_points(list(pending))
+            pending.clear()
 
         try:
             for outreach in mode_outreach_grid:
@@ -233,6 +259,9 @@ def run_capacity_sweep(
                     if math.isfinite(cap.max_allowable_load_t):
                         curve_outreach.append(outreach)
                         curve_load_t.append(cap.max_allowable_load_t)
+                        pending.append((outreach, cap.max_allowable_load_t))
+                        if len(pending) >= batch_points:
+                            _flush()
                     # Sensitivities do not depend on motion or wind, but the lead channels
                     # add to them: a limit responds if it does at any lead sign case.
                     leads = lead_points(probes, offlead_deg, sidelead_deg)
@@ -256,6 +285,7 @@ def run_capacity_sweep(
                         mode_name,
                         exc,
                     )
+            _flush()
         except (TypeError, ValueError, RuntimeError) as exc:
             _LOG.warning("Capacity sweep failed for hoist %s (%s): %s", hoist_id, mode_name, exc)
             curve_outreach, curve_load_t = [], []
@@ -297,12 +327,34 @@ def run_capacity_sweep(
             "n_points": len(curve_outreach),
         }
 
-    mode_results: dict[str, dict[str, Any]] = {"normal": _compute_mode("normal")}
-    if bool(getattr(hoist, "splitable_block", False)):
-        split_hook_mass = getattr(hoist, "split_hook_mass_t", None)
-        split_falls = getattr(hoist, "split_falls", None)
-        if split_hook_mass is not None and split_falls is not None:
-            mode_results["split"] = _compute_mode("split")
+    return _compute_mode(mode_name)
+
+
+def run_capacity_sweep(
+    doc: CraneDocument,
+    hoist_id: str,
+    enabled_limits: dict,
+    outreach_step: float,
+    limit_display_names: dict,
+    progress: Optional[Callable[[str], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> dict:
+    """Compute capacity curves, contractual verdicts and per-limit series for a hoist."""
+    hoist = next(h for h in doc.hoists if h.id == hoist_id)
+    mode_results: dict[str, dict[str, Any]] = {}
+    for mode_name in ("normal", "split"):
+        payload = run_mode_sweep(
+            doc,
+            hoist_id,
+            mode_name,
+            enabled_limits,
+            outreach_step,
+            limit_display_names,
+            progress,
+            should_cancel,
+        )
+        if payload is not None:
+            mode_results[mode_name] = payload
 
     return {
         "hoist": hoist,
