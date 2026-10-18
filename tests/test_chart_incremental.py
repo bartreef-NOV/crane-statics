@@ -9,6 +9,7 @@ from crane_statics.core import sweep as sweep_module
 from crane_statics.core.chart_cache import ChartKey
 from crane_statics.core.io import load_document
 from crane_statics.core.sweep import build_absolute_outreach_grid, run_mode_sweep
+from crane_statics.core.sweep_cache import ComputeCache
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from tests.test_chart_background import _planned, _visible, pump_events, wait_idle
@@ -167,6 +168,7 @@ def test_a_contractual_edit_makes_no_new_probe_solves_for_known_angles(vm, probe
 
 def test_a_document_edit_rebuilds_probes(vm, probes):
     _draw(vm)
+    old_cache = vm._compute_cache
     _reset(probes)
 
     vm._model.document.environment.max_wind_speed_m_s += 1.0
@@ -174,6 +176,8 @@ def test_a_document_edit_rebuilds_probes(vm, probes):
     wait_idle(vm, timeout=120.0)
 
     assert probes.calls > 0
+    # The old fingerprint's entries can never hit again: the cache is replaced.
+    assert vm._compute_cache is not old_cache
     expected = _uncached_payload(vm)
     assert vm.curvePoints == [[float(x), float(y)] for x, y in expected["curve_data"]]
 
@@ -201,3 +205,40 @@ def test_background_precompute_still_fills_the_result_cache(vm):
     fingerprint = vm._wanted_key().fingerprint
     for job in jobs:
         assert vm._cache.get(ChartKey(job.hoist_id, job.mode, STEP, fingerprint)) is not None
+
+
+def _probes_when_visible_done(vm: ChartViewModel, probes: Counter) -> list[int]:
+    """Snapshot the probe counter as the wanted chart is cached, before the next job starts."""
+    snapshots: list[int] = []
+    original = vm._cache.put
+
+    def recording(key, payload):
+        if key == vm._wanted_key():
+            snapshots.append(probes.calls)
+        original(key, payload)
+
+    vm._cache.put = recording  # type: ignore[method-assign]
+    return snapshots
+
+
+def test_background_jobs_do_not_evict_the_visible_charts_probes(vm, probes):
+    rope_id, _connection_id = _enable_limits(vm)
+    job = _visible(vm)
+    _uncached_payload(vm)
+    visible_angles = probes.calls
+    _reset(probes)
+    # Room for the visible chart and a few more: the background charts cannot all fit.
+    vm._compute_cache = ComputeCache(max_probe_sets=visible_angles + 3)
+    _draw(vm)
+    assert probes.calls > visible_angles + 3
+    assert _visible(vm) == job
+    snapshots = _probes_when_visible_done(vm, probes)
+    _reset(probes)
+
+    current = vm._model.design_limits_by_id[rope_id].max_kN
+    vm.setLimitMax(rope_id, f"{0.8 * current:.1f}")
+    wait_idle(vm, timeout=120.0)
+
+    assert snapshots == [0]
+    expected = _uncached_payload(vm)
+    assert vm.curvePoints == [[float(x), float(y)] for x, y in expected["curve_data"]]

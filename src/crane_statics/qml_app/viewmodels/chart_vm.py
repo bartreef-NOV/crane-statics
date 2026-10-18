@@ -34,7 +34,12 @@ from crane_statics.core.limit_auto_set import (
 from crane_statics.data.models import CraneDocument
 from crane_statics.qml_app.session import SessionState
 from crane_statics.core.sweep import SweepCancelled, run_mode_sweep
-from crane_statics.core.sweep_cache import ComputeCache, ComputeScope, compute_fingerprint
+from crane_statics.core.sweep_cache import (
+    ComputeCache,
+    ComputeScope,
+    JobPriority,
+    compute_fingerprint,
+)
 
 from ..models.list_models import DictListModel
 
@@ -119,6 +124,8 @@ class _RunningJob(NamedTuple):
     key: ChartKey
     generation: int
     worker: _SweepWorker
+    # Its probe-cache priority; flipped to visible here when it becomes the wanted chart.
+    priority: JobPriority
 
 
 class ChartViewModel(QObject):
@@ -147,6 +154,8 @@ class ChartViewModel(QObject):
         # Probe solves and per-limit results beneath the chart cache: a limit edit re-sweeps
         # without solving again. Replaced, never cleared, when the document changes.
         self._compute_cache = ComputeCache()
+        # The compute fingerprint the cache holds entries for; None while it is empty.
+        self._compute_cache_fingerprint: Optional[str] = None
         self._generation = 0
         self._fingerprint_generation = -1
         self._fingerprint = ""
@@ -511,6 +520,8 @@ class ChartViewModel(QObject):
                 running.worker.requestInterruption()
             elif running.job in self._queue:
                 self._queue.remove(running.job)
+                if running.job == visible:
+                    running.priority.background = False
         if self._queue and self._queue[0] == visible:
             self._prioritize(visible)
         else:
@@ -538,6 +549,7 @@ class ChartViewModel(QObject):
             and running.key == self._job_key(job)
             and not running.worker.isInterruptionRequested()
         ):
+            running.priority.background = False
             return
         if job in self._queue:
             self._queue.remove(job)
@@ -576,8 +588,16 @@ class ChartViewModel(QObject):
         if self._cache.get(key) is not None:
             return False
 
+        compute = compute_fingerprint(doc_copy)
+        if self._compute_cache_fingerprint not in (None, compute):
+            # Entries of another document state can never hit: start afresh. No worker is
+            # running here, and a finishing one keeps its own reference to the old cache.
+            self._compute_cache = ComputeCache()
+        self._compute_cache_fingerprint = compute
+        # Background jobs must not evict the wanted chart's probe solves.
+        priority = JobPriority(background=key != self._wanted_key())
         # One scope per (hoist, mode): the hook mass, and so every result, differs per mode.
-        scope = self._compute_cache.scope(compute_fingerprint(doc_copy), job.hoist_id, job.mode)
+        scope = self._compute_cache.scope(compute, job.hoist_id, job.mode, priority)
         worker = _SweepWorker(doc_copy, job, limits, self._outreach_step, names, scope)
         worker.pointsReady.connect(lambda points, w=worker: self._on_worker_points(w, points))
         worker.progress.connect(lambda text, w=worker: self._on_worker_progress(w, text))
@@ -586,10 +606,10 @@ class ChartViewModel(QObject):
         worker.cancelled.connect(lambda w=worker: self._on_worker_cancelled(w))
         worker.finished.connect(lambda w=worker: self._threads.discard(w))
         worker.finished.connect(worker.deleteLater)
-        self._running = _RunningJob(job, key, self._generation, worker)
+        self._running = _RunningJob(job, key, self._generation, worker, priority)
         self._threads.add(worker)
         self._stream_points = []
-        if key == self._wanted_key():
+        if not priority.background:
             self._show_stream()
         worker.start()
         return True
@@ -909,6 +929,7 @@ class ChartViewModel(QObject):
         # A cancelled worker may still be finishing with the old cache; it keeps its own
         # reference, so swap in a new one rather than clearing it under the worker.
         self._compute_cache = ComputeCache()
+        self._compute_cache_fingerprint = None
         self.reload()
 
     def _on_content_changed(self) -> None:

@@ -7,6 +7,7 @@ from pathlib import Path
 from crane_statics.core import load_document
 from crane_statics.core.sweep_cache import (
     ComputeCache,
+    JobPriority,
     LimitResult,
     compute_fingerprint,
     limit_signature,
@@ -106,3 +107,64 @@ def test_limit_bound_evicts() -> None:
     scope.limit_result(3.0, sig, counters[3.0])
     assert counters[1.0].calls == 2
     assert counters[3.0].calls == 1
+
+
+def test_background_hit_does_not_refresh_recency() -> None:
+    cache = ComputeCache(max_probe_sets=2)
+    visible = cache.scope("fp", "MH", "normal")
+    background = cache.scope("fp", "MH", "normal", JobPriority(background=True))
+    builds = {angle: _Counter(object()) for angle in (1.0, 2.0, 3.0)}
+    visible.probes(1.0, builds[1.0])
+    visible.probes(2.0, builds[2.0])
+    background.probes(1.0, builds[1.0])  # a hit, but 1.0 stays the oldest
+    visible.probes(3.0, builds[3.0])
+    visible.probes(2.0, builds[2.0])
+    visible.probes(1.0, builds[1.0])
+    assert builds[2.0].calls == 1
+    assert builds[1.0].calls == 2
+
+
+def test_background_insert_into_a_full_cache_is_evicted_first() -> None:
+    cache = ComputeCache(max_probe_sets=2)
+    visible = cache.scope("fp", "MH", "normal")
+    background = cache.scope("fp", "WH", "normal", JobPriority(background=True))
+    shown = {angle: _Counter(object()) for angle in (1.0, 2.0)}
+    for angle, build in shown.items():
+        visible.probes(angle, build)
+    other = {angle: _Counter(object()) for angle in (1.0, 2.0, 3.0)}
+    for angle, build in other.items():
+        assert background.probes(angle, build) is build.value
+    for angle, build in shown.items():
+        visible.probes(angle, build)
+    assert [build.calls for build in shown.values()] == [1, 1]
+    assert cache.probe_count() == 2
+
+
+def test_background_entries_give_way_to_visible_ones() -> None:
+    cache = ComputeCache(max_probe_sets=2)
+    visible = cache.scope("fp", "MH", "normal")
+    background = cache.scope("fp", "WH", "normal", JobPriority(background=True))
+    early = _Counter(object())
+    background.probes(1.0, early)
+    visible.probes(1.0, _Counter(object()))
+    visible.probes(2.0, _Counter(object()))
+    background.probes(1.0, early)
+    assert early.calls == 2
+
+
+def test_flipping_the_priority_applies_on_the_next_access() -> None:
+    cache = ComputeCache(max_probe_sets=2)
+    visible = cache.scope("fp", "MH", "normal")
+    priority = JobPriority(background=True)
+    promoted = cache.scope("fp", "WH", "normal", priority)
+    visible.probes(1.0, _Counter(object()))
+    visible.probes(2.0, _Counter(object()))
+    dropped = _Counter(object())
+    promoted.probes(3.0, dropped)
+    promoted.probes(3.0, dropped)
+    assert dropped.calls == 2  # background: evicted at once
+    priority.background = False
+    kept = _Counter(object())
+    promoted.probes(3.0, kept)
+    promoted.probes(3.0, kept)
+    assert kept.calls == 1  # visible: inserted as the newest entry

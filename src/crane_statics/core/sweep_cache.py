@@ -48,12 +48,29 @@ def _angle_key(angle: float) -> float:
     return round(float(angle), 10)
 
 
+class JobPriority:
+    """Whether a sweep's probe accesses are background work; its owner may flip it any time.
+
+    Background accesses never push out other entries: a hit does not refresh recency and
+    a new entry goes in as the oldest, so it is the first to be evicted.
+    """
+
+    def __init__(self, background: bool = False) -> None:
+        self.background = background
+
+
 class ComputeScope:
     """A view of the cache for one (fingerprint, hoist, mode)."""
 
-    def __init__(self, cache: "ComputeCache", prefix: tuple[str, str, str]) -> None:
+    def __init__(
+        self,
+        cache: "ComputeCache",
+        prefix: tuple[str, str, str],
+        priority: Optional[JobPriority] = None,
+    ) -> None:
         self._cache = cache
         self._prefix = prefix
+        self._priority = priority
 
     def probes(self, angle: float, build: Callable[[], Optional[ProbeSet]]) -> Optional[ProbeSet]:
         """Return the probe set at ``angle``, calling ``build`` only on a miss.
@@ -61,8 +78,11 @@ class ComputeScope:
         A ``None`` result (a failed probe solve) is cached too.
         """
         key = (*self._prefix, _angle_key(angle))
+        # Read on every access: the priority can change while the sweep runs.
+        background = self._priority is not None and self._priority.background
         return cast(
-            Optional[ProbeSet], self._cache._get_or_compute(self._cache._probes, key, build)
+            Optional[ProbeSet],
+            self._cache._get_or_compute(self._cache._probes, key, build, background),
         )
 
     def limit_result(
@@ -83,8 +103,14 @@ class ComputeCache:
         self._limits: OrderedDict[Hashable, Any] = OrderedDict()
         self._lock = threading.Lock()
 
-    def scope(self, fingerprint: str, hoist_id: str, mode: str) -> ComputeScope:
-        return ComputeScope(self, (fingerprint, hoist_id, mode))
+    def scope(
+        self,
+        fingerprint: str,
+        hoist_id: str,
+        mode: str,
+        priority: Optional[JobPriority] = None,
+    ) -> ComputeScope:
+        return ComputeScope(self, (fingerprint, hoist_id, mode), priority)
 
     def clear(self) -> None:
         with self._lock:
@@ -96,17 +122,23 @@ class ComputeCache:
             return len(self._probes)
 
     def _get_or_compute(
-        self, store: "OrderedDict[Hashable, Any]", key: Hashable, compute: Callable[[], Any]
+        self,
+        store: "OrderedDict[Hashable, Any]",
+        key: Hashable,
+        compute: Callable[[], Any],
+        background: bool = False,
     ) -> Any:
         limit = self._max_probe_sets if store is self._probes else self._max_limit_results
         with self._lock:
             if key in store:
-                store.move_to_end(key)
+                if not background:
+                    store.move_to_end(key)
                 return store[key]
         value = compute()  # outside the lock: a solve can take a while
         with self._lock:
             store[key] = value
-            store.move_to_end(key)
+            # A background entry goes in as the oldest: the first to go under pressure.
+            store.move_to_end(key, last=not background)
             while len(store) > limit:
                 store.popitem(last=False)
         return value
