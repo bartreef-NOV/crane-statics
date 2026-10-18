@@ -61,6 +61,7 @@ class SweepFake:
         self._held: dict[ChartJob, tuple[threading.Event, bool]] = {}
         self._streams: dict[ChartJob, tuple[list, list[threading.Event]]] = {}
         self._gates: list[threading.Event] = []
+        self._failing: set[ChartJob] = set()
         self._real = run_mode_sweep
 
     def hold(self, job: ChartJob, honour_cancel: bool = True) -> threading.Event:
@@ -71,10 +72,14 @@ class SweepFake:
         self._gates.append(release)
         return release
 
-    def stream(self, job: ChartJob, batches: list) -> list[threading.Event]:
-        """Deliver ``batches`` one at a time; batch ``i`` waits on gate ``i`` once sent."""
+    def stream(self, job: ChartJob, batches: list, fail: bool = False) -> list[threading.Event]:
+        """Deliver ``batches`` one at a time; batch ``i`` waits on gate ``i`` once sent.
+
+        With ``fail`` the sweep raises after the last batch instead of returning."""
         gates = [threading.Event() for _ in batches]
         self._streams[job] = (batches, gates)
+        if fail:
+            self._failing.add(job)
         self.started[job] = threading.Event()
         self._gates.extend(gates)
         return gates
@@ -100,6 +105,8 @@ class SweepFake:
                 if on_points is not None:
                     on_points(list(batch))
                 self._wait(job, gate, True, should_cancel)
+            if job in self._failing:
+                raise RuntimeError("sweep blew up")
             curve = [point for batch in batches for point in batch]
             return {
                 "curve_data": curve,
@@ -306,6 +313,69 @@ def test_streaming_grows_the_visible_curve(vm, sweeps):
         assert partial["xMin"] <= float(hoist.outreach_min_m)
         assert partial["xMax"] >= float(hoist.outreach_max_m)
     assert all((r["xMin"], r["xMax"]) == (ranges[0]["xMin"], ranges[0]["xMax"]) for r in ranges)
+
+
+def _stream_batches() -> list:
+    return [[(10.0 + 5 * b + i, 200.0 - 5 * b - i) for i in range(5)] for b in range(3)]
+
+
+def test_failed_wanted_sweep_leaves_no_partial_curve(vm, sweeps):
+    gates = sweeps.stream(_visible(vm), _stream_batches(), fail=True)
+    vm.draw()
+    wait_until(lambda: len(vm.curvePoints) == 5, timeout=10.0)
+    assert vm.chartComplete is False
+
+    for gate in gates:
+        gate.set()
+    wait_idle(vm)
+
+    assert vm.curvePoints == []
+    assert vm.limitSeries == []
+    assert vm.markers == []
+    assert vm._partial is False
+    assert vm.chartComplete is True
+    assert vm.statusText == "⚠ Sweep error"
+    assert vm.busy is False
+
+
+def test_export_is_refused_mid_stream_and_allowed_after_completion(vm, sweeps, tmp_path):
+    from PyQt6.QtCore import QUrl
+
+    gates = sweeps.stream(_visible(vm), _stream_batches())
+    vm.draw()
+    wait_until(lambda: len(vm.curvePoints) == 5, timeout=10.0)
+    target = tmp_path / "partial.csv"
+
+    assert vm.exportCsv(QUrl.fromLocalFile(str(target))) is False
+    assert not target.exists()
+    assert vm.statusText == "Export unavailable while the chart is still computing"
+
+    for gate in gates:
+        gate.set()
+    wait_until(lambda: vm._cache.get(vm._wanted_key()) is not None, timeout=10.0)
+    assert vm.exportCsv(QUrl.fromLocalFile(str(target))) is True
+    capacity_rows = [
+        line
+        for line in target.read_text(encoding="utf-8").splitlines()
+        if line.startswith("capacity,")
+    ]
+    assert len(capacity_rows) == 15
+
+
+def test_chart_complete_notifies_when_a_stream_starts_and_finishes(vm, sweeps):
+    gates = sweeps.stream(_visible(vm), _stream_batches())
+    seen: list[bool] = []
+    vm.chartCompleteChanged.connect(lambda: seen.append(vm.chartComplete))
+    assert vm.chartComplete is True
+
+    vm.draw()
+    wait_until(lambda: len(vm.curvePoints) == 5, timeout=10.0)
+    assert seen == [False]
+    for gate in gates:
+        gate.set()
+    wait_until(lambda: vm._cache.get(vm._wanted_key()) is not None, timeout=10.0)
+
+    assert seen == [False, True]
 
 
 def test_background_jobs_do_not_touch_the_displayed_chart(vm, sweeps):

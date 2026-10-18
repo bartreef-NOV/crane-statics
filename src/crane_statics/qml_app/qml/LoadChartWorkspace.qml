@@ -175,6 +175,7 @@ Item {
 
         MenuItem {
             text: qsTr("Export chart data…")
+            enabled: chartVm.chartComplete
             onTriggered: csvDialog.open()
         }
 

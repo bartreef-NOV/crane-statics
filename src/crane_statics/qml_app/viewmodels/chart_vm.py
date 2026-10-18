@@ -118,6 +118,7 @@ class ChartViewModel(QObject):
     statusChanged = pyqtSignal()
     limitsChanged = pyqtSignal()
     chartUpdated = pyqtSignal()
+    chartCompleteChanged = pyqtSignal()
     contractualChanged = pyqtSignal()
     preferencesChanged = pyqtSignal()
     resetViewRequested = pyqtSignal()
@@ -699,6 +700,10 @@ class ChartViewModel(QObject):
             # the display alone but still restores its status.
             self._show_wanted(force=wanted == key)
         self._pump()
+        if self._partial and not self._running_is_wanted():
+            # The wanted sweep failed, was cancelled or discarded: never leave its partial
+            # curve on screen as if it were a finished chart.
+            self._clear_display()
         # Always emits statusChanged so QML's `busy` follows.
         self._update_busy()
 
@@ -716,17 +721,12 @@ class ChartViewModel(QObject):
             if self._running_is_wanted():
                 self._show_stream()
                 return
-            self._curve_points = []
-            self._limit_series = []
-            self._markers = []
-            self._partial = False
-            self._displayed_key = None
-            self.chartUpdated.emit()
+            self._clear_display()
             self._set_stale(self._model.document is not None)
             return
         if force or key != self._displayed_key:
             self._render_payload(payload)
-            self._partial = False
+            self._set_partial(False)
             self._displayed_key = key
         self._set_stale(False)
         self._set_status(f"Done - {payload.get('n_points', 0)} points")
@@ -736,11 +736,29 @@ class ChartViewModel(QObject):
         self._curve_points = [list(point) for point in self._stream_points]
         self._limit_series = []
         self._markers = []
-        self._partial = True
+        self._set_partial(True)
         self._displayed_key = None
         self.chartUpdated.emit()
         self._set_stale(False)
         self._set_status("Sweeping...")
+
+    def _clear_display(self) -> None:
+        self._curve_points = []
+        self._limit_series = []
+        self._markers = []
+        self._set_partial(False)
+        self._displayed_key = None
+        self.chartUpdated.emit()
+
+    def _set_partial(self, partial: bool) -> None:
+        if partial != self._partial:
+            self._partial = partial
+            self.chartCompleteChanged.emit()
+
+    @pyqtProperty(bool, notify=chartCompleteChanged)
+    def chartComplete(self) -> bool:
+        """False while the displayed curve is a partial stream, not a finished payload."""
+        return not self._partial
 
     def _render_payload(self, payload: dict[str, Any]) -> None:
         self._curve_points = [[float(x), float(y)] for x, y in payload.get("curve_data", [])]
@@ -832,6 +850,9 @@ class ChartViewModel(QObject):
 
     @pyqtSlot(QUrl, result=bool)
     def exportCsv(self, url: QUrl) -> bool:
+        if self._partial:
+            self._set_status("Export unavailable while the chart is still computing")
+            return False
         path = Path(url.toLocalFile() if url.isLocalFile() else url.toString())
         try:
             with path.open("w", newline="", encoding="utf-8") as handle:
