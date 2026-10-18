@@ -71,6 +71,8 @@ class _SweepWorker(QThread):
         outreach_step: float,
         limit_display_names: dict,
     ) -> None:
+        # Workers stay parentless: as a child of the view model a QThread would be destroyed
+        # while running when the QML engine deletes the view model.
         super().__init__()
         self._args = (
             doc,
@@ -99,6 +101,11 @@ class _SweepWorker(QThread):
             self.cancelled.emit()
         except Exception as exc:  # worker boundary: report instead of crashing the thread
             self.failed.emit(str(exc))
+
+
+def _is_sweep_status(text: str) -> bool:
+    """Whether ``text`` is a status the sweep itself wrote (progress, done or error)."""
+    return text == "" or text.startswith(("Sweeping", "Stage ", "Done - ", "⚠ Sweep error"))
 
 
 class _RunningJob(NamedTuple):
@@ -697,7 +704,7 @@ class ChartViewModel(QObject):
         wanted = self._wanted_key()
         if wanted is not None and self._cache.get(wanted) is not None:
             # Re-render only the chart this job completed; a background result leaves
-            # the display alone but still restores its status.
+            # the display alone and restores only a sweep status.
             self._show_wanted(force=wanted == key)
         self._pump()
         if self._partial and not self._running_is_wanted():
@@ -724,12 +731,15 @@ class ChartViewModel(QObject):
             self._clear_display()
             self._set_stale(self._model.document is not None)
             return
-        if force or key != self._displayed_key:
+        rendered = force or key != self._displayed_key
+        if rendered:
             self._render_payload(payload)
             self._set_partial(False)
             self._displayed_key = key
         self._set_stale(False)
-        self._set_status(f"Done - {payload.get('n_points', 0)} points")
+        # A chart already on screen keeps an unrelated message such as "Exported ...".
+        if rendered or _is_sweep_status(self._status_text):
+            self._set_status(f"Done - {payload.get('n_points', 0)} points")
 
     def _show_stream(self) -> None:
         """Display the points the wanted chart's sweep has delivered so far."""

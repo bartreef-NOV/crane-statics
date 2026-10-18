@@ -46,6 +46,8 @@ def qml_engine():
     engine.warnings.connect(lambda errors: warnings.extend(str(e.toString()) for e in errors))
 
     yield engine, app_vm, model_vm, warnings
+    # Stop chart sweeps before the engine goes, as app.py does on quit.
+    chart_vm.shutdown()
     for root in engine.rootObjects():
         root.deleteLater()
     # Drain the deferred deletions before the next engine is built. Objects left
@@ -76,6 +78,27 @@ def test_main_tab_switching_loads_chart_without_crashing(qml_engine):
         QTest.qWait(100)
 
     assert root.findChild(QObject, "quickChartCanvas") is not None
+    assert warnings == []
+
+
+def test_chart_exports_are_disabled_while_the_chart_is_partial(qml_engine):
+    engine, app_vm, _model_vm, warnings = qml_engine
+    app_vm.openPath(str(EXAMPLE))
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
+    chart_vm = engine.rootContext().contextProperty("chartVm")
+    root = engine.rootObjects()[-1]
+    labels = ("Export chart data…", "Export PNG…")
+    items = [
+        obj
+        for obj in root.findChildren(QObject)
+        if obj.metaObject().className().startswith("MenuItem") and obj.property("text") in labels
+    ]
+    assert sorted(item.property("text") for item in items) == sorted(labels)
+
+    chart_vm._set_partial(True)
+    assert [item.property("enabled") for item in items] == [False, False]
+    chart_vm._set_partial(False)
+    assert [item.property("enabled") for item in items] == [True, True]
     assert warnings == []
 
 

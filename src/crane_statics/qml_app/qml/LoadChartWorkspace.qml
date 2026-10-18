@@ -181,6 +181,7 @@ Item {
 
         MenuItem {
             text: qsTr("Export PNG…")
+            enabled: chartVm.chartComplete
             onTriggered: pngDialog.open()
         }
     }

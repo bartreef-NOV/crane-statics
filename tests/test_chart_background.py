@@ -399,6 +399,22 @@ def test_background_jobs_do_not_touch_the_displayed_chart(vm, sweeps):
     assert vm.busy is False
 
 
+def test_background_completion_keeps_an_unrelated_status(vm, sweeps, tmp_path):
+    from PyQt6.QtCore import QUrl
+
+    background = next(job for job in _planned(vm)[1:] if job.hoist_id != vm.selectedHoistId)
+    release = sweeps.hold(background)
+    vm.draw()
+    wait_until(sweeps.started[background].is_set)
+    assert vm.exportCsv(QUrl.fromLocalFile(str(tmp_path / "chart.csv"))) is True
+    assert vm.statusText == "Exported chart.csv"
+
+    release.set()
+    wait_idle(vm)
+
+    assert vm.statusText == "Exported chart.csv"
+
+
 def test_document_replaced_while_running_is_safe(vm, sweeps):
     visible = _visible(vm)
     release = sweeps.hold(visible, honour_cancel=False)
