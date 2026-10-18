@@ -34,6 +34,7 @@ from crane_statics.core.limit_auto_set import (
 from crane_statics.data.models import CraneDocument
 from crane_statics.qml_app.session import SessionState
 from crane_statics.core.sweep import SweepCancelled, run_mode_sweep
+from crane_statics.core.sweep_cache import ComputeCache, ComputeScope, compute_fingerprint
 
 from ..models.list_models import DictListModel
 
@@ -70,6 +71,7 @@ class _SweepWorker(QThread):
         enabled_limits: dict,
         outreach_step: float,
         limit_display_names: dict,
+        compute_scope: ComputeScope,
     ) -> None:
         # Workers stay parentless: as a child of the view model a QThread would be destroyed
         # while running when the QML engine deletes the view model.
@@ -82,6 +84,7 @@ class _SweepWorker(QThread):
             outreach_step,
             limit_display_names,
         )
+        self._compute_scope = compute_scope
 
     def _emit_points(self, points: list) -> None:
         self.pointsReady.emit(points)
@@ -95,6 +98,7 @@ class _SweepWorker(QThread):
                 progress=self.progress.emit,
                 should_cancel=self.isInterruptionRequested,
                 on_points=self._emit_points,
+                compute_scope=self._compute_scope,
             )
             self.finishedWith.emit(payload if payload is not None else empty_payload())
         except SweepCancelled:
@@ -140,6 +144,9 @@ class ChartViewModel(QObject):
         self._shutting_down = False
         self._outreach_step = 1.0
         self._cache = ChartCache()
+        # Probe solves and per-limit results beneath the chart cache: a limit edit re-sweeps
+        # without solving again. Replaced, never cleared, when the document changes.
+        self._compute_cache = ComputeCache()
         self._generation = 0
         self._fingerprint_generation = -1
         self._fingerprint = ""
@@ -569,7 +576,9 @@ class ChartViewModel(QObject):
         if self._cache.get(key) is not None:
             return False
 
-        worker = _SweepWorker(doc_copy, job, limits, self._outreach_step, names)
+        # One scope per (hoist, mode): the hook mass, and so every result, differs per mode.
+        scope = self._compute_cache.scope(compute_fingerprint(doc_copy), job.hoist_id, job.mode)
+        worker = _SweepWorker(doc_copy, job, limits, self._outreach_step, names, scope)
         worker.pointsReady.connect(lambda points, w=worker: self._on_worker_points(w, points))
         worker.progress.connect(lambda text, w=worker: self._on_worker_progress(w, text))
         worker.finishedWith.connect(lambda payload, w=worker: self._on_worker_finished(w, payload))
@@ -897,6 +906,9 @@ class ChartViewModel(QObject):
         # The sweep in flight works on its own copy of the old document, so it can finish
         # safely; the generation check discards its result.
         self._cancel_all()
+        # A cancelled worker may still be finishing with the old cache; it keeps its own
+        # reference, so swap in a new one rather than clearing it under the worker.
+        self._compute_cache = ComputeCache()
         self.reload()
 
     def _on_content_changed(self) -> None:
