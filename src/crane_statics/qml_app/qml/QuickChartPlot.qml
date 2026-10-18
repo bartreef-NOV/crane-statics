@@ -6,7 +6,8 @@ Item {
     SystemPalette { id: pal }
     readonly property color passColor: "#2e7d32"
     readonly property color failColor: "#c62828"
-    readonly property color pendingColor: "#ef6c00"
+    // Not yet decided by the sweep: a neutral grey that follows the palette.
+    readonly property color pendingColor: pal.placeholderText
 
     property var visibilityByKey: ({})
     property var legendItems: []
@@ -71,11 +72,19 @@ Item {
         return series
     }
 
+    function contractualLegendColor(markers) {
+        // Grey while the sweep has decided none of the points yet.
+        if (markers.length > 0 && markers.every(marker => marker.status === "pending"))
+            return root.pendingColor
+        return root.passColor
+    }
+
     function collectLegendSeries() {
         const series = []
         const limits = chartVm.limitSeries || []
+        const markers = chartVm.markers || []
         series.push({ id: "capacity", label: qsTr("Capacity"), color: pal.highlight, points: chartVm.curvePoints || [] })
-        series.push({ id: "contractual", label: qsTr("Contractual"), color: root.passColor, points: chartVm.markers || [] })
+        series.push({ id: "contractual", label: qsTr("Contractual"), color: contractualLegendColor(markers), points: markers })
         for (let i = 0; i < limits.length; ++i)
             series.push(Object.assign({}, limits[i], { color: chartSeriesColor(limits[i]) }))
         return series

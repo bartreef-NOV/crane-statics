@@ -33,7 +33,7 @@ from crane_statics.core.limit_auto_set import (
 )
 from crane_statics.data.models import CraneDocument
 from crane_statics.qml_app.session import SessionState
-from crane_statics.core.sweep import SweepCancelled, run_mode_sweep
+from crane_statics.core.sweep import SweepCancelled, limit_series_layout, run_mode_sweep
 from crane_statics.core.sweep_cache import (
     ComputeCache,
     ComputeScope,
@@ -60,10 +60,29 @@ _LIMIT_COLORS = [
 ]
 
 
+def _limit_color(position: int) -> str:
+    """The colour of the limit at ``position`` in the layout of every enabled limit, so a
+    limit keeps it from its first streamed point to the finished chart."""
+    return _LIMIT_COLORS[position % len(_LIMIT_COLORS)]
+
+
+def _contractual_row(cp: Any, allowable: str, status: str) -> dict[str, str]:
+    return {
+        "outreach": f"{cp.outreach_m:.1f}",
+        "load": f"{cp.load_t:.1f}",
+        "allowable": allowable,
+        "status": status,
+    }
+
+
 class _SweepWorker(QThread):
     """Runs one (hoist, mode) capacity-curve sweep off the GUI thread."""
 
     pointsReady = pyqtSignal(object)  # list[tuple[float, float]], ascending outreach
+    # (contractual point, allowable t or None, passed or None) per point, after stage 1
+    contractualReady = pyqtSignal(object)
+    # {limit id: [(outreach, load_t), ...]}: the limit points gained with each batch
+    limitPointsReady = pyqtSignal(object)
     progress = pyqtSignal(str)
     finishedWith = pyqtSignal(object)  # the mode payload; empty_payload() if it does not apply
     failed = pyqtSignal(str)
@@ -96,6 +115,14 @@ class _SweepWorker(QThread):
         # The sweep shares the GIL with the UI thread: let it run between batches.
         time.sleep(0)
 
+    def _emit_contractual(self, results: list) -> None:
+        self.contractualReady.emit(results)
+        time.sleep(0)
+
+    def _emit_limit_points(self, gained: dict) -> None:
+        self.limitPointsReady.emit(gained)
+        time.sleep(0)
+
     def run(self) -> None:
         try:
             payload = run_mode_sweep(
@@ -104,6 +131,8 @@ class _SweepWorker(QThread):
                 should_cancel=self.isInterruptionRequested,
                 on_points=self._emit_points,
                 compute_scope=self._compute_scope,
+                on_contractual=self._emit_contractual,
+                on_limit_points=self._emit_limit_points,
             )
             self.finishedWith.emit(payload if payload is not None else empty_payload())
         except SweepCancelled:
@@ -117,6 +146,34 @@ def _is_sweep_status(text: str) -> bool:
     return text == "" or text.startswith(("Sweeping", "Stage ", "Done - ", "⚠ Sweep error"))
 
 
+class _JobStream:
+    """What the sweep in flight has delivered so far; shown while it is the wanted chart.
+
+    Every job starts with a fresh one, so nothing of an earlier job can reach the chart.
+    """
+
+    def __init__(self, layout: list[tuple[str, str, int]]) -> None:
+        # (limit id, label, rank) of every enabled limit, in display order.
+        self.layout = layout
+        self.points: list[list[float]] = []
+        self.limit_points: dict[str, list[list[float]]] = {}
+        # The stage-1 verdicts; None until they arrive.
+        self.verdicts: Optional[list] = None
+
+    def limit_series(self) -> list[dict[str, Any]]:
+        """One series per limit that has points, coloured by its place in the layout."""
+        return [
+            {
+                "id": limit_id,
+                "label": label,
+                "color": _limit_color(position),
+                "points": [list(point) for point in self.limit_points[limit_id]],
+            }
+            for position, (limit_id, label, _rank) in enumerate(self.layout)
+            if self.limit_points.get(limit_id)
+        ]
+
+
 class _RunningJob(NamedTuple):
     """The one sweep in flight, with the key and generation it started under."""
 
@@ -126,6 +183,7 @@ class _RunningJob(NamedTuple):
     worker: _SweepWorker
     # Its probe-cache priority; flipped to visible here when it becomes the wanted chart.
     priority: JobPriority
+    stream: _JobStream
 
 
 class ChartViewModel(QObject):
@@ -164,7 +222,6 @@ class ChartViewModel(QObject):
         self._queue: list[ChartJob] = []
         self._running: Optional[_RunningJob] = None
         self._threads: set[_SweepWorker] = set()
-        self._stream_points: list[list[float]] = []
         self._partial = False
         self._displayed_key: Optional[ChartKey] = None
 
@@ -401,15 +458,7 @@ class ChartViewModel(QObject):
         )
 
     def _rebuild_contractual_model(self) -> None:
-        rows = [
-            {
-                "outreach": f"{cp.outreach_m:.1f}",
-                "load": f"{cp.load_t:.1f}",
-                "allowable": "",
-                "status": "pending",
-            }
-            for cp in self._contractual_points()
-        ]
+        rows = [_contractual_row(cp, "", "pending") for cp in self._contractual_points()]
         self._contractual_model.set_rows(rows)
         self.contractualChanged.emit()
 
@@ -600,15 +649,21 @@ class ChartViewModel(QObject):
         scope = self._compute_cache.scope(compute, job.hoist_id, job.mode, priority)
         worker = _SweepWorker(doc_copy, job, limits, self._outreach_step, names, scope)
         worker.pointsReady.connect(lambda points, w=worker: self._on_worker_points(w, points))
+        worker.contractualReady.connect(
+            lambda results, w=worker: self._on_worker_contractual(w, results)
+        )
+        worker.limitPointsReady.connect(
+            lambda gained, w=worker: self._on_worker_limit_points(w, gained)
+        )
         worker.progress.connect(lambda text, w=worker: self._on_worker_progress(w, text))
         worker.finishedWith.connect(lambda payload, w=worker: self._on_worker_finished(w, payload))
         worker.failed.connect(lambda message, w=worker: self._on_worker_failed(w, message))
         worker.cancelled.connect(lambda w=worker: self._on_worker_cancelled(w))
         worker.finished.connect(lambda w=worker: self._threads.discard(w))
         worker.finished.connect(worker.deleteLater)
-        self._running = _RunningJob(job, key, self._generation, worker, priority)
+        stream = _JobStream(limit_series_layout(doc_copy, job.hoist_id, limits, names))
+        self._running = _RunningJob(job, key, self._generation, worker, priority, stream)
         self._threads.add(worker)
-        self._stream_points = []
         if not priority.background:
             self._show_stream()
         worker.start()
@@ -682,9 +737,30 @@ class ChartViewModel(QObject):
         if self._stopped() or running is None or running.worker is not worker:
             return
         batch = [[float(x), float(y)] for x, y in points]
-        self._stream_points.extend(batch)
+        running.stream.points.extend(batch)
         if self._partial and self._running_is_wanted():
             self._curve_points.extend(batch)
+            self.chartUpdated.emit()
+
+    def _on_worker_contractual(self, worker: _SweepWorker, results: list) -> None:
+        running = self._running
+        if self._stopped() or running is None or running.worker is not worker:
+            return
+        running.stream.verdicts = list(results)
+        if self._partial and self._running_is_wanted():
+            self._show_contractual(running.stream.verdicts)
+            self.chartUpdated.emit()
+
+    def _on_worker_limit_points(self, worker: _SweepWorker, gained: dict) -> None:
+        running = self._running
+        if self._stopped() or running is None or running.worker is not worker:
+            return
+        for limit_id, points in gained.items():
+            running.stream.limit_points.setdefault(str(limit_id), []).extend(
+                [float(x), float(y)] for x, y in points
+            )
+        if self._partial and self._running_is_wanted():
+            self._limit_series = running.stream.limit_series()
             self.chartUpdated.emit()
 
     def _on_worker_progress(self, worker: _SweepWorker, text: str) -> None:
@@ -729,7 +805,6 @@ class ChartViewModel(QObject):
 
     def _after_job(self, key: ChartKey) -> None:
         """Show the wanted chart if it is now cached, then start the next job."""
-        self._stream_points = []
         wanted = self._wanted_key()
         if wanted is not None and self._cache.get(wanted) is not None:
             # Re-render only the chart this job completed; a background result leaves
@@ -771,10 +846,18 @@ class ChartViewModel(QObject):
             self._set_status(f"Done - {payload.get('n_points', 0)} points")
 
     def _show_stream(self) -> None:
-        """Display the points the wanted chart's sweep has delivered so far."""
-        self._curve_points = [list(point) for point in self._stream_points]
-        self._limit_series = []
-        self._markers = []
+        """Display what the wanted chart's sweep has delivered so far: the capacity curve,
+        the limit series with points and the contractual points, pending until stage 1
+        has decided them."""
+        running = self._running
+        stream = running.stream if running is not None else _JobStream([])
+        self._curve_points = [list(point) for point in stream.points]
+        self._limit_series = stream.limit_series()
+        if stream.verdicts is None:
+            pending = [(cp, None, None) for cp in self._contractual_points()]
+            self._show_contractual(pending, undecided="")
+        else:
+            self._show_contractual(stream.verdicts)
         self._set_partial(True)
         self._displayed_key = None
         self.chartUpdated.emit()
@@ -785,6 +868,8 @@ class ChartViewModel(QObject):
         self._curve_points = []
         self._limit_series = []
         self._markers = []
+        # Drop the allowables a streamed or rendered chart left in the table.
+        self._rebuild_contractual_model()
         self._set_partial(False)
         self._displayed_key = None
         self.chartUpdated.emit()
@@ -799,40 +884,50 @@ class ChartViewModel(QObject):
         """False while the displayed curve is a partial stream, not a finished payload."""
         return not self._partial
 
-    def _render_payload(self, payload: dict[str, Any]) -> None:
-        self._curve_points = [[float(x), float(y)] for x, y in payload.get("curve_data", [])]
-        self._limit_series = [
-            {
-                "id": str(limit_id),
-                "label": str(label),
-                "color": _LIMIT_COLORS[position % len(_LIMIT_COLORS)],
-                "points": [[float(x), float(y)] for x, y in points],
-            }
-            for position, (limit_id, label, _rank, points) in enumerate(
-                payload.get("limit_series", [])
-            )
-        ]
-
+    def _show_contractual(self, results: list, undecided: str = "-") -> None:
+        """Markers and table rows from (contractual point, allowable t or None, passed or
+        None) tuples; ``undecided`` is the allowable shown where there is none."""
         self._markers = []
         contractual_rows = []
-        for cp, allowable, passed in payload.get("contractual_results", []):
+        for cp, allowable, passed in results:
             status = "pending" if passed is None else ("pass" if passed else "fail")
             # The preference hides plot markers only; the table still lists every point.
             self._markers.append(
                 {"outreach": float(cp.outreach_m), "load": float(cp.load_t), "status": status}
             )
-            contractual_rows.append(
-                {
-                    "outreach": f"{cp.outreach_m:.1f}",
-                    "load": f"{cp.load_t:.1f}",
-                    "allowable": "-" if allowable is None else f"{float(allowable):.1f}",
-                    "status": status,
-                }
-            )
+            text = undecided if allowable is None else f"{float(allowable):.1f}"
+            contractual_rows.append(_contractual_row(cp, text, status))
         if contractual_rows:
             self._contractual_model.set_rows(contractual_rows)
             self.contractualChanged.emit()
 
+    def _limit_positions(self) -> dict[str, int]:
+        """Each enabled limit's place in the display order of all enabled limits."""
+        doc = self._model.document
+        hoist_id = self._model.selected_hoist_id
+        if doc is None or not hoist_id:
+            return {}
+        layout = limit_series_layout(
+            doc, hoist_id, self._enabled_limits(), self._limit_display_names()
+        )
+        return {limit_id: position for position, (limit_id, _label, _rank) in enumerate(layout)}
+
+    def _render_payload(self, payload: dict[str, Any]) -> None:
+        self._curve_points = [[float(x), float(y)] for x, y in payload.get("curve_data", [])]
+        # The payload is the wanted chart's, computed with the limits enabled now.
+        positions = self._limit_positions()
+        self._limit_series = [
+            {
+                "id": str(limit_id),
+                "label": str(label),
+                "color": _limit_color(positions.get(str(limit_id), index)),
+                "points": [[float(x), float(y)] for x, y in points],
+            }
+            for index, (limit_id, label, _rank, points) in enumerate(
+                payload.get("limit_series", [])
+            )
+        ]
+        self._show_contractual(payload.get("contractual_results", []))
         self.chartUpdated.emit()
 
     @pyqtProperty("QVariantList", notify=chartUpdated)

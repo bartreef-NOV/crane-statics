@@ -12,7 +12,7 @@ from PyQt6.QtQml import (
     QQmlEngine,
     QQmlExpression,
 )
-from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtGui import QColor, QGuiApplication
 from PyQt6.QtQuick import QQuickItem
 
 from crane_statics.qml_app.session import SessionState
@@ -99,6 +99,26 @@ def test_chart_exports_are_disabled_while_the_chart_is_partial(qml_engine):
     assert [item.property("enabled") for item in items] == [False, False]
     chart_vm._set_partial(False)
     assert [item.property("enabled") for item in items] == [True, True]
+    assert warnings == []
+
+
+def test_chart_pending_markers_are_a_neutral_palette_grey(qml_engine):
+    engine, _app_vm, _model_vm, warnings = qml_engine
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "QuickChartPlot.qml")))
+    plot = component.create()
+    assert plot is not None, component.errorString()
+
+    pending = QColor(plot.property("pendingColor"))
+    assert pending != QColor("#ef6c00")
+    assert pending == QGuiApplication.palette().placeholderText().color()
+    assert pending.red() == pending.green() == pending.blue()
+    # The legend entry is grey while every marker is still pending.
+    undecided = _evaluate_in(plot, 'contractualLegendColor([{ status: "pending" }])')
+    decided = _evaluate_in(
+        plot, 'contractualLegendColor([{ status: "pending" }, { status: "pass" }])'
+    )
+    assert QColor(undecided) == pending
+    assert QColor(decided) == QColor(plot.property("passColor"))
     assert warnings == []
 
 
