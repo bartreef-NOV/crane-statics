@@ -385,3 +385,49 @@ def test_limit_series_do_not_stretch_the_partial_y_axis(vm, sweeps):
     y_top = 250.0
     assert vm.axisRanges["yMax"] == pytest.approx(y_top + max(1.0, y_top * 0.05))
     assert vm.axisRanges["yMin"] == 0.0
+
+
+def test_markers_set_the_partial_y_axis_until_the_curve_arrives(vm, sweeps):
+    job = _visible(vm)
+    hoist = vm._model.payload_hoist_by_id(job.hoist_id)
+    loads = [cp.load_t for cp in vm._contractual_points()]
+    # A limit series far above every marker, with no capacity point yet.
+    steps = [("limits", {"MH__rope_T": [(30.0, 50000.0)]}), ("points", [(30.0, 250.0)])]
+    gates = sweeps.script(job, steps, _payload(steps))
+
+    vm.draw()
+    gates[0].set()
+    wait_until(lambda: bool(vm.limitSeries), timeout=10.0)
+
+    assert vm.curvePoints == []
+    ranges = vm.axisRanges
+    y_top = max(loads)
+    assert ranges["yMax"] == pytest.approx(y_top + max(1.0, y_top * 0.05))
+    assert ranges["yMin"] == 0.0
+    assert all(ranges["yMin"] <= m["load"] <= ranges["yMax"] for m in vm.markers)
+    assert ranges["xMin"] <= float(hoist.outreach_min_m)
+    assert ranges["xMax"] >= float(hoist.outreach_max_m)
+
+    # The first curve batch takes over the y range.
+    gates[1].set()
+    wait_until(lambda: bool(vm.curvePoints), timeout=10.0)
+    assert vm.axisRanges["yMax"] == pytest.approx(250.0 + max(1.0, 250.0 * 0.05))
+    assert vm.axisRanges["yMin"] == 0.0
+
+
+def test_partial_y_axis_without_curve_or_markers_keeps_the_default(vm, sweeps):
+    for _ in range(len(vm._contractual_points())):
+        vm.deleteContractualPoint(0)
+    assert vm._contractual_points() == []
+    job = _visible(vm)
+    steps = [("limits", {"MH__rope_T": [(30.0, 50000.0)]})]
+    gates = sweeps.script(job, steps, _payload(steps))
+
+    vm.draw()
+    gates[0].set()
+    wait_until(lambda: bool(vm.limitSeries), timeout=10.0)
+
+    assert vm.chartComplete is False
+    assert vm.curvePoints == [] and vm.markers == []
+    assert vm.axisRanges["yMin"] == 0.0
+    assert vm.axisRanges["yMax"] == pytest.approx(2.0)

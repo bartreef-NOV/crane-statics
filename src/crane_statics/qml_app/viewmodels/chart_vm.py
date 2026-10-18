@@ -951,7 +951,10 @@ class ChartViewModel(QObject):
             lo = float(hoist.outreach_min_m or 0.0)
             hi = float(hoist.outreach_max_m or 200.0)
             lo, hi = min(lo, hi), max(lo, hi)
-            y_top = max((p[1] for p in self._curve_points), default=1.0)
+            # Until the first curve batch the contractual markers set y, so they show;
+            # limit series never stretch it.
+            y_source = self._curve_points or [[m["outreach"], m["load"]] for m in self._markers]
+            y_top = max((p[1] for p in y_source), default=1.0)
             x_pad = max(1.0, (hi - lo) * 0.05)
             return {
                 "xMin": lo - x_pad,
