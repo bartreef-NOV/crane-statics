@@ -8,6 +8,7 @@ Adapted from crane_app.solver.crane_solver.  Key differences from the original:
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Tuple, Any, cast
@@ -861,27 +862,41 @@ def _run_statics(
 # ---------------------------------------------------------------------------
 
 
-def build_directional_response_basis(
+@dataclass(frozen=True)
+class _AngleInvariants:
+    """What ``build_directional_response_basis`` solves at one boom angle, whatever the channels."""
+
+    node_pos: Dict[str, Tuple[float, float]]
+    node_body_map: Dict[str, str]
+    outreach_m: float
+    rope_mass_t_by_node: Dict[str, float]
+    dead_raw: Dict[str, float]
+    hook_sensitivity_raw: Dict[str, float]
+    offlead_lateral_sensitivity_raw: Dict[str, float]
+
+
+# (cache key, invariants, bases by channel references) of the last angle built.
+_InvariantsEntry = Tuple[
+    Tuple[Any, ...],
+    "_AngleInvariants | None",
+    Dict[Tuple[float, ...], "DirectionalResponseBasis | None"],
+]
+
+
+def _angle_invariants(
     doc_dict: Dict[str, Any],
     kinematics: "KinematicsAdapter",
     hoist_id: str,
     boom_angle_deg: float,
-    wind_speed_m_s: float = 0.0,
-    accel_x_m_s2: float = 0.0,
-    accel_z_m_s2: float = 0.0,
-    pitch_rad_s2: float = 0.0,
-    solver_ctx: Dict[str, Any] | None = None,
-    hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
-    tackle_length_m: float | None = None,
-) -> DirectionalResponseBasis | None:
+    ctx: Dict[str, Any],
+    hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None,
+    tackle_length_m: float | None,
+) -> _AngleInvariants | None:
     # ``rope_mass`` reaches back into this package for kinematics, so importing it
     # at module level would close the cycle.
     from ..rope_mass import active_hook_positions, falls_override_effective_mult, rope_mass_at_nodes
 
-    hoist_data = next((h for h in doc_dict.get("hoists", []) if h["id"] == hoist_id), None)
-    if hoist_data is None:
-        return None
-
+    hoist_data = next(h for h in doc_dict.get("hoists", []) if h["id"] == hoist_id)
     node_positions_dicts = active_hook_positions(
         doc_dict,
         hoist_id,
@@ -895,8 +910,6 @@ def build_directional_response_basis(
 
     load_node_id = str(hoist_data.get("load_node_id", ""))
     outreach_m = node_pos.get(load_node_id, (0.0, 0.0))[0]
-
-    ctx = solver_ctx or build_solver_static_context(doc_dict)
 
     falls_by_hoist_id: Dict[str, int] = {}
     for runtime_hoist_id, override in (hoist_runtime_overrides or {}).items():
@@ -971,6 +984,97 @@ def build_directional_response_basis(
     hook_sensitivity_raw = _subtract_raw(raw_hook_unit, dead_raw)
     offlead_lateral_sensitivity_raw = _subtract_raw(raw_offlead_lateral_unit, dead_raw)
 
+    return _AngleInvariants(
+        node_pos=node_pos,
+        node_body_map=node_body_map,
+        outreach_m=outreach_m,
+        rope_mass_t_by_node=rope_mass_t_by_node,
+        dead_raw=dead_raw,
+        hook_sensitivity_raw=hook_sensitivity_raw,
+        offlead_lateral_sensitivity_raw=offlead_lateral_sensitivity_raw,
+    )
+
+
+def build_directional_response_basis(
+    doc_dict: Dict[str, Any],
+    kinematics: "KinematicsAdapter",
+    hoist_id: str,
+    boom_angle_deg: float,
+    wind_speed_m_s: float = 0.0,
+    accel_x_m_s2: float = 0.0,
+    accel_z_m_s2: float = 0.0,
+    pitch_rad_s2: float = 0.0,
+    solver_ctx: Dict[str, Any] | None = None,
+    hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
+    tackle_length_m: float | None = None,
+) -> DirectionalResponseBasis | None:
+    hoist_data = next((h for h in doc_dict.get("hoists", []) if h["id"] == hoist_id), None)
+    if hoist_data is None:
+        return None
+
+    ctx = solver_ctx or build_solver_static_context(doc_dict)
+    # A sweep builds several bases at one angle that differ only in their channel references,
+    # and the probes that load no in-plane channel share one. The invariants and the bases
+    # are kept (last angle only) in the static context.
+    cache_key = (
+        hoist_id,
+        boom_angle_deg,
+        tackle_length_m,
+        json.dumps(hoist_runtime_overrides, sort_keys=True, default=repr),
+    )
+    last: _InvariantsEntry | None = ctx.get("_angle_invariants")
+    if last is None or last[0] != cache_key:
+        last = (
+            cache_key,
+            _angle_invariants(
+                doc_dict,
+                kinematics,
+                hoist_id,
+                boom_angle_deg,
+                ctx,
+                hoist_runtime_overrides,
+                tackle_length_m,
+            ),
+            {},
+        )
+        ctx["_angle_invariants"] = last
+    _, invariants, bases = last
+    if invariants is None:
+        return None
+    refs = (
+        abs(float(wind_speed_m_s)),
+        abs(float(accel_x_m_s2)),
+        abs(float(accel_z_m_s2)),
+        abs(float(pitch_rad_s2)),
+        1.0 if pitch_rad_s2 > 0 else (-1.0 if pitch_rad_s2 < 0 else 0.0),
+    )
+    if refs not in bases:
+        bases[refs] = _basis_from_invariants(
+            doc_dict, hoist_data, boom_angle_deg, refs, ctx, hoist_runtime_overrides, invariants
+        )
+    basis: DirectionalResponseBasis | None = bases[refs]
+    return basis
+
+
+def _basis_from_invariants(
+    doc_dict: Dict[str, Any],
+    hoist_data: Dict[str, Any],
+    boom_angle_deg: float,
+    refs: Tuple[float, float, float, float, float],
+    ctx: Dict[str, Any],
+    hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None,
+    invariants: _AngleInvariants,
+) -> DirectionalResponseBasis | None:
+    """The basis for channel references ``refs`` (wind, accel x, accel z, pitch, pitch sign)."""
+    hoist_id = str(hoist_data["id"])
+    node_pos = invariants.node_pos
+    node_body_map = invariants.node_body_map
+    outreach_m = invariants.outreach_m
+    rope_mass_t_by_node = invariants.rope_mass_t_by_node
+    dead_raw = invariants.dead_raw
+    hook_sensitivity_raw = invariants.hook_sensitivity_raw
+    offlead_lateral_sensitivity_raw = invariants.offlead_lateral_sensitivity_raw
+
     def _channel(
         *, wind: float = 0.0, ax: float = 0.0, az: float = 0.0, pitch: float = 0.0
     ) -> Dict[str, float] | None:
@@ -992,10 +1096,7 @@ def build_directional_response_basis(
         )
         return _subtract_raw(r, dead_raw) if r else None
 
-    wind_ref = abs(float(wind_speed_m_s))
-    ax_ref = abs(float(accel_x_m_s2))
-    az_ref = abs(float(accel_z_m_s2))
-    pt_ref = abs(float(pitch_rad_s2))
+    wind_ref, ax_ref, az_ref, pt_ref, pitch_sign = refs
 
     wind_raw: Dict[str, float] | None = (
         _channel(wind=wind_ref) if wind_ref > 0 else {k: 0.0 for k in dead_raw}
@@ -1063,7 +1164,7 @@ def build_directional_response_basis(
         active_rope_id=active_rope_id,
         active_rope_parts=active_rope_parts,
         inactive_rope_baselines=inactive_rope_baselines,
-        pitch_sign=(1.0 if pitch_rad_s2 > 0 else (-1.0 if pitch_rad_s2 < 0 else 0.0)),
+        pitch_sign=pitch_sign,
         connection_local_axes=_connection_local_axes_for_nodes(node_pos),
         inactive_rope_mass_per_part_t=inactive_rope_mass_per_part_t,
         lumped_point_masses=lumped,

@@ -24,6 +24,7 @@ class KinematicsAdapter:
             raise ValueError("Required node 'platform_base' not found")
         self.base_x = float(ground.get("x_m", 0.0))
         self.base_z = float(ground.get("z_m", 0.0))
+        self._last_resolved: Tuple[float, Dict[str, Tuple[float, float]]] | None = None
 
     def compute_outreach(self, boom_angle_deg: float, hoist_id: str) -> float:
         hoist = next((h for h in self.hoists if h.get("id") == hoist_id), None)
@@ -74,6 +75,13 @@ class KinematicsAdapter:
         return {nid: {"x": x, "z": z} for nid, (x, z) in raw.items()}
 
     def _resolve_nodes(self, boom_angle_deg: float) -> Dict[str, Tuple[float, float]]:
+        """Node positions at ``boom_angle_deg``; the last angle is kept, a sweep re-asks for it."""
+        cached = self._last_resolved
+        if cached is None or cached[0] != boom_angle_deg:
+            cached = self._last_resolved = (boom_angle_deg, self._compute_nodes(boom_angle_deg))
+        return dict(cached[1])
+
+    def _compute_nodes(self, boom_angle_deg: float) -> Dict[str, Tuple[float, float]]:
         angle_rad = boom_angle_deg * math.pi / 180.0
 
         boom_heel = self.nodes.get("boom_heel")

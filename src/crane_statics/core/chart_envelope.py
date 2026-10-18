@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import Any, Callable, Optional, Sequence
 
 import numpy as np
@@ -29,7 +30,7 @@ from ..calculation.vessel_frame import CraneFrameMotion, VesselInputs, crane_fra
 from ..data.models import VesselMotion
 from .analysis_cases import _signed_candidates
 from .lead_channels import compose_lead_channel_point
-from .vessel_envelope import vessel_motion_cases
+from .vessel_envelope import VESSEL_LIMIT_INPUTS, vessel_limit, vessel_motion_cases
 
 # Probe order for ``ProbeSet.motion`` and ``motion_channels``.
 _PROBE_KWARGS = (
@@ -162,42 +163,85 @@ def superpose(
     wind_y_scale: float,
 ) -> AnalysisPoint:
     """Assemble one case's baseline from the probes; sensitivities stay the zero point's."""
-    zero = probes.zero
-    terms = [(float(c), p) for c, p in zip(channels, probes.motion)]
-    terms.append((float(wind_x_scale), probes.wind_x))
-    terms.append((float(wind_y_scale), probes.wind_y))
+    scales = [float(c) for c in channels]
+    scales.append(float(wind_x_scale))
+    scales.append(float(wind_y_scale))
+    rope_plan, reaction_plan = _superpose_plan(probes)
 
-    rope_ids = set(zero.baseline_rope_tensions)
-    for _, p in terms:
-        rope_ids |= set(p.baseline_rope_tensions)
     ropes: dict[str, float] = {}
-    for rope_id in rope_ids:
-        base = float(zero.baseline_rope_tensions.get(rope_id, 0.0))
+    for rope_id, base, deltas in rope_plan:
         value = base
-        for scale, p in terms:
-            value += scale * (float(p.baseline_rope_tensions.get(rope_id, 0.0)) - base)
+        for scale, delta in zip(scales, deltas):
+            value += scale * delta
         ropes[rope_id] = value
 
-    entity_ids = set(zero.baseline_reactions)
-    for _, p in terms:
-        entity_ids |= set(p.baseline_reactions)
     reactions: dict[str, dict[str, float]] = {}
-    for entity_id in entity_ids:
-        zero_comps = zero.baseline_reactions.get(entity_id, {})
-        probe_comps = [(scale, p.baseline_reactions.get(entity_id, {})) for scale, p in terms]
-        component_ids = set(zero_comps)
-        for _, comps in probe_comps:
-            component_ids |= set(comps)
+    for entity_id, components in reaction_plan:
         out: dict[str, float] = {}
-        for component in component_ids:
-            base = float(zero_comps.get(component, 0.0))
+        for component, base, deltas in components:
             value = base
-            for scale, comps in probe_comps:
-                value += scale * (float(comps.get(component, 0.0)) - base)
+            for scale, delta in zip(scales, deltas):
+                value += scale * delta
             out[component] = value
         reactions[entity_id] = out
 
-    return replace(zero, baseline_rope_tensions=ropes, baseline_reactions=reactions)
+    return replace(probes.zero, baseline_rope_tensions=ropes, baseline_reactions=reactions)
+
+
+_RopePlan = list[tuple[str, float, list[float]]]
+_ReactionPlan = list[tuple[str, list[tuple[str, float, list[float]]]]]
+# The last probe set's plan: a sweep assembles many cases from one set before the next angle.
+_last_plan: Optional[tuple[ProbeSet, tuple[_RopePlan, _ReactionPlan]]] = None
+
+
+def _superpose_plan(probes: ProbeSet) -> tuple[_RopePlan, _ReactionPlan]:
+    """Per rope and reaction component: the zero probe's value and each probe's delta from it.
+
+    These do not depend on the case, so ``superpose`` only multiplies and adds. The order of
+    ropes, entities and components is the one the plain set unions give.
+    """
+    global _last_plan
+    cached = _last_plan
+    if cached is not None and cached[0] is probes:
+        return cached[1]
+
+    zero = probes.zero
+    others = [*probes.motion, probes.wind_x, probes.wind_y]
+    rope_ids = set(zero.baseline_rope_tensions)
+    for p in others:
+        rope_ids |= set(p.baseline_rope_tensions)
+    rope_plan: _RopePlan = []
+    for rope_id in rope_ids:
+        base = float(zero.baseline_rope_tensions.get(rope_id, 0.0))
+        rope_plan.append(
+            (
+                rope_id,
+                base,
+                [float(p.baseline_rope_tensions.get(rope_id, 0.0)) - base for p in others],
+            )
+        )
+
+    entity_ids = set(zero.baseline_reactions)
+    for p in others:
+        entity_ids |= set(p.baseline_reactions)
+    reaction_plan: _ReactionPlan = []
+    for entity_id in entity_ids:
+        zero_comps = zero.baseline_reactions.get(entity_id, {})
+        probe_comps = [p.baseline_reactions.get(entity_id, {}) for p in others]
+        component_ids = set(zero_comps)
+        for comps in probe_comps:
+            component_ids |= set(comps)
+        components = []
+        for component in component_ids:
+            base = float(zero_comps.get(component, 0.0))
+            components.append(
+                (component, base, [float(c.get(component, 0.0)) - base for c in probe_comps])
+            )
+        reaction_plan.append((entity_id, components))
+
+    plan = (rope_plan, reaction_plan)
+    _last_plan = (probes, plan)
+    return plan
 
 
 # --- worst case over vessel signs, slew, wind angle and lead signs ------------------------
@@ -253,6 +297,16 @@ class _SlewHarmonics:
 
 
 def _slew_harmonics(gravity: float, vessel: VesselMotion) -> _SlewHarmonics:
+    """The harmonics of ``vessel``'s limits; cached, as they do not depend on the boom angle."""
+    limits = tuple(vessel_limit(vessel, field) for field, _, _ in VESSEL_LIMIT_INPUTS)
+    return _slew_harmonics_for(gravity, limits)
+
+
+@lru_cache(maxsize=8)
+def _slew_harmonics_for(gravity: float, limits: tuple[float, ...]) -> _SlewHarmonics:
+    vessel = VesselMotion(
+        **{field: limit for (field, _, _), limit in zip(VESSEL_LIMIT_INPUTS, limits)}
+    )
     means, cos_parts, sin_parts = [], [], []
     for case in vessel_motion_cases(vessel):
         fields = {_VESSEL_INPUT_FIELDS[key]: float(value) for key, value in case.items()}
@@ -263,7 +317,10 @@ def _slew_harmonics(gravity: float, vessel: VesselMotion) -> _SlewHarmonics:
         means.append(0.5 * (c0 + c180))
         cos_parts.append(0.5 * (c0 - c180))
         sin_parts.append(0.5 * (c90 - c270))
-    return _SlewHarmonics(np.array(means), np.array(cos_parts), np.array(sin_parts))
+    harmonics = _SlewHarmonics(np.array(means), np.array(cos_parts), np.array(sin_parts))
+    for part in (harmonics.mean, harmonics.cos_part, harmonics.sin_part):
+        part.setflags(write=False)  # shared between callers through the cache
+    return harmonics
 
 
 def _used_channels(harmonics: _SlewHarmonics) -> list[bool]:

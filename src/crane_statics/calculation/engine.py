@@ -11,6 +11,8 @@ This module implements the core mathematical solver for:
 from dataclasses import dataclass
 from typing import Optional, Any, Sequence
 import math
+
+import numpy as np
 from ..data.models import CraneDocument
 from .solver.kinematics import KinematicsAdapter
 from .solver.crane_solver import (
@@ -281,6 +283,28 @@ class AllowableCapacity:
     margin_t: Optional[float] = None
 
 
+@dataclass(frozen=True)
+class _OutOfPlaneGeometry:
+    """Points of the out-of-plane pass at one boom angle, with lever arms about each group.
+
+    ``mass_*`` are the mass points (document masses, then the lumped hook and rope masses);
+    ``wind_coef`` is the wind force per wind speed squared of each wind area. ``*_rel_*`` have
+    one row per support group (the order of ``origin_by_group``).
+    """
+
+    node_pos: dict[str, tuple[float, float]]
+    origin_by_group: dict[str, tuple[float, float]]
+    mass_t: np.ndarray
+    mass_x: np.ndarray
+    mass_y: np.ndarray
+    mass_z: np.ndarray
+    mass_rel_x: np.ndarray
+    mass_rel_z: np.ndarray
+    wind_coef: np.ndarray
+    wind_rel_x: np.ndarray
+    wind_rel_z: np.ndarray
+
+
 class CraneCalculator:
     """Main calculation engine for crane statics."""
 
@@ -298,6 +322,7 @@ class CraneCalculator:
         self.hoists = {h.id: h for h in document.hoists}
         self._kinematics = KinematicsAdapter(self._doc_dict)
         self._solver_ctx = build_solver_static_context(self._doc_dict)
+        self._oop_geometry: Optional[tuple[tuple[Any, ...], _OutOfPlaneGeometry]] = None
 
     def _build_connection_map(self) -> dict[str, dict]:
         if self.doc.connections is None:
@@ -321,7 +346,118 @@ class CraneCalculator:
         pitch_accel_rad_s2: float = 0.0,
         lumped_point_masses: Sequence[tuple[float, float, float]] = (),
     ) -> tuple[dict[str, dict[str, float]], float, float]:
+        """Out-of-plane (Y) pass for one hook force and side force (``_out_of_plane_variants``)."""
+        return self._out_of_plane_variants(
+            point,
+            hoist_id,
+            boom_angle_deg,
+            [(hook_force_kN, side_lateral_force_kN)],
+            wind_y_m_s,
+            accel_y_m_s2,
+            roll_accel_rad_s2,
+            hoist_runtime_overrides,
+            accel_x_m_s2=accel_x_m_s2,
+            accel_z_m_s2=accel_z_m_s2,
+            pitch_accel_rad_s2=pitch_accel_rad_s2,
+            lumped_point_masses=lumped_point_masses,
+        )[0]
+
+    def _out_of_plane_geometry(
+        self, boom_angle_deg: float, lumped_point_masses: Sequence[tuple[float, float, float]]
+    ) -> "_OutOfPlaneGeometry":
+        """Mass and wind points of the out-of-plane pass at one boom angle (last one kept).
+
+        A sweep evaluates several probes at one angle; the points and their lever arms about
+        the support groups are the same for all of them, only the accelerations differ.
+        """
+        lumped = tuple((float(m), float(x), float(z)) for m, x, z in lumped_point_masses)
+        rho = float(self.doc.environment.air_density_kg_m3)
+        key = (boom_angle_deg, lumped, rho)
+        cached = self._oop_geometry
+        if cached is not None and cached[0] == key:
+            return cached[1]
+
+        node_positions = self._kinematics.compute_all_node_positions(boom_angle_deg)
+        node_pos = {nid: (float(v["x"]), float(v["z"])) for nid, v in node_positions.items()}
+        origin_by_group = {
+            "heel": node_pos.get("boom_heel", (0.0, 0.0)),
+            "front_leg": node_pos.get("front_base", (0.0, 0.0)),
+            "rear_leg": node_pos.get("rear_base", (0.0, 0.0)),
+            "platform_base": node_pos.get("platform_heel", (0.0, 0.0)),
+        }
+
+        masses: list[tuple[float, float, float, float]] = []  # (mass_t, x, y, z)
+        for body in self.doc.bodies:
+            for mp in body.mass_points:
+                if body.id == "boom" and mp.local_x_m is not None:
+                    xw, zw = rotate_boom_local_point(
+                        float(mp.local_x_m), float(mp.local_z_m or 0.0), node_pos, boom_angle_deg
+                    )
+                    yw = float(mp.local_y_m or 0.0)
+                else:
+                    xw, zw = float(mp.x_m), float(mp.z_m)
+                    yw = float(mp.y_m)
+                masses.append((float(mp.mass_t), xw, yw, zw))
+        # Idle hook blocks and rope self-weight, lumped at nodes on the crane centreline:
+        # the same masses at the same positions as the X-Z solve
+        # (``crane_solver.lumped_point_masses``, carried on the response basis).
+        masses.extend((m, x, 0.0, z) for m, x, z in lumped)
+
+        winds: list[tuple[float, float, float]] = []  # (force per speed squared, x, z)
+        boom_proj = boom_wind_projection_scale(boom_angle_deg)
+        for body in self.doc.bodies:
+            for wa in body.wind_areas:
+                if body.id == "boom" and wa.local_x_m is not None:
+                    xw, zw = rotate_boom_local_point(
+                        float(wa.local_x_m), float(wa.local_z_m or 0.0), node_pos, boom_angle_deg
+                    )
+                    area_proj = float(wa.area_v_m2) * boom_proj
+                else:
+                    xw, zw = float(wa.x_m), float(wa.z_m)
+                    area_proj = float(wa.area_v_m2)
+                winds.append((0.5 * rho * float(wa.cd) * area_proj / 1000.0, xw, zw))
+
+        m_arr = np.array(masses, dtype=float).reshape(-1, 4)
+        w_arr = np.array(winds, dtype=float).reshape(-1, 3)
+        ox = np.array([float(o[0]) for o in origin_by_group.values()])[:, None]
+        oz = np.array([float(o[1]) for o in origin_by_group.values()])[:, None]
+        geometry = _OutOfPlaneGeometry(
+            node_pos=node_pos,
+            origin_by_group=origin_by_group,
+            mass_t=m_arr[:, 0],
+            mass_x=m_arr[:, 1],
+            mass_y=m_arr[:, 2],
+            mass_z=m_arr[:, 3],
+            mass_rel_x=m_arr[:, 1][None, :] - ox,
+            mass_rel_z=m_arr[:, 3][None, :] - oz,
+            wind_coef=w_arr[:, 0],
+            wind_rel_x=w_arr[:, 1][None, :] - ox,
+            wind_rel_z=w_arr[:, 2][None, :] - oz,
+        )
+        self._oop_geometry = (key, geometry)
+        return geometry
+
+    def _out_of_plane_variants(
+        self,
+        point: AnalysisPoint,
+        hoist_id: str,
+        boom_angle_deg: float,
+        variants: Sequence[tuple[float, float]],
+        wind_y_m_s: float,
+        accel_y_m_s2: float,
+        roll_accel_rad_s2: float,
+        hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
+        *,
+        accel_x_m_s2: float = 0.0,
+        accel_z_m_s2: float = 0.0,
+        pitch_accel_rad_s2: float = 0.0,
+        lumped_point_masses: Sequence[tuple[float, float, float]] = (),
+    ) -> list[tuple[dict[str, dict[str, float]], float, float]]:
         """Out-of-plane (Y) pass: left/right split, platform Fy and Mx.
+
+        ``variants`` are ``(hook_force_kN, side_lateral_force_kN)`` pairs; the mass and wind
+        loads do not depend on them, so they are accumulated once and each variant adds its
+        own side force and totals. Returns one ``(split, platform_mx, platform_fy)`` per variant.
 
         All accelerations are the equivalent crane-frame values (``CraneFrameMotion``), so
         each mass carries the same in-plane (Fx, Fz) load as in the X-Z solve plus
@@ -329,21 +465,10 @@ class CraneCalculator:
         ``lumped_point_masses`` are the idle hook and rope masses ``(mass_t, x, z)`` from the
         response basis; ``compute_analysis_point`` always passes them.
         """
-        node_positions = self._kinematics.compute_all_node_positions(boom_angle_deg)
-        node_pos = {nid: (float(v["x"]), float(v["z"])) for nid, v in node_positions.items()}
-
-        origin_by_group = {
-            "heel": node_pos.get("boom_heel", (0.0, 0.0)),
-            "front_leg": node_pos.get("front_base", (0.0, 0.0)),
-            "rear_leg": node_pos.get("rear_base", (0.0, 0.0)),
-            "platform_base": node_pos.get("platform_heel", (0.0, 0.0)),
-        }
-        moments = {
-            "heel": {"Mx": 0.0, "Mz": 0.0},
-            "front_leg": {"Mx": 0.0, "Mz": 0.0},
-            "rear_leg": {"Mx": 0.0, "Mz": 0.0},
-            "platform_base": {"Mx": 0.0, "Mz": 0.0},
-        }
+        geometry = self._out_of_plane_geometry(boom_angle_deg, lumped_point_masses)
+        node_pos = geometry.node_pos
+        origin_by_group = geometry.origin_by_group
+        moments = {group: {"Mx": 0.0, "Mz": 0.0} for group in origin_by_group}
         total_fy_platform = 0.0
 
         def _accumulate_force(
@@ -382,112 +507,102 @@ class CraneCalculator:
             ay_pt = float(accel_y_m_s2) - float(roll_accel_rad_s2) * (zw - roll_ref_z)
             return fx, -mass_t * ay_pt, fz
 
-        for body in self.doc.bodies:
-            for mp in body.mass_points:
-                if body.id == "boom" and mp.local_x_m is not None:
-                    xw, zw = rotate_boom_local_point(
-                        float(mp.local_x_m), float(mp.local_z_m or 0.0), node_pos, boom_angle_deg
-                    )
-                    yw = float(mp.local_y_m or 0.0)
-                else:
-                    xw, zw = float(mp.x_m), float(mp.z_m)
-                    yw = float(mp.y_m)
-                fx, fy, fz = _mass_force(float(mp.mass_t), xw, zw)
-                _accumulate_force(xw, yw, zw, fx=fx, fy=fy, fz=fz)
-
-        # Idle hook blocks and rope self-weight, lumped at nodes on the crane centreline:
-        # the same masses at the same positions as the X-Z solve
-        # (``crane_solver.lumped_point_masses``, carried on the response basis).
-        for lmass_t, lx, lz in lumped_point_masses:
-            fx, fy, fz = _mass_force(float(lmass_t), float(lx), float(lz))
-            _accumulate_force(float(lx), 0.0, float(lz), fx=fx, fy=fy, fz=fz)
-
-        rho = float(env.air_density_kg_m3)
+        # The mass and wind loads of every point at once (``inertia_force`` and ``_mass_force``
+        # in array form); the moments about each support group are dot products with the
+        # per-angle lever arms.
+        mass_t = geometry.mass_t
+        dz = geometry.mass_z - roll_ref_z
+        dx = geometry.mass_x - ref_x
+        pitch = float(pitch_accel_rad_s2)
+        fx_m = -mass_t * (float(accel_x_m_s2) + pitch * dz)
+        fz_m = -mass_t * (gravity_abs + (float(accel_z_m_s2) - pitch * dx))
+        fy_m = -mass_t * (float(accel_y_m_s2) - float(roll_accel_rad_s2) * dz)
         wind_sign = 0.0 if abs(float(wind_y_m_s)) < 1e-12 else math.copysign(1.0, float(wind_y_m_s))
-        wind_mag = abs(float(wind_y_m_s))
-        boom_proj = boom_wind_projection_scale(boom_angle_deg)
+        fy_w = wind_sign * geometry.wind_coef * abs(float(wind_y_m_s)) ** 2
+        mx = geometry.mass_y @ fz_m - geometry.mass_rel_z @ fy_m - geometry.wind_rel_z @ fy_w
+        mz = geometry.mass_rel_x @ fy_m - geometry.mass_y @ fx_m + geometry.wind_rel_x @ fy_w
+        for index, group in enumerate(origin_by_group):
+            moments[group]["Mx"] = float(mx[index])
+            moments[group]["Mz"] = float(mz[index])
+        total_fy_platform = float(fy_m.sum() + fy_w.sum())
 
-        for body in self.doc.bodies:
-            for wa in body.wind_areas:
-                if body.id == "boom" and wa.local_x_m is not None:
-                    xw, zw = rotate_boom_local_point(
-                        float(wa.local_x_m), float(wa.local_z_m or 0.0), node_pos, boom_angle_deg
+        shared_moments = moments
+        shared_fy_platform = total_fy_platform
+        results = []
+        for hook_force_kN, side_lateral_force_kN in variants:
+            moments = {group: dict(comps) for group, comps in shared_moments.items()}
+            total_fy_platform = shared_fy_platform
+            hoist = self.hoists.get(hoist_id)
+            if hoist is not None:
+                # The rope delivers the lateral load to the crane at the supporting sheave, not at
+                # the hook (a placeholder node parked below the sheave).
+                load_node = node_pos.get(str(getattr(hoist, "support_node_id", "") or ""))
+                if load_node is None:
+                    load_node = node_pos.get(str(hoist.load_node_id))
+                if load_node is not None:
+                    _accumulate_force(
+                        float(load_node[0]),
+                        0.0,
+                        float(load_node[1]),
+                        fx=0.0,
+                        fy=float(side_lateral_force_kN),
+                        fz=0.0,
                     )
-                    area_proj = float(wa.area_v_m2) * boom_proj
-                else:
-                    xw, zw = float(wa.x_m), float(wa.z_m)
-                    area_proj = float(wa.area_v_m2)
-                fy_wind = wind_sign * 0.5 * rho * float(wa.cd) * area_proj * wind_mag**2 / 1000.0
-                _accumulate_force(xw, 0.0, zw, fx=0.0, fy=fy_wind, fz=0.0)
 
-        hoist = self.hoists.get(hoist_id)
-        if hoist is not None:
-            # The rope delivers the lateral load to the crane at the supporting sheave, not at
-            # the hook (a placeholder node parked below the sheave).
-            load_node = node_pos.get(str(getattr(hoist, "support_node_id", "") or ""))
-            if load_node is None:
-                load_node = node_pos.get(str(hoist.load_node_id))
-            if load_node is not None:
-                _accumulate_force(
-                    float(load_node[0]),
-                    0.0,
-                    float(load_node[1]),
-                    fx=0.0,
-                    fy=float(side_lateral_force_kN),
-                    fz=0.0,
+                override = (hoist_runtime_overrides or {}).get(hoist_id, {})
+                normal_hook_mass_t = float(hoist.hook_mass_t)
+                effective_hook_mass_t = float(
+                    override.get("hook_mass_t", normal_hook_mass_t) or 0.0
                 )
+                comp_mass_t = override.get("support_comp_mass_t")
+                if comp_mass_t is None:
+                    comp_mass_t = max(0.0, normal_hook_mass_t - effective_hook_mass_t)
+                try:
+                    comp_mass_t = max(0.0, float(comp_mass_t))
+                except (TypeError, ValueError):
+                    comp_mass_t = 0.0
+                support_node_id = str(
+                    override.get("support_node_id") or getattr(hoist, "support_node_id", "") or ""
+                )
+                if comp_mass_t > 1e-12 and support_node_id and support_node_id in node_pos:
+                    sx, sz = node_pos[support_node_id]
+                    # A mass like any other: weight plus the vessel motion, no invented side
+                    # force when the vessel is level and still.
+                    fx_comp, fy_comp, fz_comp = _mass_force(comp_mass_t, float(sx), float(sz))
+                    _accumulate_force(float(sx), 0.0, float(sz), fx=fx_comp, fy=fy_comp, fz=fz_comp)
 
-            override = (hoist_runtime_overrides or {}).get(hoist_id, {})
-            normal_hook_mass_t = float(hoist.hook_mass_t)
-            effective_hook_mass_t = float(override.get("hook_mass_t", normal_hook_mass_t) or 0.0)
-            comp_mass_t = override.get("support_comp_mass_t")
-            if comp_mass_t is None:
-                comp_mass_t = max(0.0, normal_hook_mass_t - effective_hook_mass_t)
-            try:
-                comp_mass_t = max(0.0, float(comp_mass_t))
-            except (TypeError, ValueError):
-                comp_mass_t = 0.0
-            support_node_id = str(
-                override.get("support_node_id") or getattr(hoist, "support_node_id", "") or ""
-            )
-            if comp_mass_t > 1e-12 and support_node_id and support_node_id in node_pos:
-                sx, sz = node_pos[support_node_id]
-                # A mass like any other: weight plus the vessel motion, no invented side
-                # force when the vessel is level and still.
-                fx_comp, fy_comp, fz_comp = _mass_force(comp_mass_t, float(sx), float(sz))
-                _accumulate_force(float(sx), 0.0, float(sz), fx=fx_comp, fy=fy_comp, fz=fz_comp)
+            widths = self.doc.support_widths
+            boom_width = float(widths.boom_width_m)
+            if boom_width <= 0.0:
+                raise ValueError("Support widths must be > 0")
 
-        widths = self.doc.support_widths
-        boom_width = float(widths.boom_width_m)
-        if boom_width <= 0.0:
-            raise ValueError("Support widths must be > 0")
-
-        total_map = {
-            "heel": "heel_point",
-            "front_leg": "front_hinge",
-            "rear_leg": "rear_hinge",
-        }
-        side_entity = {
-            "heel": ("heel_left", "heel_right", boom_width),
-            "front_leg": ("front_leg_left", "front_leg_right", boom_width),
-            "rear_leg": ("rear_leg_left", "rear_leg_right", boom_width),
-        }
-        split: dict[str, dict[str, float]] = {}
-        for group, total_entity in total_map.items():
-            left_entity, right_entity, width = side_entity[group]
-            base = point.baseline_reactions.get(total_entity, {})
-            sens = point.sensitivity_reactions.get(total_entity, {})
-            total_fx = float(base.get("Fx", 0.0)) + float(sens.get("Fx", 0.0)) * float(
-                hook_force_kN
-            )
-            total_fz = float(base.get("Fz", 0.0)) + float(sens.get("Fz", 0.0)) * float(
-                hook_force_kN
-            )
-            d_fx = float(moments[group]["Mz"]) / float(width)
-            d_fz = float(moments[group]["Mx"]) / float(width)
-            split[left_entity] = {"Fx": 0.5 * total_fx + d_fx, "Fz": 0.5 * total_fz + d_fz}
-            split[right_entity] = {"Fx": 0.5 * total_fx - d_fx, "Fz": 0.5 * total_fz - d_fz}
-        return split, float(moments["platform_base"]["Mx"]), float(total_fy_platform)
+            total_map = {
+                "heel": "heel_point",
+                "front_leg": "front_hinge",
+                "rear_leg": "rear_hinge",
+            }
+            side_entity = {
+                "heel": ("heel_left", "heel_right", boom_width),
+                "front_leg": ("front_leg_left", "front_leg_right", boom_width),
+                "rear_leg": ("rear_leg_left", "rear_leg_right", boom_width),
+            }
+            split: dict[str, dict[str, float]] = {}
+            for group, total_entity in total_map.items():
+                left_entity, right_entity, width = side_entity[group]
+                base = point.baseline_reactions.get(total_entity, {})
+                sens = point.sensitivity_reactions.get(total_entity, {})
+                total_fx = float(base.get("Fx", 0.0)) + float(sens.get("Fx", 0.0)) * float(
+                    hook_force_kN
+                )
+                total_fz = float(base.get("Fz", 0.0)) + float(sens.get("Fz", 0.0)) * float(
+                    hook_force_kN
+                )
+                d_fx = float(moments[group]["Mz"]) / float(width)
+                d_fz = float(moments[group]["Mx"]) / float(width)
+                split[left_entity] = {"Fx": 0.5 * total_fx + d_fx, "Fz": 0.5 * total_fz + d_fz}
+                split[right_entity] = {"Fx": 0.5 * total_fx - d_fx, "Fz": 0.5 * total_fz - d_fz}
+            results.append((split, float(moments["platform_base"]["Mx"]), float(total_fy_platform)))
+        return results
 
     def _augment_point_with_out_of_plane_loads(
         self,
@@ -504,47 +619,24 @@ class CraneCalculator:
         Runs for every document. Rewrites the left/right support reactions and platform base
         ``Fy``/``Mx``; hinge totals, rope tensions and member loads stay in-plane.
         """
-        motion_kwargs: dict[str, Any] = {
-            "accel_y_m_s2": motion.accel_y_m_s2,
-            "roll_accel_rad_s2": motion.roll_accel_rad_s2,
-            "accel_x_m_s2": motion.accel_x_m_s2,
-            "accel_z_m_s2": motion.accel_z_m_s2,
-            "pitch_accel_rad_s2": motion.pitch_accel_rad_s2,
-            "lumped_point_masses": lumped_point_masses,
-        }
-        split_at_zero, platform_mx_at_zero, platform_fy_at_zero = (
-            self._build_out_of_plane_reactions(
-                point,
-                hoist_id,
-                point.boom_angle_deg,
-                hook_force_kN=0.0,
-                wind_y_m_s=wind_y_m_s,
-                **motion_kwargs,
-                side_lateral_force_kN=0.0,
-                hoist_runtime_overrides=hoist_runtime_overrides,
-            )
-        )
-        split_at_one, platform_mx_at_one, platform_fy_at_one = self._build_out_of_plane_reactions(
+        (
+            (split_at_zero, platform_mx_at_zero, platform_fy_at_zero),
+            (split_at_one, platform_mx_at_one, platform_fy_at_one),
+            (split_at_side_unit, platform_mx_at_side_unit, platform_fy_at_side_unit),
+        ) = self._out_of_plane_variants(
             point,
             hoist_id,
             point.boom_angle_deg,
-            hook_force_kN=1.0,
-            wind_y_m_s=wind_y_m_s,
-            **motion_kwargs,
-            side_lateral_force_kN=0.0,
-            hoist_runtime_overrides=hoist_runtime_overrides,
-        )
-        split_at_side_unit, platform_mx_at_side_unit, platform_fy_at_side_unit = (
-            self._build_out_of_plane_reactions(
-                point,
-                hoist_id,
-                point.boom_angle_deg,
-                hook_force_kN=0.0,
-                wind_y_m_s=wind_y_m_s,
-                **motion_kwargs,
-                side_lateral_force_kN=1.0,
-                hoist_runtime_overrides=hoist_runtime_overrides,
-            )
+            # (hook force, side force): zero, one kN of hook load, one kN of side force.
+            [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            wind_y_m_s,
+            motion.accel_y_m_s2,
+            motion.roll_accel_rad_s2,
+            hoist_runtime_overrides,
+            accel_x_m_s2=motion.accel_x_m_s2,
+            accel_z_m_s2=motion.accel_z_m_s2,
+            pitch_accel_rad_s2=motion.pitch_accel_rad_s2,
+            lumped_point_masses=lumped_point_masses,
         )
         side_scale = math.sin(math.radians(float(sidelead_deg)))
         side_unit_reactions: dict[str, dict[str, float]] = {}
