@@ -7,7 +7,7 @@ import pytest
 from crane_statics.core.io import load_document
 from crane_statics.core.limit_auto_set import compute_required_rope_capacity_kN
 from crane_statics.qml_app.session import SessionState
-from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep
+from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mode_sweep
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
@@ -362,11 +362,73 @@ class TestChartCaching:
         other = self._other_hoist(chart_vm)
         if other is None:
             pytest.skip("Example has one payload hoist")
-        chart_vm.drawBlocking()
+        key = chart_vm._wanted_key()
+        payload = run_mode_sweep(
+            chart_vm._model.document,
+            key.hoist_id,
+            key.mode,
+            chart_vm._enabled_limits(),
+            chart_vm.outreachStep,
+            chart_vm._limit_display_names(),
+        )
+        chart_vm._busy = True
         chart_vm.selectHoist(other)
+        emitted: list[int] = []
+        chart_vm.statusChanged.connect(lambda: emitted.append(1))
+
+        chart_vm._on_sweep_finished(key, payload)
 
         assert chart_vm.curvePoints == []
         assert chart_vm.markers == []
+        assert chart_vm.busy is False
+        assert emitted
+        assert chart_vm._cache.get(key) is payload
+
+    def test_discarded_result_restores_the_cached_chart_status(self, chart_vm):
+        other = self._other_hoist(chart_vm)
+        if other is None:
+            pytest.skip("Example has one payload hoist")
+        first = chart_vm.selectedHoistId
+        key = chart_vm._wanted_key()
+        payload = run_mode_sweep(
+            chart_vm._model.document,
+            key.hoist_id,
+            key.mode,
+            chart_vm._enabled_limits(),
+            chart_vm.outreachStep,
+            chart_vm._limit_display_names(),
+        )
+        chart_vm.selectHoist(other)
+        chart_vm.drawBlocking()
+        shown = list(chart_vm.curvePoints)
+        chart_vm._busy = True
+        chart_vm._set_status("Sweeping... 40%")
+        chart_vm.selectHoist(first)
+        chart_vm.selectHoist(other)
+        emitted: list[int] = []
+        chart_vm.statusChanged.connect(lambda: emitted.append(1))
+
+        chart_vm._on_sweep_finished(key, payload)
+
+        assert chart_vm.curvePoints == shown
+        assert chart_vm.busy is False
+        assert emitted
+        assert chart_vm.statusText.startswith("Done - ")
+
+    def test_failed_sweep_for_an_unwanted_key_clears_busy(self, chart_vm):
+        other = self._other_hoist(chart_vm)
+        if other is None:
+            pytest.skip("Example has one payload hoist")
+        key = chart_vm._wanted_key()
+        chart_vm._busy = True
+        chart_vm.selectHoist(other)
+        emitted: list[int] = []
+        chart_vm.statusChanged.connect(lambda: emitted.append(1))
+
+        chart_vm._on_sweep_failed("boom", key)
+
+        assert chart_vm.busy is False
+        assert emitted
 
 
 def _splitable(vm: ChartViewModel, hoist_id: str) -> bool:

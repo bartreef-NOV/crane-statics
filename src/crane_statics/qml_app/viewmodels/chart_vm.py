@@ -508,18 +508,15 @@ class ChartViewModel(QObject):
         self._worker = None
         # Store under the key the sweep started with; show it only if it is still wanted.
         self._cache.put(key, payload or empty_payload())
-        wanted = self._wanted_key()
-        if wanted == key:
-            self._show_wanted()
-        elif wanted is not None and self._cache.get(wanted) is None:
-            self._set_stale(True)
+        # Always re-show the wanted chart: it also emits statusChanged so `busy` updates.
+        self._show_wanted()
 
     def _on_sweep_failed(self, message: str, key: ChartKey) -> None:
         _LOG.warning("Chart sweep failed: %s", message)
         self._busy = False
         self._worker = None
         if key != self._wanted_key():
-            self._set_stale(True)
+            self._show_wanted()
             return
         self._set_status("⚠ Sweep error")
 
