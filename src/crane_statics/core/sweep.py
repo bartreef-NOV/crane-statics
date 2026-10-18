@@ -61,6 +61,45 @@ def _split_applies(hoist: Any) -> bool:
     )
 
 
+def _hoist_order_by_rope(doc: CraneDocument) -> dict[str, int]:
+    """Display rank of each hoist's rope: solve-tension ropes first, then document order."""
+    solve_rope_ids = {
+        str(r.id).strip()
+        for r in doc.ropes
+        if str(getattr(r, "tension_mode", "") or "").strip().lower() == "solve"
+    }
+    payload_hoists = [h for h in doc.hoists if str(h.rope_id).strip() not in solve_rope_ids]
+    solve_hoists = [h for h in doc.hoists if str(h.rope_id).strip() in solve_rope_ids]
+    ordered_hoists = solve_hoists + payload_hoists
+    return {
+        str(h.rope_id).strip(): idx
+        for idx, h in enumerate(ordered_hoists)
+        if str(h.rope_id).strip()
+    }
+
+
+def limit_series_layout(
+    doc: CraneDocument, hoist_id: str, enabled_limits: dict, limit_display_names: dict
+) -> list[tuple[str, str, int]]:
+    """(limit id, display label, rank) for every enabled limit, in display order.
+
+    The order is rank, then label: the order of the ``limit_series`` rows of a sweep, which
+    are the rows of this layout that have points.
+    """
+    hoist_order_by_rope = _hoist_order_by_rope(doc)
+    non_rope_rank_seed = len(hoist_order_by_rope)
+    rows: list[tuple[str, str, int]] = []
+    for non_rope_offset, lid in enumerate(enabled_limits):
+        lid_s = str(lid)
+        rope_id = lid_s[:-2] if lid_s.endswith("_T") else lid_s
+        rank = hoist_order_by_rope.get(rope_id)
+        if rank is None:
+            rank = non_rope_rank_seed + non_rope_offset
+        rows.append((lid_s, limit_display_names.get(lid_s, lid_s), int(rank)))
+    rows.sort(key=lambda row: (row[2], row[1]))
+    return rows
+
+
 def run_mode_sweep(
     doc: CraneDocument,
     hoist_id: str,
@@ -73,6 +112,10 @@ def run_mode_sweep(
     on_points: Optional[Callable[[list[tuple[float, float]]], None]] = None,
     batch_points: int = 20,
     compute_scope: Optional[ComputeScope] = None,
+    on_contractual: Optional[
+        Callable[[list[tuple[Any, Optional[float], Optional[bool]]]], None]
+    ] = None,
+    on_limit_points: Optional[Callable[[dict[str, list[tuple[float, float]]]], None]] = None,
 ) -> Optional[dict[str, Any]]:
     """Compute one analysis mode's curve, contractual verdicts and per-limit series.
 
@@ -82,6 +125,10 @@ def run_mode_sweep(
     ``compute_scope`` (for this document, hoist and mode) supplies and keeps the probe
     solves and per-limit results, so a re-sweep only evaluates what changed; the payload
     is the same with or without it.
+    ``on_contractual`` receives a copy of the contractual results once, right after stage 1
+    (not when the mode has no contractual points). ``on_limit_points`` receives, with each
+    ``on_points`` flush, the points the limit series gained since the previous call, keyed by
+    limit id; per limit the batches concatenate to its ``limit_series`` points.
     """
     report = progress if progress is not None else (lambda _msg: None)
     cancel_requested = should_cancel if should_cancel is not None else (lambda: False)
@@ -103,20 +150,6 @@ def run_mode_sweep(
     vessel = doc.environment.vessel_motion
     offlead_deg = float(getattr(hoist, "offlead_deg", 0.0))
     sidelead_deg = float(getattr(hoist, "sidelead_deg", offlead_deg))
-
-    solve_rope_ids = {
-        str(r.id).strip()
-        for r in doc.ropes
-        if str(getattr(r, "tension_mode", "") or "").strip().lower() == "solve"
-    }
-    payload_hoists = [h for h in doc.hoists if str(h.rope_id).strip() not in solve_rope_ids]
-    solve_hoists = [h for h in doc.hoists if str(h.rope_id).strip() in solve_rope_ids]
-    ordered_hoists = solve_hoists + payload_hoists
-    hoist_order_by_rope = {
-        str(h.rope_id).strip(): idx
-        for idx, h in enumerate(ordered_hoists)
-        if str(h.rope_id).strip()
-    }
 
     def _capacity(
         probes: ProbeSet, design_limits_map: dict[str, dict], hook_mass_t: float
@@ -277,16 +310,30 @@ def run_mode_sweep(
             load_t, _results = envelope
             contractual_results.append((cp, load_t, cp.load_t <= load_t))
 
+        if on_contractual is not None and contractual_results:
+            on_contractual(list(contractual_results))
+
         report(f"Stage 2/2 ({mode_name}): Capacity curve sweep...")
         curve_outreach: list[float] = []
         curve_load_t: list[float] = []
         limit_series_map: dict[str, list] = {lid: [] for lid in enabled_limits}
         pending: list[tuple[float, float]] = []
 
+        sent_counts: dict[str, int] = {}
+
         def _flush() -> None:
             if pending and on_points is not None:
                 on_points(list(pending))
             pending.clear()
+            if on_limit_points is not None:
+                gained = {
+                    lid: pts[sent_counts.get(lid, 0) :]
+                    for lid, pts in limit_series_map.items()
+                    if len(pts) > sent_counts.get(lid, 0)
+                }
+                if gained:
+                    sent_counts.update({lid: len(limit_series_map[lid]) for lid in gained})
+                    on_limit_points(gained)
 
         try:
             for outreach in mode_outreach_grid:
@@ -299,17 +346,17 @@ def run_mode_sweep(
                     if envelope is None:
                         continue
                     load_t, results = envelope
+                    for lid, result in results.items():
+                        # CRITICAL: Use load_t (payload domain) for curves, not kN.
+                        # Chart Y-axis shows payload tonnes, not hook-force.
+                        if result.responsive and math.isfinite(result.load_t):
+                            limit_series_map[lid].append((outreach, result.load_t))
                     if math.isfinite(load_t):
                         curve_outreach.append(outreach)
                         curve_load_t.append(load_t)
                         pending.append((outreach, load_t))
                         if len(pending) >= batch_points:
                             _flush()
-                    for lid, result in results.items():
-                        # CRITICAL: Use load_t (payload domain) for curves, not kN.
-                        # Chart Y-axis shows payload tonnes, not hook-force.
-                        if result.responsive and math.isfinite(result.load_t):
-                            limit_series_map[lid].append((outreach, result.load_t))
                 except (TypeError, ValueError, ArithmeticError) as exc:
                     _LOG.debug(
                         "Skipping outreach %.3f m for hoist %s (%s): %s",
@@ -333,25 +380,13 @@ def run_mode_sweep(
             # disappearing when pass/fail markers are hidden.
             contractual_results = [(cp, None, None) for cp in mode_contractual_points]
 
-        non_rope_rank_seed = len(hoist_order_by_rope)
-        limit_series = []
-        for non_rope_offset, (lid, pts) in enumerate(limit_series_map.items()):
-            if not pts:
-                continue
-            lid_s = str(lid)
-            rope_id = lid_s[:-2] if lid_s.endswith("_T") else lid_s
-            rank = hoist_order_by_rope.get(rope_id)
-            if rank is None:
-                rank = non_rope_rank_seed + non_rope_offset
-            limit_series.append(
-                (
-                    lid_s,
-                    limit_display_names.get(lid_s, lid_s),
-                    int(rank),
-                    sorted(pts),
-                )
+        limit_series = [
+            (lid, label, rank, sorted(limit_series_map[lid]))
+            for lid, label, rank in limit_series_layout(
+                doc, hoist_id, enabled_limits, limit_display_names
             )
-        limit_series.sort(key=lambda row: (int(row[2]), str(row[1])))
+            if limit_series_map.get(lid)
+        ]
 
         return {
             "curve_data": list(zip(curve_outreach, curve_load_t)),
