@@ -47,7 +47,7 @@ def _sweep(doc: CraneDocument, mode: str = "normal", **kwargs: Any) -> Optional[
 def test_layout_matches_the_final_series_order_and_labels(doc: CraneDocument) -> None:
     payload = _sweep(doc)
     assert payload is not None
-    layout = limit_series_layout(doc, HOIST, LIMITS, NAMES)
+    layout = limit_series_layout(doc, LIMITS, NAMES)
     assert {lid for lid, _label, _rank in layout} == set(LIMITS)
     rows = payload["limit_series"]
     assert len(rows) >= 2 and len(rows) < len(layout)
@@ -129,7 +129,7 @@ def test_an_empty_limit_in_the_middle_does_not_shift_the_others(doc: CraneDocume
         "rear_hinge": {"Fx": 5000.0},
         "boom_hoist": {"T": 8000.0},
     }
-    layout = limit_series_layout(doc, HOIST, limits, {})
+    layout = limit_series_layout(doc, limits, {})
     assert layout == [
         ("MH__rope", "MH__rope", 1),
         ("WH__rope", "WH__rope", 2),

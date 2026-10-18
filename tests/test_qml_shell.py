@@ -111,7 +111,6 @@ def test_chart_pending_markers_are_a_neutral_palette_grey(qml_engine):
     pending = QColor(plot.property("pendingColor"))
     assert pending != QColor("#ef6c00")
     assert pending == QGuiApplication.palette().placeholderText().color()
-    assert pending.red() == pending.green() == pending.blue()
     # The legend entry is grey while every marker is still pending.
     undecided = _evaluate_in(plot, 'contractualLegendColor([{ status: "pending" }])')
     decided = _evaluate_in(

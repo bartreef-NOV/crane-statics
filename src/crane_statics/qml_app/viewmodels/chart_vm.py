@@ -161,13 +161,16 @@ class _JobStream:
         self.verdicts: Optional[list] = None
 
     def limit_series(self) -> list[dict[str, Any]]:
-        """One series per limit that has points, coloured by its place in the layout."""
+        """One series per limit that has points, coloured by its place in the layout.
+
+        The point lists are the stream's own, not copies: copying them on every batch cost
+        seconds over a fine sweep, and the view only reads them when ``chartUpdated`` fires."""
         return [
             {
                 "id": limit_id,
                 "label": label,
                 "color": _limit_color(position),
-                "points": [list(point) for point in self.limit_points[limit_id]],
+                "points": self.limit_points[limit_id],
             }
             for position, (limit_id, label, _rank) in enumerate(self.layout)
             if self.limit_points.get(limit_id)
@@ -228,6 +231,9 @@ class ChartViewModel(QObject):
         self._curve_points: list[list[float]] = []
         self._limit_series: list[dict[str, Any]] = []
         self._markers: list[dict[str, Any]] = []
+        # Streamed batches coalesce into one chartUpdated per event-loop turn.
+        self._chart_update_pending = False
+        self._limit_series_dirty = False
 
         self._rope_limits_model = DictListModel(LIMIT_ROLES, self)
         self._connection_limits_model = DictListModel(LIMIT_ROLES, self)
@@ -661,7 +667,7 @@ class ChartViewModel(QObject):
         worker.cancelled.connect(lambda w=worker: self._on_worker_cancelled(w))
         worker.finished.connect(lambda w=worker: self._threads.discard(w))
         worker.finished.connect(worker.deleteLater)
-        stream = _JobStream(limit_series_layout(doc_copy, job.hoist_id, limits, names))
+        stream = _JobStream(limit_series_layout(doc_copy, limits, names))
         self._running = _RunningJob(job, key, self._generation, worker, priority, stream)
         self._threads.add(worker)
         if not priority.background:
@@ -740,7 +746,7 @@ class ChartViewModel(QObject):
         running.stream.points.extend(batch)
         if self._partial and self._running_is_wanted():
             self._curve_points.extend(batch)
-            self.chartUpdated.emit()
+            self._schedule_chart_update()
 
     def _on_worker_contractual(self, worker: _SweepWorker, results: list) -> None:
         running = self._running
@@ -749,7 +755,7 @@ class ChartViewModel(QObject):
         running.stream.verdicts = list(results)
         if self._partial and self._running_is_wanted():
             self._show_contractual(running.stream.verdicts)
-            self.chartUpdated.emit()
+            self._schedule_chart_update()
 
     def _on_worker_limit_points(self, worker: _SweepWorker, gained: dict) -> None:
         running = self._running
@@ -760,8 +766,27 @@ class ChartViewModel(QObject):
                 [float(x), float(y)] for x, y in points
             )
         if self._partial and self._running_is_wanted():
+            self._limit_series_dirty = True
+            self._schedule_chart_update()
+
+    def _schedule_chart_update(self) -> None:
+        """Emit chartUpdated once after the streamed batches delivered in this loop turn."""
+        if not self._chart_update_pending:
+            self._chart_update_pending = True
+            QTimer.singleShot(0, self._flush_chart_update)
+
+    def _flush_chart_update(self) -> None:
+        if not self._chart_update_pending:
+            return  # a direct emit already showed everything
+        self._chart_update_pending = False
+        running = self._running
+        if self._stopped() or running is None or not (self._partial and self._running_is_wanted()):
+            self._limit_series_dirty = False
+            return
+        if self._limit_series_dirty:
+            self._limit_series_dirty = False
             self._limit_series = running.stream.limit_series()
-            self.chartUpdated.emit()
+        self.chartUpdated.emit()
 
     def _on_worker_progress(self, worker: _SweepWorker, text: str) -> None:
         running = self._running
@@ -860,7 +885,7 @@ class ChartViewModel(QObject):
             self._show_contractual(stream.verdicts)
         self._set_partial(True)
         self._displayed_key = None
-        self.chartUpdated.emit()
+        self._emit_chart_updated()
         self._set_stale(False)
         self._set_status("Sweeping...")
 
@@ -872,6 +897,12 @@ class ChartViewModel(QObject):
         self._rebuild_contractual_model()
         self._set_partial(False)
         self._displayed_key = None
+        self._emit_chart_updated()
+
+    def _emit_chart_updated(self) -> None:
+        """Emit now; the display is complete, so a queued streamed update is redundant."""
+        self._chart_update_pending = False
+        self._limit_series_dirty = False
         self.chartUpdated.emit()
 
     def _set_partial(self, partial: bool) -> None:
@@ -907,9 +938,7 @@ class ChartViewModel(QObject):
         hoist_id = self._model.selected_hoist_id
         if doc is None or not hoist_id:
             return {}
-        layout = limit_series_layout(
-            doc, hoist_id, self._enabled_limits(), self._limit_display_names()
-        )
+        layout = limit_series_layout(doc, self._enabled_limits(), self._limit_display_names())
         return {limit_id: position for position, (limit_id, _label, _rank) in enumerate(layout)}
 
     def _render_payload(self, payload: dict[str, Any]) -> None:
@@ -928,7 +957,7 @@ class ChartViewModel(QObject):
             )
         ]
         self._show_contractual(payload.get("contractual_results", []))
-        self.chartUpdated.emit()
+        self._emit_chart_updated()
 
     @pyqtProperty("QVariantList", notify=chartUpdated)
     def curvePoints(self) -> list:
@@ -953,8 +982,8 @@ class ChartViewModel(QObject):
             lo, hi = min(lo, hi), max(lo, hi)
             # Until the first curve batch the contractual markers set y, so they show;
             # limit series never stretch it.
-            y_source = self._curve_points or [[m["outreach"], m["load"]] for m in self._markers]
-            y_top = max((p[1] for p in y_source), default=1.0)
+            y_values = [p[1] for p in self._curve_points] or [m["load"] for m in self._markers]
+            y_top = max(y_values, default=1.0)
             x_pad = max(1.0, (hi - lo) * 0.05)
             return {
                 "xMin": lo - x_pad,

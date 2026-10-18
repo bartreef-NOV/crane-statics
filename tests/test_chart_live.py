@@ -499,3 +499,42 @@ def test_background_job_promoted_mid_stream_shows_what_it_delivered(vm, sweeps):
     assert [row["allowable"] for row in _table(vm)] == [
         f"{allowable:.1f}" for _cp, allowable, _passed in verdicts
     ]
+
+
+def test_signals_of_one_turn_emit_chart_updated_once(vm, sweeps):
+    job = _visible(vm)
+    release = sweeps.hold(job)
+    vm.draw()
+    wait_until(sweeps.started[job].is_set, timeout=10.0)
+    worker = vm._running.worker
+    updates: list[int] = []
+    vm.chartUpdated.connect(lambda: updates.append(1))
+
+    vm._on_worker_points(worker, [(30.0, 250.0), (31.0, 240.0)])
+    vm._on_worker_limit_points(worker, {"MH__rope_T": [(30.0, 900.0)]})
+    vm._on_worker_points(worker, [(32.0, 230.0)])
+    assert updates == []
+    pump_events(0.05)
+
+    assert len(updates) == 1
+    assert vm.curvePoints == [[30.0, 250.0], [31.0, 240.0], [32.0, 230.0]]
+    assert [(s["id"], s["points"]) for s in vm.limitSeries] == [("MH__rope_T", [[30.0, 900.0]])]
+    release.set()
+
+
+def test_finished_chart_without_curve_points_does_not_use_the_partial_axes(vm, sweeps):
+    job = _visible(vm)
+    steps = [("contractual", _verdicts(vm._contractual_points()))]
+    gates = sweeps.script(job, steps, _payload(steps))
+
+    vm.draw()
+    for gate in gates:
+        gate.set()
+    wait_until(lambda: vm._cache.get(vm._wanted_key()) is not None, timeout=10.0)
+    pump_events(0.05)
+
+    assert vm.chartComplete is True
+    assert vm.curvePoints == [] and vm.markers
+    xs = [m["outreach"] for m in vm.markers]
+    ranges = vm.axisRanges
+    assert ranges["xMin"] == pytest.approx(min(xs) - max(1.0, (max(xs) - min(xs)) * 0.05))

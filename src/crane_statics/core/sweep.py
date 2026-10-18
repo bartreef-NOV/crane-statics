@@ -79,7 +79,7 @@ def _hoist_order_by_rope(doc: CraneDocument) -> dict[str, int]:
 
 
 def limit_series_layout(
-    doc: CraneDocument, hoist_id: str, enabled_limits: dict, limit_display_names: dict
+    doc: CraneDocument, enabled_limits: dict, limit_display_names: dict
 ) -> list[tuple[str, str, int]]:
     """(limit id, display label, rank) for every enabled limit, in display order.
 
@@ -383,9 +383,7 @@ def run_mode_sweep(
 
         limit_series = [
             (lid, label, rank, sorted(limit_series_map[lid]))
-            for lid, label, rank in limit_series_layout(
-                doc, hoist_id, enabled_limits, limit_display_names
-            )
+            for lid, label, rank in limit_series_layout(doc, enabled_limits, limit_display_names)
             if limit_series_map.get(lid)
         ]
 
