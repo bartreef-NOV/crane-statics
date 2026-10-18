@@ -16,6 +16,7 @@ from .demand_extraction import (
     rope_tension_responds_to_hook_load,
 )
 from .limit_components import KNOWN_LIMIT_COMPONENTS
+from .sweep_cache import ComputeScope, LimitResult, limit_signature
 
 _LOG = logging.getLogger(__name__)
 
@@ -71,12 +72,16 @@ def run_mode_sweep(
     should_cancel: Optional[Callable[[], bool]] = None,
     on_points: Optional[Callable[[list[tuple[float, float]]], None]] = None,
     batch_points: int = 20,
+    compute_scope: Optional[ComputeScope] = None,
 ) -> Optional[dict[str, Any]]:
     """Compute one analysis mode's curve, contractual verdicts and per-limit series.
 
     Returns None when the mode does not apply to the hoist (split without a split block).
     ``on_points`` receives the finite (outreach, load_t) pairs in ascending outreach, in
     batches of at most ``batch_points``; the batches concatenate to ``curve_data``.
+    ``compute_scope`` (for this document, hoist and mode) supplies and keeps the probe
+    solves and per-limit results, so a re-sweep only evaluates what changed; the payload
+    is the same with or without it.
     """
     report = progress if progress is not None else (lambda _msg: None)
     cancel_requested = should_cancel if should_cancel is not None else (lambda: False)
@@ -127,22 +132,63 @@ def run_mode_sweep(
             hook_mass_t=hook_mass_t,
         )
 
+    def _limit_results(
+        angle: float, probes: ProbeSet, hook_mass_t: float
+    ) -> dict[str, LimitResult]:
+        leads: list[AnalysisPoint] = []
+        results: dict[str, LimitResult] = {}
+        for lid, comps in enabled_limits.items():
+            if not any(comps.values()):
+                continue  # envelope_capacity skips falsy values: unlimited, never plotted
+
+            def compute(lid: str = lid, comps: dict = comps) -> LimitResult:
+                if not leads:
+                    leads.extend(lead_points(probes, offlead_deg, sidelead_deg))
+                cap = _capacity(probes, {lid: comps}, hook_mass_t)
+                # Sensitivities do not depend on motion or wind, but the lead channels
+                # add to them: a limit responds if it does at any lead sign case.
+                responsive = any(_affects_hook_load(pt, lid, comps) for pt in leads)
+                return LimitResult(cap.max_allowable_load_t, cap.max_allowable_load_kN, responsive)
+
+            if compute_scope is None:
+                results[lid] = compute()
+            else:
+                signature = limit_signature(lid, {c: v or 0.0 for c, v in comps.items()})
+                results[lid] = compute_scope.limit_result(angle, signature, compute)
+        return results
+
     # Stage 2 revisits the contractual outreaches of stage 1; their solves are reused.
-    envelope_cache: dict[tuple[float, str], Optional[tuple[ProbeSet, AllowableCapacity]]] = {}
+    envelope_cache: dict[tuple[float, str], Optional[tuple[float, dict[str, LimitResult]]]] = {}
 
     def _envelope(
         angle: float, mode: HoistAnalysisMode
-    ) -> Optional[tuple[ProbeSet, AllowableCapacity]]:
+    ) -> Optional[tuple[float, dict[str, LimitResult]]]:
+        """Combined payload capacity and per-limit results at ``angle``, None if unsolved.
+
+        envelope_capacity evaluates every limit on its own and keeps the lowest, so the
+        combined capacity is the per-limit result of lowest hook load (first one on a tie).
+        """
         key = (round(float(angle), 10), mode.name)
         if key not in envelope_cache:
-            probes = build_probes(
-                calc, hoist_id, angle, wind_speed, mode.runtime_overrides, vessel=vessel
-            )
-            envelope_cache[key] = (
-                None
-                if probes is None
-                else (probes, _capacity(probes, enabled_limits, mode.hook_mass_t))
-            )
+
+            def build() -> Optional[ProbeSet]:
+                return build_probes(
+                    calc, hoist_id, angle, wind_speed, mode.runtime_overrides, vessel=vessel
+                )
+
+            probes = build() if compute_scope is None else compute_scope.probes(angle, build)
+            if probes is None:
+                envelope_cache[key] = None
+            else:
+                results = _limit_results(angle, probes, mode.hook_mass_t)
+                if results:
+                    load_t = min(results.values(), key=lambda r: r.load_kN).load_t
+                else:
+                    # No limit applies: the unlimited capacity.
+                    load_t = _capacity(
+                        probes, enabled_limits, mode.hook_mass_t
+                    ).max_allowable_load_t
+                envelope_cache[key] = (load_t, results)
         return envelope_cache[key]
 
     def _resolve_entity(limit_key: str) -> str:
@@ -196,7 +242,6 @@ def run_mode_sweep(
     def _compute_mode(mode_name: str) -> dict[str, Any]:
         check_cancelled()
         mode = analysis_mode_by_name(hoist, mode_name)
-        mode_hook_mass_t = mode.hook_mass_t
         mode_contractual_points = mode.contractual_points
         if mode_name == "split" and not mode_contractual_points:
             return {
@@ -229,10 +274,8 @@ def run_mode_sweep(
             if envelope is None:
                 contractual_results.append((cp, None, None))
                 continue
-            _probes, cap = envelope
-            contractual_results.append(
-                (cp, cap.max_allowable_load_t, cp.load_t <= cap.max_allowable_load_t)
-            )
+            load_t, _results = envelope
+            contractual_results.append((cp, load_t, cp.load_t <= load_t))
 
         report(f"Stage 2/2 ({mode_name}): Capacity curve sweep...")
         curve_outreach: list[float] = []
@@ -255,28 +298,18 @@ def run_mode_sweep(
                     envelope = _envelope(angle, mode)
                     if envelope is None:
                         continue
-                    probes, cap = envelope
-                    if math.isfinite(cap.max_allowable_load_t):
+                    load_t, results = envelope
+                    if math.isfinite(load_t):
                         curve_outreach.append(outreach)
-                        curve_load_t.append(cap.max_allowable_load_t)
-                        pending.append((outreach, cap.max_allowable_load_t))
+                        curve_load_t.append(load_t)
+                        pending.append((outreach, load_t))
                         if len(pending) >= batch_points:
                             _flush()
-                    # Sensitivities do not depend on motion or wind, but the lead channels
-                    # add to them: a limit responds if it does at any lead sign case.
-                    leads = lead_points(probes, offlead_deg, sidelead_deg)
-                    for lid, comps in enabled_limits.items():
-                        if not any(_affects_hook_load(pt, lid, comps) for pt in leads):
-                            continue
-                        cap_limit = (
-                            cap
-                            if len(enabled_limits) == 1
-                            else _capacity(probes, {lid: comps}, mode_hook_mass_t)
-                        )
-                        # CRITICAL: Use max_allowable_load_t (payload domain) for curves, not kN.
+                    for lid, result in results.items():
+                        # CRITICAL: Use load_t (payload domain) for curves, not kN.
                         # Chart Y-axis shows payload tonnes, not hook-force.
-                        if math.isfinite(cap_limit.max_allowable_load_t):
-                            limit_series_map[lid].append((outreach, cap_limit.max_allowable_load_t))
+                        if result.responsive and math.isfinite(result.load_t):
+                            limit_series_map[lid].append((outreach, result.load_t))
                 except (TypeError, ValueError, ArithmeticError) as exc:
                     _LOG.debug(
                         "Skipping outreach %.3f m for hoist %s (%s): %s",
