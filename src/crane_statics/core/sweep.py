@@ -127,7 +127,8 @@ def run_mode_sweep(
     is the same with or without it.
     ``on_contractual`` receives a copy of the contractual results once, right after stage 1
     (not when the mode has no contractual points). ``on_limit_points`` receives, with each
-    ``on_points`` flush, the points the limit series gained since the previous call, keyed by
+    flush when any limit gained points (the final flush may bring limit points without a
+    curve batch), the points the limit series gained since the previous call, keyed by
     limit id; per limit the batches concatenate to its ``limit_series`` points.
     """
     report = progress if progress is not None else (lambda _msg: None)

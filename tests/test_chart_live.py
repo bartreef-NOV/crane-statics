@@ -282,6 +282,10 @@ def test_mid_stream_switch_leaves_nothing_behind(vm, sweeps, action):
         wanted = first
         _hold_next(vm, sweeps, wanted)
         vm.addContractualPoint({"outreach_m": 45.0, "load_t": 10.0})
+        # At once, before the old worker notices the cancel: nothing of it stays on screen.
+        assert vm.limitSeries == []
+        assert vm.curvePoints == []
+        assert all(m["status"] == "pending" for m in vm.markers)
     else:
         wanted = None
         vm._cancel_all()
@@ -431,3 +435,67 @@ def test_partial_y_axis_without_curve_or_markers_keeps_the_default(vm, sweeps):
     assert vm.curvePoints == [] and vm.markers == []
     assert vm.axisRanges["yMin"] == 0.0
     assert vm.axisRanges["yMax"] == pytest.approx(2.0)
+
+
+def test_a_disabled_limit_takes_no_colour(vm, sweeps):
+    # BH comes first in display order; disabled, it must not shift MH's colour.
+    _disable_limits(vm, "BH__rope_T")
+    job = _visible(vm)
+    steps = [("points", [(30.0, 250.0)]), ("limits", {"MH__rope_T": [(30.0, 900.0)]})]
+    gates = sweeps.script(job, steps, _payload(steps))
+
+    vm.draw()
+    gates[0].set()
+    gates[1].set()
+    wait_until(lambda: bool(vm.limitSeries), timeout=10.0)
+    assert [(s["id"], s["color"]) for s in vm.limitSeries] == [("MH__rope_T", _LIMIT_COLORS[0])]
+
+    gates[2].set()
+    wait_until(lambda: vm.chartComplete, timeout=10.0)
+    assert [(s["id"], s["color"]) for s in vm.limitSeries] == [("MH__rope_T", _LIMIT_COLORS[0])]
+
+
+def test_background_job_promoted_mid_stream_shows_what_it_delivered(vm, sweeps):
+    visible = _visible(vm)
+    background = _planned(vm)[1]
+    assert background == ChartJob(visible.hoist_id, "split")
+    split_points = vm._model.contractual_points_for_mode(background.hoist_id, "split")
+    verdicts = _verdicts(split_points)
+    steps = [("points", [(30.0, 250.0)])]
+    background_steps = [
+        ("contractual", verdicts),
+        ("points", [(40.0, 230.0)]),
+        ("limits", {"MH__rope_T": [(40.0, 700.0)]}),
+    ]
+    gates = sweeps.script(visible, steps, _payload(steps))
+    background_gates = sweeps.script(background, background_steps, _payload(background_steps))
+    for job in _planned(vm)[2:]:
+        sweeps.hold(job)
+
+    vm.draw()
+    for gate in gates:
+        gate.set()
+    wait_until(sweeps.started[background].is_set, timeout=10.0)
+    for gate in background_gates[:-1]:
+        gate.set()
+    wait_until(
+        lambda: vm._running is not None and bool(vm._running.stream.limit_points), timeout=10.0
+    )
+    # Still the finished normal chart on screen.
+    assert vm.chartComplete is True
+    assert vm.curvePoints == [[30.0, 250.0]]
+
+    vm.setChartMode("split")
+
+    assert vm._running is not None and vm._running.job == background
+    assert vm.chartComplete is False
+    assert vm.curvePoints == [[40.0, 230.0]]
+    assert vm.limitSeries == [
+        {"id": "MH__rope_T", "label": "MH", "color": _LIMIT_COLORS[1], "points": [[40.0, 700.0]]}
+    ]
+    assert [m["status"] for m in vm.markers] == [
+        "pass" if passed else "fail" for _cp, _allowable, passed in verdicts
+    ]
+    assert [row["allowable"] for row in _table(vm)] == [
+        f"{allowable:.1f}" for _cp, allowable, _passed in verdicts
+    ]

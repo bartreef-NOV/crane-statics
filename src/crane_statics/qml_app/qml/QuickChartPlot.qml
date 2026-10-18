@@ -54,7 +54,7 @@ Item {
         if (series.id === "capacity")
             return pal.highlight
         if (series.id === "contractual")
-            return root.passColor
+            return contractualLegendColor(series.points || [])
         if (!series.color)
             return pal.placeholderText
         return series.color
@@ -84,7 +84,7 @@ Item {
         const limits = chartVm.limitSeries || []
         const markers = chartVm.markers || []
         series.push({ id: "capacity", label: qsTr("Capacity"), color: pal.highlight, points: chartVm.curvePoints || [] })
-        series.push({ id: "contractual", label: qsTr("Contractual"), color: contractualLegendColor(markers), points: markers })
+        series.push({ id: "contractual", label: qsTr("Contractual"), color: chartSeriesColor({ id: "contractual", points: markers }), points: markers })
         for (let i = 0; i < limits.length; ++i)
             series.push(Object.assign({}, limits[i], { color: chartSeriesColor(limits[i]) }))
         return series

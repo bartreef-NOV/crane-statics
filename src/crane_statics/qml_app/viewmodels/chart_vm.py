@@ -1033,6 +1033,10 @@ class ChartViewModel(QObject):
     def _on_content_changed(self) -> None:
         self._generation += 1
         self._cancel_all()
+        if self._partial:
+            # The cancelled stream no longer matches the document: clear it now rather
+            # than when the worker notices the cancel.
+            self._clear_display()
         self._set_stale(bool(self._model.document))
         self._update_busy()
 

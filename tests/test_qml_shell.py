@@ -119,6 +119,10 @@ def test_chart_pending_markers_are_a_neutral_palette_grey(qml_engine):
     )
     assert QColor(undecided) == pending
     assert QColor(decided) == QColor(plot.property("passColor"))
+    series = _evaluate_in(
+        plot, 'chartSeriesColor({ id: "contractual", points: [{ status: "pending" }] })'
+    )
+    assert QColor(series) == pending
     assert warnings == []
 
 
