@@ -38,7 +38,10 @@ def doc() -> CraneDocument:
 
 
 def _sweep(doc: CraneDocument, mode: str = "normal", **kwargs: Any) -> Optional[dict[str, Any]]:
-    return run_mode_sweep(doc, HOIST, mode, LIMITS, STEP, NAMES, **kwargs)
+    payload: Optional[dict[str, Any]] = run_mode_sweep(
+        doc, HOIST, mode, LIMITS, STEP, NAMES, **kwargs
+    )
+    return payload
 
 
 def test_layout_matches_the_final_series_order_and_labels(doc: CraneDocument) -> None:
@@ -114,3 +117,49 @@ def test_callbacks_do_not_change_the_payload(doc: CraneDocument) -> None:
         on_limit_points=lambda _pts: None,
     )
     assert streamed == plain
+
+
+def test_an_empty_limit_in_the_middle_does_not_shift_the_others(doc: CraneDocument) -> None:
+    # Ranks: BH 0, MH 1, WH 2, SH 3 for the ropes; non-rope limits start at 4 plus their
+    # position among ALL enabled limits, the empty WH__rope included.
+    limits: dict[str, dict] = {
+        "MH__rope": {"T": 1500.0},
+        "WH__rope": {"T": 100000.0},
+        "platform_base": {"max_bearing_line_load": 6000.0},
+        "rear_hinge": {"Fx": 5000.0},
+        "boom_hoist": {"T": 8000.0},
+    }
+    layout = limit_series_layout(doc, HOIST, limits, {})
+    assert layout == [
+        ("MH__rope", "MH__rope", 1),
+        ("WH__rope", "WH__rope", 2),
+        ("platform_base", "platform_base", 6),
+        ("rear_hinge", "rear_hinge", 7),
+        ("boom_hoist", "boom_hoist", 8),
+    ]
+    payload = run_mode_sweep(doc, HOIST, "normal", limits, STEP, {})
+    assert payload is not None
+    rows = [row[:3] for row in payload["limit_series"]]
+    assert "WH__rope" not in {row[0] for row in rows}
+    assert len(rows) >= 3
+    assert rows == [row for row in layout if row[0] in {r[0] for r in rows}]
+
+
+def test_unsolved_stage_one_gives_pending_verdicts_and_no_limit_batches(
+    doc: CraneDocument, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("crane_statics.core.sweep.build_probes", lambda *a, **k: None)
+    contractual: list[list] = []
+    limit_batches: list[dict] = []
+    payload = _sweep(
+        doc,
+        on_contractual=contractual.append,
+        on_limit_points=limit_batches.append,
+    )
+    assert payload is not None
+    assert payload["n_points"] == 0 and payload["curve_data"] == []
+    assert payload["limit_series"] == []
+    pending = payload["contractual_results"]
+    assert pending and all(allow is None and ok is None for _cp, allow, ok in pending)
+    assert contractual == [pending]
+    assert limit_batches == []
