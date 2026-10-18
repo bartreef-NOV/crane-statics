@@ -272,6 +272,103 @@ class TestExport:
         assert "CSV export failed" in chart_vm.statusText
 
 
+class TestChartCaching:
+    @pytest.fixture
+    def sweep_calls(self, monkeypatch):
+        from crane_statics.qml_app.viewmodels import chart_vm as chart_vm_module
+
+        calls: list[tuple] = []
+        real = chart_vm_module.run_mode_sweep
+
+        def counting(*args, **kwargs):
+            calls.append(args[1:3])
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(chart_vm_module, "run_mode_sweep", counting)
+        return calls
+
+    @staticmethod
+    def _other_hoist(vm):
+        return next((h for h in vm.hoistIds if h != vm.selectedHoistId), None)
+
+    def test_switching_back_to_a_computed_chart_does_not_sweep(self, chart_vm, sweep_calls):
+        other = self._other_hoist(chart_vm)
+        if other is None:
+            pytest.skip("Example has one payload hoist")
+        first = chart_vm.selectedHoistId
+        chart_vm.drawBlocking()
+        first_points = list(chart_vm.curvePoints)
+        chart_vm.selectHoist(other)
+        chart_vm.drawBlocking()
+
+        chart_vm.selectHoist(first)
+
+        assert len(sweep_calls) == 2
+        assert chart_vm.curvePoints == first_points
+        assert chart_vm.stale is False
+
+    def test_mode_switch_after_both_modes_computed_does_not_sweep(self, chart_vm, sweep_calls):
+        splitable = next((h for h in chart_vm.hoistIds if _splitable(chart_vm, h)), None)
+        if splitable is None:
+            pytest.skip("No splitable hoist in example")
+        chart_vm.selectHoist(splitable)
+        chart_vm.drawBlocking()
+        chart_vm.setChartMode("split")
+        chart_vm.drawBlocking()
+        assert len(sweep_calls) == 2
+
+        chart_vm.setChartMode("normal")
+        chart_vm.setChartMode("split")
+
+        assert len(sweep_calls) == 2
+        assert chart_vm.stale is False
+
+    def test_a_limit_edit_misses_and_restoring_it_hits(self, chart_vm, sweep_calls):
+        limit_id = chart_vm.ropeLimitsModel.row_at(0)["limitId"]
+        chart_vm.setLimitEnabled(limit_id, True)
+        chart_vm.setLimitMax(limit_id, "900")
+        chart_vm.drawBlocking()
+        assert len(sweep_calls) == 1
+
+        chart_vm.setLimitMax(limit_id, "950")
+        chart_vm.drawBlocking()
+        assert len(sweep_calls) == 2
+
+        chart_vm.setLimitMax(limit_id, "900")
+        chart_vm.drawBlocking()
+        assert len(sweep_calls) == 2
+
+    def test_outreach_step_change_misses_the_cache(self, chart_vm, sweep_calls):
+        chart_vm.drawBlocking()
+
+        chart_vm.setOutreachStep(2.0)
+        chart_vm.drawBlocking()
+
+        assert len(sweep_calls) == 2
+
+    def test_switching_hoist_clears_the_displayed_chart_until_available(self, chart_vm):
+        other = self._other_hoist(chart_vm)
+        if other is None:
+            pytest.skip("Example has one payload hoist")
+        chart_vm.drawBlocking()
+        assert chart_vm.curvePoints
+
+        chart_vm.selectHoist(other)
+
+        assert chart_vm.curvePoints == []
+        assert chart_vm.stale is True
+
+    def test_result_is_never_rendered_under_another_hoist(self, chart_vm):
+        other = self._other_hoist(chart_vm)
+        if other is None:
+            pytest.skip("Example has one payload hoist")
+        chart_vm.drawBlocking()
+        chart_vm.selectHoist(other)
+
+        assert chart_vm.curvePoints == []
+        assert chart_vm.markers == []
+
+
 def _splitable(vm: ChartViewModel, hoist_id: str) -> bool:
     doc = vm._model.document
     assert doc is not None

@@ -1498,67 +1498,44 @@ class TestSplitModeAutosetAndChart:
         assert hs.chart_mode == "normal"
         assert harness.vm.hookMode == "normal"
 
+    @staticmethod
+    def _payload(curve):
+        return {
+            "curve_data": curve,
+            "contractual_results": [],
+            "limit_series": [],
+            "n_points": len(curve),
+        }
+
     def test_chart_mode_switch_renders_selected_dataset(self):
-        doc = self._example_doc()
         session = SessionState()
-        session.model.set_document(doc)
+        session.model.set_document(self._example_doc())
 
         chart_vm = ChartViewModel(session)
         chart_vm.selectHoist("MH")
 
-        hoist = next(h for h in doc.hoists if h.id == "MH")
-        synthetic = {
-            "hoist": hoist,
-            "modes": {
-                "normal": {
-                    "curve_data": [(10.0, 100.0)],
-                    "contractual_results": [],
-                    "limit_series": [],
-                    "n_points": 1,
-                },
-                "split": {
-                    "curve_data": [(10.0, 90.0)],
-                    "contractual_results": [],
-                    "limit_series": [],
-                    "n_points": 1,
-                },
-            },
-            "n_points": 1,
-            "n_points_by_mode": {"normal": 1, "split": 1},
-        }
-
-        chart_vm._on_sweep_finished(synthetic)
+        chart_vm._cache.put(chart_vm._wanted_key(), self._payload([(10.0, 100.0)]))
+        chart_vm.reload()
         assert chart_vm.curvePoints == [[10.0, 100.0]]
 
         chart_vm.setChartMode("split")
+        chart_vm._cache.put(chart_vm._wanted_key(), self._payload([(10.0, 90.0)]))
+        chart_vm.reload()
         assert chart_vm.curvePoints == [[10.0, 90.0]]
         assert chart_vm.chartMode == "split"
 
     def test_chart_split_mode_missing_dataset_renders_empty_instead_of_fallback(self):
-        doc = self._example_doc()
         session = SessionState()
-        session.model.set_document(doc)
+        session.model.set_document(self._example_doc())
 
         chart_vm = ChartViewModel(session)
         chart_vm.selectHoist("MH")
+        chart_vm._cache.put(chart_vm._wanted_key(), self._payload([(10.0, 100.0)]))
+        chart_vm.reload()
+        assert chart_vm.curvePoints == [[10.0, 100.0]]
+
         chart_vm.setChartMode("split")
 
-        hoist = next(h for h in doc.hoists if h.id == "MH")
-        synthetic = {
-            "hoist": hoist,
-            "modes": {
-                "normal": {
-                    "curve_data": [(10.0, 100.0)],
-                    "contractual_results": [],
-                    "limit_series": [],
-                    "n_points": 1,
-                },
-            },
-            "n_points": 1,
-            "n_points_by_mode": {"normal": 1},
-        }
-
-        chart_vm._on_sweep_finished(synthetic)
         assert chart_vm.curvePoints == []
         assert chart_vm.chartMode == "split"
 

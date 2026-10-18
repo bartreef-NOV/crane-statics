@@ -14,6 +14,13 @@ from crane_statics.presentation.formatters import (
     HoistFormatter,
     RopeFormatter,
 )
+from crane_statics.core.chart_cache import (
+    ChartCache,
+    ChartJob,
+    ChartKey,
+    chart_fingerprint,
+    empty_payload,
+)
 from crane_statics.core.document_edit import DocumentEditor, build_contractual_point
 from crane_statics.core.limit_auto_set import (
     ConnectionAutoSetResult,
@@ -23,7 +30,7 @@ from crane_statics.core.limit_auto_set import (
 )
 from crane_statics.data.models import CraneDocument
 from crane_statics.qml_app.session import SessionState
-from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep
+from crane_statics.core.sweep import SweepCancelled, run_mode_sweep
 
 from ..models.list_models import DictListModel
 
@@ -48,7 +55,7 @@ class _SweepWorker(QThread):
     """Runs the capacity-curve sweep off the GUI thread."""
 
     progress = pyqtSignal(str)
-    finishedWith = pyqtSignal(object)
+    finishedWith = pyqtSignal(object)  # the mode payload, or None when the mode does not apply
     failed = pyqtSignal(str)
     cancelled = pyqtSignal()
 
@@ -56,17 +63,18 @@ class _SweepWorker(QThread):
         self,
         doc: CraneDocument,
         hoist_id: str,
+        mode: str,
         enabled_limits: dict,
         outreach_step: float,
         limit_display_names: dict,
     ) -> None:
         super().__init__()
-        self._args = (doc, hoist_id, enabled_limits, outreach_step, limit_display_names)
+        self._args = (doc, hoist_id, mode, enabled_limits, outreach_step, limit_display_names)
 
     def run(self) -> None:
         try:
             self.finishedWith.emit(
-                run_capacity_sweep(
+                run_mode_sweep(
                     *self._args,
                     progress=self.progress.emit,
                     should_cancel=self.isInterruptionRequested,
@@ -100,8 +108,10 @@ class ChartViewModel(QObject):
         self._shutting_down = False
         self._outreach_step = 1.0
         self._worker: Optional[_SweepWorker] = None
-        self._last_result: dict[str, Any] = {}
+        self._cache = ChartCache()
         self._generation = 0
+        self._fingerprint_generation = -1
+        self._fingerprint = ""
 
         self._curve_points: list[list[float]] = []
         self._limit_series: list[dict[str, Any]] = []
@@ -157,7 +167,7 @@ class ChartViewModel(QObject):
             return
         self.chartModeChanged.emit()
         self._rebuild_contractual_model()
-        self._render_active_mode()
+        self._show_wanted()
 
     # ------------------------------------------------------------------
     # Status
@@ -412,38 +422,55 @@ class ChartViewModel(QObject):
     # Sweep
     # ------------------------------------------------------------------
 
+    def _wanted_job(self) -> Optional[ChartJob]:
+        if self._model.document is None or not self._model.selected_hoist_id:
+            return None
+        return ChartJob(self._model.selected_hoist_id, self._current_chart_mode())
+
+    def _wanted_key(self) -> Optional[ChartKey]:
+        """The cache key of the chart that should be on screen right now."""
+        job = self._wanted_job()
+        doc = self._model.document
+        if job is None or doc is None:
+            return None
+        if self._fingerprint_generation != self._generation:
+            self._fingerprint = chart_fingerprint(
+                doc, self._enabled_limits(), self._limit_display_names()
+            )
+            self._fingerprint_generation = self._generation
+        return ChartKey(job.hoist_id, job.mode, self._outreach_step, self._fingerprint)
+
     @pyqtSlot()
     def draw(self) -> None:
         if self._shutting_down:
             return
         doc = self._model.document
-        if doc is None or not self._model.selected_hoist_id:
+        key = self._wanted_key()
+        if doc is None or key is None:
             self._set_status("No document loaded")
             return
         if self._busy:
             return
+        if self._cache.get(key) is not None:
+            self._show_wanted()
+            return
 
         self._busy = True
         self._set_status("Sweeping...")
-        generation = self._generation
-        analysis_doc = doc.model_copy(deep=True)
         worker = _SweepWorker(
-            analysis_doc,
-            self._model.selected_hoist_id,
+            doc.model_copy(deep=True),
+            key.hoist_id,
+            key.mode,
             self._enabled_limits(),
             self._outreach_step,
             self._limit_display_names(),
         )
         worker.progress.connect(self._set_status)
         worker.finishedWith.connect(
-            lambda result, expected_generation=generation: self._on_sweep_finished(
-                result, expected_generation
-            )
+            lambda payload, sweep_key=key: self._on_sweep_finished(sweep_key, payload)
         )
         worker.failed.connect(
-            lambda message, expected_generation=generation: self._on_sweep_failed(
-                message, expected_generation
-            )
+            lambda message, sweep_key=key: self._on_sweep_failed(message, sweep_key)
         )
         worker.cancelled.connect(self._on_sweep_cancelled)
         worker.finished.connect(worker.deleteLater)
@@ -459,63 +486,63 @@ class ChartViewModel(QObject):
 
     @pyqtSlot()
     def drawBlocking(self) -> None:
-        """Synchronous sweep used by tests and headless runs."""
+        """Synchronous sweep of the wanted chart, used by tests and headless runs."""
         doc = self._model.document
-        if doc is None or not self._model.selected_hoist_id:
+        key = self._wanted_key()
+        if doc is None or key is None:
             return
-        self._on_sweep_finished(
-            run_capacity_sweep(
+        if self._cache.get(key) is None:
+            payload = run_mode_sweep(
                 doc,
-                self._model.selected_hoist_id,
+                key.hoist_id,
+                key.mode,
                 self._enabled_limits(),
                 self._outreach_step,
                 self._limit_display_names(),
-            ),
-            self._generation,
-        )
+            )
+            self._cache.put(key, payload or empty_payload())
+        self._show_wanted()
 
-    def _on_sweep_finished(self, result: dict, generation: Optional[int] = None) -> None:
+    def _on_sweep_finished(self, key: ChartKey, payload: Optional[dict]) -> None:
         self._busy = False
         self._worker = None
-        if generation is None:
-            generation = self._generation
-        if generation != self._generation:
+        # Store under the key the sweep started with; show it only if it is still wanted.
+        self._cache.put(key, payload or empty_payload())
+        wanted = self._wanted_key()
+        if wanted == key:
+            self._show_wanted()
+        elif wanted is not None and self._cache.get(wanted) is None:
             self._set_stale(True)
-            return
-        self._last_result = result or {}
-        self._set_stale(False)
-        by_mode = self._last_result.get("n_points_by_mode") or {}
-        if by_mode:
-            self._set_status(
-                "Done - " + ", ".join(f"{k}:{int(v)}" for k, v in by_mode.items()) + " points"
-            )
-        else:
-            self._set_status(f"Done - {self._last_result.get('n_points', 0)} points")
-        self._render_active_mode()
 
-    def _on_sweep_failed(self, message: str, generation: Optional[int] = None) -> None:
+    def _on_sweep_failed(self, message: str, key: ChartKey) -> None:
         _LOG.warning("Chart sweep failed: %s", message)
         self._busy = False
         self._worker = None
-        if generation is None:
-            generation = self._generation
-        if generation != self._generation:
+        if key != self._wanted_key():
             self._set_stale(True)
             return
-        self._set_status("\u26a0 Sweep error")
+        self._set_status("⚠ Sweep error")
 
     # ------------------------------------------------------------------
     # Rendering
     # ------------------------------------------------------------------
 
-    def _render_active_mode(self) -> None:
-        modes = self._last_result.get("modes") or {}
-        chart_mode = self._current_chart_mode()
-        payload = modes.get(chart_mode)
-        if payload is None and chart_mode == "normal":
-            payload = modes.get(next(iter(modes), ""), None)
-        payload = payload or {"curve_data": [], "contractual_results": [], "limit_series": []}
+    def _show_wanted(self) -> None:
+        """Render the wanted chart if cached; otherwise clear the display and mark it stale."""
+        key = self._wanted_key()
+        payload = self._cache.get(key) if key is not None else None
+        if payload is None:
+            self._curve_points = []
+            self._limit_series = []
+            self._markers = []
+            self.chartUpdated.emit()
+            self._set_stale(self._model.document is not None)
+            return
+        self._render_payload(payload)
+        self._set_stale(False)
+        self._set_status(f"Done - {payload.get('n_points', 0)} points")
 
+    def _render_payload(self, payload: dict[str, Any]) -> None:
         self._curve_points = [[float(x), float(y)] for x, y in payload.get("curve_data", [])]
         self._limit_series = [
             {
@@ -620,6 +647,7 @@ class ChartViewModel(QObject):
 
     def _on_document_changed(self, _doc) -> None:
         self._generation += 1
+        self._cache.clear()
         self.reload()
 
     def _on_content_changed(self) -> None:
@@ -632,15 +660,11 @@ class ChartViewModel(QObject):
         if self._model.selected_hoist_id not in hoist_ids:
             if hoist_ids:
                 self._model.select_payload_hoist(hoist_ids[0])
-        self._last_result = {}
-        self._curve_points = []
-        self._limit_series = []
-        self._markers = []
         self._refresh_limits_models()
         self._rebuild_contractual_model()
         self.hoistsChanged.emit()
         self.chartModeChanged.emit()
         self.preferencesChanged.emit()
-        self.chartUpdated.emit()
-        self._set_stale(bool(self._model.document))
-        self._set_status("" if self._model.document else "No document loaded")
+        self._show_wanted()
+        if self._stale or not self._model.document:
+            self._set_status("" if self._model.document else "No document loaded")
