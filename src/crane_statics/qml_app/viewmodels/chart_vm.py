@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import csv
 import logging
+import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
+from PyQt6 import sip
 from PyQt6.QtCore import QObject, QThread, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
 from crane_statics.presentation.formatters import (
@@ -20,6 +22,7 @@ from crane_statics.core.chart_cache import (
     ChartKey,
     chart_fingerprint,
     empty_payload,
+    plan_chart_jobs,
 )
 from crane_statics.core.document_edit import DocumentEditor, build_contractual_point
 from crane_statics.core.limit_auto_set import (
@@ -52,38 +55,59 @@ _LIMIT_COLORS = [
 
 
 class _SweepWorker(QThread):
-    """Runs the capacity-curve sweep off the GUI thread."""
+    """Runs one (hoist, mode) capacity-curve sweep off the GUI thread."""
 
+    pointsReady = pyqtSignal(object)  # list[tuple[float, float]], ascending outreach
     progress = pyqtSignal(str)
-    finishedWith = pyqtSignal(object)  # the mode payload, or None when the mode does not apply
+    finishedWith = pyqtSignal(object)  # the mode payload; empty_payload() if it does not apply
     failed = pyqtSignal(str)
     cancelled = pyqtSignal()
 
     def __init__(
         self,
         doc: CraneDocument,
-        hoist_id: str,
-        mode: str,
+        job: ChartJob,
         enabled_limits: dict,
         outreach_step: float,
         limit_display_names: dict,
     ) -> None:
         super().__init__()
-        self._args = (doc, hoist_id, mode, enabled_limits, outreach_step, limit_display_names)
+        self._args = (
+            doc,
+            job.hoist_id,
+            job.mode,
+            enabled_limits,
+            outreach_step,
+            limit_display_names,
+        )
+
+    def _emit_points(self, points: list) -> None:
+        self.pointsReady.emit(points)
+        # The sweep shares the GIL with the UI thread: let it run between batches.
+        time.sleep(0)
 
     def run(self) -> None:
         try:
-            self.finishedWith.emit(
-                run_mode_sweep(
-                    *self._args,
-                    progress=self.progress.emit,
-                    should_cancel=self.isInterruptionRequested,
-                )
+            payload = run_mode_sweep(
+                *self._args,
+                progress=self.progress.emit,
+                should_cancel=self.isInterruptionRequested,
+                on_points=self._emit_points,
             )
+            self.finishedWith.emit(payload if payload is not None else empty_payload())
         except SweepCancelled:
             self.cancelled.emit()
         except Exception as exc:  # worker boundary: report instead of crashing the thread
             self.failed.emit(str(exc))
+
+
+class _RunningJob(NamedTuple):
+    """The one sweep in flight, with the key and generation it started under."""
+
+    job: ChartJob
+    key: ChartKey
+    generation: int
+    worker: _SweepWorker
 
 
 class ChartViewModel(QObject):
@@ -107,11 +131,18 @@ class ChartViewModel(QObject):
         self._busy = False
         self._shutting_down = False
         self._outreach_step = 1.0
-        self._worker: Optional[_SweepWorker] = None
         self._cache = ChartCache()
         self._generation = 0
         self._fingerprint_generation = -1
         self._fingerprint = ""
+        # Jobs waiting to run, the one in flight and every thread not yet exited (a
+        # QThread must outlive its run(), so workers are held until `finished`).
+        self._queue: list[ChartJob] = []
+        self._running: Optional[_RunningJob] = None
+        self._threads: set[_SweepWorker] = set()
+        self._stream_points: list[list[float]] = []
+        self._partial = False
+        self._displayed_key: Optional[ChartKey] = None
 
         self._curve_points: list[list[float]] = []
         self._limit_series: list[dict[str, Any]] = []
@@ -167,7 +198,7 @@ class ChartViewModel(QObject):
             return
         self.chartModeChanged.emit()
         self._rebuild_contractual_model()
-        self._show_wanted()
+        self._show_or_prioritize()
 
     # ------------------------------------------------------------------
     # Status
@@ -411,12 +442,14 @@ class ChartViewModel(QObject):
             return
         self._shutting_down = True
         self._refresh_timer.stop()
-        worker = self._worker
-        if worker is None:
-            return
-        worker.requestInterruption()
-        worker.wait()
-        self._worker = None
+        self._queue.clear()
+        self._running = None
+        threads = list(self._threads)
+        for worker in threads:
+            worker.requestInterruption()
+        for worker in threads:
+            worker.wait()
+        self._threads.clear()
 
     # ------------------------------------------------------------------
     # Sweep
@@ -427,62 +460,146 @@ class ChartViewModel(QObject):
             return None
         return ChartJob(self._model.selected_hoist_id, self._current_chart_mode())
 
-    def _wanted_key(self) -> Optional[ChartKey]:
-        """The cache key of the chart that should be on screen right now."""
-        job = self._wanted_job()
+    def _job_key(self, job: ChartJob) -> ChartKey:
+        """A job's cache key under the current inputs; the fingerprint is kept per generation."""
         doc = self._model.document
-        if job is None or doc is None:
-            return None
-        if self._fingerprint_generation != self._generation:
+        if doc is not None and self._fingerprint_generation != self._generation:
             self._fingerprint = chart_fingerprint(
                 doc, self._enabled_limits(), self._limit_display_names()
             )
             self._fingerprint_generation = self._generation
         return ChartKey(job.hoist_id, job.mode, self._outreach_step, self._fingerprint)
 
+    def _wanted_key(self) -> Optional[ChartKey]:
+        """The cache key of the chart that should be on screen right now."""
+        job = self._wanted_job()
+        return None if job is None else self._job_key(job)
+
     @pyqtSlot()
     def draw(self) -> None:
+        """Show the wanted chart, then queue every uncomputed chart behind it."""
         if self._shutting_down:
             return
-        doc = self._model.document
+        self._refresh_timer.stop()
+        visible = self._wanted_job()
         key = self._wanted_key()
-        if doc is None or key is None:
+        if visible is None or key is None:
             self._set_status("No document loaded")
             return
-        if self._busy:
-            return
         if self._cache.get(key) is not None:
-            self._show_wanted()
+            self._show_wanted(force=False)
+        planned = plan_chart_jobs(visible, self.hoistIds, self._model.is_splitable_hoist)
+        self._queue = [job for job in planned if self._cache.get(self._job_key(job)) is None]
+        running = self._running
+        if running is not None and not running.worker.isInterruptionRequested():
+            if running.generation != self._generation or running.key != self._job_key(running.job):
+                running.worker.requestInterruption()
+            elif running.job in self._queue:
+                self._queue.remove(running.job)
+        if self._queue and self._queue[0] == visible:
+            self._prioritize(visible)
+        else:
+            self._pump()
+        self._update_busy()
+
+    def _show_or_prioritize(self) -> None:
+        """Show the wanted chart; if it is not computed yet, move it to the front of the queue."""
+        self._show_wanted()
+        job = self._wanted_job()
+        key = self._wanted_key()
+        idle = self._running is None and not self._queue
+        # When idle, the stale timer started by _show_wanted plans the work instead.
+        if job is not None and key is not None and self._cache.get(key) is None and not idle:
+            self._prioritize(job)
+        self._update_busy()
+
+    def _prioritize(self, job: ChartJob) -> None:
+        """Run ``job`` next: a different job in flight is cancelled and requeued behind it."""
+        running = self._running
+        if (
+            running is not None
+            and running.job == job
+            and running.generation == self._generation
+            and running.key == self._job_key(job)
+            and not running.worker.isInterruptionRequested()
+        ):
             return
+        if job in self._queue:
+            self._queue.remove(job)
+        self._queue.insert(0, job)
+        if running is not None and not running.worker.isInterruptionRequested():
+            # Its partial work is lost; the cancel lands in _on_worker_cancelled.
+            running.worker.requestInterruption()
+            if (
+                running.job != job
+                and running.generation == self._generation
+                and running.job not in self._queue
+            ):
+                self._queue.insert(1, running.job)
+        self._pump()
 
-        self._busy = True
-        self._set_status("Sweeping...")
-        worker = _SweepWorker(
-            doc.model_copy(deep=True),
-            key.hoist_id,
-            key.mode,
-            self._enabled_limits(),
-            self._outreach_step,
-            self._limit_display_names(),
-        )
-        worker.progress.connect(self._set_status)
-        worker.finishedWith.connect(
-            lambda payload, sweep_key=key: self._on_sweep_finished(sweep_key, payload)
-        )
-        worker.failed.connect(
-            lambda message, sweep_key=key: self._on_sweep_failed(message, sweep_key)
-        )
-        worker.cancelled.connect(self._on_sweep_cancelled)
+    def _pump(self) -> None:
+        """Start the next queued chart that is not cached, unless a sweep is in flight."""
+        if self._shutting_down or self._running is not None:
+            return
+        while self._queue:
+            job = self._queue.pop(0)
+            if self._cache.get(self._job_key(job)) is None and self._start(job):
+                return
+
+    def _start(self, job: ChartJob) -> bool:
+        doc = self._model.document
+        if doc is None or job.hoist_id not in self.hoistIds:
+            return False
+        # The worker owns a private copy; its key is fingerprinted from that copy.
+        doc_copy = doc.model_copy(deep=True)
+        limits = self._enabled_limits()
+        names = self._limit_display_names()
+        self._fingerprint = chart_fingerprint(doc_copy, limits, names)
+        self._fingerprint_generation = self._generation
+        key = ChartKey(job.hoist_id, job.mode, self._outreach_step, self._fingerprint)
+        if self._cache.get(key) is not None:
+            return False
+
+        worker = _SweepWorker(doc_copy, job, limits, self._outreach_step, names)
+        worker.pointsReady.connect(lambda points, w=worker: self._on_worker_points(w, points))
+        worker.progress.connect(lambda text, w=worker: self._on_worker_progress(w, text))
+        worker.finishedWith.connect(lambda payload, w=worker: self._on_worker_finished(w, payload))
+        worker.failed.connect(lambda message, w=worker: self._on_worker_failed(w, message))
+        worker.cancelled.connect(lambda w=worker: self._on_worker_cancelled(w))
+        worker.finished.connect(lambda w=worker: self._threads.discard(w))
         worker.finished.connect(worker.deleteLater)
-        self._worker = worker
+        self._running = _RunningJob(job, key, self._generation, worker)
+        self._threads.add(worker)
+        self._stream_points = []
+        if key == self._wanted_key():
+            self._show_stream()
         worker.start()
+        return True
 
-    @pyqtSlot()
-    def _on_sweep_cancelled(self) -> None:
-        self._busy = False
-        self._worker = None
-        if not self._shutting_down:
-            self._set_status("Sweep cancelled")
+    def _running_is_wanted(self) -> bool:
+        """Whether the sweep in flight is computing the chart that should be on screen."""
+        running = self._running
+        return (
+            running is not None
+            and running.generation == self._generation
+            and not running.worker.isInterruptionRequested()
+            and running.key == self._wanted_key()
+        )
+
+    def _update_busy(self) -> None:
+        """`busy` is true while the wanted chart is queued or computing, not for background jobs."""
+        job = self._wanted_job()
+        key = self._wanted_key()
+        pending = job is not None and (job in self._queue or self._running_is_wanted())
+        self._busy = bool(pending and key is not None and self._cache.get(key) is None)
+        self.statusChanged.emit()
+
+    def _cancel_all(self) -> None:
+        """Drop the queue and cancel the sweep in flight; its result will be discarded."""
+        self._queue.clear()
+        if self._running is not None:
+            self._running.worker.requestInterruption()
 
     @pyqtSlot()
     def drawBlocking(self) -> None:
@@ -503,41 +620,127 @@ class ChartViewModel(QObject):
             self._cache.put(key, payload or empty_payload())
         self._show_wanted()
 
-    def _on_sweep_finished(self, key: ChartKey, payload: Optional[dict]) -> None:
-        self._busy = False
-        self._worker = None
-        # Store under the key the sweep started with; show it only if it is still wanted.
-        self._cache.put(key, payload or empty_payload())
-        # Always re-show the wanted chart: it also emits statusChanged so `busy` updates.
-        self._show_wanted()
+    # Worker signals arrive queued on the GUI thread. Only the job in flight is listened
+    # to; anything from a worker that is no longer running (or after shutdown) is dropped.
 
-    def _on_sweep_failed(self, message: str, key: ChartKey) -> None:
-        _LOG.warning("Chart sweep failed: %s", message)
-        self._busy = False
-        self._worker = None
-        if key != self._wanted_key():
-            self._show_wanted()
+    def _stopped(self) -> bool:
+        """True after shutdown(), or once a parent deleted this object without calling it."""
+        if not self._shutting_down and sip.isdeleted(self):
+            # The QML engine tore this object down: wind the workers down, render nothing.
+            self._shutting_down = True
+            self._queue.clear()
+            for worker in self._threads:
+                worker.requestInterruption()
+        return self._shutting_down
+
+    def _take_running(self, worker: _SweepWorker) -> Optional[_RunningJob]:
+        running = self._running
+        if self._stopped() or running is None or running.worker is not worker:
+            return None
+        self._running = None
+        return running
+
+    def _on_worker_points(self, worker: _SweepWorker, points: list) -> None:
+        running = self._running
+        if self._stopped() or running is None or running.worker is not worker:
             return
-        self._set_status("⚠ Sweep error")
+        batch = [[float(x), float(y)] for x, y in points]
+        self._stream_points.extend(batch)
+        if self._partial and self._running_is_wanted():
+            self._curve_points.extend(batch)
+            self.chartUpdated.emit()
+
+    def _on_worker_progress(self, worker: _SweepWorker, text: str) -> None:
+        running = self._running
+        if self._stopped() or running is None or running.worker is not worker:
+            return
+        if self._running_is_wanted():
+            self._set_status(text)
+
+    def _on_worker_finished(self, worker: _SweepWorker, payload: dict) -> None:
+        running = self._take_running(worker)
+        if running is not None:
+            self._on_sweep_finished(running.key, payload, running.generation)
+
+    def _on_worker_failed(self, worker: _SweepWorker, message: str) -> None:
+        running = self._take_running(worker)
+        if running is not None:
+            self._on_sweep_failed(message, running.key, running.generation)
+
+    def _on_worker_cancelled(self, worker: _SweepWorker) -> None:
+        running = self._take_running(worker)
+        if running is not None:
+            self._after_job(running.key)
+
+    def _on_sweep_finished(
+        self, key: ChartKey, payload: Optional[dict], generation: Optional[int] = None
+    ) -> None:
+        # Store under the key the sweep started with, unless an edit happened since; it is
+        # shown only if it is still the wanted chart.
+        if generation is None or generation == self._generation:
+            self._cache.put(key, payload or empty_payload())
+        self._after_job(key)
+
+    def _on_sweep_failed(
+        self, message: str, key: ChartKey, generation: Optional[int] = None
+    ) -> None:
+        # A failed background job marks nothing stale; it is retried on the next draw().
+        _LOG.warning("Chart sweep failed for %s/%s: %s", key.hoist_id, key.mode, message)
+        if key == self._wanted_key() and (generation is None or generation == self._generation):
+            self._set_status("⚠ Sweep error")
+        self._after_job(key)
+
+    def _after_job(self, key: ChartKey) -> None:
+        """Show the wanted chart if it is now cached, then start the next job."""
+        self._stream_points = []
+        wanted = self._wanted_key()
+        if wanted is not None and self._cache.get(wanted) is not None:
+            # Re-render only the chart this job completed; a background result leaves
+            # the display alone but still restores its status.
+            self._show_wanted(force=wanted == key)
+        self._pump()
+        # Always emits statusChanged so QML's `busy` follows.
+        self._update_busy()
 
     # ------------------------------------------------------------------
     # Rendering
     # ------------------------------------------------------------------
 
-    def _show_wanted(self) -> None:
-        """Render the wanted chart if cached; otherwise clear the display and mark it stale."""
+    def _show_wanted(self, force: bool = True) -> None:
+        """Render the wanted chart if cached, or its partial curve while it is computing;
+        otherwise clear the display and mark it stale. Without ``force`` a chart already
+        on screen is not rendered again."""
         key = self._wanted_key()
         payload = self._cache.get(key) if key is not None else None
         if payload is None:
+            if self._running_is_wanted():
+                self._show_stream()
+                return
             self._curve_points = []
             self._limit_series = []
             self._markers = []
+            self._partial = False
+            self._displayed_key = None
             self.chartUpdated.emit()
             self._set_stale(self._model.document is not None)
             return
-        self._render_payload(payload)
+        if force or key != self._displayed_key:
+            self._render_payload(payload)
+            self._partial = False
+            self._displayed_key = key
         self._set_stale(False)
         self._set_status(f"Done - {payload.get('n_points', 0)} points")
+
+    def _show_stream(self) -> None:
+        """Display the points the wanted chart's sweep has delivered so far."""
+        self._curve_points = [list(point) for point in self._stream_points]
+        self._limit_series = []
+        self._markers = []
+        self._partial = True
+        self._displayed_key = None
+        self.chartUpdated.emit()
+        self._set_stale(False)
+        self._set_status("Sweeping...")
 
     def _render_payload(self, payload: dict[str, Any]) -> None:
         self._curve_points = [[float(x), float(y)] for x, y in payload.get("curve_data", [])]
@@ -589,6 +792,21 @@ class ChartViewModel(QObject):
 
     @pyqtProperty("QVariantMap", notify=chartUpdated)
     def axisRanges(self) -> dict:
+        hoist = self._model.payload_hoist_by_id(self._model.selected_hoist_id)
+        if self._partial and hoist is not None:
+            # A chart still being computed: x spans the hoist's outreach limits and y starts
+            # at 0, so the axes do not jump as batches arrive.
+            lo = float(hoist.outreach_min_m or 0.0)
+            hi = float(hoist.outreach_max_m or 200.0)
+            lo, hi = min(lo, hi), max(lo, hi)
+            y_top = max((p[1] for p in self._curve_points), default=1.0)
+            x_pad = max(1.0, (hi - lo) * 0.05)
+            return {
+                "xMin": lo - x_pad,
+                "xMax": hi + x_pad,
+                "yMin": 0.0,
+                "yMax": y_top + max(1.0, y_top * 0.05),
+            }
         xs = [p[0] for p in self._curve_points] + [m["outreach"] for m in self._markers]
         ys = [p[1] for p in self._curve_points]
         fallback_ys = [m["load"] for m in self._markers]
@@ -645,11 +863,16 @@ class ChartViewModel(QObject):
     def _on_document_changed(self, _doc) -> None:
         self._generation += 1
         self._cache.clear()
+        # The sweep in flight works on its own copy of the old document, so it can finish
+        # safely; the generation check discards its result.
+        self._cancel_all()
         self.reload()
 
     def _on_content_changed(self) -> None:
         self._generation += 1
+        self._cancel_all()
         self._set_stale(bool(self._model.document))
+        self._update_busy()
 
     @pyqtSlot()
     def reload(self) -> None:
@@ -662,6 +885,6 @@ class ChartViewModel(QObject):
         self.hoistsChanged.emit()
         self.chartModeChanged.emit()
         self.preferencesChanged.emit()
-        self._show_wanted()
+        self._show_or_prioritize()
         if self._stale or not self._model.document:
             self._set_status("" if self._model.document else "No document loaded")
