@@ -38,7 +38,9 @@ from crane_statics.core.sweep_cache import (
     ComputeCache,
     ComputeScope,
     JobPriority,
+    LimitSignature,
     compute_fingerprint,
+    limit_signature,
 )
 
 from ..models.list_models import DictListModel
@@ -152,11 +154,18 @@ class _JobStream:
     Every job starts with a fresh one, so nothing of an earlier job can reach the chart.
     """
 
-    def __init__(self, layout: list[tuple[str, str, int]]) -> None:
+    def __init__(
+        self,
+        layout: list[tuple[str, str, int]],
+        kept: Optional[dict[str, list[list[float]]]] = None,
+    ) -> None:
         # (limit id, label, rank) of every enabled limit, in display order.
         self.layout = layout
         self.points: list[list[float]] = []
-        self.limit_points: dict[str, list[list[float]]] = {}
+        # Limits the chart on screen already shows unchanged: their points stay put and the
+        # sweep's replay of them is ignored.
+        self.kept = kept if kept is not None else {}
+        self.limit_points: dict[str, list[list[float]]] = dict(self.kept)
         # The stage-1 verdicts; None until they arrive.
         self.verdicts: Optional[list] = None
 
@@ -175,6 +184,14 @@ class _JobStream:
             for position, (limit_id, label, _rank) in enumerate(self.layout)
             if self.limit_points.get(limit_id)
         ]
+
+
+class _DisplayedChart(NamedTuple):
+    """What a finished chart on screen was computed from, to keep its unchanged limit series."""
+
+    key: ChartKey
+    compute: str
+    signatures: dict[str, LimitSignature]
 
 
 class _RunningJob(NamedTuple):
@@ -227,6 +244,7 @@ class ChartViewModel(QObject):
         self._threads: set[_SweepWorker] = set()
         self._partial = False
         self._displayed_key: Optional[ChartKey] = None
+        self._displayed_chart: Optional[_DisplayedChart] = None
 
         self._curve_points: list[list[float]] = []
         self._limit_series: list[dict[str, Any]] = []
@@ -667,13 +685,53 @@ class ChartViewModel(QObject):
         worker.cancelled.connect(lambda w=worker: self._on_worker_cancelled(w))
         worker.finished.connect(lambda w=worker: self._threads.discard(w))
         worker.finished.connect(worker.deleteLater)
-        stream = _JobStream(limit_series_layout(doc_copy, limits, names))
+        kept = {} if priority.background else self._unchanged_limit_series(key, compute, limits)
+        stream = _JobStream(limit_series_layout(doc_copy, limits, names), kept)
         self._running = _RunningJob(job, key, self._generation, worker, priority, stream)
         self._threads.add(worker)
         if not priority.background:
             self._show_stream()
         worker.start()
         return True
+
+    def _unchanged_limit_series(
+        self, key: ChartKey, compute: str, limits: dict
+    ) -> dict[str, list[list[float]]]:
+        """Points of the limit series on screen that a sweep for ``key`` would reproduce.
+
+        After a limit edit only the changed or added limits differ; the rest of the finished
+        chart on screen (same hoist, mode, step and inputs) stays instead of being redrawn."""
+        shown = self._displayed_chart
+        if (
+            shown is None
+            or self._partial
+            or shown.key != self._displayed_key
+            or (shown.key.hoist_id, shown.key.mode, shown.key.outreach_step)
+            != (key.hoist_id, key.mode, key.outreach_step)
+            or shown.compute != compute
+        ):
+            return {}
+        same = {
+            lid
+            for lid, comps in limits.items()
+            if shown.signatures.get(lid) == self._signature(lid, comps)
+        }
+        return {s["id"]: s["points"] for s in self._limit_series if s["id"] in same}
+
+    @staticmethod
+    def _signature(limit_id: str, components: dict) -> LimitSignature:
+        return limit_signature(limit_id, {c: v or 0.0 for c, v in components.items()})
+
+    def _remember_displayed(self, key: ChartKey) -> None:
+        doc = self._model.document
+        if doc is None:
+            self._displayed_chart = None
+            return
+        self._displayed_chart = _DisplayedChart(
+            key,
+            compute_fingerprint(doc),
+            {lid: self._signature(lid, comps) for lid, comps in self._enabled_limits().items()},
+        )
 
     def _running_is_wanted(self) -> bool:
         """Whether the sweep in flight is computing the chart that should be on screen."""
@@ -762,6 +820,8 @@ class ChartViewModel(QObject):
         if self._stopped() or running is None or running.worker is not worker:
             return
         for limit_id, points in gained.items():
+            if limit_id in running.stream.kept:
+                continue
             running.stream.limit_points.setdefault(str(limit_id), []).extend(
                 [float(x), float(y)] for x, y in points
             )
@@ -865,6 +925,8 @@ class ChartViewModel(QObject):
             self._render_payload(payload)
             self._set_partial(False)
             self._displayed_key = key
+            if key is not None:
+                self._remember_displayed(key)
         self._set_stale(False)
         # A chart already on screen keeps an unrelated message such as "Exported ...".
         if rendered or _is_sweep_status(self._status_text):

@@ -538,3 +538,68 @@ def test_finished_chart_without_curve_points_does_not_use_the_partial_axes(vm, s
     xs = [m["outreach"] for m in vm.markers]
     ranges = vm.axisRanges
     assert ranges["xMin"] == pytest.approx(min(xs) - max(1.0, (max(xs) - min(xs)) * 0.05))
+
+
+def test_an_edit_keeps_the_unchanged_limit_series_on_screen(vm, sweeps):
+    job = _visible(vm)
+    first = [
+        ("contractual", _verdicts(vm._contractual_points())),
+        ("points", [(30.0, 250.0), (40.0, 230.0)]),
+        ("limits", {"MH__rope_T": [(30.0, 900.0)], "SH__rope_T": [(35.0, 5000.0)]}),
+    ]
+    gates = sweeps.script(job, first, _payload(first))
+    vm.draw()
+    for gate in gates:
+        gate.set()
+    wait_until(lambda: vm.chartComplete and bool(vm.limitSeries), timeout=10.0)
+    mh_before = next(s for s in vm.limitSeries if s["id"] == "MH__rope_T")
+
+    # Edit SH only; the redraw replays every limit, as the real sweep does from its cache.
+    second = [
+        ("points", [(30.0, 250.0)]),
+        ("limits", {"MH__rope_T": [(30.0, 900.0)], "SH__rope_T": [(35.0, 4000.0)]}),
+    ]
+    gates = sweeps.script(job, second, _payload(second))
+    vm.setLimitMax("SH__rope_T", "1234")
+    vm.draw()
+    wait_until(sweeps.started[job].is_set, timeout=10.0)
+    wait_until(lambda: vm._running is not None and vm._running_is_wanted(), timeout=10.0)
+
+    # Streaming: MH stays where it was, SH is gone until its new points arrive, the curve restarts.
+    assert vm.chartComplete is False
+    assert vm.curvePoints == []
+    assert [s["id"] for s in vm.limitSeries] == ["MH__rope_T"]
+    assert vm.limitSeries[0] == mh_before
+
+    gates[0].set()
+    gates[1].set()
+    wait_until(lambda: len(vm.limitSeries) == 2, timeout=10.0)
+    # The replay of MH is ignored; SH shows only its new points.
+    assert next(s for s in vm.limitSeries if s["id"] == "MH__rope_T")["points"] == [[30.0, 900.0]]
+    assert next(s for s in vm.limitSeries if s["id"] == "SH__rope_T")["points"] == [[35.0, 4000.0]]
+
+    gates[2].set()
+    wait_until(lambda: vm.chartComplete, timeout=10.0)
+    assert [s["id"] for s in vm.limitSeries] == ["MH__rope_T", "SH__rope_T"]
+
+
+def test_a_changed_hoist_keeps_nothing_from_the_chart_on_screen(vm, sweeps):
+    job = _visible(vm)
+    first = [("points", [(30.0, 250.0)]), ("limits", {"MH__rope_T": [(30.0, 900.0)]})]
+    gates = sweeps.script(job, first, _payload(first))
+    vm.draw()
+    for gate in gates:
+        gate.set()
+    wait_until(lambda: vm.chartComplete and bool(vm.limitSeries), timeout=10.0)
+
+    assert (
+        vm._unchanged_limit_series(
+            vm._wanted_key()._replace(hoist_id="other"),
+            vm._displayed_chart.compute,
+            vm._enabled_limits(),
+        )
+        == {}
+    )
+    assert (
+        vm._unchanged_limit_series(vm._wanted_key(), "another-document", vm._enabled_limits()) == {}
+    )
