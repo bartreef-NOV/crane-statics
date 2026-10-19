@@ -55,8 +55,11 @@ with exactly the inputs and results that produce that limit.
 - Entry point is the right-click context menu.
 
 ## Also decided by the user (review round)
-- `SceneState` gets a continuous wind angle so the worst wind angle can be held
-  exactly (replaces the discrete direction as the source of truth).
+- No continuous wind angle (supersedes the earlier decision): the worst-case wind
+  is always an axis wind (+X/-X/+Y/-Y) -- linear limits take the worst sign of each
+  axis wind channel, magnitude limits evaluate the wind corners -- so `SceneState`
+  keeps its discrete `wind_direction`, which holds every case. A case whose limit
+  does not respond to wind shows as "+X".
 - Vessel motion: the case uses the full vessel-motion limits, as the chart does
   (the chart has no motion-off toggle). Users zero the motion manually after the jump.
 - Applying the case sets `tackle_length_m` to the value the load curve used.
