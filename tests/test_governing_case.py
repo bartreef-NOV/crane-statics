@@ -88,11 +88,11 @@ def _binding_outreach(payload: dict[str, Any], lid: str) -> float:
     return float(candidates[len(candidates) // 2])
 
 
-def _scene_load_kN(doc: CraneDocument, case: GoverningCase, mode_name: str) -> float:
+def _scene_load_kN(doc: CraneDocument, case: GoverningCase) -> float:
     """The case solved as the Scene solves it: exact inputs, no envelope."""
     f = case.scene_fields
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, mode_name)
+    mode = analysis_mode_by_name(hoist, case.mode_name)
     calc = CraneCalculator(doc)
     point = calc.compute_analysis_point(
         f["boom_angle_deg"],
@@ -133,13 +133,14 @@ def test_case_hook_load_equals_chart_point(
     case = governing_case(doc, HOIST, "normal", LIMITS, outreach, lid)
     assert case is not None
     assert case.limit_id == lid
+    assert case.mode_name == "normal"
     assert case.outreach_m == outreach
     assert set(case.scene_fields) == _SCENE_FIELDS
     assert case.scene_fields["hook_load_auto"] is False
     assert case.scene_fields["wind_direction"] in {"+X", "-X", "+Y", "-Y"}
     assert case.scene_fields["wind_speed_m_s"] == doc.environment.max_wind_speed_m_s
     assert case.scene_fields["hook_load_kN"] == pytest.approx(chart, rel=1e-6)
-    scene = _scene_load_kN(doc, case, "normal")
+    scene = _scene_load_kN(doc, case)
     if lid in _MAGNITUDE:
         assert scene == pytest.approx(chart, rel=1e-3)
         assert scene >= chart - 1e-9
@@ -185,6 +186,7 @@ def test_tackle_length_is_mode_value(doc: CraneDocument, mode_name: str) -> None
     outreach = _binding_outreach(payload, lid)
     case = governing_case(doc, HOIST, mode_name, LIMITS, outreach, lid)
     assert case is not None
+    assert case.mode_name == mode_name
     # The sweep evaluates the hook at the document's design height.
     doc_dict = doc.model_dump()
     angle = KinematicsAdapter(doc_dict).outreach_to_angle(outreach, HOIST)
@@ -197,4 +199,18 @@ def test_tackle_length_is_mode_value(doc: CraneDocument, mode_name: str) -> None
     assert case.scene_fields["tackle_length_m"] == pytest.approx(expected, abs=1e-9)
     assert case.scene_fields["tackle_length_m"] != SceneState().tackle_length_m
     chart = _chart_result(doc, scope, outreach, lid).load_kN
-    assert _scene_load_kN(doc, case, mode_name) == pytest.approx(chart, rel=1e-6)
+    assert _scene_load_kN(doc, case) == pytest.approx(chart, rel=1e-6)
+
+
+def test_inapplicable_split_mode_returns_none(doc: CraneDocument) -> None:
+    """WH has no split block: like run_mode_sweep, split gives nothing (not a normal case)."""
+    wh = next(h for h in doc.hoists if h.id == "WH")
+    assert analysis_mode_by_name(wh, "split").name == "normal"
+    assert run_mode_sweep(doc, "WH", "split", {}, STEP, {}) is None
+    limits = {"WH__rope": {"T": 100000.0}}
+    lo, hi = float(wh.outreach_min_m or 0.0), float(wh.outreach_max_m or 0.0)
+    outreach = round(0.5 * (lo + hi), 1)
+    normal_case = governing_case(doc, "WH", "normal", limits, outreach, "WH__rope")
+    assert normal_case is not None and normal_case.mode_name == "normal"
+    assert governing_case(doc, "WH", "split", limits, outreach, "WH__rope") is None
+    assert governing_case(doc, "WH", "split", limits, outreach, None) is None

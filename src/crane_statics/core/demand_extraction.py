@@ -11,6 +11,8 @@ from ..calculation.engine import (
     compute_platform_base_max_bearing_line_load_kN_per_m,
     resolve_connection_component_linear_response,
 )
+from ..data.models import CraneDocument
+from .limit_components import KNOWN_LIMIT_COMPONENTS
 
 
 def extract_connection_component_response(
@@ -139,6 +141,55 @@ def rope_tension_responds_to_hook_load(
     """Return whether a rope tension has non-zero hook-load sensitivity."""
     sensitivity = float(pt.sensitivity_rope_tensions.get(rope_id, 0.0))
     return abs(sensitivity) > tolerance
+
+
+def _limit_entity(limit_key: str) -> str:
+    for comp in KNOWN_LIMIT_COMPONENTS:
+        if limit_key.endswith(f"_{comp}"):
+            return limit_key[: -len(f"_{comp}")]
+    return limit_key
+
+
+def _limit_rope_entity(doc: CraneDocument, entity: str, comps: dict) -> str:
+    if "T" not in comps:
+        return entity
+    candidates = [entity]
+    if entity.endswith("_rope") and not entity.endswith("__rope"):
+        candidates.append(f"{entity[:-5]}__rope")
+    elif entity.endswith("__rope"):
+        candidates.append(f"{entity[:-6]}_rope")
+    for rid in candidates:
+        rope = next((r for r in doc.ropes if r.id == rid), None)
+        if rope is None:
+            continue
+        return "boom_hoist" if rope.tension_mode == "solve" else rid
+    return entity
+
+
+def limit_responds_to_hook_load(doc: CraneDocument, pt: Any, limit_key: str, comps: dict) -> bool:
+    """Whether the design limit ``limit_key`` (components ``comps``) changes with hook load.
+
+    The key names a connection (optionally suffixed ``_<component>``) or a rope; a rope
+    limit needs a ``T`` component, and a solve-tension rope is the boom hoist.
+    """
+    entity = _limit_entity(limit_key)
+    tol = 1e-9
+    if entity in pt.sensitivity_reactions:
+        diameter = doc.support_widths.slewing_bearing_diameter_m
+        for comp in comps:
+            if connection_component_responds_to_hook_load(
+                pt,
+                entity,
+                comp,
+                support_widths_diameter_m=diameter,
+                tolerance=tol,
+            ):
+                return True
+        return False
+    rope_entity = _limit_rope_entity(doc, entity, comps)
+    if rope_entity in pt.sensitivity_rope_tensions:
+        return "T" in comps and rope_tension_responds_to_hook_load(pt, rope_entity, tol)
+    return False
 
 
 def extract_rope_tension_demand(

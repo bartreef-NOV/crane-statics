@@ -11,11 +11,7 @@ from ..calculation.solver.kinematics import KinematicsAdapter
 from ..data.models import CraneDocument
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .chart_envelope import ProbeSet, build_probes, envelope_capacity, lead_points
-from .demand_extraction import (
-    connection_component_responds_to_hook_load,
-    rope_tension_responds_to_hook_load,
-)
-from .limit_components import KNOWN_LIMIT_COMPONENTS
+from .demand_extraction import limit_responds_to_hook_load
 from .sweep_cache import ComputeScope, LimitResult, limit_signature
 
 _LOG = logging.getLogger(__name__)
@@ -181,7 +177,7 @@ def run_mode_sweep(
                 cap = _capacity(probes, {lid: comps}, hook_mass_t)
                 # Sensitivities do not depend on motion or wind, but the lead channels
                 # add to them: a limit responds if it does at any lead sign case.
-                responsive = any(_affects_hook_load(pt, lid, comps) for pt in leads)
+                responsive = any(limit_responds_to_hook_load(doc, pt, lid, comps) for pt in leads)
                 return LimitResult(cap.max_allowable_load_t, cap.max_allowable_load_kN, responsive)
 
             if compute_scope is None:
@@ -224,47 +220,6 @@ def run_mode_sweep(
                     ).max_allowable_load_t
                 envelope_cache[key] = (load_t, results)
         return envelope_cache[key]
-
-    def _resolve_entity(limit_key: str) -> str:
-        for comp in KNOWN_LIMIT_COMPONENTS:
-            if limit_key.endswith(f"_{comp}"):
-                return limit_key[: -len(f"_{comp}")]
-        return limit_key
-
-    def _resolve_rope_entity(entity: str, comps: dict) -> str:
-        if "T" not in comps:
-            return entity
-        candidates = [entity]
-        if entity.endswith("_rope") and not entity.endswith("__rope"):
-            candidates.append(f"{entity[:-5]}__rope")
-        elif entity.endswith("__rope"):
-            candidates.append(f"{entity[:-6]}_rope")
-        for rid in candidates:
-            rope = next((r for r in doc.ropes if r.id == rid), None)
-            if rope is None:
-                continue
-            return "boom_hoist" if rope.tension_mode == "solve" else rid
-        return entity
-
-    def _affects_hook_load(pt_obj: AnalysisPoint, limit_key: str, comps: dict) -> bool:
-        entity = _resolve_entity(limit_key)
-        tol = 1e-9
-        if entity in pt_obj.sensitivity_reactions:
-            diameter = doc.support_widths.slewing_bearing_diameter_m
-            for comp in comps:
-                if connection_component_responds_to_hook_load(
-                    pt_obj,
-                    entity,
-                    comp,
-                    support_widths_diameter_m=diameter,
-                    tolerance=tol,
-                ):
-                    return True
-            return False
-        rope_entity = _resolve_rope_entity(entity, comps)
-        if rope_entity in pt_obj.sensitivity_rope_tensions:
-            return "T" in comps and rope_tension_responds_to_hook_load(pt_obj, rope_entity, tol)
-        return False
 
     step = max(0.01, float(outreach_step))
     lo_out = float(hoist.outreach_min_m or 0.0)

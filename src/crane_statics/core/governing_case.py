@@ -12,7 +12,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from ..calculation.engine import AnalysisPoint, CraneCalculator
+from ..calculation.engine import CraneCalculator
 from ..calculation.rope_mass import active_hook_positions, hook_support_node_id
 from ..calculation.solver.kinematics import KinematicsAdapter
 from ..data.models import CraneDocument
@@ -24,11 +24,7 @@ from .chart_envelope import (
     envelope_capacity_case,
     lead_points,
 )
-from .demand_extraction import (
-    connection_component_responds_to_hook_load,
-    rope_tension_responds_to_hook_load,
-)
-from .limit_components import KNOWN_LIMIT_COMPONENTS
+from .demand_extraction import limit_responds_to_hook_load
 
 # ``VesselInputs`` field -> ``SceneState`` field.
 _SCENE_VESSEL_FIELDS = {vessel: scene for scene, vessel in _VESSEL_INPUT_FIELDS.items()}
@@ -36,9 +32,16 @@ _SCENE_VESSEL_FIELDS = {vessel: scene for scene, vessel in _VESSEL_INPUT_FIELDS.
 
 @dataclass(frozen=True)
 class GoverningCase:
-    """The case behind one chart point: ``scene_fields`` are ``SceneState`` field values."""
+    """The case behind one chart point: ``scene_fields`` are ``SceneState`` field values.
+
+    ``mode_name`` is the chart mode the point was computed in ("normal" or "split"). The
+    fields reproduce the chart value only under that mode's hook configuration, so the
+    Scene must set ``HoistState.split_mode_active = (mode_name == "split")`` before it
+    applies ``scene_fields``.
+    """
 
     limit_id: str
+    mode_name: str
     scene_fields: dict[str, Any]
     outreach_m: float
 
@@ -63,6 +66,8 @@ def governing_case(
     if hoist is None:
         return None
     mode = analysis_mode_by_name(hoist, mode_name)
+    if mode.name != mode_name:
+        return None  # split without a split block: run_mode_sweep has no curve either
     calc = CraneCalculator(doc)
     doc_dict = doc.model_dump()
     kin = KinematicsAdapter(doc_dict)
@@ -104,7 +109,8 @@ def governing_case(
         return None
     load_kN, case = best
     leads = lead_points(probes, offlead_deg, sidelead_deg)
-    if not any(_responds(doc, pt, case.limit_id, enabled_limits[case.limit_id]) for pt in leads):
+    comps = enabled_limits[case.limit_id]
+    if not any(limit_responds_to_hook_load(doc, pt, case.limit_id, comps) for pt in leads):
         return None
     tackle_m = _design_tackle_length_m(doc_dict, kin, hoist_id, angle)
     if tackle_m is None:
@@ -126,7 +132,12 @@ def governing_case(
     fields.update(
         {_SCENE_VESSEL_FIELDS[name]: float(value) for name, value in case.vessel_inputs.items()}
     )
-    return GoverningCase(limit_id=case.limit_id, scene_fields=fields, outreach_m=float(outreach_m))
+    return GoverningCase(
+        limit_id=case.limit_id,
+        mode_name=mode.name,
+        scene_fields=fields,
+        outreach_m=float(outreach_m),
+    )
 
 
 def _design_tackle_length_m(
@@ -144,35 +155,3 @@ def _design_tackle_length_m(
     if hook is None or support is None:
         return None
     return max(0.0, float(support["z"]) - float(hook["z"]))
-
-
-def _responds(doc: CraneDocument, point: AnalysisPoint, limit_key: str, comps: dict) -> bool:
-    """Whether the limit responds to the hook load (as ``run_mode_sweep`` decides)."""
-    entity = limit_key
-    for comp in KNOWN_LIMIT_COMPONENTS:
-        if limit_key.endswith(f"_{comp}"):
-            entity = limit_key[: -len(f"_{comp}")]
-            break
-    tol = 1e-9
-    if entity in point.sensitivity_reactions:
-        diameter = doc.support_widths.slewing_bearing_diameter_m
-        return any(
-            connection_component_responds_to_hook_load(
-                point, entity, comp, support_widths_diameter_m=diameter, tolerance=tol
-            )
-            for comp in comps
-        )
-    if "T" not in comps:
-        return False
-    rope_entity = entity
-    candidates = [entity]
-    if entity.endswith("_rope") and not entity.endswith("__rope"):
-        candidates.append(f"{entity[:-5]}__rope")
-    elif entity.endswith("__rope"):
-        candidates.append(f"{entity[:-6]}_rope")
-    rope = next((r for rid in candidates for r in doc.ropes if r.id == rid), None)
-    if rope is not None:
-        rope_entity = "boom_hoist" if rope.tension_mode == "solve" else rope.id
-    return rope_entity in point.sensitivity_rope_tensions and rope_tension_responds_to_hook_load(
-        point, rope_entity, tol
-    )
