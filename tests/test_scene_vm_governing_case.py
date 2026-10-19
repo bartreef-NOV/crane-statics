@@ -139,6 +139,33 @@ def test_tackle_range_covers_a_case_payout_above_the_hook_travel(vm: SceneViewMo
     assert vm.tackleMax == configured_max
 
 
+def test_tackle_range_keeps_the_case_payout_after_the_tackle_is_lowered(
+    vm: SceneViewModel,
+) -> None:
+    """Lowering the tackle must not ratchet the range down until Restore."""
+    configured_max = vm.tackleMax
+    case = _case(vm)
+    case_tackle = case.scene_fields["tackle_length_m"]
+    vm.apply_governing_case(case, LABEL)
+
+    vm.setTackle(configured_max / 2)
+    assert vm.tackleMax == case_tackle
+
+    bounds = _count(vm.tackleBoundsChanged)
+    vm.restoreInputs()
+    assert vm.tackleMax == configured_max
+    assert bounds[0] >= 1
+
+
+@pytest.mark.parametrize("signal", ["boomAngleChanged", "tackleLengthChanged"])
+def test_canvas_drag_clears_label_keeps_restore(vm: SceneViewModel, signal: str) -> None:
+    vm.apply_governing_case(_case(vm), LABEL)
+    getattr(vm._canvas, signal).emit(10.0)
+
+    assert vm.governingCaseLabel == ""
+    assert vm.canRestoreInputs
+
+
 def test_apply_runs_without_vessel_clamp_side_effects(vm: SceneViewModel) -> None:
     vm.setHookLoadAuto(True)  # auto would recompute the hook load if a setter ran
     vm.setAngle(vm.angleMin)
@@ -229,7 +256,7 @@ def test_restore_restores_fields_and_auto_flag_and_hides_button(vm: SceneViewMod
 def test_apply_split_case_sets_split_mode_and_restore_reverts(vm: SceneViewModel) -> None:
     model = vm._model
     model.set_chart_mode("MH", "split")  # the chart the case came from
-    before = {hid: (s.split_mode_active, s.chart_mode) for hid, s in model.hoist_states.items()}
+    before = model.split_flags()
     assert vm.hookMode == "normal"
 
     vm.apply_governing_case(_case(vm, mode_name="split"), LABEL)
@@ -238,21 +265,34 @@ def test_apply_split_case_sets_split_mode_and_restore_reverts(vm: SceneViewModel
     assert vm.governingCaseLabel == LABEL
 
     vm.restoreInputs()
-    after = {hid: (s.split_mode_active, s.chart_mode) for hid, s in model.hoist_states.items()}
+    after = model.split_flags()
     assert after == before
+    assert vm.hookMode == "normal"
+
+
+def test_restore_keeps_a_chart_mode_chosen_after_the_apply(vm: SceneViewModel) -> None:
+    model = vm._model
+    flags_before_apply = model.split_flags()
+    assert model.hoist_states["MH"].chart_mode == "normal"
+    vm.apply_governing_case(_case(vm, mode_name="split"), LABEL)
+    model.set_chart_mode("MH", "split")  # the Load Chart radio, between apply and Restore
+
+    vm.restoreInputs()
+    assert model.hoist_states["MH"].chart_mode == "split"
+    assert model.split_flags() == flags_before_apply
     assert vm.hookMode == "normal"
 
 
 def test_apply_normal_case_leaves_split_and_restore_reverts(vm: SceneViewModel) -> None:
     vm.setHookMode("split")
     model = vm._model
-    before = {hid: (s.split_mode_active, s.chart_mode) for hid, s in model.hoist_states.items()}
+    before = model.split_flags()
 
     vm.apply_governing_case(_case(vm, mode_name="normal"), LABEL)
     assert vm.hookMode == "normal"
 
     vm.restoreInputs()
-    after = {hid: (s.split_mode_active, s.chart_mode) for hid, s in model.hoist_states.items()}
+    after = model.split_flags()
     assert after == before
     assert vm.hookMode == "split"
 

@@ -264,3 +264,14 @@ class SessionModel:
         for candidate_id, state in self.hoist_states.items():
             state.split_mode_active = hoist_id is not None and candidate_id == hoist_id
         return hoist_id
+
+    def split_flags(self) -> dict[str, bool]:
+        """Every hoist's Scene split flag (not its Load Chart mode)."""
+        return {hid: state.split_mode_active for hid, state in self.hoist_states.items()}
+
+    def restore_split_flags(self, flags: dict[str, bool]) -> None:
+        """Put back flags taken by ``split_flags``; each hoist's chart mode is left alone."""
+        for hid, split in flags.items():
+            state = self.hoist_states.get(hid)
+            if state is not None:
+                state.split_mode_active = split

@@ -47,9 +47,12 @@ class _InputsSnapshot:
     scene_state: SceneState
     hook_load_t: float
     contractual_idx: Optional[int]
-    # Every hoist's (split_mode_active, chart_mode): applying a split case through
-    # ``set_active_split_hoist`` clears the flag on the other hoists too.
-    hook_modes: dict[str, tuple[bool, str]]
+    # Every hoist's Scene split flag: applying a split case through
+    # ``set_active_split_hoist`` clears the flag on the other hoists too. The Load
+    # Chart modes are not touched by an apply, so they are not restored either.
+    split_flags: dict[str, bool]
+    # The tackle of the case shown last: the tackle range covers it until Restore.
+    case_tackle_m: float
 
 
 class SceneViewModel(QObject):
@@ -191,7 +194,6 @@ class SceneViewModel(QObject):
         self._end_governing_label()
         state.scene_state.tackle_length_m = float(tackle_m)
         self.geometryChanged.emit()
-        self.tackleBoundsChanged.emit()
         self._after_state_changed()
 
     @pyqtSlot(str, float, float)
@@ -401,7 +403,6 @@ class SceneViewModel(QObject):
             return
         state.scene_state.tackle_length_m = float(value)
         self.geometryChanged.emit()
-        self.tackleBoundsChanged.emit()
         self._after_state_changed()
         self._model.mark_content_changed()
 
@@ -420,9 +421,8 @@ class SceneViewModel(QObject):
         hi = float(hoist.max_hook_travel_m) if hoist.max_hook_travel_m is not None else 500.0
         # A governing case can pay out more rope than the hook travel: keep it in range,
         # so neither the tackle field nor the canvas clamps the case back.
-        state = self._model.get_active_hoist_state()
-        if self._snapshot is not None and state is not None:
-            hi = max(hi, float(state.scene_state.tackle_length_m))
+        if self._snapshot is not None:
+            hi = max(hi, self._snapshot.case_tackle_m)
         return 0.0, max(0.0, hi)
 
     def _sync_outreach_from_angle(self, angle: float) -> None:
@@ -851,11 +851,11 @@ class SceneViewModel(QObject):
                 scene_state=dataclasses.replace(state.scene_state),
                 hook_load_t=self._hook_load_t,
                 contractual_idx=state.selected_contractual_idx,
-                hook_modes={
-                    hid: (hs.split_mode_active, hs.chart_mode)
-                    for hid, hs in self._model.hoist_states.items()
-                },
+                split_flags=self._model.split_flags(),
+                case_tackle_m=0.0,
             )
+        case_tackle = case.scene_fields.get("tackle_length_m", state.scene_state.tackle_length_m)
+        self._snapshot = dataclasses.replace(self._snapshot, case_tackle_m=float(case_tackle))
         self._applying = True
         try:
             # The case reproduces the chart only under its mode's hook configuration.
@@ -882,11 +882,7 @@ class SceneViewModel(QObject):
         state = self._model.get_active_hoist_state()
         if snapshot is None or state is None or snapshot.hoist_id != self._model.selected_hoist_id:
             return
-        for hid, (split, chart_mode) in snapshot.hook_modes.items():
-            hoist_state = self._model.hoist_states.get(hid)
-            if hoist_state is not None:
-                hoist_state.split_mode_active = split
-                hoist_state.chart_mode = chart_mode
+        self._model.restore_split_flags(snapshot.split_flags)
         state.scene_state = dataclasses.replace(snapshot.scene_state)
         state.selected_contractual_idx = snapshot.contractual_idx
         self._hook_load_t = snapshot.hook_load_t

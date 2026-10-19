@@ -248,7 +248,7 @@ def _superpose_plan(probes: ProbeSet) -> tuple[_RopePlan, _ReactionPlan]:
 # --- worst case over vessel signs, slew, wind angle and lead signs ------------------------
 
 # compute_analysis_point vessel keyword (VESSEL_LIMIT_INPUTS) -> VesselInputs field.
-_VESSEL_INPUT_FIELDS = {
+VESSEL_INPUT_FIELDS = {
     "accel_x_m_s2": "accel_x_m_s2",
     "accel_y_m_s2": "accel_y_m_s2",
     "accel_z_m_s2": "accel_z_m_s2",
@@ -310,7 +310,7 @@ def _slew_harmonics_for(gravity: float, limits: tuple[float, ...]) -> _SlewHarmo
     )
     means, cos_parts, sin_parts = [], [], []
     for case in vessel_motion_cases(vessel):
-        fields = {_VESSEL_INPUT_FIELDS[key]: float(value) for key, value in case.items()}
+        fields = {VESSEL_INPUT_FIELDS[key]: float(value) for key, value in case.items()}
         c0, c90, c180, c270 = (
             motion_channels(gravity, VesselInputs(slew_deg=slew, **fields))
             for slew in (0.0, 90.0, 180.0, 270.0)
@@ -919,7 +919,7 @@ def envelope_capacity_case(
         hook_daf=float(hook_daf),
         hook_mass_t=float(hook_mass_t),
         vessel_cases=tuple(
-            {_VESSEL_INPUT_FIELDS[key]: float(value) for key, value in case.items()}
+            {VESSEL_INPUT_FIELDS[key]: float(value) for key, value in case.items()}
             for case in vessel_motion_cases(vessel)
         ),
     )

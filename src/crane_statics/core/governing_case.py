@@ -18,7 +18,7 @@ from ..calculation.solver.kinematics import KinematicsAdapter
 from ..data.models import CraneDocument
 from .analysis_cases import analysis_mode_by_name
 from .chart_envelope import (
-    _VESSEL_INPUT_FIELDS,
+    VESSEL_INPUT_FIELDS,
     EnvelopeCase,
     build_probes,
     envelope_capacity_case,
@@ -27,7 +27,7 @@ from .chart_envelope import (
 from .demand_extraction import limit_responds_to_hook_load
 
 # ``VesselInputs`` field -> ``SceneState`` field.
-_SCENE_VESSEL_FIELDS = {vessel: scene for scene, vessel in _VESSEL_INPUT_FIELDS.items()}
+_SCENE_VESSEL_FIELDS = {vessel: scene for scene, vessel in VESSEL_INPUT_FIELDS.items()}
 
 
 @dataclass(frozen=True)

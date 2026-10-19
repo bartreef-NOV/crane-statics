@@ -1131,7 +1131,8 @@ class ChartViewModel(QObject):
         """The key of the finished chart on screen, if ``series_id`` (a limit id, or "" for
         the combined curve) is one of its curves and a governing case can be asked for.
 
-        Decided from the chart state alone; QML evaluates it whenever the menu binds it."""
+        Decided from the chart state alone. The slot has no notify signal, so QML asks
+        it once per opening, in the menu's onAboutToShow."""
         key = self._displayed_key
         if (
             self._scene_vm is None
@@ -1211,7 +1212,8 @@ class ChartViewModel(QObject):
         name = self._limit_display_names().get(case.limit_id) or case.limit_id
         # Not a content change: that would clear the label the Scene shows.
         scene.apply_governing_case(case, f"Governing case: {name} at {request.outreach_m:.1f} m")
-        self._set_status(request.previous_status)
+        if self._status_text.startswith("Finding the governing case"):
+            self._set_status(request.previous_status)
         self.showSceneRequested.emit()
 
     def _on_case_failed(self, worker: _GoverningCaseWorker, message: str) -> None:

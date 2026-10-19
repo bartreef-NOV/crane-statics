@@ -212,6 +212,32 @@ def test_no_case_posts_status_and_stays(drawn: Pair, monkeypatch) -> None:
     assert "No governing case" in chart.statusText
 
 
+def test_worker_error_posts_status_and_a_later_request_works(drawn: Pair, monkeypatch) -> None:
+    def broken(*_args: Any) -> Any:
+        raise RuntimeError("solver blew up")
+
+    monkeypatch.setattr(chart_vm_module, "governing_case", broken)
+    chart, scene = drawn.chart, drawn.scene
+    shown = _count(chart.showSceneRequested)
+    before = drawn.scene_fields()
+    outreach = float(drawn.series(ROPE)["points"][0][0])
+
+    chart.showGoverningCase(ROPE, outreach)
+    wait_until(lambda: chart._case_request is None and not chart._threads)
+
+    assert chart.statusText.startswith("⚠ Governing case error")
+    assert "solver blew up" in chart.statusText
+    assert shown[0] == 0
+    assert drawn.scene_fields() == before
+    assert scene.governingCaseLabel == ""
+
+    monkeypatch.setattr(chart_vm_module, "governing_case", governing_case)
+    assert chart.governingCaseAvailable(ROPE)
+    chart.showGoverningCase(ROPE, outreach)
+    wait_until(lambda: shown[0] == 1)
+    assert scene.governingCaseLabel != ""
+
+
 def test_split_mode_uses_chart_mode(pair: Pair, monkeypatch) -> None:
     chart, scene = pair.chart, pair.scene
     chart.setChartMode("split")
