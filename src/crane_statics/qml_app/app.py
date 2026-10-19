@@ -57,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     model_vm = ModelViewModel(session, engine)
     scene_vm = SceneViewModel(session, engine)
     chart_vm = ChartViewModel(session, engine)
+    chart_vm.set_scene_view_model(scene_vm)
 
     def cleanup() -> None:
         chart_vm.shutdown()

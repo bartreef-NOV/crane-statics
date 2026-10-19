@@ -36,6 +36,7 @@ def qml_engine():
     model_vm = ModelViewModel(session, engine)
     scene_vm = SceneViewModel(session, engine)
     chart_vm = ChartViewModel(session, engine)
+    chart_vm.set_scene_view_model(scene_vm)
 
     engine.rootContext().setContextProperty("appVm", app_vm)
     engine.rootContext().setContextProperty("modelVm", model_vm)

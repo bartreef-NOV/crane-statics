@@ -6,7 +6,7 @@ import csv
 import logging
 import time
 from pathlib import Path
-from typing import Any, NamedTuple, Optional
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
 from PyQt6 import sip
 from PyQt6.QtCore import QObject, QThread, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
@@ -25,6 +25,7 @@ from crane_statics.core.chart_cache import (
     plan_chart_jobs,
 )
 from crane_statics.core.document_edit import DocumentEditor, build_contractual_point
+from crane_statics.core.governing_case import governing_case
 from crane_statics.core.limit_auto_set import (
     ConnectionAutoSetResult,
     RopeAutoSetResult,
@@ -44,6 +45,9 @@ from crane_statics.core.sweep_cache import (
 )
 
 from ..models.list_models import DictListModel
+
+if TYPE_CHECKING:
+    from .scene_vm import SceneViewModel
 
 _LOG = logging.getLogger(__name__)
 
@@ -143,6 +147,43 @@ class _SweepWorker(QThread):
             self.failed.emit(str(exc))
 
 
+class _GoverningCaseWorker(QThread):
+    """Re-evaluates one chart point's governing case off the GUI thread."""
+
+    finishedWith = pyqtSignal(object)  # Optional[GoverningCase]
+    failed = pyqtSignal(str)
+
+    def __init__(
+        self,
+        doc: CraneDocument,
+        hoist_id: str,
+        mode: str,
+        enabled_limits: dict,
+        outreach_m: float,
+        limit_id: Optional[str],
+    ) -> None:
+        # Parentless, as _SweepWorker: the view model holds it until `finished`.
+        super().__init__()
+        self._args = (doc, hoist_id, mode, enabled_limits, outreach_m, limit_id)
+
+    def run(self) -> None:
+        try:
+            self.finishedWith.emit(governing_case(*self._args))
+        except Exception as exc:  # worker boundary: report instead of crashing the thread
+            self.failed.emit(str(exc))
+
+
+class _CaseRequest(NamedTuple):
+    """The governing-case evaluation in flight, with the chart its point was clicked on."""
+
+    worker: _GoverningCaseWorker
+    generation: int
+    key: ChartKey
+    outreach_m: float
+    # The status shown before the request, put back when it ends.
+    previous_status: str
+
+
 def _is_sweep_status(text: str) -> bool:
     """Whether ``text`` is a status the sweep itself wrote (progress, done or error)."""
     return text == "" or text.startswith(("Sweeping", "Stage ", "Done - ", "⚠ Sweep error"))
@@ -218,6 +259,8 @@ class ChartViewModel(QObject):
     contractualChanged = pyqtSignal()
     preferencesChanged = pyqtSignal()
     resetViewRequested = pyqtSignal()
+    # A governing case was applied to the Scene: QML switches to the Scene tab.
+    showSceneRequested = pyqtSignal()
 
     def __init__(self, session: SessionState, parent=None):
         super().__init__(parent)
@@ -241,7 +284,10 @@ class ChartViewModel(QObject):
         # QThread must outlive its run(), so workers are held until `finished`).
         self._queue: list[ChartJob] = []
         self._running: Optional[_RunningJob] = None
-        self._threads: set[_SweepWorker] = set()
+        self._threads: set[QThread] = set()
+        # The Scene a governing case is shown in, and the one evaluation in flight.
+        self._scene_vm: Optional[SceneViewModel] = None
+        self._case_request: Optional[_CaseRequest] = None
         self._partial = False
         self._displayed_key: Optional[ChartKey] = None
         self._displayed_chart: Optional[_DisplayedChart] = None
@@ -541,6 +587,7 @@ class ChartViewModel(QObject):
         self._refresh_timer.stop()
         self._queue.clear()
         self._running = None
+        self._case_request = None
         threads = list(self._threads)
         for worker in threads:
             worker.requestInterruption()
@@ -1071,6 +1118,108 @@ class ChartViewModel(QObject):
             "yMin": max(0.0, min(ys) - y_pad),
             "yMax": max(ys) + y_pad,
         }
+
+    # ------------------------------------------------------------------
+    # Governing case
+    # ------------------------------------------------------------------
+
+    def set_scene_view_model(self, scene_vm: SceneViewModel) -> None:
+        """The Scene a clicked chart point's governing case is applied to."""
+        self._scene_vm = scene_vm
+
+    def _governing_case_chart(self, series_id: str) -> Optional[ChartKey]:
+        """The key of the finished chart on screen, if ``series_id`` (a limit id, or "" for
+        the combined curve) is one of its curves and a governing case can be asked for.
+
+        Decided from the chart state alone; QML evaluates it whenever the menu binds it."""
+        key = self._displayed_key
+        if (
+            self._scene_vm is None
+            or self._model.document is None
+            or self._stale
+            or self._busy
+            or self._partial
+            or self._case_request is not None
+            or key is None
+            or key.hoist_id != self._model.selected_hoist_id
+            or key.mode != self._current_chart_mode()
+        ):
+            return None
+        if series_id == "":
+            return key if self._curve_points else None
+        # A limit that is unlimited or does not respond to the hook load has no series.
+        return key if any(s["id"] == series_id for s in self._limit_series) else None
+
+    @pyqtSlot(str, result=bool)
+    def governingCaseAvailable(self, series_id: str) -> bool:
+        return self._governing_case_chart(series_id) is not None
+
+    @pyqtSlot(str, float)
+    def showGoverningCase(self, series_id: str, outreach: float) -> None:
+        """Find the case behind the point of ``series_id`` at ``outreach`` off the GUI
+        thread, then apply it to the Scene and ask for the Scene tab."""
+        key = self._governing_case_chart(series_id)
+        doc = self._model.document
+        if key is None or doc is None or self._shutting_down:
+            return
+        outreach_m = float(outreach)
+        # The chart's own mode and limits: the case must reproduce the point drawn.
+        worker = _GoverningCaseWorker(
+            doc.model_copy(deep=True),
+            key.hoist_id,
+            key.mode,
+            self._enabled_limits(),
+            outreach_m,
+            series_id or None,
+        )
+        worker.finishedWith.connect(lambda case, w=worker: self._on_case_finished(w, case))
+        worker.failed.connect(lambda message, w=worker: self._on_case_failed(w, message))
+        worker.finished.connect(lambda w=worker: self._threads.discard(w))
+        worker.finished.connect(worker.deleteLater)
+        self._case_request = _CaseRequest(
+            worker, self._generation, key, outreach_m, self._status_text
+        )
+        self._threads.add(worker)
+        self._set_status(f"Finding the governing case at {outreach_m:.1f} m...")
+        worker.start()
+
+    def _take_case_request(self, worker: _GoverningCaseWorker) -> Optional[_CaseRequest]:
+        """The request ``worker`` ran for, if it still describes the chart on screen."""
+        request = self._case_request
+        if self._stopped() or request is None or request.worker is not worker:
+            return None
+        self._case_request = None
+        if (
+            request.generation != self._generation
+            or request.key != self._displayed_key
+            or request.key.hoist_id != self._model.selected_hoist_id
+        ):
+            # An edit, a new document or another hoist since the click: drop the result.
+            if self._status_text.startswith("Finding the governing case"):
+                self._set_status(request.previous_status)
+            return None
+        return request
+
+    def _on_case_finished(self, worker: _GoverningCaseWorker, case: Any) -> None:
+        request = self._take_case_request(worker)
+        if request is None:
+            return
+        scene = self._scene_vm
+        if case is None or scene is None:
+            self._set_status(f"No governing case at {request.outreach_m:.1f} m")
+            return
+        name = self._limit_display_names().get(case.limit_id) or case.limit_id
+        # Not a content change: that would clear the label the Scene shows.
+        scene.apply_governing_case(case, f"Governing case: {name} at {request.outreach_m:.1f} m")
+        self._set_status(request.previous_status)
+        self.showSceneRequested.emit()
+
+    def _on_case_failed(self, worker: _GoverningCaseWorker, message: str) -> None:
+        request = self._take_case_request(worker)
+        if request is None:
+            return
+        _LOG.warning("Governing case failed at %.1f m: %s", request.outreach_m, message)
+        self._set_status(f"⚠ Governing case error: {message}")
 
     # ------------------------------------------------------------------
     # Export
