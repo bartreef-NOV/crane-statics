@@ -109,7 +109,7 @@ def test_apply_sets_fields_and_label(vm: SceneViewModel) -> None:
     vm.apply_governing_case(case, LABEL)
 
     assert _state(vm) == case.scene_fields
-    assert vm.tackle > vm.tackleMax  # the curve's payout is kept, not clamped
+    assert vm.tackle == case.scene_fields["tackle_length_m"]  # the payout is kept, not clamped
     assert vm.governingCaseLabel == LABEL
     assert vm.canRestoreInputs
     assert changed[0] >= 1
@@ -122,6 +122,21 @@ def test_apply_sets_fields_and_label(vm: SceneViewModel) -> None:
     assert vm.ropeRowsModel.count > 0
     # A programmatic apply is not a user edit: the document stays clean.
     assert not vm._model.dirty
+
+
+def test_tackle_range_covers_a_case_payout_above_the_hook_travel(vm: SceneViewModel) -> None:
+    """The tackle field and the canvas would otherwise clamp the case's payout back."""
+    configured_max = vm.tackleMax
+    case = _case(vm)
+    bounds = _count(vm.tackleBoundsChanged)
+    vm.apply_governing_case(case, LABEL)
+
+    assert vm.tackleMax == case.scene_fields["tackle_length_m"] > configured_max
+    assert bounds[0] >= 1
+    assert vm._scene_inputs().tackle_length_m == case.scene_fields["tackle_length_m"]
+
+    vm.restoreInputs()
+    assert vm.tackleMax == configured_max
 
 
 def test_apply_runs_without_vessel_clamp_side_effects(vm: SceneViewModel) -> None:

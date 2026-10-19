@@ -210,6 +210,14 @@ ApplicationWindow {
             appVm.setStatusText(message)
         }
     }
+
+    Connections {
+        target: chartVm
+        // A governing case was applied to the Scene: show it (the Scene is tab 0).
+        function onShowSceneRequested() {
+            workspaceTabs.currentIndex = 0
+        }
+    }
 }
 
 

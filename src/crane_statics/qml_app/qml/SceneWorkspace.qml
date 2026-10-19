@@ -42,6 +42,34 @@ Item {
             Layout.minimumHeight: 320
             spacing: root.layoutSpacing
 
+            // The governing case opened from the Load Chart, and the way back.
+            RowLayout {
+                Layout.fillWidth: true
+                visible: sceneVm.governingCaseLabel.length > 0 || sceneVm.canRestoreInputs
+                spacing: root.layoutSpacing
+
+                Label {
+                    objectName: "governingCaseLabel"
+                    Layout.fillWidth: true
+                    text: sceneVm.governingCaseLabel
+                    visible: text.length > 0
+                    elide: Text.ElideRight
+                    font.bold: true
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    visible: sceneVm.governingCaseLabel.length === 0
+                }
+
+                Button {
+                    objectName: "restoreInputsButton"
+                    text: qsTr("Restore my inputs")
+                    visible: sceneVm.canRestoreInputs
+                    onClicked: sceneVm.restoreInputs()
+                }
+            }
+
             QuickSceneCanvas {
                 id: canvas
                 objectName: "sceneCanvas"

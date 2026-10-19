@@ -1,9 +1,10 @@
 """QML front end: every view loads warning-free and the model tables populate."""
 
+import time
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import QObject, QUrl
+from PyQt6.QtCore import QCoreApplication, QMetaObject, QObject, QUrl
 from PyQt6.QtTest import QTest
 from PyQt6.QtQml import (
     QJSValue,
@@ -653,4 +654,120 @@ ApplicationWindow {{
     dialog.open()
     QTest.qWait(20)
     assert dialog.property("height") >= minimum_height
+    assert warnings == []
+
+
+def _wait_until(predicate, timeout: float = 60.0) -> None:
+    """Pump the Qt event loop until ``predicate()`` holds; worker signals arrive this way."""
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        if time.monotonic() > deadline:
+            raise AssertionError("condition not met in time")
+        QCoreApplication.processEvents()
+        time.sleep(0.005)
+
+
+def _drawn_main(qml_engine):
+    """Main.qml on the example with a finished Load Chart for the selected hoist."""
+    if not EXAMPLE.exists():
+        pytest.skip("Example file not found")
+    engine, app_vm, _model_vm, warnings = qml_engine
+    app_vm.openPath(str(EXAMPLE))
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
+    root = engine.rootObjects()[-1]
+    chart_vm = engine.rootContext().contextProperty("chartVm")
+    chart_vm._outreach_step = 10.0
+    chart_vm.drawBlocking()
+    # No background sweeps of the other charts while the test runs.
+    chart_vm._refresh_timer.stop()
+    QTest.qWait(50)
+    return engine, root, chart_vm, warnings
+
+
+def _only_series_visible(plot: QObject, key: str) -> None:
+    keys = [item["id"] for item in _evaluate_in(plot, "collectLegendSeries()")]
+    for other in keys:
+        _evaluate_in(plot, f"setSeriesVisible({other!r}, {str(other == key).lower()})")
+
+
+def _point_under(plot: QObject):
+    """``nearestPoint`` on the first point of the only visible series, and its position."""
+    return _evaluate_in(
+        plot,
+        """
+        (function () {
+            const markers = chartVm.markers || []
+            const series = collectSeries()
+            const first = series.length > 0
+                ? { outreach: series[0].points[0][0], load: series[0].points[0][1] }
+                : { outreach: markers[0].outreach, load: markers[0].load }
+            const px = mapX(first.outreach, viewRanges, plotLeft, plotWidth)
+            const py = mapY(first.load, viewRanges, plotTop, plotHeight)
+            const point = nearestPoint(px, py)
+            return point === null ? "no point" : [point.seriesId, px, py]
+        })()
+        """,
+    )
+
+
+def test_chart_points_carry_the_series_a_governing_case_is_asked_for(qml_engine):
+    """A limit's point names the limit, the combined curve "", a contractual marker none."""
+    _engine, root, chart_vm, warnings = _drawn_main(qml_engine)
+    plot = root.findChild(QObject, "quickChartPlot")
+    assert plot is not None
+    limit_id = chart_vm.limitSeries[0]["id"]
+
+    _only_series_visible(plot, limit_id)
+    assert _point_under(plot)[0] == limit_id
+    _only_series_visible(plot, "capacity")
+    assert _point_under(plot)[0] == ""
+    _only_series_visible(plot, "contractual")
+    assert _point_under(plot)[0] is None
+    assert warnings == []
+
+
+def test_chart_menu_shows_the_governing_case_in_the_scene(qml_engine):
+    """Right-click a curve point -> Scene tab, banner label and Restore; an edit drops the label."""
+    engine, root, _chart_vm, warnings = _drawn_main(qml_engine)
+    scene_vm = engine.rootContext().contextProperty("sceneVm")
+    tabs = root.findChild(QObject, "workspaceTabs")
+    tabs.setProperty("currentIndex", 1)
+    QTest.qWait(50)
+    workspace = root.findChild(QObject, "loadChartWorkspace")
+    plot = root.findChild(QObject, "quickChartPlot")
+    item = root.findChild(QObject, "governingCaseMenuItem")
+    label = root.findChild(QObject, "governingCaseLabel")
+    restore = root.findChild(QObject, "restoreInputsButton")
+    assert None not in (workspace, plot, item, label, restore)
+    assert item.property("text") == "Show governing case in Scene"
+    assert label.property("visible") is False
+    assert restore.property("visible") is False
+
+    # A contractual marker has no curve behind it: the entry is there, but disabled.
+    _only_series_visible(plot, "contractual")
+    _series_id, px, py = _point_under(plot)
+    _evaluate_in(workspace, f"openChartMenu(Qt.point({px}, {py}))")
+    assert item.property("enabled") is False
+    QMetaObject.invokeMethod(root.findChild(QObject, "chartMenu"), "close")
+
+    _only_series_visible(plot, "capacity")
+    _series_id, px, py = _point_under(plot)
+    _evaluate_in(workspace, f"openChartMenu(Qt.point({px}, {py}))")
+    assert item.property("enabled") is True
+    QMetaObject.invokeMethod(item, "triggered")
+    _wait_until(lambda: scene_vm.governingCaseLabel != "")
+    QTest.qWait(50)
+
+    assert tabs.property("currentIndex") == 0
+    assert label.property("visible") is True
+    assert label.property("text") == scene_vm.governingCaseLabel
+    assert restore.property("visible") is True
+
+    scene_vm.setAngle(scene_vm.angle - 1.0)
+    assert label.property("visible") is False
+    assert restore.property("visible") is True
+
+    QMetaObject.invokeMethod(restore, "click")
+    assert restore.property("visible") is False
+    assert not scene_vm.canRestoreInputs
     assert warnings == []

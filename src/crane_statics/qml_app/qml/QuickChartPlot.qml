@@ -185,6 +185,8 @@ Item {
                 const py = mapY(points[i][1], ranges, plotTop, plotHeight)
                 candidates.push({
                     x: px, y: py, outreach: points[i][0], load: points[i][1],
+                    // The series a governing case is asked for: "" is the combined curve.
+                    seriesId: series[s].id === "capacity" ? "" : series[s].id,
                     label: series[s].label, color: series[s].color || pal.placeholderText,
                     distance: Math.hypot(px - x, py - y)
                 })
@@ -197,6 +199,8 @@ Item {
                 const py = mapY(markers[i].load, ranges, plotTop, plotHeight)
                 candidates.push({
                     x: px, y: py, outreach: markers[i].outreach, load: markers[i].load,
+                    // A contractual point is not on a curve: it has no governing case.
+                    seriesId: null,
                     label: qsTr("Contractual (%1)").arg(markers[i].status),
                     color: markers[i].status === "pass" ? root.passColor : (markers[i].status === "fail" ? root.failColor : root.pendingColor),
                     distance: Math.hypot(px - x, py - y)

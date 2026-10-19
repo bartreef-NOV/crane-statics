@@ -191,6 +191,7 @@ class SceneViewModel(QObject):
         self._end_governing_label()
         state.scene_state.tackle_length_m = float(tackle_m)
         self.geometryChanged.emit()
+        self.tackleBoundsChanged.emit()
         self._after_state_changed()
 
     @pyqtSlot(str, float, float)
@@ -400,6 +401,7 @@ class SceneViewModel(QObject):
             return
         state.scene_state.tackle_length_m = float(value)
         self.geometryChanged.emit()
+        self.tackleBoundsChanged.emit()
         self._after_state_changed()
         self._model.mark_content_changed()
 
@@ -416,6 +418,11 @@ class SceneViewModel(QObject):
         if hoist is None:
             return 0.0, 500.0
         hi = float(hoist.max_hook_travel_m) if hoist.max_hook_travel_m is not None else 500.0
+        # A governing case can pay out more rope than the hook travel: keep it in range,
+        # so neither the tackle field nor the canvas clamps the case back.
+        state = self._model.get_active_hoist_state()
+        if self._snapshot is not None and state is not None:
+            hi = max(hi, float(state.scene_state.tackle_length_m))
         return 0.0, max(0.0, hi)
 
     def _sync_outreach_from_angle(self, angle: float) -> None:
@@ -896,6 +903,7 @@ class SceneViewModel(QObject):
         self.hookModeChanged.emit()
         self.contractualChanged.emit()
         self.angleBoundsChanged.emit()
+        self.tackleBoundsChanged.emit()
         self.geometryChanged.emit()
         self.loadChanged.emit()
         self.environmentChanged.emit()
@@ -913,6 +921,7 @@ class SceneViewModel(QObject):
             return
         self._snapshot = None
         self._governing_label = ""
+        self.tackleBoundsChanged.emit()
         self.governingCaseChanged.emit()
 
     # ------------------------------------------------------------------

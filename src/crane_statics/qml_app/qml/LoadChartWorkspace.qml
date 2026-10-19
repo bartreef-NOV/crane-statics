@@ -6,11 +6,18 @@ import "dialogs"
 
 Item {
     id: root
+    objectName: "loadChartWorkspace"
 
     readonly property bool compact: width > 0 && width < 1240
     readonly property int layoutSpacing: Math.round(
         8
     )
+
+    // The menu acts on the chart point under the cursor (null when there is none).
+    function openChartMenu(position) {
+        chartMenu.targetPoint = plot.nearestPoint(position.x, position.y)
+        chartMenu.popup(chartMenu.parent.mapFromItem(plot, position))
+    }
 
     GridLayout {
         anchors.fill: parent
@@ -106,15 +113,14 @@ Item {
 
                 QuickChartPlot {
                     id: plot
+                    objectName: "quickChartPlot"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.minimumHeight: 240
 
                     TapHandler {
                         acceptedButtons: Qt.RightButton
-                        onTapped: eventPoint => chartMenu.popup(
-                            chartMenu.parent.mapFromItem(plot, eventPoint.position)
-                        )
+                        onTapped: eventPoint => root.openChartMenu(eventPoint.position)
                     }
                 }
 
@@ -159,6 +165,15 @@ Item {
 
     Menu {
         id: chartMenu
+        objectName: "chartMenu"
+
+        property var targetPoint: null
+        // Asked once per opening: availability has no change signal to bind to.
+        property bool governingCaseAvailable: false
+
+        onAboutToShow: governingCaseAvailable = targetPoint !== null
+                                                && typeof targetPoint.seriesId === "string"
+                                                && chartVm.governingCaseAvailable(targetPoint.seriesId)
 
         MenuItem {
             text: qsTr("Reset view")
@@ -169,6 +184,14 @@ Item {
             text: qsTr("Refresh chart")
             enabled: !chartVm.busy
             onTriggered: chartVm.draw()
+        }
+
+        MenuItem {
+            objectName: "governingCaseMenuItem"
+            text: qsTr("Show governing case in Scene")
+            enabled: chartMenu.governingCaseAvailable
+            onTriggered: chartVm.showGoverningCase(chartMenu.targetPoint.seriesId,
+                                                   chartMenu.targetPoint.outreach)
         }
 
         MenuSeparator {}
