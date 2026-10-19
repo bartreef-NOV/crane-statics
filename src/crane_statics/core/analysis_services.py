@@ -212,6 +212,18 @@ class HoistStateService:
             _, hook_mass_t, _ = self.effective_hoist_parameters(hoist.id)
         return (payload + hook_mass_t) * hook_daf * self.gravity_abs()
 
+    def hook_force_kN_to_payload_t(self, hook_force_kN: float) -> float:
+        """Inverse of ``payload_t_to_hook_force_kN`` for the selected hoist (floored at 0)."""
+        hoist = self.selected_hoist()
+        hook_mass_t = 0.0
+        hook_daf = float(hoist.hook_daf) if hoist is not None else 1.0
+        if hoist is not None:
+            _, hook_mass_t, _ = self.effective_hoist_parameters(hoist.id)
+        per_tonne_kN = hook_daf * self.gravity_abs()
+        if per_tonne_kN <= 0.0:
+            return 0.0
+        return max(0.0, float(hook_force_kN) / per_tonne_kN - hook_mass_t)
+
 
 class AnalysisCalculator:
     """Pure analysis computation: equilibrium checks, load capacity calculations."""

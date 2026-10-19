@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import math
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal, pyqtSlot
@@ -15,7 +17,9 @@ from crane_statics.core.analysis_services import (
     KinematicsService,
 )
 from crane_statics.core.drawn_loads import active_hoist_dict
+from crane_statics.core.governing_case import GoverningCase
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
+from crane_statics.core.session_model import SceneState
 from crane_statics.core.vessel_envelope import SCENE_FIELD_LIMITS, clamp_to_limit, vessel_limit
 from crane_statics.qml_app.adapters.scene_adapter import SceneStateAdapter
 from crane_statics.qml_app.scene.scene_drag import DragEdit, DragLimits, SceneDrag
@@ -35,6 +39,19 @@ _LOG = logging.getLogger(__name__)
 WIND_DIRECTIONS = ["+X", "-X", "+Y", "-Y"]
 
 
+@dataclass(frozen=True)
+class _InputsSnapshot:
+    """The Scene inputs a governing case replaced, so Restore can put them back."""
+
+    hoist_id: str
+    scene_state: SceneState
+    hook_load_t: float
+    contractual_idx: Optional[int]
+    # Every hoist's (split_mode_active, chart_mode): applying a split case through
+    # ``set_active_split_hoist`` clears the flag on the other hoists too.
+    hook_modes: dict[str, tuple[bool, str]]
+
+
 class SceneViewModel(QObject):
     """Drives the QML scene workspace from the session and analysis service."""
 
@@ -51,6 +68,7 @@ class SceneViewModel(QObject):
     statusMessage = pyqtSignal(str)
     reportReady = pyqtSignal(str, str)
     loadOverviewReady = pyqtSignal("QVariantMap")
+    governingCaseChanged = pyqtSignal()
 
     def __init__(self, session: SessionState, parent=None):
         super().__init__(parent)
@@ -73,6 +91,9 @@ class SceneViewModel(QObject):
         self._analysis_point: Any = None
         self._drag: Optional[SceneDrag] = None
         self._initialized_load_hoist_id: Optional[str] = None
+        self._governing_label = ""
+        self._snapshot: Optional[_InputsSnapshot] = None
+        self._applying = False
 
         self._rope_rows_model = DictListModel(RESULT_ROLES, self)
         self._connection_rows_model = DictListModel(RESULT_ROLES, self)
@@ -82,7 +103,7 @@ class SceneViewModel(QObject):
 
         self._session.document_changed.connect(self._on_document_changed)
         self._session.content_changed.connect(self._on_content_changed)
-        self._session.hoist_selected.connect(lambda _hid: self.reload())
+        self._session.hoist_selected.connect(self._on_hoist_selected)
 
     # ------------------------------------------------------------------
     # Canvas binding
@@ -157,6 +178,7 @@ class SceneViewModel(QObject):
         state = self._model.get_active_hoist_state()
         if state is None:
             return
+        self._end_governing_label()
         state.scene_state.boom_angle_deg = float(angle)
         self.geometryChanged.emit()
         self._sync_outreach_from_angle(float(angle))
@@ -166,6 +188,7 @@ class SceneViewModel(QObject):
         state = self._model.get_active_hoist_state()
         if state is None:
             return
+        self._end_governing_label()
         state.scene_state.tackle_length_m = float(tackle_m)
         self.geometryChanged.emit()
         self._after_state_changed()
@@ -439,6 +462,7 @@ class SceneViewModel(QObject):
         state = self._model.get_active_hoist_state()
         if state is None:
             return
+        self._end_governing_label()
         state.scene_state.hook_load_auto = bool(enabled)
         self.angleBoundsChanged.emit()
         self.loadChanged.emit()
@@ -726,6 +750,7 @@ class SceneViewModel(QObject):
 
     @pyqtSlot(int)
     def selectContractual(self, position: int) -> None:
+        self._end_governing_label()
         if position < 0 or position >= len(self._contractual_rows):
             self._set_contractual_selection(None)
             self.contractualChanged.emit()
@@ -791,6 +816,106 @@ class SceneViewModel(QObject):
         self.contractualChanged.emit()
 
     # ------------------------------------------------------------------
+    # Governing case
+    # ------------------------------------------------------------------
+
+    @pyqtProperty(str, notify=governingCaseChanged)
+    def governingCaseLabel(self) -> str:
+        return self._governing_label
+
+    @pyqtProperty(bool, notify=governingCaseChanged)
+    def canRestoreInputs(self) -> bool:
+        return self._snapshot is not None
+
+    def apply_governing_case(self, case: GoverningCase, label: str) -> None:
+        """Show ``case`` on the active hoist, keeping the inputs it replaces for Restore.
+
+        The fields are written as they are, not through the setters: the setters clamp
+        (angle, vessel motion) and recompute the auto load, so their order would change
+        the case. Only the first apply takes the snapshot; a second keeps the original.
+        """
+        hoist_id = self._model.selected_hoist_id
+        state = self._model.get_active_hoist_state()
+        if state is None or not hoist_id:
+            return
+        if self._snapshot is None:
+            self._snapshot = _InputsSnapshot(
+                hoist_id=hoist_id,
+                scene_state=dataclasses.replace(state.scene_state),
+                hook_load_t=self._hook_load_t,
+                contractual_idx=state.selected_contractual_idx,
+                hook_modes={
+                    hid: (hs.split_mode_active, hs.chart_mode)
+                    for hid, hs in self._model.hoist_states.items()
+                },
+            )
+        self._applying = True
+        try:
+            # The case reproduces the chart only under its mode's hook configuration.
+            want_split = case.mode_name == "split"
+            if state.split_mode_active != want_split:
+                self._model.set_active_split_hoist(hoist_id if want_split else None)
+            state.selected_contractual_idx = None
+            state.scene_state = dataclasses.replace(state.scene_state, **case.scene_fields)
+            self._hook_load_t = self._hoist_state.hook_force_kN_to_payload_t(
+                state.scene_state.hook_load_kN
+            )
+            self._sync_outreach_from_angle(float(state.scene_state.boom_angle_deg))
+            self._emit_inputs_changed()
+            self._after_state_changed()
+        finally:
+            self._applying = False
+        self._governing_label = str(label)
+        self.governingCaseChanged.emit()
+
+    @pyqtSlot()
+    def restoreInputs(self) -> None:
+        """Put back the inputs the first governing case replaced, as a user edit would."""
+        snapshot = self._snapshot
+        state = self._model.get_active_hoist_state()
+        if snapshot is None or state is None or snapshot.hoist_id != self._model.selected_hoist_id:
+            return
+        for hid, (split, chart_mode) in snapshot.hook_modes.items():
+            hoist_state = self._model.hoist_states.get(hid)
+            if hoist_state is not None:
+                hoist_state.split_mode_active = split
+                hoist_state.chart_mode = chart_mode
+        state.scene_state = dataclasses.replace(snapshot.scene_state)
+        state.selected_contractual_idx = snapshot.contractual_idx
+        self._hook_load_t = snapshot.hook_load_t
+        self._snapshot = None
+        self._governing_label = ""
+        self._sync_outreach_from_angle(float(state.scene_state.boom_angle_deg))
+        self._rebuild_contractual_rows()
+        self._emit_inputs_changed()
+        self._after_state_changed()
+        self.governingCaseChanged.emit()
+        self._model.mark_content_changed()
+
+    def _emit_inputs_changed(self) -> None:
+        self.hookModeChanged.emit()
+        self.contractualChanged.emit()
+        self.angleBoundsChanged.emit()
+        self.geometryChanged.emit()
+        self.loadChanged.emit()
+        self.environmentChanged.emit()
+
+    def _end_governing_label(self) -> None:
+        """A user edit: the Scene no longer shows the case (Restore stays available)."""
+        if self._applying or not self._governing_label:
+            return
+        self._governing_label = ""
+        self.governingCaseChanged.emit()
+
+    def _drop_snapshot(self) -> None:
+        """Another hoist or document: the saved inputs no longer apply."""
+        if self._snapshot is None and not self._governing_label:
+            return
+        self._snapshot = None
+        self._governing_label = ""
+        self.governingCaseChanged.emit()
+
+    # ------------------------------------------------------------------
     # Results
     # ------------------------------------------------------------------
 
@@ -850,10 +975,18 @@ class SceneViewModel(QObject):
     # ------------------------------------------------------------------
 
     def _on_document_changed(self, _doc) -> None:
+        self._drop_snapshot()
         self._initialized_load_hoist_id = None
         self.reload()
 
+    def _on_hoist_selected(self, _hoist_id: str) -> None:
+        self._drop_snapshot()
+        self.reload()
+
     def _on_content_changed(self) -> None:
+        # Every Scene setter that edits an input marks the content changed: this is
+        # the user-edit path that ends the governing case shown.
+        self._end_governing_label()
         if self._model.document is not None:
             self.reload()
 
