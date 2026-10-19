@@ -8,6 +8,7 @@ lead channels do not depend on motion or wind and are taken from the zero probe.
 
 ``envelope_capacity`` takes the worst case over every vessel-motion sign case, every slew
 angle, every wind angle and both lead signs without enumerating them; see its docstring.
+``envelope_capacity_case`` also returns that case (``EnvelopeCase``).
 """
 
 from __future__ import annotations
@@ -335,13 +336,55 @@ def _used_channels(harmonics: _SlewHarmonics) -> list[bool]:
     ]
 
 
-def lead_points(probes: ProbeSet, offlead_deg: float, sidelead_deg: float) -> list[AnalysisPoint]:
-    """The zero probe composed with every lead sign case (one point for zero leads)."""
+@dataclass(frozen=True)
+class EnvelopeCase:
+    """The real case an envelope capacity was evaluated at, as Scene inputs.
+
+    ``vessel_inputs`` holds the vessel-frame ``VesselInputs`` fields other than
+    ``slew_deg``; ``wind_axis`` is the axis wind ("+X", "-X", "+Y", "-Y"), or "" when the
+    limit does not respond to wind; the leads are signed; ``limit_id`` is the limit key.
+    For a magnitude limit the slew is that of a vertex of the polygon circumscribing the
+    slew ellipse (see ``_magnitude_capacity``), so re-solving the case at that slew can
+    give a capacity slightly above the envelope's.
+    """
+
+    vessel_inputs: dict[str, float]
+    slew_deg: float
+    wind_axis: str
+    offlead_deg: float
+    sidelead_deg: float
+    limit_id: str
+
+
+@dataclass(frozen=True)
+class _Lead:
+    """The zero probe composed with one signed lead case."""
+
+    point: AnalysisPoint
+    offlead_deg: float
+    sidelead_deg: float
+
+
+def _leads(probes: ProbeSet, offlead_deg: float, sidelead_deg: float) -> list[_Lead]:
     return [
-        compose_lead_channel_point(probes.zero, offlead, sidelead)
+        _Lead(compose_lead_channel_point(probes.zero, offlead, sidelead), offlead, sidelead)
         for offlead in _signed_candidates(offlead_deg)
         for sidelead in _signed_candidates(sidelead_deg)
     ]
+
+
+def lead_points(probes: ProbeSet, offlead_deg: float, sidelead_deg: float) -> list[AnalysisPoint]:
+    """The zero probe composed with every lead sign case (one point for zero leads)."""
+    return [lead.point for lead in _leads(probes, offlead_deg, sidelead_deg)]
+
+
+def _wind_axis(wind_x_scale: float, wind_y_scale: float) -> str:
+    """Axis of a wind corner: scale +1 is the probe direction (+X at 0 deg, +Y at 90 deg)."""
+    if wind_x_scale:
+        return "+X" if wind_x_scale > 0.0 else "-X"
+    if wind_y_scale:
+        return "+Y" if wind_y_scale > 0.0 else "-Y"
+    return ""
 
 
 @dataclass(frozen=True)
@@ -453,30 +496,52 @@ class _LimitContext:
     harmonics: _SlewHarmonics
     hook_daf: float
     hook_mass_t: float
+    # VesselInputs fields (no slew) of each sign case, in the harmonics' case order.
+    vessel_cases: tuple[dict[str, float], ...]
 
     def capacity(self, point: AnalysisPoint, single_limit: dict[str, dict]) -> AllowableCapacity:
         return self.calc.compute_allowable_load(
             point, single_limit, hook_daf=self.hook_daf, hook_mass_t=self.hook_mass_t
         )
 
+    def case(
+        self,
+        lead: _Lead,
+        case: int,
+        cos_phi: float,
+        sin_phi: float,
+        wind_axis: str,
+        limit_id: str,
+    ) -> EnvelopeCase:
+        return EnvelopeCase(
+            vessel_inputs=dict(self.vessel_cases[case]),
+            slew_deg=math.degrees(math.atan2(sin_phi, cos_phi)),
+            wind_axis=wind_axis,
+            offlead_deg=lead.offlead_deg,
+            sidelead_deg=lead.sidelead_deg,
+            limit_id=limit_id,
+        )
 
-def _lower(
-    best: Optional[AllowableCapacity], cap: Optional[AllowableCapacity]
-) -> Optional[AllowableCapacity]:
-    if cap is None:
+
+# A capacity with the case it was evaluated at (None where no single case applies).
+_Candidate = tuple[AllowableCapacity, Optional[EnvelopeCase]]
+
+
+def _lower(best: Optional[_Candidate], candidate: Optional[_Candidate]) -> Optional[_Candidate]:
+    if candidate is None:
         return best
-    if best is None or cap.max_allowable_load_kN < best.max_allowable_load_kN:
-        return cap
+    if best is None or candidate[0].max_allowable_load_kN < best[0].max_allowable_load_kN:
+        return candidate
     return best
 
 
 def _linear_capacity(
     ctx: _LimitContext,
-    lead_point: AnalysisPoint,
+    lead: _Lead,
     limit_key: str,
     component: str,
     single_limit: dict[str, dict],
-) -> Optional[AllowableCapacity]:
+) -> Optional[_Candidate]:
     """Capacity at the cases of largest and smallest baseline of a linear limit.
 
     Per sign case the baseline over slew is ``B0 + P cos(phi) + Q sin(phi)``, extreme at
@@ -485,8 +550,9 @@ def _linear_capacity(
     ``+/- max(|a|, |b|)``. The capacity compute_allowable_load gives a linear limit never
     increases with the baseline (0 above the limit, ``(L - B)/s`` or unlimited below), so
     the worst case is the largest baseline; the smallest is evaluated too and the lower
-    capacity kept. Both are real cases.
+    capacity kept. Both are real cases; the lower is returned with its case.
     """
+    lead_point = lead.point
     reader = _linear_reader(ctx.calc, lead_point, limit_key, component)
     if reader is None:
         return None
@@ -499,7 +565,8 @@ def _linear_capacity(
     q = harmonics.sin_part @ quantity.motion
     amplitude = np.hypot(p, q)
     x_dominant = abs(quantity.wind_x) >= abs(quantity.wind_y)
-    best: Optional[AllowableCapacity] = None
+    no_wind = quantity.wind_x == 0.0 and quantity.wind_y == 0.0
+    best: Optional[_Candidate] = None
     for sign in (1.0, -1.0):
         case = int(np.argmax(sign * b0 + amplitude))
         r = float(amplitude[case])
@@ -510,7 +577,15 @@ def _linear_capacity(
         else:
             wind = (0.0, sign * math.copysign(1.0, quantity.wind_y))
         point = _case_point(ctx.probes, lead_point, channels, *wind)
-        best = _lower(best, ctx.capacity(point, single_limit))
+        found = ctx.case(
+            lead,
+            case,
+            sign * cos_phi,
+            sign * sin_phi,
+            "" if no_wind else _wind_axis(*wind),
+            limit_key,
+        )
+        best = _lower(best, (ctx.capacity(point, single_limit), found))
     return best
 
 
@@ -621,12 +696,13 @@ def _ring_baselines(
 
 def _magnitude_capacity(
     ctx: _LimitContext,
-    lead_points: Sequence[AnalysisPoint],
+    leads: Sequence[_Lead],
+    limit_key: str,
     entity_id: str,
     component: str,
     limit: float,
     single_limit: dict[str, dict],
-) -> AllowableCapacity:
+) -> _Candidate:
     """Lower bound of a magnitude limit's capacity over all slews, wind angles and leads.
 
     For a fixed sensitivity the set of (baseline, hook load) meeting the limit is convex
@@ -645,6 +721,7 @@ def _magnitude_capacity(
     vectorised closed forms of the compute_allowable_load solvers, then evaluates them
     through compute_allowable_load in rank order until no unevaluated vertex can be lower
     (its rank minus the largest rank error seen is not below the best exact capacity).
+    The lowest evaluated vertex is returned with its case.
     """
     quantities = _MAGNITUDE_QUANTITIES[component]
     affines: list[_Affine] = []
@@ -662,7 +739,7 @@ def _magnitude_capacity(
         diameter = float(getattr(ctx.calc.doc.support_widths, "slewing_bearing_diameter_m", 1.0))
         if diameter <= 0.0:
             # compute_allowable_load rejects this diameter; let it raise.
-            return ctx.capacity(lead_points[0], single_limit)
+            return ctx.capacity(leads[0].point, single_limit), None
 
     def _rank(sens: list[float], values: np.ndarray) -> np.ndarray:
         if component == "max_bearing_line_load":
@@ -691,13 +768,13 @@ def _magnitude_capacity(
     corner_values = np.array([u * wind_a + v * wind_b for u, v in corners])  # (C, K)
     sens_by_lead = [
         [
-            _read_component(lead.sensitivity_reactions.get(entity_id, {}), key, fallback)
+            _read_component(lead.point.sensitivity_reactions.get(entity_id, {}), key, fallback)
             for key, fallback in quantities
         ]
-        for lead in lead_points
+        for lead in leads
     ]
 
-    best: Optional[AllowableCapacity] = None
+    best: Optional[_Candidate] = None
     rank_error = 0.0
 
     def _evaluate(
@@ -705,7 +782,7 @@ def _magnitude_capacity(
     ) -> None:
         nonlocal best, rank_error
         channels = harmonics.channels(case, cos_v, sin_v)
-        point = _case_point(ctx.probes, lead_points[lead], channels, *corners[corner])
+        point = _case_point(ctx.probes, leads[lead].point, channels, *corners[corner])
         cap = ctx.capacity(point, single_limit)
         exact = cap.max_allowable_load_kN
         if math.isinf(rank) and not math.isinf(exact):
@@ -713,7 +790,8 @@ def _magnitude_capacity(
             rank_error = math.inf
         elif not math.isinf(exact):
             rank_error = max(rank_error, abs(exact - rank))
-        best = _lower(best, cap)
+        found = ctx.case(leads[lead], case, cos_v, sin_v, _wind_axis(*corners[corner]), limit_key)
+        best = _lower(best, (cap, found))
 
     # Stage 1: a real capacity from the coarse ring and a lower bound per sign case.
     ring_cos, ring_sin = _ring(_COARSE_SIDES, outer=False)
@@ -736,7 +814,8 @@ def _magnitude_capacity(
     assert best is not None
     # A sign case is dropped only if its bound, less the rank error allowance, is above a
     # capacity that a real case reaches.
-    cutoff = best.max_allowable_load_kN + _rank_margin(rank_error, best.max_allowable_load_kN)
+    lowest = best[0].max_allowable_load_kN
+    cutoff = lowest + _rank_margin(rank_error, lowest)
 
     # Stage 2: fine N-gon vertices of the sign cases that can still hold the minimum.
     fine_cos, fine_sin = _ring(_SLEW_POLYGON_SIDES, outer=True)
@@ -760,7 +839,7 @@ def _magnitude_capacity(
     order = np.argsort(all_ranks, kind="stable")
     for position, flat in enumerate(order):
         rank = float(all_ranks[flat])
-        current = best.max_allowable_load_kN
+        current = best[0].max_allowable_load_kN
         if position >= _EXACT_CANDIDATES and not rank - _rank_margin(rank_error, current) < current:
             break
         lead, case, side, corner = (int(i) for i in all_index[flat])
@@ -779,6 +858,31 @@ def envelope_capacity(
     hook_daf: float,
     hook_mass_t: float,
 ) -> AllowableCapacity:
+    """Lowest allowable capacity over every case; see ``envelope_capacity_case``."""
+    capacity, _ = envelope_capacity_case(
+        calc,
+        probes,
+        limits,
+        vessel=vessel,
+        offlead_deg=offlead_deg,
+        sidelead_deg=sidelead_deg,
+        hook_daf=hook_daf,
+        hook_mass_t=hook_mass_t,
+    )
+    return capacity
+
+
+def envelope_capacity_case(
+    calc: CraneCalculator,
+    probes: ProbeSet,
+    limits: dict[str, dict],
+    *,
+    vessel: VesselMotion,
+    offlead_deg: float,
+    sidelead_deg: float,
+    hook_daf: float,
+    hook_mass_t: float,
+) -> tuple[AllowableCapacity, Optional[EnvelopeCase]]:
     """Lowest allowable capacity over every vessel sign case, slew, wind angle and lead sign.
 
     The baseline is affine in the crane-frame channels and the per-axis wind scales, and
@@ -792,7 +896,8 @@ def envelope_capacity(
     Sensitivities do not depend on motion, slew or wind; each lead sign case composes them
     once from ``probes.zero``. Every capacity comes from ``compute_allowable_load`` on an
     assembled point, one limit at a time; the lowest is returned with its
-    ``governing_limit_id``.
+    ``governing_limit_id`` and the case it was evaluated at (``None`` when no limit
+    applies).
     """
     gravity = abs(float(calc.doc.environment.gravity_m_s2))
     harmonics = _slew_harmonics(gravity, vessel)
@@ -813,9 +918,13 @@ def envelope_capacity(
         harmonics=harmonics,
         hook_daf=float(hook_daf),
         hook_mass_t=float(hook_mass_t),
+        vessel_cases=tuple(
+            {_VESSEL_INPUT_FIELDS[key]: float(value) for key, value in case.items()}
+            for case in vessel_motion_cases(vessel)
+        ),
     )
-    leads = lead_points(probes, offlead_deg, sidelead_deg)
-    best: Optional[AllowableCapacity] = None
+    leads = _leads(probes, offlead_deg, sidelead_deg)
+    best: Optional[_Candidate] = None
     for limit_key, components in limits.items():
         for component, limit_value in components.items():
             if not limit_value:
@@ -823,23 +932,30 @@ def envelope_capacity(
             single_limit = {limit_key: {component: limit_value}}
             entity_id, _ = calc.resolve_limit_target(limit_key, component)
             # Which branch compute_allowable_load takes depends on sensitivity keys only.
-            magnitude = [lead for lead in leads if _is_magnitude(lead, entity_id, component)]
+            magnitude = [lead for lead in leads if _is_magnitude(lead.point, entity_id, component)]
             if magnitude:
                 best = _lower(
                     best,
                     _magnitude_capacity(
-                        ctx, magnitude, entity_id, component, float(limit_value), single_limit
+                        ctx,
+                        magnitude,
+                        limit_key,
+                        entity_id,
+                        component,
+                        float(limit_value),
+                        single_limit,
                     ),
                 )
             for lead in leads:
-                if not _is_magnitude(lead, entity_id, component):
+                if not _is_magnitude(lead.point, entity_id, component):
                     best = _lower(
                         best, _linear_capacity(ctx, lead, limit_key, component, single_limit)
                     )
     if best is None:
         # No limit applies: compute_allowable_load reports the unlimited capacity.
-        best = ctx.capacity(probes.zero, limits)
+        best = (ctx.capacity(probes.zero, limits), None)
+    capacity, case = best
     # The worst case is over all wind angles, not one direction; the field would otherwise
     # carry the zero probe's direction.
-    best.governing_wind_direction = None
-    return best
+    capacity.governing_wind_direction = None
+    return capacity, case
