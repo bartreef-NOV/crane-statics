@@ -5,7 +5,6 @@ Use the project venv (`.venv/Scripts/python.exe` on Windows, `.venv/bin/python` 
 - Tests: `.venv/Scripts/python.exe -m pytest` (add `--no-cov` for a single file; `pythonpath = ["src"]` is configured)
 - Lint/type/boundaries: `.venv/Scripts/python.exe -m pre_commit run --all-files` (black, flake8, mypy, `tests/test_architecture.py`)
 - Run or screenshot the app: use the `run-app` skill
-- `rtk` (if installed) filters bash output via a hook; no action needed.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
