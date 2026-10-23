@@ -169,8 +169,6 @@ def test_chart_legend_handles_long_labels_and_toggles_visibility(qml_engine):
         "LoadOverviewDialog.qml",
         "ChartLegend.qml",
         "QuickChartPlot.qml",
-        "DesignLimitsTable.qml",
-        "ContractualTable.qml",
         "dialogs/NodeDialog.qml",
         "dialogs/MassPointDialog.qml",
         "dialogs/WindAreaDialog.qml",
@@ -770,4 +768,23 @@ def test_chart_menu_shows_the_governing_case_in_the_scene(qml_engine):
     QMetaObject.invokeMethod(restore, "click")
     assert restore.property("visible") is False
     assert not scene_vm.canRestoreInputs
+    assert warnings == []
+
+
+def test_edit_menu_undo_follows_history(qml_engine):
+    engine, app_vm, model_vm, warnings = qml_engine
+    app_vm.openPath(str(EXAMPLE))
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
+    root = engine.rootObjects()[-1]
+    undo = root.findChild(QObject, "undoAction")
+    redo = root.findChild(QObject, "redoAction")
+    assert undo is not None and redo is not None
+    assert undo.property("enabled") is False
+
+    wind = model_vm._model.document.environment.max_wind_speed_m_s
+    model_vm.setEnvironmentValue("max_wind_speed_m_s", wind + 1.0)
+    assert undo.property("enabled") is True and redo.property("enabled") is False
+
+    app_vm.undo()
+    assert undo.property("enabled") is False and redo.property("enabled") is True
     assert warnings == []

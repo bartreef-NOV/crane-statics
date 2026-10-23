@@ -23,6 +23,7 @@ class LimitComponent(StrEnum):
     LEG_AXIAL = "leg_axial"
     LEG_NORMAL = "leg_normal"
     MAX_BEARING_LINE_LOAD = "max_bearing_line_load"
+    MIN_BEARING_LINE_LOAD = "min_bearing_line_load"
 
 
 KNOWN_LIMIT_COMPONENTS = frozenset(component.value for component in LimitComponent)

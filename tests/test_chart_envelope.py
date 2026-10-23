@@ -494,6 +494,7 @@ def test_zero_leads_collapse_to_one_case(monkeypatch: pytest.MonkeyPatch) -> Non
         ("platform_base", "mradial"),
         ("heel_point", "resultant"),
         ("platform_base", "max_bearing_line_load"),
+        ("platform_base", "min_bearing_line_load"),
     ],
 )
 def test_magnitude_rankings_match_compute_allowable_load(entity: str, component: str) -> None:
@@ -525,8 +526,10 @@ def test_magnitude_rankings_match_compute_allowable_load(entity: str, component:
             chart_envelope._read_component(point.sensitivity_reactions[entity], k, f)
             for k, f in quantities
         ]
-        if component == "max_bearing_line_load":
-            ranked = chart_envelope._bearing_ranking(limit, diameter, *base, *sens)
+        if component in ("max_bearing_line_load", "min_bearing_line_load"):
+            ranked = chart_envelope._bearing_ranking(
+                limit, diameter, *base, *sens, uplift=component == "min_bearing_line_load"
+            )
         else:
             ranked = chart_envelope._radial_ranking(limit, *base, *sens)
         exact = calc.compute_allowable_load(point, {entity: {component: limit}})

@@ -33,18 +33,42 @@ Item {
             Layout.preferredHeight: root.compact ? 460 : -1
             spacing: root.layoutSpacing
 
-            DesignLimitsTable {
+            DataTable {
+                id: ropeLimits
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 title: qsTr("Rope Limits")
                 model: chartVm.ropeLimitsModel
+                editable: true
+                rowsEditable: false
+                emptyText: qsTr("No design limits")
+
+                toolbarExtras: Button {
+                    text: qsTr("Auto")
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Set the selected limit from the contractual points")
+                    enabled: ropeLimits.hasSelection
+                    onClicked: chartVm.autoSetLimitRow("rope", ropeLimits.currentRow)
+                }
             }
 
-            DesignLimitsTable {
+            DataTable {
+                id: connectionLimits
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 title: qsTr("Connection Limits")
                 model: chartVm.connectionLimitsModel
+                editable: true
+                rowsEditable: false
+                emptyText: qsTr("No design limits")
+
+                toolbarExtras: Button {
+                    text: qsTr("Auto")
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Set the selected limit from the contractual points")
+                    enabled: connectionLimits.hasSelection
+                    onClicked: chartVm.autoSetLimitRow("connection", connectionLimits.currentRow)
+                }
             }
         }
 
@@ -146,12 +170,14 @@ Item {
                 }
             }
 
-            ContractualTable {
+            DataTable {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 180
+                title: qsTr("Contractual Points")
                 model: chartVm.contractualModel
+                editable: true
+                emptyText: qsTr("No contractual points for this hoist.")
                 onAddRequested: contractualDialog.openFor(-1, null)
-                onEditRequested: row => contractualDialog.openFor(row, chartVm.contractualFields(row))
                 onDeleteRequested: row => chartVm.deleteContractualPoint(row)
             }
         }

@@ -119,6 +119,7 @@ _LIMIT_KEY_COMPONENTS = (
     "leg_axial",
     "leg_normal",
     "max_bearing_line_load",
+    "min_bearing_line_load",
 )
 
 
@@ -231,6 +232,21 @@ def compute_platform_base_max_bearing_line_load_kN_per_m(
         raise ValueError("slewing_bearing_diameter_m must be > 0")
     m_res = math.hypot(float(mx_kNm), float(my_kNm))
     return float(fz_kN) / (math.pi * diameter) + 4.0 * m_res / (math.pi * diameter * diameter)
+
+
+def compute_platform_base_min_bearing_line_load_kN_per_m(
+    *,
+    fz_kN: float,
+    mx_kNm: float,
+    my_kNm: float,
+    slewing_bearing_diameter_m: float,
+) -> float:
+    """Compute the minimum (signed) bearing line load; negative means uplift."""
+    diameter = float(slewing_bearing_diameter_m)
+    if diameter <= 0.0:
+        raise ValueError("slewing_bearing_diameter_m must be > 0")
+    m_res = math.hypot(float(mx_kNm), float(my_kNm))
+    return float(fz_kN) / (math.pi * diameter) - 4.0 * m_res / (math.pi * diameter * diameter)
 
 
 def compute_platform_base_fradial_kN(
@@ -889,6 +905,30 @@ class CraneCalculator:
                 entity_id, rope_channel = self.resolve_limit_target(limit_key, component)
 
                 if entity_id in point.sensitivity_reactions:
+                    if component == "min_bearing_line_load" and entity_id == "platform_base":
+                        base_map = point.baseline_reactions.get(entity_id, {})
+                        sens_map = point.sensitivity_reactions.get(entity_id, {})
+                        diameter = float(
+                            getattr(self.doc.support_widths, "slewing_bearing_diameter_m", 1.0)
+                        )
+                        # Uplift -q_min(H) must stay within the (positive) limit.
+                        h_candidate = solve_capacity_limit_kN(
+                            float(limit_kN),
+                            lambda hook_kN: -compute_platform_base_min_bearing_line_load_kN_per_m(
+                                fz_kN=float(base_map.get("Fz", 0.0))
+                                + float(sens_map.get("Fz", 0.0)) * hook_kN,
+                                mx_kNm=float(base_map.get("Mx", 0.0))
+                                + float(sens_map.get("Mx", 0.0)) * hook_kN,
+                                my_kNm=float(base_map.get("My", base_map.get("M", 0.0)))
+                                + float(sens_map.get("My", sens_map.get("M", 0.0))) * hook_kN,
+                                slewing_bearing_diameter_m=diameter,
+                            ),
+                            tolerance=self.TOLERANCE,
+                        )
+                        if 0.0 <= h_candidate < h_max_kN:
+                            h_max_kN = h_candidate
+                            governing_limit_id = limit_key
+                        continue
                     if component == "resultant":
                         base_map = point.baseline_reactions.get(entity_id, {})
                         sens_map = point.sensitivity_reactions.get(entity_id, {})

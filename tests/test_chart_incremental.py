@@ -64,7 +64,7 @@ def _enable_limits(vm: ChartViewModel) -> tuple[str, str]:
     chosen = []
     for model in (vm.ropeLimitsModel, vm.connectionLimitsModel):
         for index in range(model.count):
-            limit_id = model.row_at(index)["limitId"]
+            limit_id = model.record_at(index)["limitId"]
             vm.autoSetLimit(limit_id)
             if vm._model.design_limits_by_id[limit_id].enabled:
                 chosen.append(limit_id)

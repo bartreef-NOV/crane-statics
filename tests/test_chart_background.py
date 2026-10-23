@@ -273,7 +273,7 @@ def test_edit_during_background_discards_old_fingerprint_results(vm, sweeps):
     old_fingerprint = vm._wanted_key().fingerprint
     puts = _record_puts(vm)
 
-    row = vm.ropeLimitsModel.row_at(0)
+    row = vm.ropeLimitsModel.record_at(0)
     current = vm._model.design_limits_by_id[row["limitId"]].max_kN or 1000.0
     vm.setLimitEnabled(row["limitId"], True)
     vm.setLimitMax(row["limitId"], f"{0.5 * current:.1f}")

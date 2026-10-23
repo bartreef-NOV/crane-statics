@@ -48,7 +48,7 @@ local `SystemPalette { id: pal }`; only the pass/fail/pending status colors are
 inline constants.
 
 **Hand-rolled tables use `SystemPalette`.** `DataTable.qml`,
-`ContractualTable.qml`, `DesignLimitsTable.qml`, `ResultsTable.qml`, and
+`ResultsTable.qml`, and
 `ResultRowDelegate.qml` are bespoke `TableView`+`Rectangle`-delegate grids (no
 native "data grid" control exists to fall back to). They source their zebra-
 stripe/text/border/selection colors from a local `SystemPalette { id:

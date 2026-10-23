@@ -9,6 +9,7 @@ from ..calculation.engine import (
     compute_platform_base_fradial_kN,
     compute_platform_base_mradial_kNm,
     compute_platform_base_max_bearing_line_load_kN_per_m,
+    compute_platform_base_min_bearing_line_load_kN_per_m,
     resolve_connection_component_linear_response,
 )
 from ..data.models import CraneDocument
@@ -58,7 +59,10 @@ def extract_connection_component_response(
         )
         return compute_platform_base_mradial_kNm(mx_kNm=mx, my_kNm=my)
 
-    elif component == "max_bearing_line_load" and connection_id == "platform_base":
+    elif (
+        component in {"max_bearing_line_load", "min_bearing_line_load"}
+        and connection_id == "platform_base"
+    ):
         if support_widths_diameter_m is None:
             return None
         fz = float(base_map.get("Fz", 0.0)) + float(sens_map.get("Fz", 0.0)) * hook_kN
@@ -67,6 +71,14 @@ def extract_connection_component_response(
             float(base_map.get("My", base_map.get("M", 0.0)))
             + float(sens_map.get("My", sens_map.get("M", 0.0))) * hook_kN
         )
+        if component == "min_bearing_line_load":
+            # Uplift: the negated minimum line load, so it reads like a max-type demand.
+            return -compute_platform_base_min_bearing_line_load_kN_per_m(
+                fz_kN=fz,
+                mx_kNm=mx,
+                my_kNm=my,
+                slewing_bearing_diameter_m=support_widths_diameter_m,
+            )
         return compute_platform_base_max_bearing_line_load_kN_per_m(
             fz_kN=fz,
             mx_kNm=mx,
@@ -101,6 +113,8 @@ def extract_connection_component_demand(
     )
     if response is None:
         return None
+    if component == "min_bearing_line_load":
+        return max(0.0, response)  # uplift only; a compressive ring has none
     if component in {"resultant", "fradial", "mradial", "max_bearing_line_load"}:
         return response
     return abs(response)

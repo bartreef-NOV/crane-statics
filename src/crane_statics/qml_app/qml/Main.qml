@@ -72,6 +72,24 @@ ApplicationWindow {
         }
 
         Menu {
+            title: qsTr("&Edit")
+            Action {
+                objectName: "undoAction"
+                text: qsTr("&Undo")
+                shortcut: StandardKey.Undo
+                enabled: appVm.canUndo
+                onTriggered: appVm.undo()
+            }
+            Action {
+                objectName: "redoAction"
+                text: qsTr("&Redo")
+                shortcut: StandardKey.Redo
+                enabled: appVm.canRedo
+                onTriggered: appVm.redo()
+            }
+        }
+
+        Menu {
             title: qsTr("&View")
             Action {
                 text: qsTr("&Reset Layout")

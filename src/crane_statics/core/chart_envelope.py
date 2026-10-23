@@ -266,7 +266,11 @@ _MAGNITUDE_QUANTITIES: dict[str, tuple[tuple[str, Optional[str]], ...]] = {
     "fradial": (("Fx", None), ("Fy", None)),
     "mradial": (("Mx", None), ("My", "M")),
     "max_bearing_line_load": (("Fz", None), ("Mx", None), ("My", "M")),
+    "min_bearing_line_load": (("Fz", None), ("Mx", None), ("My", "M")),
 }
+_BEARING_COMPONENTS = frozenset({"max_bearing_line_load", "min_bearing_line_load"})
+# Bearing limits on the uplift (the negated minimum line load) rather than the maximum.
+_UPLIFT_COMPONENTS = frozenset({"min_bearing_line_load"})
 # Sides of the polygon circumscribing the slew ellipse (see _magnitude_capacity). Its
 # vertices overshoot the ellipse by 1/cos(pi/N) - 1 (3.8e-5 of the slew part at N = 360).
 _SLEW_POLYGON_SIDES = 360
@@ -623,8 +627,13 @@ def _bearing_ranking(
     sfz: float,
     smx: float,
     smy: float,
+    *,
+    uplift: bool = False,
 ) -> np.ndarray:
     """Largest hook load with bearing line load <= limit, in closed form (ranking only).
+
+    With ``uplift`` the limit is on ``-(k1*Fz - k2*|M|)``, the negated minimum line load:
+    the same convex problem with ``k1`` negated.
 
     The demand ``k1*Fz(H) + k2*|M(H)|`` is convex in H, so from a feasible start the
     capacity is the single crossing of ``|m0 + sm*H| = rho0 - sigma*H`` with
@@ -634,6 +643,8 @@ def _bearing_ranking(
     """
     k1 = 1.0 / (math.pi * diameter)
     k2 = 4.0 / (math.pi * diameter * diameter)
+    if uplift:
+        k1 = -k1
     rho0 = (limit - k1 * fz) / k2
     sigma = k1 * sfz / k2
     a = smx * smx + smy * smy - sigma * sigma
@@ -735,14 +746,14 @@ def _magnitude_capacity(
         affines.append(affine)
 
     diameter = 1.0
-    if component == "max_bearing_line_load":
+    if component in _BEARING_COMPONENTS:
         diameter = float(getattr(ctx.calc.doc.support_widths, "slewing_bearing_diameter_m", 1.0))
         if diameter <= 0.0:
             # compute_allowable_load rejects this diameter; let it raise.
             return ctx.capacity(leads[0].point, single_limit), None
 
     def _rank(sens: list[float], values: np.ndarray) -> np.ndarray:
-        if component == "max_bearing_line_load":
+        if component in _BEARING_COMPONENTS:
             return _bearing_ranking(
                 limit,
                 diameter,
@@ -752,6 +763,7 @@ def _magnitude_capacity(
                 sens[0],
                 sens[1],
                 sens[2],
+                uplift=component in _UPLIFT_COMPONENTS,
             )
         return _radial_ranking(limit, values[..., 0], values[..., 1], sens[0], sens[1])
 

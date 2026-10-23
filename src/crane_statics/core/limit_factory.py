@@ -75,6 +75,15 @@ class DesignLimitFactory:
                         component="max_bearing_line_load",
                     )
                 )
+                # Uplift limit: the value is the allowed uplift as a positive line load.
+                limits.append(
+                    DesignLimit(
+                        id=f"{connection_id}_min_bearing_line_load",
+                        kind="connection",
+                        entity_id=connection_id,
+                        component="min_bearing_line_load",
+                    )
+                )
 
             # Heel-point boom and axial limits
             if connection_id == "heel_point":

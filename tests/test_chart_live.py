@@ -125,7 +125,7 @@ def _pending(points: list) -> list[dict]:
 
 def _table(vm: ChartViewModel) -> list[dict]:
     model = vm.contractualModel
-    return [model.row_at(index) for index in range(model.count)]
+    return [model.record_at(index) for index in range(model.count)]
 
 
 def _curve_steps() -> list:

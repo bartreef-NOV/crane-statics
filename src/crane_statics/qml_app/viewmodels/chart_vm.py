@@ -44,15 +44,27 @@ from crane_statics.core.sweep_cache import (
     limit_signature,
 )
 
-from ..models.list_models import DictListModel
+from ..models.table_models import Column, RecordTableModel
 
 if TYPE_CHECKING:
     from .scene_vm import SceneViewModel
 
 _LOG = logging.getLogger(__name__)
 
-LIMIT_ROLES = ["limitId", "name", "unit", "maxValue", "limitEnabled", "tooltip"]
-CONTRACTUAL_ROLES = ["outreach", "load", "allowable", "status"]
+LIMIT_COLUMNS = [
+    Column("Limit", lambda r: r["name"]),
+    Column("Unit", lambda r: r["unit"]),
+    Column("Max", lambda r: r["maxValue"], decimals=1, field="maxValue", editor="number"),
+    Column("On", lambda r: r["limitEnabled"], field="limitEnabled", editor="bool"),
+]
+CONTRACTUAL_COLUMNS = [
+    Column(
+        "Outreach (m)", lambda r: r["outreach"], decimals=1, field="outreach_m", editor="number"
+    ),
+    Column("Load (t)", lambda r: r["load"], decimals=1, field="load_t", editor="number"),
+    Column("Allowable (t)", lambda r: r["allowable"]),
+    Column("Status", lambda r: r["status"]),
+]
 
 _LIMIT_COLORS = [
     "#8E44AD",
@@ -299,9 +311,15 @@ class ChartViewModel(QObject):
         self._chart_update_pending = False
         self._limit_series_dirty = False
 
-        self._rope_limits_model = DictListModel(LIMIT_ROLES, self)
-        self._connection_limits_model = DictListModel(LIMIT_ROLES, self)
-        self._contractual_model = DictListModel(CONTRACTUAL_ROLES, self)
+        self._rope_limits_model = RecordTableModel(
+            LIMIT_COLUMNS, self, commit=self._commit_limit_edit("rope")
+        )
+        self._connection_limits_model = RecordTableModel(
+            LIMIT_COLUMNS, self, commit=self._commit_limit_edit("connection")
+        )
+        self._contractual_model = RecordTableModel(
+            CONTRACTUAL_COLUMNS, self, commit=self._commit_contractual_edit
+        )
 
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -424,9 +442,38 @@ class ChartViewModel(QObject):
         return rows
 
     def _refresh_limits_models(self) -> None:
-        self._rope_limits_model.set_rows(self._limit_rows("rope"))
-        self._connection_limits_model.set_rows(self._limit_rows("connection"))
+        self._rope_limits_model.set_records(self._limit_rows("rope"))
+        self._connection_limits_model.set_records(self._limit_rows("connection"))
         self.limitsChanged.emit()
+
+    def _commit_limit_edit(self, kind: str):
+        def commit(row: int, field: str, value: Any) -> bool:
+            model = self._rope_limits_model if kind == "rope" else self._connection_limits_model
+            record = model.record_at(row)
+            if record is None:
+                return False
+            if field == "limitEnabled":
+                self.setLimitEnabled(record["limitId"], bool(value))
+            else:
+                self.setLimitMax(record["limitId"], str(value))
+            return True
+
+        return commit
+
+    def _commit_contractual_edit(self, row: int, field: str, value: Any) -> bool:
+        points = self._contractual_points()
+        if not (0 <= row < len(points)):
+            return False
+        try:
+            fields = {
+                "outreach_m": float(points[row].outreach_m),
+                "load_t": float(points[row].load_t),
+            }
+            fields[field] = float(value)
+        except (TypeError, ValueError):
+            return False
+        self.updateContractualPoint(row, fields)
+        return True
 
     def _limit_by_id(self, limit_id: str):
         return self._model.design_limits_by_id.get(limit_id)
@@ -476,12 +523,24 @@ class ChartViewModel(QObject):
             self._set_status(f"Could not compute: {auto.message}")
             return
 
+        if dl.component == "min_bearing_line_load" and auto.required_kN <= 0.0:
+            self._set_status(f"No uplift in any contractual case: {dl.id} left unchanged")
+            return
+
         dl.max_kN = float(auto.required_kN)
         dl.enabled = True
         self._model.mark_content_changed()
         self._set_status(f"Auto-set {dl.id} to {auto.required_kN:.1f} {unit}")
         self._refresh_limits_models()
         self._set_stale(True)
+
+    @pyqtSlot(str, int)
+    def autoSetLimitRow(self, kind: str, row: int) -> None:
+        """Auto-set the limit shown at ``row`` of the rope or connection limits table."""
+        model = self._rope_limits_model if kind == "rope" else self._connection_limits_model
+        record = model.record_at(row)
+        if record is not None:
+            self.autoSetLimit(record["limitId"])
 
     def _enabled_limits(self) -> dict:
         return {
@@ -529,7 +588,7 @@ class ChartViewModel(QObject):
 
     def _rebuild_contractual_model(self) -> None:
         rows = [_contractual_row(cp, "", "pending") for cp in self._contractual_points()]
-        self._contractual_model.set_rows(rows)
+        self._contractual_model.set_records(rows)
         self.contractualChanged.emit()
 
     @pyqtSlot("QVariantMap")
@@ -1038,7 +1097,7 @@ class ChartViewModel(QObject):
             text = undecided if allowable is None else f"{float(allowable):.1f}"
             contractual_rows.append(_contractual_row(cp, text, status))
         if contractual_rows:
-            self._contractual_model.set_rows(contractual_rows)
+            self._contractual_model.set_records(contractual_rows)
             self.contractualChanged.emit()
 
     def _limit_positions(self) -> dict[str, int]:

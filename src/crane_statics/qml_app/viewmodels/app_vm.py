@@ -25,6 +25,7 @@ class AppViewModel(QObject):
     statusTextChanged = pyqtSignal()
     currentPathChanged = pyqtSignal()
     documentChanged = pyqtSignal()
+    historyChanged = pyqtSignal()
     layoutResetRequested = pyqtSignal()
     notification = pyqtSignal(str, str)
 
@@ -35,6 +36,7 @@ class AppViewModel(QObject):
         self._status_text = "No document loaded"
         self.session.dirty_changed.connect(self._on_dirty_changed)
         self.session.notification.connect(self.notification)
+        self._model.subscribe("history_changed", self.historyChanged.emit)
 
     def _on_dirty_changed(self, _dirty: bool) -> None:
         self.dirtyChanged.emit()
@@ -58,6 +60,14 @@ class AppViewModel(QObject):
     @pyqtProperty(bool, notify=hasDocumentChanged)
     def hasDocument(self) -> bool:
         return self._model.document is not None
+
+    @pyqtProperty(bool, notify=historyChanged)
+    def canUndo(self) -> bool:
+        return self._model.can_undo
+
+    @pyqtProperty(bool, notify=historyChanged)
+    def canRedo(self) -> bool:
+        return self._model.can_redo
 
     @pyqtProperty(str, notify=currentPathChanged)
     def currentPath(self) -> str:
@@ -120,6 +130,16 @@ class AppViewModel(QObject):
         self.notification.emit("Document closed", "info")
 
     @pyqtSlot()
+    def undo(self) -> None:
+        if self._model.undo():
+            self.setStatusText("Undo")
+
+    @pyqtSlot()
+    def redo(self) -> None:
+        if self._model.redo():
+            self.setStatusText("Redo")
+
+    @pyqtSlot()
     def resetLayout(self) -> None:
         if self._model.document is not None:
             self._model.add_notification("Layout reset", "info")
@@ -135,7 +155,7 @@ class AppViewModel(QObject):
             self.notification.emit(str(exc), "error")
             return False
         self._model.document_path = path
-        self._model.set_dirty(False)
+        self._model.mark_saved()
         self.setStatusText(f"Saved {path.name}")
         self.currentPathChanged.emit()
         self.titleChanged.emit()

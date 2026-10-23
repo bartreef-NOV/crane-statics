@@ -23,6 +23,10 @@ Item {
     property string title: ""
     property string emptyText: qsTr("No entries.")
     property bool editable: false
+    // Whether rows can be added and deleted; cells stay editable either way.
+    property bool rowsEditable: true
+    // Extra toolbar items, placed before the add and delete buttons.
+    property alias toolbarExtras: extras.data
     property int currentRow: -1
     property int currentColumn: 0
     // Node ids offered by the cells that hold a node reference.
@@ -53,7 +57,7 @@ Item {
             root.startEdit(root.currentRow, root.currentColumn)
             event.accepted = true
         } else if (event.key === Qt.Key_Delete) {
-            if (root.editable && root.hasSelection)
+            if (root.editable && root.rowsEditable && root.hasSelection)
                 root.deleteRequested(root.currentRow)
             event.accepted = true
         }
@@ -99,12 +103,17 @@ Item {
                 font.bold: true
             }
 
+            RowLayout {
+                id: extras
+                spacing: root.layoutSpacing
+            }
+
             Button {
                 text: "+"
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Add")
                 padding: 0
-                visible: root.editable
+                visible: root.editable && root.rowsEditable
                 onClicked: root.addRequested()
             }
 
@@ -113,7 +122,7 @@ Item {
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Delete")
                 padding: 0
-                visible: root.editable
+                visible: root.editable && root.rowsEditable
                 enabled: root.hasSelection
                 onClicked: root.deleteRequested(root.currentRow)
             }

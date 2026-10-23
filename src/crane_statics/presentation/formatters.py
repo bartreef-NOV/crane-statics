@@ -136,6 +136,7 @@ class ConnectionFormatter:
         "leg_axial": "Leg Axial",
         "leg_normal": "Leg Normal",
         "max_bearing_line_load": "Bearing Line Load",
+        "min_bearing_line_load": "Bearing Line Load Uplift",
     }
 
     _COMPONENT_UNITS = {
@@ -153,6 +154,7 @@ class ConnectionFormatter:
         "leg_axial": "kN",
         "leg_normal": "kN",
         "max_bearing_line_load": "kN/m",
+        "min_bearing_line_load": "kN/m",
     }
 
     _TOP_LEVEL_ORDER = (
@@ -226,6 +228,11 @@ class ConnectionFormatter:
             "max_bearing_line_load": (
                 "Bearing Line Load = Fz/(pi*D) + 4*sqrt(Mx^2 + My^2)/(pi*D^2), "
                 "where D is slewing bearing diameter"
+            ),
+            "min_bearing_line_load": (
+                "Uplift = -(Fz/(pi*D) - 4*sqrt(Mx^2 + My^2)/(pi*D^2)) when positive, "
+                "else 0, where D is slewing bearing diameter. "
+                "The limit is the allowed uplift as a positive line load."
             ),
         }
         return tooltips.get(str(component or ""), "")

@@ -431,6 +431,8 @@ class AnalysisCalculator:
                 limit_kN = (
                     float(limit.max_kN) if limit is not None and limit.max_kN is not None else None
                 )
+                if comp == "min_bearing_line_load":
+                    demand = max(0.0, demand)  # uplift only
                 util_pct = abs(demand) / limit_kN * 100.0 if limit_kN else None
                 rows.append(
                     ResultRow(

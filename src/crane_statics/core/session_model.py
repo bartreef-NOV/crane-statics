@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -10,6 +11,7 @@ from typing import Any, Optional
 
 from crane_statics.data import CraneDocument, Hoist, payload_hoist_ids
 
+from .edit_history import EditHistory
 from .limit_components import validate_limit_component
 from .limit_factory import DesignLimitFactory
 from .vessel_envelope import vessel_limit
@@ -73,6 +75,28 @@ class DesignLimit:
 SessionListener = Callable[..., None]
 
 
+@dataclass(frozen=True, eq=False)
+class HoistSnapshot:
+    """The restorable part of a hoist's runtime state (sweep caches are not kept)."""
+
+    scene_state: SceneState
+    split_mode_active: bool
+    chart_mode: str
+    selected_contractual_idx: Optional[int]
+
+
+@dataclass(frozen=True, eq=False)
+class SessionSnapshot:
+    """Everything an undo step restores. Treated as immutable once taken."""
+
+    document: Optional[CraneDocument]
+    design_limits: tuple[DesignLimit, ...]
+    hoists: dict[str, HoistSnapshot]
+    selected_hoist_id: Optional[str]
+    selected_editor_hoist_id: Optional[str]
+    extras: dict[str, Any]
+
+
 class SessionModel:
     """Pure mutable session state with named change-event subscriptions."""
 
@@ -89,6 +113,9 @@ class SessionModel:
         self.notification_history: list[str] = []
         self.max_notifications = 100
         self._listeners: dict[str, list[SessionListener]] = defaultdict(list)
+        self.history: EditHistory[SessionSnapshot] = EditHistory()
+        self._restoring = False
+        self._history_extras: dict[str, tuple[Callable[[], Any], Callable[[Any], None]]] = {}
 
     def subscribe(self, event: str, listener: SessionListener) -> Callable[[], None]:
         """Register a listener and return an unsubscribe callback."""
@@ -151,6 +178,8 @@ class SessionModel:
             self.design_limits_by_id = DesignLimitFactory.index_by_id(limits)
 
         self._emit("document_changed", self.document)
+        # After the listeners ran, so view-model state captured as extras is initialised.
+        self._reset_history()
 
     def payload_hoist_ids(self) -> list[str]:
         return [] if self.document is None else list(payload_hoist_ids(self.document))
@@ -235,8 +264,20 @@ class SessionModel:
             self.dirty = dirty
             self._emit("dirty_changed", dirty)
 
-    def mark_content_changed(self) -> None:
+    def mark_content_changed(self, *, scope: str = "document", key: Optional[str] = None) -> None:
+        """Record an edit that has just been applied.
+
+        ``scope="scene"`` is for edits that only touch Scene inputs: the document and limits
+        of the previous undo state are reused instead of copied. Edits with the same ``key``
+        in quick succession (a slider drag) merge into one undo step.
+        """
+        if self._restoring:
+            return
         self.set_dirty(True)
+        if self.document is not None:
+            previous = self.history.current if scope == "scene" else None
+            self.history.record(self._capture(previous), key)
+            self._emit("history_changed")
         self._emit("content_changed")
 
     def update_design_limits(self, limits: list[DesignLimit]) -> None:
@@ -275,3 +316,103 @@ class SessionModel:
             state = self.hoist_states.get(hid)
             if state is not None:
                 state.split_mode_active = split
+
+    # ------------------------------------------------------------------
+    # Undo / redo
+    # ------------------------------------------------------------------
+
+    def register_history_extra(
+        self, name: str, capture: Callable[[], Any], restore: Callable[[Any], None]
+    ) -> None:
+        """Add view-model state to snapshots (``restore`` runs before listeners reload)."""
+        self._history_extras[name] = (capture, restore)
+
+    def _capture(self, reuse: Optional[SessionSnapshot]) -> SessionSnapshot:
+        if reuse is not None:
+            document, limits = reuse.document, reuse.design_limits
+        else:
+            document = None if self.document is None else self.document.model_copy(deep=True)
+            limits = tuple(dataclasses.replace(limit) for limit in self.design_limits)
+        return SessionSnapshot(
+            document=document,
+            design_limits=limits,
+            hoists={
+                hid: HoistSnapshot(
+                    scene_state=dataclasses.replace(state.scene_state),
+                    split_mode_active=state.split_mode_active,
+                    chart_mode=state.chart_mode,
+                    selected_contractual_idx=state.selected_contractual_idx,
+                )
+                for hid, state in self.hoist_states.items()
+            },
+            selected_hoist_id=self.selected_hoist_id,
+            selected_editor_hoist_id=self.selected_editor_hoist_id,
+            extras={name: capture() for name, (capture, _restore) in self._history_extras.items()},
+        )
+
+    def _reset_history(self) -> None:
+        self.history.reset(None if self.document is None else self._capture(None))
+        self._emit("history_changed")
+
+    @property
+    def restoring(self) -> bool:
+        """True while undo/redo is putting a snapshot back (and listeners are reloading)."""
+        return self._restoring
+
+    @property
+    def can_undo(self) -> bool:
+        return self.history.can_undo
+
+    @property
+    def can_redo(self) -> bool:
+        return self.history.can_redo
+
+    def mark_saved(self) -> None:
+        """The document was written to disk: the current state is clean."""
+        self.history.mark_saved()
+        self.set_dirty(False)
+
+    def undo(self) -> bool:
+        return self._travel(self.history.undo)
+
+    def redo(self) -> bool:
+        return self._travel(self.history.redo)
+
+    def _travel(self, step: Callable[[], Optional[SessionSnapshot]]) -> bool:
+        snapshot = step()
+        if snapshot is None:
+            return False
+        self._restore(snapshot)
+        return True
+
+    def _restore(self, snapshot: SessionSnapshot) -> None:
+        self._restoring = True
+        try:
+            document = snapshot.document
+            self.document = None if document is None else document.model_copy(deep=True)
+            limits = [dataclasses.replace(limit) for limit in snapshot.design_limits]
+            self.design_limits[:] = limits
+            self.design_limits_by_id.clear()
+            self.design_limits_by_id.update({limit.id: limit for limit in limits})
+            for hid in [hid for hid in self.hoist_states if hid not in snapshot.hoists]:
+                del self.hoist_states[hid]
+            for hid, saved in snapshot.hoists.items():
+                self.hoist_states[hid] = HoistState(
+                    hoist_id=hid,
+                    scene_state=dataclasses.replace(saved.scene_state),
+                    split_mode_active=saved.split_mode_active,
+                    chart_mode=saved.chart_mode,
+                    selected_contractual_idx=saved.selected_contractual_idx,
+                )
+            if self.selected_hoist_id not in self.payload_hoist_ids():
+                self.selected_hoist_id = snapshot.selected_hoist_id
+            if self.selected_editor_hoist_id not in self.editor_hoist_ids():
+                self.selected_editor_hoist_id = snapshot.selected_editor_hoist_id
+            for name, (_capture, restore) in self._history_extras.items():
+                if name in snapshot.extras:
+                    restore(snapshot.extras[name])
+            self._emit("document_changed", self.document)
+        finally:
+            self._restoring = False
+        self.set_dirty(not self.history.is_at_saved)
+        self._emit("history_changed")

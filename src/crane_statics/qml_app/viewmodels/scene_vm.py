@@ -107,6 +107,17 @@ class SceneViewModel(QObject):
         self._session.document_changed.connect(self._on_document_changed)
         self._session.content_changed.connect(self._on_content_changed)
         self._session.hoist_selected.connect(self._on_hoist_selected)
+        self._model.register_history_extra(
+            "scene_hook_load_t", self._capture_hook_load, self._restore_hook_load
+        )
+
+    def _capture_hook_load(self) -> float:
+        return self._hook_load_t
+
+    def _restore_hook_load(self, hook_load_t: float) -> None:
+        """Undo/redo: keep the restored load; the reload that follows must not re-initialise it."""
+        self._hook_load_t = float(hook_load_t)
+        self._initialized_load_hoist_id = self._model.selected_hoist_id
 
     # ------------------------------------------------------------------
     # Canvas binding
@@ -293,7 +304,7 @@ class SceneViewModel(QObject):
         self.hookModeChanged.emit()
         self._rebuild_contractual_rows()
         self._after_state_changed()
-        self._model.mark_content_changed()
+        self._model.mark_content_changed(scope="scene")
 
     # ------------------------------------------------------------------
     # Geometry
@@ -323,7 +334,7 @@ class SceneViewModel(QObject):
                 self.recomputeAutoLoad()
             else:
                 self._after_state_changed()
-            self._model.mark_content_changed()
+            self._model.mark_content_changed(scope="scene", key="angle")
         finally:
             self._geometry_sync_active = False
 
@@ -404,7 +415,7 @@ class SceneViewModel(QObject):
         state.scene_state.tackle_length_m = float(value)
         self.geometryChanged.emit()
         self._after_state_changed()
-        self._model.mark_content_changed()
+        self._model.mark_content_changed(scope="scene", key="tackle")
 
     @pyqtProperty(float, notify=tackleBoundsChanged)
     def tackleMin(self) -> float:
@@ -457,7 +468,7 @@ class SceneViewModel(QObject):
         )
         self.loadChanged.emit()
         self._after_state_changed()
-        self._model.mark_content_changed()
+        self._model.mark_content_changed(scope="scene", key="hook_load")
 
     @pyqtProperty(bool, notify=loadChanged)
     def hookLoadAuto(self) -> bool:
@@ -559,7 +570,7 @@ class SceneViewModel(QObject):
         state.scene_state.wind_direction = direction
         self.environmentChanged.emit()
         self._after_state_changed()
-        self._model.mark_content_changed()
+        self._model.mark_content_changed(scope="scene", key="wind")
 
     @pyqtProperty(str, notify=environmentChanged)
     def windAxis(self) -> str:
@@ -711,7 +722,7 @@ class SceneViewModel(QObject):
             self.recomputeAutoLoad()
         else:
             self._after_state_changed()
-        self._model.mark_content_changed()
+        self._model.mark_content_changed(scope="scene", key=f"field:{name}")
 
     # ------------------------------------------------------------------
     # Display options
@@ -893,7 +904,7 @@ class SceneViewModel(QObject):
         self._emit_inputs_changed()
         self._after_state_changed()
         self.governingCaseChanged.emit()
-        self._model.mark_content_changed()
+        self._model.mark_content_changed(scope="scene")
 
     def _emit_inputs_changed(self) -> None:
         self.hookModeChanged.emit()
@@ -981,7 +992,8 @@ class SceneViewModel(QObject):
 
     def _on_document_changed(self, _doc) -> None:
         self._drop_snapshot()
-        self._initialized_load_hoist_id = None
+        if not self._model.restoring:  # undo/redo keeps the hook load it restored
+            self._initialized_load_hoist_id = None
         self.reload()
 
     def _on_hoist_selected(self, _hoist_id: str) -> None:

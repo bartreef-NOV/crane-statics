@@ -40,7 +40,7 @@ class TestDesignLimits:
         assert chart_vm.connectionLimitsModel.count > 0
 
     def test_setting_max_writes_through_and_marks_stale(self, chart_vm):
-        row = chart_vm.ropeLimitsModel.row_at(0)
+        row = chart_vm.ropeLimitsModel.record_at(0)
         chart_vm.setLimitMax(row["limitId"], "1234.5")
 
         dl = chart_vm._model.design_limits_by_id[row["limitId"]]
@@ -49,27 +49,42 @@ class TestDesignLimits:
         assert chart_vm._model.dirty is True
 
     def test_blank_max_clears_the_limit(self, chart_vm):
-        row = chart_vm.ropeLimitsModel.row_at(0)
+        row = chart_vm.ropeLimitsModel.record_at(0)
         chart_vm.setLimitMax(row["limitId"], "500")
         chart_vm.setLimitMax(row["limitId"], "")
 
         assert chart_vm._model.design_limits_by_id[row["limitId"]].max_kN is None
 
     def test_non_numeric_max_is_ignored(self, chart_vm):
-        row = chart_vm.ropeLimitsModel.row_at(0)
+        row = chart_vm.ropeLimitsModel.record_at(0)
         chart_vm.setLimitMax(row["limitId"], "800")
         chart_vm.setLimitMax(row["limitId"], "abc")
 
         assert chart_vm._model.design_limits_by_id[row["limitId"]].max_kN == pytest.approx(800.0)
 
     def test_toggling_enabled_updates_the_model_row(self, chart_vm):
-        row = chart_vm.ropeLimitsModel.row_at(0)
+        row = chart_vm.ropeLimitsModel.record_at(0)
         chart_vm.setLimitEnabled(row["limitId"], True)
 
-        assert chart_vm.ropeLimitsModel.row_at(0)["limitEnabled"] is True
+        assert chart_vm.ropeLimitsModel.record_at(0)["limitEnabled"] is True
+
+    def test_uplift_limit_is_listed_and_auto_sets_like_the_max_limit(self, chart_vm):
+        limit_id = "platform_base_min_bearing_line_load"
+        dl = chart_vm._model.design_limits_by_id[limit_id]
+        assert (dl.max_kN, dl.enabled) == (None, False)
+
+        chart_vm.autoSetLimit(limit_id)
+
+        if dl.max_kN is None:
+            assert dl.enabled is False
+            assert chart_vm.statusText.startswith(("Could not compute", "No uplift"))
+        else:
+            assert dl.max_kN > 0.0 and dl.enabled is True
+            assert "Auto-set" in chart_vm.statusText
+            assert limit_id in chart_vm._enabled_limits()
 
     def test_auto_set_fills_and_enables_a_rope_limit(self, chart_vm):
-        rope_row = chart_vm.ropeLimitsModel.row_at(0)
+        rope_row = chart_vm.ropeLimitsModel.record_at(0)
         chart_vm.autoSetLimit(rope_row["limitId"])
 
         dl = chart_vm._model.design_limits_by_id[rope_row["limitId"]]
@@ -80,7 +95,7 @@ class TestDesignLimits:
             assert "Auto-set" in chart_vm.statusText
 
     def test_enabled_limits_payload_matches_session(self, chart_vm):
-        row = chart_vm.ropeLimitsModel.row_at(0)
+        row = chart_vm.ropeLimitsModel.record_at(0)
         chart_vm.setLimitMax(row["limitId"], "999")
         chart_vm.setLimitEnabled(row["limitId"], True)
 
@@ -204,14 +219,14 @@ class TestSweepRendering:
 
     def test_contractual_rows_gain_allowable_after_draw(self, rendered_chart_vm):
         chart_vm = rendered_chart_vm
-        row = chart_vm.contractualModel.row_at(0)
+        row = chart_vm.contractualModel.record_at(0)
 
         assert row["allowable"] != ""
         assert row["status"] in {"pass", "fail", "pending"}
 
     def test_limit_series_appear_when_limits_are_enabled(self, chart_vm):
         for index in range(chart_vm.ropeLimitsModel.count):
-            row = chart_vm.ropeLimitsModel.row_at(index)
+            row = chart_vm.ropeLimitsModel.record_at(index)
             chart_vm.autoSetLimit(row["limitId"])
         chart_vm.drawBlocking()
 
@@ -324,7 +339,7 @@ class TestChartCaching:
         assert chart_vm.stale is False
 
     def test_a_limit_edit_misses_and_restoring_it_hits(self, chart_vm, sweep_calls):
-        limit_id = chart_vm.ropeLimitsModel.row_at(0)["limitId"]
+        limit_id = chart_vm.ropeLimitsModel.record_at(0)["limitId"]
         chart_vm.setLimitEnabled(limit_id, True)
         chart_vm.setLimitMax(limit_id, "900")
         chart_vm.drawBlocking()
