@@ -24,6 +24,7 @@ from .solver.crane_solver import (
     rotate_boom_local_point,
 )
 from .capacity import solve_capacity_limit_kN, solve_radial_capacity_kN
+from .dynamic_factor import DynamicFactorLike, as_dynamic_factor
 from .vessel_frame import CraneFrameMotion, VesselInputs, crane_frame_motion
 
 
@@ -277,7 +278,8 @@ class AllowableCapacity:
     - max_allowable_load_t: Payload domain (tonnes). This is the net payload mass that can
       be lifted after subtracting hook mass. Used for Load Chart Y-axis and contractual checks.
 
-    METRIC CONVERSION FORMULA (hook_force → payload):
+    METRIC CONVERSION (hook_force → payload), see ``dynamic_factor.DynamicFactor``; for a
+    constant factor:
         max_allowable_load_t = (max_allowable_load_kN / hook_daf / gravity) - hook_mass_t
 
     USAGE RULES:
@@ -882,7 +884,7 @@ class CraneCalculator:
         self,
         point: AnalysisPoint,
         design_limits: dict[str, dict],  # entity_id -> {component -> max_kN}
-        hook_daf: float = 1.0,
+        hook_daf: DynamicFactorLike = 1.0,
         hook_mass_t: float = 0.0,
     ) -> AllowableCapacity:
         """Invert Q(H) = Q0 + s*H <= Q_max  →  H_max = (Q_max - Q0) / s.
@@ -1018,12 +1020,10 @@ class CraneCalculator:
 
         # No limit yields a candidate: the hook load is unlimited (inf), not 1000 kN.
 
-        # Convert hook force to payload using DAF and gravity
-        # Step 1: Remove DAF to get net hook force
+        # Convert hook force to payload with the dynamic factor (removes the factor, converts
+        # force to mass and subtracts the hook mass).
         h_max_kN = max(0.0, h_max_kN)
-        h_net_kN = h_max_kN / hook_daf
-        # Step 2: Convert force to mass (kN / gravity_m_s2 = tonnes) and subtract hook mass
-        h_net_payload_t = h_net_kN / gravity - hook_mass_t
+        h_net_payload_t = as_dynamic_factor(hook_daf).payload_t(h_max_kN, hook_mass_t, gravity)
         h_net_payload_t = max(0.0, h_net_payload_t)
         # Metric domain semantics:
         #   h_max_kN = hook-force domain (includes DAF & hook mass effects)
@@ -1042,7 +1042,7 @@ class CraneCalculator:
         boom_angle_deg: float,
         hoist_id: str,
         design_limits: dict[str, dict],
-        hook_daf: float = 1.0,
+        hook_daf: DynamicFactorLike = 1.0,
         hook_mass_t: float = 0.0,
         *,
         wind_speed_m_s: Optional[float] = None,

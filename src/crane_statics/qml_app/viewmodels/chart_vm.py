@@ -527,10 +527,10 @@ class ChartViewModel(QObject):
             self._set_status(f"No uplift in any contractual case: {dl.id} left unchanged")
             return
 
-        dl.max_kN = float(auto.required_kN)
+        dl.max_kN = float(auto.required_kN) * dl.required_factor
         dl.enabled = True
         self._model.mark_content_changed()
-        self._set_status(f"Auto-set {dl.id} to {auto.required_kN:.1f} {unit}")
+        self._set_status(f"Auto-set {dl.id} to {dl.max_kN:.1f} {unit}")
         self._refresh_limits_models()
         self._set_stale(True)
 
@@ -544,9 +544,9 @@ class ChartViewModel(QObject):
 
     def _enabled_limits(self) -> dict:
         return {
-            dl.id: {dl.component: dl.max_kN}
+            dl.id: {dl.component: dl.allowable_kN}
             for dl in self._model.design_limits
-            if dl.enabled and dl.max_kN is not None
+            if dl.enabled and dl.allowable_kN is not None
         }
 
     def _limit_display_names(self) -> dict:
@@ -631,6 +631,13 @@ class ChartViewModel(QObject):
             return
         self._model.mark_content_changed()
         self._rebuild_contractual_model()
+        # Markers follow the edit at once, undecided until the redraw; their order is the
+        # row order the context menu edits and deletes by.
+        self._markers = [
+            {"outreach": float(cp.outreach_m), "load": float(cp.load_t), "status": "pending"}
+            for cp in self._contractual_points()
+        ]
+        self._emit_chart_updated()
         self._set_stale(True)
 
     @pyqtSlot()

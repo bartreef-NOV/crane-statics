@@ -1,8 +1,8 @@
 """Vessel-motion limits as a ± envelope.
 
 The Model's vessel motion values are limits: each input may take either sign up to its
-magnitude. The load chart evaluates every sign combination and keeps the worst case; the
-Scene clamps its inputs to the same ± range.
+magnitude. The load chart evaluates every sign combination and keeps the worst case. The
+Scene seeds its inputs from the same limits but does not clamp them.
 """
 
 from __future__ import annotations
@@ -24,20 +24,12 @@ VESSEL_LIMIT_INPUTS: tuple[tuple[str, str, str], ...] = (
     ("pitch_deg", "vessel_pitch_deg", "vessel_pitch_deg"),
 )
 
-# SceneState field -> VesselMotion field holding its limit.
-SCENE_FIELD_LIMITS: dict[str, str] = {scene: model for model, scene, _ in VESSEL_LIMIT_INPUTS}
-
 _ZERO = 1e-12
 
 
 def vessel_limit(motion: VesselMotion, field: str) -> float:
     """Magnitude of one vessel motion limit (the sign in the document is ignored)."""
     return abs(float(getattr(motion, field, 0.0) or 0.0))
-
-
-def clamp_to_limit(value: float, limit: float) -> float:
-    """Clamp ``value`` to ``[-limit, +limit]``."""
-    return max(-limit, min(limit, float(value)))
 
 
 def vessel_motion_cases(motion: VesselMotion) -> list[dict[str, Any]]:

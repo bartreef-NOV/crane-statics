@@ -11,6 +11,7 @@ import math
 from typing import Optional, Callable, Any
 
 from ..data.models import CraneDocument
+from ..calculation.dynamic_factor import DynamicFactorLike, as_dynamic_factor
 from ..calculation.engine import CraneCalculator, get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
 from .analysis_cases import (
@@ -19,6 +20,7 @@ from .analysis_cases import (
     DirectionalAnalysisCase,
 )
 from .lead_channels import compose_lead_channel_point
+from .load_condition import default_load_condition
 from .demand_extraction import extract_rope_tension_demand, extract_connection_component_demand
 
 
@@ -73,10 +75,12 @@ class ConnectionAutoSetResult:
 
 
 def _required_hook_force_kN(
-    load_t: float, hook_mass_t: float, hook_daf: float, gravity_m_s2: float
+    load_t: float, hook_mass_t: float, hook_daf: DynamicFactorLike, gravity_m_s2: float
 ) -> float:
     """Required hook force at contractual point, including hook mass and DAF."""
-    return (float(load_t) + float(hook_mass_t)) * abs(float(gravity_m_s2)) * float(hook_daf)
+    return as_dynamic_factor(hook_daf).hook_force_kN(
+        float(load_t), float(hook_mass_t), abs(float(gravity_m_s2))
+    )
 
 
 def _evaluate_contractual_points(
@@ -104,7 +108,7 @@ def _evaluate_contractual_points(
         List of ContractualPointResult with best demand per contractual point.
     """
     results = []
-    wind_speed = float(doc.environment.max_wind_speed_m_s)
+    wind_speed = default_load_condition(doc).wind_speed_m_s
 
     for hoist in hoists:
         for mode in iter_hoist_analysis_modes(hoist):

@@ -25,6 +25,7 @@ from .chart_envelope import (
     lead_points,
 )
 from .demand_extraction import limit_responds_to_hook_load
+from .load_condition import default_load_condition
 
 # ``VesselInputs`` field -> ``SceneState`` field.
 _SCENE_VESSEL_FIELDS = {vessel: scene for scene, vessel in VESSEL_INPUT_FIELDS.items()}
@@ -71,8 +72,9 @@ def governing_case(
     calc = CraneCalculator(doc)
     doc_dict = doc.model_dump()
     kin = KinematicsAdapter(doc_dict)
-    wind_speed = float(doc.environment.max_wind_speed_m_s)
-    vessel = doc.environment.vessel_motion
+    condition = default_load_condition(doc)
+    wind_speed = condition.wind_speed_m_s
+    vessel = condition.vessel_motion
     offlead_deg = float(getattr(hoist, "offlead_deg", 0.0))
     sidelead_deg = float(getattr(hoist, "sidelead_deg", offlead_deg))
 

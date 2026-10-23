@@ -788,3 +788,47 @@ def test_edit_menu_undo_follows_history(qml_engine):
     app_vm.undo()
     assert undo.property("enabled") is False and redo.property("enabled") is True
     assert warnings == []
+
+
+def test_chart_menu_edits_contractual_points_at_the_cursor(qml_engine):
+    """Add works anywhere in the plot; edit and delete need a contractual marker close by."""
+    _engine, root, chart_vm, warnings = _drawn_main(qml_engine)
+    tabs = root.findChild(QObject, "workspaceTabs")
+    tabs.setProperty("currentIndex", 1)
+    QTest.qWait(50)
+    workspace = root.findChild(QObject, "loadChartWorkspace")
+    plot = root.findChild(QObject, "quickChartPlot")
+    menu = root.findChild(QObject, "chartMenu")
+    add = root.findChild(QObject, "addContractualMenuItem")
+    edit = root.findChild(QObject, "editContractualMenuItem")
+    delete = root.findChild(QObject, "deleteContractualMenuItem")
+    assert None not in (workspace, plot, menu, add, edit, delete)
+
+    _only_series_visible(plot, "contractual")
+    _series_id, px, py = _point_under(plot)
+    _evaluate_in(workspace, f"openChartMenu(Qt.point({px}, {py}))")
+    assert add.property("enabled") is True
+    assert edit.property("enabled") is True
+    assert delete.property("enabled") is True
+    QMetaObject.invokeMethod(menu, "close")
+
+    # Far from every marker, inside the plot: only Add is available.
+    left, top = plot.property("plotLeft") + 1, plot.property("plotTop") + 1
+    _evaluate_in(workspace, f"openChartMenu(Qt.point({left}, {top}))")
+    assert add.property("enabled") is True
+    assert edit.property("enabled") is False
+    assert delete.property("enabled") is False
+    QMetaObject.invokeMethod(menu, "close")
+
+    # Outside the plot area nothing is offered.
+    _evaluate_in(workspace, "openChartMenu(Qt.point(0, 0))")
+    assert add.property("enabled") is False
+    QMetaObject.invokeMethod(menu, "close")
+
+    before = len(chart_vm.markers)
+    _only_series_visible(plot, "contractual")
+    _series_id, px, py = _point_under(plot)
+    _evaluate_in(workspace, f"openChartMenu(Qt.point({px}, {py}))")
+    QMetaObject.invokeMethod(delete, "triggered")
+    assert len(chart_vm.markers) == before - 1
+    assert not warnings

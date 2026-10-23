@@ -32,7 +32,7 @@ def test_saved_documents_are_version_8(tmp_path):
     out = tmp_path / "out.yaml"
     save_document(doc, out)
     saved = yaml.safe_load(out.read_text(encoding="utf-8"))
-    assert saved["schema"]["version"] == "8.0.0"
+    assert saved["schema"]["version"] == "8.1.0"
 
 
 def test_authored_vessel_motion_accepts_signed_values_and_angles():

@@ -22,7 +22,26 @@ Item {
     property string title: ""
     property string section: ""
 
-    signal barClicked(int row)
+    // Share of the table width taken by Name, Unit, Demand and Util; dragging a header
+    // edge moves width between that column and the next, so the total stays the width.
+    property var columnFractions: [0.34, 0.2, 0.23, 0.23]
+    readonly property var columnWidths: columnFractions.map(f => f * root.width)
+    readonly property real minColumnFraction: 0.1
+
+    signal demandClicked(int row)
+
+    function resizeColumn(column, deltaPx) {
+        if (root.width <= 0 || column < 0 || column >= columnFractions.length - 1)
+            return
+        const pair = columnFractions[column] + columnFractions[column + 1]
+        const next = Math.max(minColumnFraction,
+                              Math.min(pair - minColumnFraction,
+                                       columnFractions[column] + deltaPx / root.width))
+        const fractions = columnFractions.slice()
+        fractions[column] = next
+        fractions[column + 1] = pair - next
+        columnFractions = fractions
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -51,13 +70,13 @@ Item {
                     spacing: 0
 
                     Repeater {
-                        model: [qsTr("Name"), qsTr("Unit"), qsTr("Demand"), qsTr("Limit"), qsTr("Util"), qsTr("")]
+                        model: [qsTr("Name"), qsTr("Unit"), qsTr("Demand"), qsTr("Util")]
 
                         Rectangle {
                             required property string modelData
                             required property int index
 
-                            width: index === 0 ? Math.max(90, root.width * 0.30) : (root.width - Math.max(90, root.width * 0.30)) / 5
+                            width: root.columnWidths[index]
                             height: root.tableRowHeight
                             color: root.headerColor
                             border.color: root.gridColor
@@ -74,6 +93,24 @@ Item {
                                 verticalAlignment: Text.AlignBottom
                                 elide: Text.ElideRight
                             }
+
+                            // Drag the right edge to resize against the next column.
+                            MouseArea {
+                                width: 6
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                anchors.right: parent.right
+                                visible: parent.index < root.columnWidths.length - 1
+                                cursorShape: Qt.SplitHCursor
+                                preventStealing: true
+                                property real pressX: 0
+                                onPressed: mouse => pressX = mapToItem(root, mouse.x, 0).x
+                                onPositionChanged: mouse => {
+                                    const x = mapToItem(root, mouse.x, 0).x
+                                    root.resizeColumn(parent.index, x - pressX)
+                                    pressX = x
+                                }
+                            }
                         }
                     }
                 }
@@ -89,8 +126,8 @@ Item {
 
                     delegate: ResultRowDelegate {
                         width: rowsList.width
-                        nameWidth: Math.max(90, root.width * 0.30)
-                        onBarClicked: root.barClicked(index)
+                        columnWidths: root.columnWidths
+                        onDemandClicked: root.demandClicked(index)
                     }
                 }
             }

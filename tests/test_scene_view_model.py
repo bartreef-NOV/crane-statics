@@ -329,33 +329,21 @@ class TestSceneViewModelState:
         assert sc.pitch_accel_rad_s2 == pytest.approx(0.05)
 
     @pytest.mark.parametrize(
-        ("prop", "setter", "field", "limit_prop", "limit_field"),
+        ("prop", "setter", "field", "limit_field"),
         [
-            ("vesselRoll", "setVesselRoll", "vessel_roll_deg", "vesselRollMax", "roll_deg"),
-            ("vesselPitch", "setVesselPitch", "vessel_pitch_deg", "vesselPitchMax", "pitch_deg"),
-            ("accelX", "setAccelX", "accel_x_m_s2", "accelXMax", "accel_x_m_s2"),
-            ("accelY", "setAccelY", "accel_y_m_s2", "accelYMax", "accel_y_m_s2"),
-            ("accelZ", "setAccelZ", "accel_z_m_s2", "accelZMax", "accel_z_m_s2"),
-            (
-                "rollAccel",
-                "setRollAccel",
-                "roll_accel_rad_s2",
-                "rollAccelMax",
-                "roll_angular_accel_rad_s2",
-            ),
-            (
-                "pitchAccel",
-                "setPitchAccel",
-                "pitch_accel_rad_s2",
-                "pitchAccelMax",
-                "pitch_angular_accel_rad_s2",
-            ),
+            ("vesselRoll", "setVesselRoll", "vessel_roll_deg", "roll_deg"),
+            ("vesselPitch", "setVesselPitch", "vessel_pitch_deg", "pitch_deg"),
+            ("accelX", "setAccelX", "accel_x_m_s2", "accel_x_m_s2"),
+            ("accelY", "setAccelY", "accel_y_m_s2", "accel_y_m_s2"),
+            ("accelZ", "setAccelZ", "accel_z_m_s2", "accel_z_m_s2"),
+            ("rollAccel", "setRollAccel", "roll_accel_rad_s2", "roll_angular_accel_rad_s2"),
+            ("pitchAccel", "setPitchAccel", "pitch_accel_rad_s2", "pitch_angular_accel_rad_s2"),
         ],
     )
-    def test_vessel_motion_setters_clamp_to_model_limits_notify_and_reanalyse(
-        self, scene_vm, monkeypatch, prop, setter, field, limit_prop, limit_field
+    def test_vessel_motion_setters_are_not_clamped_to_model_limits(
+        self, scene_vm, monkeypatch, prop, setter, field, limit_field
     ):
-        setattr(scene_vm._model.document.environment.vessel_motion, limit_field, -3.0)
+        setattr(scene_vm._model.document.environment.vessel_motion, limit_field, 3.0)
         calls: list[int] = []
         emitted: list[int] = []
         monkeypatch.setattr(scene_vm, "_after_state_changed", lambda: calls.append(1))
@@ -363,24 +351,20 @@ class TestSceneViewModelState:
         scene_vm.environmentChanged.connect(lambda: emitted.append(1))
         sc = scene_vm._model.get_active_hoist_state().scene_state
 
-        assert getattr(scene_vm, limit_prop) == pytest.approx(3.0)  # limit is a magnitude
-        getattr(scene_vm, setter)(-2.5)
-        assert getattr(sc, field) == pytest.approx(-2.5)
-        assert getattr(scene_vm, prop) == pytest.approx(-2.5)
+        getattr(scene_vm, setter)(10.0)
+        assert getattr(sc, field) == pytest.approx(10.0)
+        assert getattr(scene_vm, prop) == pytest.approx(10.0)
         assert emitted
         assert calls
-
-        getattr(scene_vm, setter)(10.0)
-        assert getattr(sc, field) == pytest.approx(3.0)
         getattr(scene_vm, setter)(-10.0)
-        assert getattr(sc, field) == pytest.approx(-3.0)
+        assert getattr(sc, field) == pytest.approx(-10.0)
 
     def test_crane_slewing_angle_is_not_limited_by_vessel_motion(self, scene_vm):
         scene_vm.setCraneSlewingAngle(-90.0)
         sc = scene_vm._model.get_active_hoist_state().scene_state
         assert sc.crane_slewing_angle_deg == pytest.approx(-90.0)
 
-    def test_model_limit_edit_pulls_scene_values_back_inside(self, scene_vm):
+    def test_model_limit_edit_leaves_scene_values_alone(self, scene_vm):
         vm = scene_vm._model.document.environment.vessel_motion
         vm.roll_deg = 10.0
         scene_vm.setVesselRoll(8.0)
@@ -389,7 +373,7 @@ class TestSceneViewModelState:
         vm.roll_deg = 5.0
         scene_vm.reload()
 
-        assert sc.vessel_roll_deg == pytest.approx(5.0)
+        assert sc.vessel_roll_deg == pytest.approx(8.0)
 
     def test_document_vessel_motion_seeds_every_hoist_scene_state(self):
         session = SessionState()

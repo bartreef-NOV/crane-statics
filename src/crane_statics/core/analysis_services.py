@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
+from ..calculation.dynamic_factor import as_dynamic_factor
 from ..calculation.engine import get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
 from .demand_extraction import extract_connection_component_response
@@ -207,22 +208,22 @@ class HoistStateService:
 
         payload = max(0.0, float(payload_t))
         hook_mass_t = 0.0
-        hook_daf = float(hoist.hook_daf) if hoist is not None else 1.0
+        factor = as_dynamic_factor(float(hoist.hook_daf) if hoist is not None else 1.0)
         if hoist is not None:
             _, hook_mass_t, _ = self.effective_hoist_parameters(hoist.id)
-        return (payload + hook_mass_t) * hook_daf * self.gravity_abs()
+        return factor.hook_force_kN(payload, hook_mass_t, self.gravity_abs())
 
     def hook_force_kN_to_payload_t(self, hook_force_kN: float) -> float:
         """Inverse of ``payload_t_to_hook_force_kN`` for the selected hoist (floored at 0)."""
         hoist = self.selected_hoist()
         hook_mass_t = 0.0
-        hook_daf = float(hoist.hook_daf) if hoist is not None else 1.0
+        factor = as_dynamic_factor(float(hoist.hook_daf) if hoist is not None else 1.0)
         if hoist is not None:
             _, hook_mass_t, _ = self.effective_hoist_parameters(hoist.id)
-        per_tonne_kN = hook_daf * self.gravity_abs()
-        if per_tonne_kN <= 0.0:
+        gravity = self.gravity_abs()
+        if gravity <= 0.0:
             return 0.0
-        return max(0.0, float(hook_force_kN) / per_tonne_kN - hook_mass_t)
+        return max(0.0, factor.payload_t(float(hook_force_kN), hook_mass_t, gravity))
 
 
 class AnalysisCalculator:
@@ -325,7 +326,7 @@ class AnalysisCalculator:
         active_limits = {
             dl.id: dl
             for dl in self._session.design_limits
-            if dl.enabled and dl.max_kN is not None and float(dl.max_kN) > 1e-9
+            if dl.enabled and dl.allowable_kN is not None and dl.allowable_kN > 1e-9
         }
         pinned_momentless_connections = {"rear_hinge", "front_hinge", "heel_point", "upper_hinge"}
 
@@ -381,9 +382,7 @@ class AnalysisCalculator:
             sens = float(pt.sensitivity_rope_tensions.get(channel, 0.0))
             demand = float(baseline) + sens * hook_load_kN
             limit = active_limits.get(f"{runtime_rope_id}_T") or active_limits.get(f"{channel}_T")
-            limit_kN = (
-                float(limit.max_kN) if limit is not None and limit.max_kN is not None else None
-            )
+            limit_kN = limit.allowable_kN if limit is not None else None
             util_pct = abs(demand) / limit_kN * 100.0 if limit_kN else None
             rope_rows.append(
                 ResultRow(
@@ -428,15 +427,13 @@ class AnalysisCalculator:
                 if demand is None:
                     continue
                 limit = active_limits.get(f"{conn_id}_{comp}")
-                limit_kN = (
-                    float(limit.max_kN) if limit is not None and limit.max_kN is not None else None
-                )
+                limit_kN = limit.allowable_kN if limit is not None else None
                 if comp == "min_bearing_line_load":
                     demand = max(0.0, demand)  # uplift only
                 util_pct = abs(demand) / limit_kN * 100.0 if limit_kN else None
                 rows.append(
                     ResultRow(
-                        name=ConnectionFormatter.component_display_name(comp),
+                        name=ConnectionFormatter.format_label(conn_id, comp),
                         unit=ConnectionFormatter.component_unit(comp),
                         demand_kN=demand,
                         limit_kN=limit_kN,
@@ -454,63 +451,24 @@ class AnalysisCalculator:
 
         for top_entity_id in ConnectionFormatter.top_level_entities(conn_ids_order):
             if top_entity_id == "heel_point":
-                heel_rows = _entity_result_rows("heel_point")
-                child_blocks: list[tuple[str, list[ResultRow]]] = []
+                conn_rows.extend(_entity_result_rows("heel_point"))
                 for child_entity_id in ConnectionFormatter.child_entities(
                     "heel_point", conn_ids_order
                 ):
-                    child_rows = _entity_result_rows(child_entity_id)
-                    if child_rows:
-                        child_blocks.append(
-                            (ConnectionFormatter.child_display_name(child_entity_id), child_rows)
-                        )
+                    conn_rows.extend(_entity_result_rows(child_entity_id))
                     processed.add(child_entity_id)
-
-                if heel_rows or child_blocks:
-                    conn_rows.append(
-                        ResultRow(
-                            name=ConnectionFormatter.display_name("heel_point"),
-                            is_group_header=True,
-                        )
-                    )
-                    conn_rows.extend(heel_rows)
-                    for child_label, child_rows in child_blocks:
-                        conn_rows.append(ResultRow(name=f"  {child_label}", is_group_header=True))
-                        conn_rows.extend(child_rows)
-
                 processed.add("heel_point")
                 continue
 
-            top_rows = _entity_result_rows(top_entity_id)
-            if top_rows:
-                conn_rows.append(
-                    ResultRow(
-                        name=ConnectionFormatter.display_name(top_entity_id), is_group_header=True
-                    )
-                )
-                conn_rows.extend(top_rows)
+            conn_rows.extend(_entity_result_rows(top_entity_id))
             processed.add(top_entity_id)
 
-        for conn_id in conn_ids_order:
+        # Entities outside the canonical order follow, in limit order and then any rest.
+        for conn_id in [*conn_ids_order, *present_conn_ids]:
             if conn_id in processed:
                 continue
-            group_rows = _entity_result_rows(conn_id)
-            if group_rows:
-                conn_rows.append(
-                    ResultRow(name=ConnectionFormatter.display_name(conn_id), is_group_header=True)
-                )
-                conn_rows.extend(group_rows)
+            conn_rows.extend(_entity_result_rows(conn_id))
             processed.add(conn_id)
-
-        for conn_id in present_conn_ids:
-            if conn_id in processed:
-                continue
-            group_rows = _entity_result_rows(conn_id)
-            if group_rows:
-                conn_rows.append(
-                    ResultRow(name=ConnectionFormatter.display_name(conn_id), is_group_header=True)
-                )
-                conn_rows.extend(group_rows)
 
         return rope_rows, conn_rows
 
@@ -537,9 +495,9 @@ class AnalysisCalculator:
         sc = state.scene_state
         calc = get_calculator(doc)
         enabled = {
-            dl.id: {dl.component: dl.max_kN}
+            dl.id: {dl.component: dl.allowable_kN}
             for dl in self._session.design_limits
-            if dl.enabled and dl.max_kN is not None
+            if dl.enabled and dl.allowable_kN is not None
         }
         hoist = next(h for h in doc.hoists if h.id == hoist_id)
         _falls, effective_hook_mass_t, _support = self._hoist.effective_hoist_parameters(hoist_id)

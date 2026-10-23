@@ -67,9 +67,16 @@ class DesignLimit:
     max_enabled: bool = True
     min_enabled: bool = False
     pressure_D: Optional[float] = None
+    required_factor: float = 1.0
+    """Margin a rule requires on ``max_kN`` (the capacity): demand may use ``1 / factor`` of it."""
 
     def __post_init__(self) -> None:
         self.component = validate_limit_component(self.component)
+
+    @property
+    def allowable_kN(self) -> Optional[float]:
+        """The value demand is checked against: ``max_kN`` reduced by the required factor."""
+        return None if self.max_kN is None else float(self.max_kN) / self.required_factor
 
 
 SessionListener = Callable[..., None]

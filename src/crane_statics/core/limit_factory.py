@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
+
+from crane_statics.data.models import SavedLimit
 
 from .limit_auto_set import compute_required_rope_capacity_kN
 from .limit_components import validate_limit_component
@@ -17,6 +20,40 @@ class DesignLimitFactory:
 
     @staticmethod
     def create_for_document(doc: CraneDocument) -> list[DesignLimit]:
+        """The design-limit catalog of a document: the defaults, with its saved limits applied."""
+        limits = DesignLimitFactory.create_default(doc)
+        for limit in limits:
+            saved = doc.saved_limits.get(limit.id)
+            if saved is not None:
+                limit.max_kN = saved.capacity_kN
+                limit.enabled = saved.enabled
+        return limits
+
+    @staticmethod
+    def saved_limits_for(doc: CraneDocument, limits: list[DesignLimit]) -> dict[str, SavedLimit]:
+        """The limits that differ from the document's defaults: what a save has to keep.
+
+        A limit still at its default is left out, so it keeps following the contractual
+        points the next time the document is opened.
+        """
+        defaults = DesignLimitFactory.index_by_id(DesignLimitFactory.create_default(doc))
+        saved: dict[str, SavedLimit] = {}
+        for limit in limits:
+            if limit.max_kN is None:
+                continue
+            default = defaults.get(limit.id)
+            if (
+                default is not None
+                and default.max_kN is not None
+                and default.enabled == limit.enabled
+                and math.isclose(default.max_kN, limit.max_kN, rel_tol=1e-9, abs_tol=1e-9)
+            ):
+                continue
+            saved[limit.id] = SavedLimit(capacity_kN=limit.max_kN, enabled=limit.enabled)
+        return saved
+
+    @staticmethod
+    def create_default(doc: CraneDocument) -> list[DesignLimit]:
         """Generate the default design-limit catalog for a document."""
         from .session_model import DesignLimit  # Import here to avoid circular dependency
 

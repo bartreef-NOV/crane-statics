@@ -10,14 +10,14 @@ Item {
     required property string limit
     required property string utilization
     required property real utilizationValue
-    required property string utilState
     required property bool isGroupHeader
     required property bool nested
     required property bool clickable
     required property string tooltip
     required property int index
 
-    property real nameWidth: 120
+    // Pixel widths of Name, Unit, Demand and Util, set by the table.
+    property var columnWidths: [120, 60, 60, 60]
 
     SystemPalette { id: sysPalette }
 
@@ -27,9 +27,7 @@ Item {
     readonly property color alternateSurfaceColor: sysPalette.alternateBase
     readonly property color textColor: sysPalette.text
 
-    readonly property real cellWidth: (width - nameWidth) / 5
-
-    signal barClicked()
+    signal demandClicked()
 
     implicitHeight: 24
     height: 24
@@ -61,7 +59,7 @@ Item {
         spacing: 0
 
         Label {
-            width: delegateRoot.nameWidth
+            width: delegateRoot.columnWidths[0]
             height: parent.height
             leftPadding: 6
             text: delegateRoot.name
@@ -83,7 +81,7 @@ Item {
         }
 
         Label {
-            width: delegateRoot.cellWidth
+            width: delegateRoot.columnWidths[1]
             height: parent.height
             leftPadding: 6
             text: delegateRoot.unit
@@ -101,49 +99,26 @@ Item {
         }
 
         Label {
-            width: delegateRoot.cellWidth
+            width: delegateRoot.columnWidths[2]
             height: parent.height
             rightPadding: 6
             text: delegateRoot.demand
             color: delegateRoot.textColor
+            font.underline: delegateRoot.clickable && demandHover.hovered
             horizontalAlignment: Text.AlignRight
             verticalAlignment: Text.AlignVCenter
 
-            Rectangle {
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.right: parent.right
-                width: 1
-                color: delegateRoot.barTrackColor
+            TapHandler {
+                enabled: delegateRoot.clickable
+                onTapped: delegateRoot.demandClicked()
             }
-        }
 
-        Label {
-            width: delegateRoot.cellWidth
-            height: parent.height
-            rightPadding: 6
-            text: delegateRoot.limit
-            color: delegateRoot.textColor
-            horizontalAlignment: Text.AlignRight
-            verticalAlignment: Text.AlignVCenter
-
-            Rectangle {
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.right: parent.right
-                width: 1
-                color: delegateRoot.barTrackColor
+            ToolTip.visible: demandHover.hovered && delegateRoot.clickable
+            ToolTip.text: qsTr("Click to view load-contribution overview")
+            HoverHandler {
+                id: demandHover
+                cursorShape: delegateRoot.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
             }
-        }
-
-        Label {
-            width: delegateRoot.cellWidth
-            height: parent.height
-            rightPadding: 6
-            text: delegateRoot.utilization
-            color: delegateRoot.textColor
-            horizontalAlignment: Text.AlignRight
-            verticalAlignment: Text.AlignVCenter
 
             Rectangle {
                 anchors.top: parent.top
@@ -155,8 +130,14 @@ Item {
         }
 
         Item {
-            width: delegateRoot.cellWidth
+            width: delegateRoot.columnWidths[3]
             height: parent.height
+
+            readonly property bool hasLimit: delegateRoot.limit !== "-"
+
+            ToolTip.visible: utilHover.hovered && hasLimit
+            ToolTip.text: qsTr("Limit: %1 %2").arg(delegateRoot.limit).arg(delegateRoot.unit)
+            HoverHandler { id: utilHover }
 
             Rectangle {
                 id: barTrack
@@ -165,26 +146,25 @@ Item {
                 anchors.right: parent.right
                 anchors.leftMargin: 6
                 anchors.rightMargin: 6
-                height: 10
-                radius: 5
+                height: 18
+                radius: 3
                 border.width: 1
                 border.color: delegateRoot.barTrackColor
 
                 Rectangle {
                     height: parent.height
                     width: parent.width * Math.max(0, Math.min(100, delegateRoot.utilizationValue)) / 100
-                    radius: 5
+                    radius: 3
                     color: delegateRoot.barColor
+                    // Translucent so the utilization text stays readable over the fill.
+                    opacity: 0.45
                 }
 
-                TapHandler {
-                    enabled: delegateRoot.clickable
-                    onTapped: delegateRoot.barClicked()
+                Label {
+                    anchors.centerIn: parent
+                    text: delegateRoot.utilization
+                    color: delegateRoot.textColor
                 }
-
-                ToolTip.visible: barHover.hovered && delegateRoot.clickable
-                ToolTip.text: qsTr("Click to view load-contribution overview")
-                HoverHandler { id: barHover }
             }
         }
     }

@@ -491,24 +491,10 @@ class ResultRowFormatter:
     """Formats analysis result rows for display tables."""
 
     @staticmethod
-    def utilization_state(utilization_pct: Optional[float]) -> str:
-        """Semantic state for utilization display (none, pass, warn, fail)."""
-        if utilization_pct is None:
-            return "none"
-        if utilization_pct > 100.0:
-            return "fail"
-        if utilization_pct >= 90.0:
-            return "warn"
-        return "pass"
-
-    @staticmethod
     def is_clickable(row: ResultRow) -> bool:
         """Determine if a result row should be clickable (selectable)."""
         return (
-            row.limit_kN is not None
-            and not row.is_group_header
-            and row.kind in {"rope", "connection"}
-            and bool(row.entity_id)
+            not row.is_group_header and row.kind in {"rope", "connection"} and bool(row.entity_id)
         )
 
     @staticmethod
@@ -542,7 +528,6 @@ class ResultRowFormatter:
                         "limit": "",
                         "utilization": "",
                         "utilizationValue": 0.0,
-                        "utilState": "none",
                         "isGroupHeader": True,
                         "nested": row.name.startswith("  "),
                         "clickable": False,
@@ -562,7 +547,6 @@ class ResultRowFormatter:
                     "utilizationValue": (
                         0.0 if util is None else max(0.0, min(100.0, float(util)))
                     ),
-                    "utilState": ResultRowFormatter.utilization_state(util),
                     "isGroupHeader": False,
                     "nested": False,
                     "clickable": ResultRowFormatter.is_clickable(row),

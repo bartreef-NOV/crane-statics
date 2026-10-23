@@ -213,6 +213,36 @@ Item {
         return candidates[0].distance <= 28 ? candidates[0] : null
     }
 
+    // The chart coordinates under a pixel, or null when it is outside the plot area.
+    function dataAt(x, y) {
+        const ranges = viewRanges
+        if (!ranges || x < plotLeft || x > plotLeft + plotWidth
+                || y < plotTop || y > plotTop + plotHeight)
+            return null
+        return {
+            outreach: ranges.xMin + (x - plotLeft) / plotWidth * (ranges.xMax - ranges.xMin),
+            load: ranges.yMin + (plotTop + plotHeight - y) / plotHeight * (ranges.yMax - ranges.yMin)
+        }
+    }
+
+    // The contractual marker under a pixel, with its row in the contractual points.
+    function nearestMarker(x, y) {
+        if (!seriesKeyVisible("contractual") || !viewRanges)
+            return null
+        const markers = chartVm.markers || []
+        let best = null
+        let bestDistance = 28
+        for (let i = 0; i < markers.length; ++i) {
+            const distance = Math.hypot(mapX(markers[i].outreach, viewRanges, plotLeft, plotWidth) - x,
+                                        mapY(markers[i].load, viewRanges, plotTop, plotHeight) - y)
+            if (distance <= bestDistance) {
+                bestDistance = distance
+                best = { index: i, outreach: markers[i].outreach, load: markers[i].load }
+            }
+        }
+        return best
+    }
+
     function clearPinnedPoint() {
         pinnedPoint = null
         canvas.requestPaint()

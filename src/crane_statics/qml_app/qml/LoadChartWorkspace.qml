@@ -16,6 +16,8 @@ Item {
     // The menu acts on the chart point under the cursor (null when there is none).
     function openChartMenu(position) {
         chartMenu.targetPoint = plot.nearestPoint(position.x, position.y)
+        chartMenu.targetMarker = plot.nearestMarker(position.x, position.y)
+        chartMenu.cursorData = plot.dataAt(position.x, position.y)
         chartMenu.popup(chartMenu.parent.mapFromItem(plot, position))
     }
 
@@ -169,17 +171,6 @@ Item {
                     Layout.fillWidth: true
                 }
             }
-
-            DataTable {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 180
-                title: qsTr("Contractual Points")
-                model: chartVm.contractualModel
-                editable: true
-                emptyText: qsTr("No contractual points for this hoist.")
-                onAddRequested: contractualDialog.openFor(-1, null)
-                onDeleteRequested: row => chartVm.deleteContractualPoint(row)
-            }
         }
     }
 
@@ -194,6 +185,9 @@ Item {
         objectName: "chartMenu"
 
         property var targetPoint: null
+        // The contractual marker and the chart coordinates under the cursor (null when none).
+        property var targetMarker: null
+        property var cursorData: null
         // Asked once per opening: availability has no change signal to bind to.
         property bool governingCaseAvailable: false
 
@@ -218,6 +212,35 @@ Item {
             enabled: chartMenu.governingCaseAvailable
             onTriggered: chartVm.showGoverningCase(chartMenu.targetPoint.seriesId,
                                                    chartMenu.targetPoint.outreach)
+        }
+
+        MenuSeparator {}
+
+        MenuItem {
+            objectName: "addContractualMenuItem"
+            text: qsTr("Add contractual point here…")
+            enabled: chartMenu.cursorData !== null
+            onTriggered: contractualDialog.openFor(-1, {
+                "outreach_m": Math.max(0, Math.round(chartMenu.cursorData.outreach * 10) / 10),
+                "load_t": Math.max(0, Math.round(chartMenu.cursorData.load * 10) / 10)
+            })
+        }
+
+        MenuItem {
+            objectName: "editContractualMenuItem"
+            text: qsTr("Edit contractual point…")
+            enabled: chartMenu.targetMarker !== null
+            onTriggered: contractualDialog.openFor(chartMenu.targetMarker.index, {
+                "outreach_m": chartMenu.targetMarker.outreach,
+                "load_t": chartMenu.targetMarker.load
+            })
+        }
+
+        MenuItem {
+            objectName: "deleteContractualMenuItem"
+            text: qsTr("Delete contractual point")
+            enabled: chartMenu.targetMarker !== null
+            onTriggered: chartVm.deleteContractualPoint(chartMenu.targetMarker.index)
         }
 
         MenuSeparator {}
