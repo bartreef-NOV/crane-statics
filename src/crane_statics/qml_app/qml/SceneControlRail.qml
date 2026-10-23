@@ -244,8 +244,6 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Surge (m/s²):")
-                from: -sceneVm.accelXMax
-                to: sceneVm.accelXMax
                 flippable: true
                 value: sceneVm.accelX
                 onCommitted: newValue => sceneVm.setAccelX(newValue)
@@ -254,8 +252,6 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Sway (m/s²):")
-                from: -sceneVm.accelYMax
-                to: sceneVm.accelYMax
                 flippable: true
                 value: sceneVm.accelY
                 onCommitted: newValue => sceneVm.setAccelY(newValue)
@@ -264,8 +260,6 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Heave (m/s²):")
-                from: -sceneVm.accelZMax
-                to: sceneVm.accelZMax
                 flippable: true
                 value: sceneVm.accelZ
                 onCommitted: newValue => sceneVm.setAccelZ(newValue)
@@ -274,8 +268,6 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Roll (rad/s²):")
-                from: -sceneVm.rollAccelMax
-                to: sceneVm.rollAccelMax
                 flippable: true
                 value: sceneVm.rollAccel
                 onCommitted: newValue => sceneVm.setRollAccel(newValue)
@@ -284,8 +276,6 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Pitch (rad/s²):")
-                from: -sceneVm.pitchAccelMax
-                to: sceneVm.pitchAccelMax
                 flippable: true
                 value: sceneVm.pitchAccel
                 onCommitted: newValue => sceneVm.setPitchAccel(newValue)
@@ -294,8 +284,6 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Roll angle (°):")
-                from: -sceneVm.vesselRollMax
-                to: sceneVm.vesselRollMax
                 flippable: true
                 value: sceneVm.vesselRoll
                 onCommitted: newValue => sceneVm.setVesselRoll(newValue)
@@ -304,8 +292,6 @@ ColumnLayout {
             NumericRow {
                 Layout.fillWidth: true
                 label: qsTr("Pitch angle (°):")
-                from: -sceneVm.vesselPitchMax
-                to: sceneVm.vesselPitchMax
                 flippable: true
                 value: sceneVm.vesselPitch
                 onCommitted: newValue => sceneVm.setVesselPitch(newValue)

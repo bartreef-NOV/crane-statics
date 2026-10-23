@@ -21,6 +21,7 @@ from typing import Any, Callable, Optional, Sequence
 import numpy as np
 
 from ..calculation.capacity import QUADRATIC_SOLVER_TOLERANCE
+from ..calculation.dynamic_factor import DynamicFactor, DynamicFactorLike, as_dynamic_factor
 from ..calculation.engine import (
     AllowableCapacity,
     AnalysisPoint,
@@ -498,7 +499,7 @@ class _LimitContext:
     probes: ProbeSet
     basis: _UnitBasis
     harmonics: _SlewHarmonics
-    hook_daf: float
+    hook_daf: DynamicFactor
     hook_mass_t: float
     # VesselInputs fields (no slew) of each sign case, in the harmonics' case order.
     vessel_cases: tuple[dict[str, float], ...]
@@ -867,7 +868,7 @@ def envelope_capacity(
     vessel: VesselMotion,
     offlead_deg: float,
     sidelead_deg: float,
-    hook_daf: float,
+    hook_daf: DynamicFactorLike,
     hook_mass_t: float,
 ) -> AllowableCapacity:
     """Lowest allowable capacity over every case; see ``envelope_capacity_case``."""
@@ -892,7 +893,7 @@ def envelope_capacity_case(
     vessel: VesselMotion,
     offlead_deg: float,
     sidelead_deg: float,
-    hook_daf: float,
+    hook_daf: DynamicFactorLike,
     hook_mass_t: float,
 ) -> tuple[AllowableCapacity, Optional[EnvelopeCase]]:
     """Lowest allowable capacity over every vessel sign case, slew, wind angle and lead sign.
@@ -928,7 +929,7 @@ def envelope_capacity_case(
         probes=probes,
         basis=_unit_basis(probes),
         harmonics=harmonics,
-        hook_daf=float(hook_daf),
+        hook_daf=as_dynamic_factor(hook_daf),
         hook_mass_t=float(hook_mass_t),
         vessel_cases=tuple(
             {VESSEL_INPUT_FIELDS[key]: float(value) for key, value in case.items()}

@@ -5,7 +5,7 @@ Uses crane_statics.presentation.formatters for all display logic.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from crane_statics.core.results import ResultRow
 from crane_statics.presentation.formatters import ResultRowFormatter
@@ -17,7 +17,6 @@ RESULT_ROLES = [
     "limit",
     "utilization",
     "utilizationValue",
-    "utilState",
     "isGroupHeader",
     "nested",
     "clickable",
@@ -25,11 +24,6 @@ RESULT_ROLES = [
 ]
 
 REPORT_ROLES = ["label", "kind", "fx", "fz", "magnitude", "posX", "posZ", "moment", "passed"]
-
-
-def utilization_state(utilization_pct: Optional[float]) -> str:
-    """Semantic state for utilization display (none, pass, warn, fail)."""
-    return ResultRowFormatter.utilization_state(utilization_pct)
 
 
 def is_clickable(row: ResultRow) -> bool:

@@ -1,10 +1,12 @@
 """File I/O utilities for Crane Statics documents."""
 
+from __future__ import annotations
+
 import json
 import re
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 
 import yaml
 from pydantic import ValidationError
@@ -22,6 +24,10 @@ from ..data.authored_models import (
     authored_schema_major,
     format_authored_validation_error,
 )
+from .limit_factory import DesignLimitFactory
+
+if TYPE_CHECKING:
+    from .session_model import DesignLimit
 
 
 class DocumentIOError(Exception):
@@ -135,19 +141,27 @@ def load_document(path: Path) -> CraneDocument:
         raise DocumentIOError(f"Failed to validate document: {e}")
 
 
-def save_document(doc: CraneDocument, path: Path) -> None:
+def save_document(
+    doc: CraneDocument, path: Path, limits: Optional[list[DesignLimit]] = None
+) -> None:
     """
     Save a document to disk in authored format.
 
     Args:
         doc: The document to save
         path: Target path
+        limits: The session's design limits; those differing from the defaults are saved with
+            the document. Without them the limits the document was loaded with are kept.
 
     Raises:
         DocumentIOError: If save fails
     """
     fmt = _format_for_suffix(path.suffix)
     try:
+        if limits is not None:
+            doc = doc.model_copy(
+                update={"saved_limits": DesignLimitFactory.saved_limits_for(doc, limits)}
+            )
         # Convert to authored form (remove derived fields, connections)
         authored_data = document_to_authored_form(doc)
         _validate_authored_schema(authored_data)

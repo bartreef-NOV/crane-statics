@@ -12,6 +12,7 @@ from ..data.models import CraneDocument
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .chart_envelope import ProbeSet, build_probes, envelope_capacity, lead_points
 from .demand_extraction import limit_responds_to_hook_load
+from .load_condition import default_load_condition
 from .sweep_cache import ComputeScope, LimitResult, limit_signature
 
 _LOG = logging.getLogger(__name__)
@@ -141,10 +142,11 @@ def run_mode_sweep(
     # would leak a document copy.
     calc = CraneCalculator(doc)
     kin = KinematicsAdapter(doc.model_dump())
-    wind_speed = float(doc.environment.max_wind_speed_m_s)
+    condition = default_load_condition(doc)
+    wind_speed = condition.wind_speed_m_s
     # The Model's vessel motion values are ± limits and the hoist's leads are taken with
     # both signs; the chart reports the worst case over them, every slew and wind angle.
-    vessel = doc.environment.vessel_motion
+    vessel = condition.vessel_motion
     offlead_deg = float(getattr(hoist, "offlead_deg", 0.0))
     sidelead_deg = float(getattr(hoist, "sidelead_deg", offlead_deg))
 

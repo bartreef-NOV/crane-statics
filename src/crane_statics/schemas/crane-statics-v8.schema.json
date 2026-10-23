@@ -317,6 +317,28 @@
       "title": "AuthoredHook",
       "type": "object"
     },
+    "AuthoredLimit": {
+      "additionalProperties": false,
+      "properties": {
+        "capacity_kN": {
+          "description": "The limit's capacity in kN (kN/m for bearing line loads, kNm for moments), as a positive magnitude.",
+          "minimum": 0,
+          "title": "Capacity Kn",
+          "type": "number"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether the limit is checked.",
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "capacity_kN"
+      ],
+      "title": "AuthoredLimit",
+      "type": "object"
+    },
     "AuthoredLoadChartPoint": {
       "additionalProperties": false,
       "description": "A rated operating point on the hoist capacity curve.",
@@ -507,6 +529,19 @@
             "minLength": 1
           },
           "title": "Payload Hoists",
+          "type": "object"
+        },
+        "limits": {
+          "description": "Design limits whose value or enabled state differs from the default the app derives from the hoists' contractual points. Keyed by limit id: a rope limit is '<rope id>_T' (for example 'MH__rope_T'), a connection limit '<connection>_<component>' (for example 'rear_hinge_Fx'). Limits not listed keep their default.",
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9_-]*$": {
+              "$ref": "#/$defs/AuthoredLimit"
+            }
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Limits",
           "type": "object"
         }
       },
@@ -1127,7 +1162,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "8.0.0"
+        "version": "8.1.0"
       }
     }
   ],

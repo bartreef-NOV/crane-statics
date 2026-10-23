@@ -133,7 +133,7 @@ Item {
                 Layout.fillHeight: true
                 title: qsTr("Hoists")
                 model: sceneVm.ropeRowsModel
-                onBarClicked: row => sceneVm.openLoadOverview("rope", row)
+                onDemandClicked: row => sceneVm.openLoadOverview("rope", row)
             }
 
             ResultsTable {
@@ -141,7 +141,7 @@ Item {
                 Layout.fillHeight: true
                 title: qsTr("Connections")
                 model: sceneVm.connectionRowsModel
-                onBarClicked: row => sceneVm.openLoadOverview("connection", row)
+                onDemandClicked: row => sceneVm.openLoadOverview("connection", row)
             }
         }
     }

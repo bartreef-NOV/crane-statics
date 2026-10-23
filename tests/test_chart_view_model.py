@@ -246,6 +246,17 @@ class TestContractualEditing:
         chart_vm.deleteContractualPoint(before)
         assert chart_vm.contractualModel.count == before
 
+    def test_markers_follow_edits_in_row_order(self, chart_vm):
+        before = chart_vm.contractualModel.count
+
+        chart_vm.addContractualPoint({"outreach_m": 33.0, "load_t": 120.0})
+        assert len(chart_vm.markers) == before + 1
+        assert chart_vm.markers[-1]["outreach"] == pytest.approx(33.0)
+        assert chart_vm.markers[-1]["status"] == "pending"
+
+        chart_vm.deleteContractualPoint(before)
+        assert len(chart_vm.markers) == before
+
     def test_update_writes_back_to_the_document(self, chart_vm):
         chart_vm.updateContractualPoint(0, {"outreach_m": 31.5, "load_t": 77.0})
         fields = chart_vm.contractualFields(0)

@@ -24,11 +24,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
 AUTHORED_SCHEMA_MAJOR_VERSION = 8
-AUTHORED_SCHEMA_VERSION = "8.0.0"
+AUTHORED_SCHEMA_VERSION = "8.1.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
 IdName = Annotated[str, Field(min_length=1, pattern=r"^[A-Za-z][A-Za-z0-9_-]*$")]
+
+DEFAULT_GRAVITY_M_S2 = 9.81
+DEFAULT_AIR_DENSITY_KG_M3 = 1.225
 
 BOOM_HOIST_ID = "BH"
 """Runtime hoist ID of the boom hoist; its local node IDs are prefixed ``bh_``."""
@@ -88,12 +91,12 @@ class AuthoredEnvironment(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     gravity_m_s2: float = Field(
-        default=9.81,
+        default=DEFAULT_GRAVITY_M_S2,
         gt=0,
         description="Gravity magnitude in m/s²; the runtime uses it as negative Z gravity.",
     )
     max_wind_speed_m_s: float = Field(gt=0, description="Positive maximum wind speed in m/s.")
-    air_density_kg_m3: float = Field(default=1.225, gt=0)
+    air_density_kg_m3: float = Field(default=DEFAULT_AIR_DENSITY_KG_M3, gt=0)
 
 
 class AuthoredGlobalPosition2D(BaseModel):
@@ -518,6 +521,17 @@ class AuthoredStructure(BaseModel):
     )
 
 
+class AuthoredLimit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capacity_kN: float = Field(
+        ge=0,
+        description="The limit's capacity in kN (kN/m for bearing line loads, kNm for moments), "
+        "as a positive magnitude.",
+    )
+    enabled: bool = Field(default=True, description="Whether the limit is checked.")
+
+
 class AuthoredModelDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -555,6 +569,13 @@ class AuthoredModelDefinition(BaseModel):
         description="Named payload hoists. Each is self-contained: deleting its block removes "
         "the hoist together with the sheaves it owns.",
     )
+    limits: dict[IdName, AuthoredLimit] = Field(
+        default_factory=dict,
+        description="Design limits whose value or enabled state differs from the default the "
+        "app derives from the hoists' contractual points. Keyed by limit id: a rope limit is "
+        "'<rope id>_T' (for example 'MH__rope_T'), a connection limit '<connection>_<component>' "
+        "(for example 'rear_hinge_Fx'). Limits not listed keep their default.",
+    )
 
     @model_validator(mode="after")
     def _check_hoist_prefixes_unique(self) -> "AuthoredModelDefinition":
@@ -575,8 +596,8 @@ EXAMPLE_DOCUMENT: dict = {
     "metadata": {"name": "New Crane Model"},
     "model_definition": {
         "environment": {
-            "gravity_m_s2": 9.81,
-            "air_density_kg_m3": 1.225,
+            "gravity_m_s2": DEFAULT_GRAVITY_M_S2,
+            "air_density_kg_m3": DEFAULT_AIR_DENSITY_KG_M3,
             "max_wind_speed_m_s": 20.0,
         },
         "structure": {

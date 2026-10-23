@@ -85,6 +85,18 @@ class TestSaveGuards:
         assert app_vm.save() is True
         assert app_vm.dirty is False
 
+    def test_edited_design_limits_are_saved_and_reopened(self, app_vm, tmp_path):
+        app_vm.openPath(str(EXAMPLE))
+        app_vm.session.model.design_limits_by_id["rear_hinge_Fx"].max_kN = 321.0
+        app_vm.session.model.design_limits_by_id["rear_hinge_Fx"].enabled = True
+        target = tmp_path / "limits.yaml"
+
+        assert app_vm.saveAs(QUrl.fromLocalFile(str(target))) is True
+        app_vm.openPath(str(target))
+
+        reopened = app_vm.session.model.design_limits_by_id["rear_hinge_Fx"]
+        assert (reopened.max_kN, reopened.enabled) == (321.0, True)
+
 
 class TestLayoutReset:
     def test_reset_is_ignored_without_a_document(self, app_vm):

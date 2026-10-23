@@ -16,14 +16,14 @@ from .authored_models import (
     AUTHORED_SCHEMA_NAME,
     AUTHORED_SCHEMA_VERSION,
     BOOM_HOIST_ID,
+    DEFAULT_AIR_DENSITY_KG_M3,
+    DEFAULT_GRAVITY_M_S2,
     authored_schema_major,
     format_authored_validation_error,
     hoist_node_prefix,
 )
 
 CANONICAL_BODIES = ["boom", "rear_leg", "front_leg", "platform"]
-DEFAULT_GRAVITY_M_S2 = 9.81
-DEFAULT_AIR_DENSITY_KG_M3 = 1.225
 DEFAULT_VESSEL_MOTION = {
     "accel_x_m_s2": 0.0,
     "accel_y_m_s2": 0.0,
@@ -105,9 +105,9 @@ class VesselMotion(BaseModel):
 class Environment(BaseModel):
     """Environment definition."""
 
-    gravity_m_s2: float = Field(default=-9.81, description="Gravity acceleration")
+    gravity_m_s2: float = Field(default=-DEFAULT_GRAVITY_M_S2, description="Gravity acceleration")
     max_wind_speed_m_s: float = Field(default=20.0, description="Maximum wind speed")
-    air_density_kg_m3: float = Field(default=1.225, description="Air density")
+    air_density_kg_m3: float = Field(default=DEFAULT_AIR_DENSITY_KG_M3, description="Air density")
     vessel_motion: VesselMotion = Field(default_factory=VesselMotion)
 
     @field_validator("gravity_m_s2")
@@ -345,6 +345,13 @@ class SupportWidths(BaseModel):
         return v
 
 
+class SavedLimit(BaseModel):
+    """An authored design-limit value: the capacity in kN and whether the limit is checked."""
+
+    capacity_kN: float = Field(ge=0.0)
+    enabled: bool = True
+
+
 class CraneDocument(BaseModel):
     """Root crane model document."""
 
@@ -363,6 +370,11 @@ class CraneDocument(BaseModel):
     ropes: list[Rope] = Field(default_factory=list)
     hoists: list[Hoist] = Field(default_factory=list)
     support_widths: SupportWidths = Field(default_factory=SupportWidths)
+    saved_limits: dict[str, SavedLimit] = Field(
+        default_factory=dict,
+        description="Design limits as authored: those differing from the default catalog. "
+        "Read once when a session starts; the session's own limits are what is analysed",
+    )
     connections: Optional[list[dict[str, Any]]] = Field(
         default=None, description="Runtime-generated only"
     )
@@ -1171,6 +1183,13 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         "support_widths": {
             "boom_width_m": boom_width_m,
             "slewing_bearing_diameter_m": slewing_bearing_diameter_m,
+        },
+        "saved_limits": {
+            str(limit_id): {
+                "capacity_kN": float(limit["capacity_kN"]),
+                "enabled": bool(limit.get("enabled", True)),
+            }
+            for limit_id, limit in (md.get("limits") or {}).items()
         },
         "bodies": bodies,
         "nodes": nodes,
@@ -2063,8 +2082,8 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
 
     model_definition: dict[str, Any] = {
         "environment": {
-            "gravity_m_s2": abs(float(env.get("gravity_m_s2", -9.81))),
-            "air_density_kg_m3": float(env.get("air_density_kg_m3", 1.225)),
+            "gravity_m_s2": abs(float(env.get("gravity_m_s2", -DEFAULT_GRAVITY_M_S2))),
+            "air_density_kg_m3": float(env.get("air_density_kg_m3", DEFAULT_AIR_DENSITY_KG_M3)),
             "max_wind_speed_m_s": float(env.get("max_wind_speed_m_s", 20.0)),
         },
     }
@@ -2086,6 +2105,15 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
             model_definition[body_id] = section
     model_definition["boom_hoist"] = authored_boom_hoist
     model_definition["payload_hoists"] = authored_payload_hoists
+    saved_limits = data.get("saved_limits") or {}
+    if saved_limits:
+        model_definition["limits"] = {
+            str(limit_id): {
+                "capacity_kN": float(limit["capacity_kN"]),
+                "enabled": bool(limit.get("enabled", True)),
+            }
+            for limit_id, limit in saved_limits.items()
+        }
 
     return {
         "schema": {
