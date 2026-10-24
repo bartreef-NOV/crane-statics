@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import math
 
 import pytest
 
@@ -41,8 +40,6 @@ def _synthetic_doc_dict(
     falls=2,
     split_falls=None,
     outreach_min_m=15.0,
-    drum_dead_turns=0,
-    drum_diameter_m=None,
 ):
     segments = []
     for winch_id in winch_node_ids:
@@ -80,8 +77,6 @@ def _synthetic_doc_dict(
                 "rope_length_m": rope_length_m,
                 "falls": falls,
                 "split_falls": split_falls,
-                "drum_dead_turns": drum_dead_turns,
-                "drum_diameter_m": drum_diameter_m,
             }
         ],
     }
@@ -166,13 +161,6 @@ class TestHookGeometryDerivation:
         _travel_m, rope_m = derive_hook_geometry(doc_dict, "hoist_a", -30.0)
 
         assert rope_m == pytest.approx(expected)
-
-    def test_dead_turns_add_their_wrapped_length(self):
-        doc_dict = _synthetic_doc_dict()
-        _travel_m, bare_rope_m = derive_hook_geometry(doc_dict, "hoist_a", -30.0)
-        _travel_m, with_dead_m = derive_hook_geometry(doc_dict, "hoist_a", -30.0, 4 * math.pi * 1.5)
-
-        assert with_dead_m - bare_rope_m == pytest.approx(4 * math.pi * 1.5)
 
     def test_design_height_above_the_sheave_is_an_error(self):
         doc_dict = _synthetic_doc_dict()
@@ -314,14 +302,13 @@ class TestExampleDocument:
         assert resolve_total_rope_length_m(example_doc_dict, "BH") == pytest.approx(4500.0)
         assert find_winch_node_ids(example_doc_dict, boom_hoist["id"])
 
-    def test_payload_hoist_rope_length_is_derived_from_the_design_hook_height(self, example_doc):
-        hook_height_m = example_doc.hook_height_at_min_outreach_m
-        assert hook_height_m == pytest.approx(-53.0)
-
+    def test_payload_hoist_rope_length_is_derived_from_the_lowest_hook_height(self, example_doc):
         doc_dict = example_doc.model_dump()
         for hoist in example_doc.hoists:
             if hoist.id == "BH":
                 continue
+            hook_height_m = hoist.lowest_hook_height_m
+            assert hook_height_m == pytest.approx(-53.0)
             travel_m, rope_m = derive_hook_geometry(doc_dict, hoist.id, hook_height_m)
             assert hoist.max_hook_travel_m == pytest.approx(travel_m)
             assert hoist.rope_length_m == pytest.approx(rope_m)
@@ -337,7 +324,7 @@ class TestExampleDocument:
                 doc_dict,
                 hoist.id,
                 kin.compute_all_node_positions(angle),
-                float(example_doc.hook_height_at_min_outreach_m),
+                float(hoist.lowest_hook_height_m),
             )
             reeved = compute_reeved_length_m(doc_dict, hoist.id, positions)
             assert reeved is not None

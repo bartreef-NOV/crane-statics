@@ -134,8 +134,7 @@ def build_payload_hoist(
     offlead_deg: float = 0.0,
     sidelead_deg: float = 0.0,
     linear_mass_kg_m: float = 0.0,
-    drum_dead_turns: int = 0,
-    drum_diameter_m: Optional[float] = None,
+    lowest_hook_height_m: float = 0.0,
 ) -> Hoist:
     hoist_id = hoist_id.strip()
     if not hoist_id:
@@ -160,8 +159,7 @@ def build_payload_hoist(
         offlead_deg=float(offlead_deg),
         sidelead_deg=float(sidelead_deg),
         linear_mass_kg_m=max(0.0, float(linear_mass_kg_m)),
-        drum_dead_turns=max(0, int(drum_dead_turns)),
-        drum_diameter_m=None if drum_diameter_m is None else max(1e-9, float(drum_diameter_m)),
+        lowest_hook_height_m=float(lowest_hook_height_m),
         split_contractual_points=(
             [ContractualPoint(outreach_m=0.0, load_t=0.0)] if splitable_block else []
         ),
@@ -202,7 +200,7 @@ class DocumentEditor:
 
         Any edit can move the sheave -- a node, a hinge, a gravity change that
         shifts nothing but is cheap to re-run -- and both values are consequences
-        of the design hook height, so they are recomputed rather than carried.
+        of each hoist's lowest hook height, so they are recomputed rather than carried.
         """
         derive_payload_hoist_rope_geometry(self._doc)
 

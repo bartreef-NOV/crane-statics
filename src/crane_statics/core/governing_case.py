@@ -76,7 +76,7 @@ def governing_case(
     wind_speed = condition.wind_speed_m_s
     vessel = condition.vessel_motion
     offlead_deg = float(getattr(hoist, "offlead_deg", 0.0))
-    sidelead_deg = float(getattr(hoist, "sidelead_deg", offlead_deg))
+    sidelead_deg = float(getattr(hoist, "sidelead_deg", 0.0))
 
     candidates = [
         lid

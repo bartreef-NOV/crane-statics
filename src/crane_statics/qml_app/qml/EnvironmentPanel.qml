@@ -9,6 +9,8 @@ ColumnLayout {
         8
     )
 
+    property bool advancedExpanded: false
+
     spacing: root.layoutSpacing
 
     component EnvRow: RowLayout {
@@ -147,21 +149,7 @@ ColumnLayout {
             anchors.fill: parent
             spacing: root.layoutSpacing
 
-            EnvRow { label: qsTr("Gravity (m/s²)"); fieldKey: "gravity_m_s2" }
             EnvRow { label: qsTr("Max Wind Speed (m/s)"); fieldKey: "max_wind_speed_m_s" }
-            EnvRow { label: qsTr("Air Density (kg/m³)"); fieldKey: "air_density_kg_m3" }
-        }
-    }
-
-    GroupBox {
-        Layout.fillWidth: true
-        title: qsTr("Design Duty")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: root.layoutSpacing
-
-            EnvRow { label: qsTr("Hook Height at Min Outreach (m)"); fieldKey: "hook_height_at_min_outreach_m" }
         }
     }
 
@@ -180,8 +168,34 @@ ColumnLayout {
             EnvRow { label: qsTr("Pitch (rad/s²)"); fieldKey: "pitch_angular_accel_rad_s2" }
             EnvRow { label: qsTr("Roll angle (°)"); fieldKey: "roll_deg" }
             EnvRow { label: qsTr("Pitch angle (°)"); fieldKey: "pitch_deg" }
-            EnvRow { label: qsTr("Reference X (m)"); fieldKey: "reference_x_m" }
-            EnvRow { label: qsTr("Reference Z (m)"); fieldKey: "reference_z_m" }
+        }
+    }
+
+    // Rarely changed values: the defaults suit nearly every model.
+    Button {
+        objectName: "advancedToggle"
+        Layout.fillWidth: true
+        flat: true
+        checkable: true
+        checked: root.advancedExpanded
+        onToggled: root.advancedExpanded = checked
+        text: (checked ? "▾ " : "▸ ") + qsTr("Advanced")
+    }
+
+    GroupBox {
+        objectName: "advancedGroup"
+        Layout.fillWidth: true
+        visible: root.advancedExpanded
+        title: qsTr("Advanced")
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: root.layoutSpacing
+
+            EnvRow { label: qsTr("Gravity (m/s²)"); fieldKey: "gravity_m_s2" }
+            EnvRow { label: qsTr("Air Density (kg/m³)"); fieldKey: "air_density_kg_m3" }
+            EnvRow { label: qsTr("Vessel Motion Reference X (m)"); fieldKey: "reference_x_m" }
+            EnvRow { label: qsTr("Vessel Motion Reference Z (m)"); fieldKey: "reference_z_m" }
         }
     }
 }

@@ -74,6 +74,15 @@ Dialog {
                 font.bold: true
             }
         }
+
+        Label {
+            Layout.fillWidth: true
+            visible: root.overview.note !== undefined
+            text: root.overview.note !== undefined ? root.overview.note : ""
+            wrapMode: Text.WordWrap
+            font.italic: true
+            color: sysPalette.placeholderText
+        }
     }
 }
 

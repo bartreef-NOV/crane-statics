@@ -354,7 +354,6 @@ class TestModelViewModelEditing:
             "DAF",
             "Offlead (deg)",
             "Sidelead (deg)",
-            "Max Hook Travel (m)",
         ):
             column = headers.index(payload_header)
             assert (
@@ -435,34 +434,44 @@ class TestInlineCellEditing:
         model = model_vm.hoistsModel
         boom_row = self._row_of(model, "BH")
         payload_row = self._row_of(model, "MH")
-        rope_length = self._column(model, "Rope Length (m)")
         falls = self._column(model, "Falls")
-        travel = self._column(model, "Max Hook Travel (m)")
         linear_mass = self._column(model, "Linear Mass (kg/m)")
 
-        # The boom hoist authors its rope length; a payload hoist derives it.
-        assert model.isCellEditable(boom_row, rope_length) is True
-        assert model.isCellEditable(payload_row, rope_length) is False
         # Payload-only fields, and the id every rope and hook is named after.
         assert model.isCellEditable(boom_row, falls) is False
         assert model.isCellEditable(payload_row, falls) is True
         assert model.isCellEditable(payload_row, self._column(model, "ID")) is False
-        # Derived on every row.
-        assert model.isCellEditable(boom_row, travel) is False
-        assert model.isCellEditable(payload_row, travel) is False
         # Rope weight applies to both.
         assert model.isCellEditable(boom_row, linear_mass) is True
         assert model.isCellEditable(payload_row, linear_mass) is True
 
+    def test_hoist_list_follows_the_hoists_model_rows(self, model_vm):
+        listed = [(h["id"], h["isBoom"]) for h in model_vm.hoistList]
+
+        assert listed == [
+            (model_vm.hoistsModel.record_at(row).id, model_vm.hoistsModel.record_at(row).id == "BH")
+            for row in range(model_vm.hoistsModel.count)
+        ]
+
+    def test_hoist_form_edits_a_payload_field_and_the_boom_rope_length(self, model_vm, document):
+        payload_row = self._row_of(model_vm.hoistsModel, "MH")
+        boom_row = self._row_of(model_vm.hoistsModel, "BH")
+
+        assert model_vm.setHoistField(payload_row, "lowest_hook_height_m", -40.0) is True
+        assert model_vm.setHoistField(boom_row, "rope_length_m", 1234.0) is True
+
+        assert next(h for h in document.hoists if h.id == "MH").lowest_hook_height_m == -40.0
+        assert next(h for h in document.hoists if h.id == "BH").rope_length_m == 1234.0
+        assert "max_hook_travel_m" not in model_vm.hoistFields(payload_row)
+
     def test_a_read_only_cell_refuses_a_commit(self, model_vm, document):
         model = model_vm.hoistsModel
         row = self._row_of(model, "MH")
-        column = self._column(model, "Max Hook Travel (m)")
-        before = next(h for h in document.hoists if h.id == "MH").max_hook_travel_m
+        column = self._column(model, "ID")
 
-        assert model.commitCell(row, column, "99.0") is False
+        assert model.commitCell(row, column, "renamed") is False
 
-        assert next(h for h in document.hoists if h.id == "MH").max_hook_travel_m == before
+        assert next(h for h in document.hoists if h.id == "MH").id == "MH"
         flags = model.flags(model.index(row, column))
         assert not flags & Qt.ItemFlag.ItemIsEditable
 

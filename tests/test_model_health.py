@@ -92,11 +92,12 @@ class TestHealthChecks:
     def test_design_height_below_the_sheave_at_max_outreach_warns(self, document):
         # The sheaves sit at ~162 m boomed up and ~30 m boomed out, so a design
         # height of 40 m is reachable close in and unreachable far out.
-        document.hook_height_at_min_outreach_m = 40.0
+        for hoist in document.hoists:
+            hoist.lowest_hook_height_m = 40.0
 
         _blocking, warnings = collect_model_health_issues(document)
 
-        assert any("cannot reach the design hook height" in issue for issue in warnings)
+        assert any("cannot reach the lowest hook height" in issue for issue in warnings)
 
     def test_validation_error_is_prepended_as_blocking(self, document):
         severity, verdict, checks = health_status(document, "bad value")

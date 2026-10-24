@@ -23,8 +23,8 @@ from typing import Annotated, Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
-AUTHORED_SCHEMA_MAJOR_VERSION = 8
-AUTHORED_SCHEMA_VERSION = "8.1.0"
+AUTHORED_SCHEMA_MAJOR_VERSION = 9
+AUTHORED_SCHEMA_VERSION = "9.0.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -384,26 +384,6 @@ class AuthoredPayloadHoistRope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     linear_mass_kg_m: float = Field(default=0.0, ge=0)
-    drum_dead_turns: int = Field(
-        default=0,
-        ge=0,
-        description="Turns of rope that must remain on the drum when the hook is at its "
-        "lowest point. Requires drum_diameter_m.",
-    )
-    drum_diameter_m: Optional[float] = Field(
-        default=None,
-        gt=0,
-        description="Mean wrap diameter of the dead turns in metres. Dead rope length is "
-        "drum_dead_turns * pi * drum_diameter_m and is added to the derived total rope length.",
-    )
-
-    @model_validator(mode="after")
-    def _check_dead_turns_require_diameter(self) -> "AuthoredPayloadHoistRope":
-        if "drum_dead_turns" in self.model_fields_set and "drum_diameter_m" not in (
-            self.model_fields_set
-        ):
-            raise ValueError("drum_dead_turns requires drum_diameter_m")
-        return self
 
 
 class AuthoredHook(BaseModel):
@@ -473,6 +453,12 @@ class AuthoredPayloadHoist(BaseModel):
         description="Reeving node the hook hangs from. Omit to use the last reeving entry.",
     )
     hook: AuthoredHook
+    lowest_hook_height_m: Optional[float] = Field(
+        default=None,
+        description="Absolute global Z the hook must reach at this hoist's minimum outreach. "
+        "The hoist's maximum hook travel and total rope length are derived from it. Omit to "
+        "default to crane-frame z = 0.",
+    )
     load_chart: list[AuthoredLoadChartPoint] = Field(min_length=1)
     split: Optional[AuthoredSplitMode] = None
 
@@ -537,12 +523,6 @@ class AuthoredModelDefinition(BaseModel):
 
     environment: AuthoredEnvironment
     vessel_motion: AuthoredVesselMotion = Field(default_factory=AuthoredVesselMotion)
-    hook_height_at_min_outreach_m: Optional[float] = Field(
-        default=None,
-        description="Absolute global Z the hook must reach at each payload hoist's minimum "
-        "outreach. Every payload hoist's maximum hook travel and total rope length are "
-        "derived from it. Omit to default to crane-frame z = 0.",
-    )
     structure: AuthoredStructure
     boom: AuthoredBoomBody = Field(
         default_factory=AuthoredBoomBody,

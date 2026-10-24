@@ -617,7 +617,7 @@ def test_live_tables_use_the_shared_row_height_token(qml_engine):
     ("qml_file", "minimum_height"),
     [
         ("dialogs/NodeDialog.qml", 150),
-        ("dialogs/HoistDialog.qml", 400),
+        ("dialogs/HoistDialog.qml", 340),
         ("dialogs/MassPointDialog.qml", 200),
     ],
 )

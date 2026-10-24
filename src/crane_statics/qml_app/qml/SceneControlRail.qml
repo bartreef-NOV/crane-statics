@@ -133,7 +133,7 @@ ColumnLayout {
 
             NumericRow {
                 Layout.fillWidth: true
-                label: qsTr("Static Hook Load (t):")
+                label: qsTr("Applied Hook Load (t):")
                 from: 0
                 to: 10000
                 decimals: 1

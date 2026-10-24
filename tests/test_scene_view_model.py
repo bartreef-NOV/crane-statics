@@ -83,11 +83,7 @@ class TestSceneViewModelState:
 
         assert state is not None
         assert hoist is not None
-        expected = (
-            (hoist.static_hook_load_t + hoist.hook_mass_t)
-            * hoist.hook_daf
-            * scene_vm._hoist_state.gravity_abs()
-        )
+        expected = hoist.hook_mass_t * hoist.hook_daf * scene_vm._hoist_state.gravity_abs()
         assert state.scene_state.hook_load_kN == pytest.approx(expected)
 
     def test_second_canvas_stays_synchronized(self, scene_vm):
@@ -608,7 +604,7 @@ class TestReportsAndOverview:
         scene_vm.openLoadOverview("rope", clickable)
 
         assert overviews
-        assert len(overviews[-1]["terms"]) == 6
+        assert len(overviews[-1]["terms"]) == 8
 
 
 def _is_splitable(vm: SceneViewModel, hoist_id: str) -> bool:

@@ -187,14 +187,15 @@ def test_tackle_length_is_mode_value(doc: CraneDocument, mode_name: str) -> None
     case = governing_case(doc, HOIST, mode_name, LIMITS, outreach, lid)
     assert case is not None
     assert case.mode_name == mode_name
-    # The sweep evaluates the hook at the document's design height.
+    # The sweep evaluates the hook at the hoist's lowest hook height.
     doc_dict = doc.model_dump()
     angle = KinematicsAdapter(doc_dict).outreach_to_angle(outreach, HOIST)
     assert angle is not None
     support = KinematicsAdapter(doc_dict).compute_all_node_positions(angle)[
         hook_support_node_id(doc_dict, HOIST)
     ]
-    height = float(doc.hook_height_at_min_outreach_m)  # type: ignore[arg-type]
+    hoist = next(h for h in doc.hoists if h.id == HOIST)
+    height = float(hoist.lowest_hook_height_m)  # type: ignore[arg-type]
     expected = float(support["z"]) - min(float(support["z"]), height)
     assert case.scene_fields["tackle_length_m"] == pytest.approx(expected, abs=1e-9)
     assert case.scene_fields["tackle_length_m"] != SceneState().tackle_length_m

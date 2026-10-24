@@ -8,7 +8,7 @@ the one definition both the solver and ``core.drawn_loads`` build their rope
 weight from.
 
 A payload hoist's rope length and hook travel are not authored: they follow from
-the document's ``hook_height_at_min_outreach_m``, the absolute Z the hook must
+the hoist's ``lowest_hook_height_m``, the absolute Z the hook must
 reach at that hoist's minimum outreach. That state is the governing one --
 reeved length falls monotonically as the boom lowers -- so the rope needed there
 is the rope needed anywhere, and ``derive_hook_geometry`` computes both from it.
@@ -275,19 +275,19 @@ def active_hook_positions(
     Kinematics parks every managed hook a nominal drop below its sheave, which is
     a placeholder, not a position. ``tackle_length_m`` is the rope paid out below
     the sheave -- what the scene draws and drags. Passing ``None`` asks for the
-    designed operating position instead: the hook at the document's
-    ``hook_height_at_min_outreach_m``, which is the state the derived rope length
+    designed operating position instead: the hook at the hoist's
+    ``lowest_hook_height_m``, which is the state the derived rope length
     was sized for and so the state a sweep or a contractual check evaluates.
     """
+    hoist = _find_hoist(doc_dict, hoist_id)
+    if hoist is None:
+        return positions
     if tackle_length_m is None:
-        hook_height_m = doc_dict.get("hook_height_at_min_outreach_m")
+        hook_height_m = hoist.get("lowest_hook_height_m")
         if hook_height_m is None:
             return positions
         return hook_positions_at_height(doc_dict, hoist_id, positions, float(hook_height_m))
 
-    hoist = _find_hoist(doc_dict, hoist_id)
-    if hoist is None:
-        return positions
     support = positions.get(hook_support_node_id(doc_dict, hoist_id))
     if support is None:
         return positions
@@ -303,16 +303,15 @@ def derive_hook_geometry(
     doc_dict: dict[str, Any],
     hoist_id: str,
     hook_height_m: float,
-    dead_turns_length_m: float = 0.0,
 ) -> Optional[tuple[float, float]]:
-    """``(max_hook_travel_m, rope_length_m)`` implied by the design hook height.
+    """``(max_hook_travel_m, rope_length_m)`` implied by the lowest hook height.
 
     Both follow from one state: the hook at ``hook_height_m`` with the boom at
     this hoist's minimum outreach. Returns ``None`` when the geometry cannot be
     resolved (an unreachable minimum outreach, a missing support node), leaving
     the caller to report it rather than substitute a number.
 
-    Raises ``ValueError`` when the design height sits above the support node at
+    Raises ``ValueError`` when the lowest hook height sits above the support node at
     minimum outreach, which asks for negative rope payout.
     """
     hoist = _find_hoist(doc_dict, hoist_id)
@@ -340,7 +339,7 @@ def derive_hook_geometry(
     travel_m = float(support["z"]) - float(hook_height_m)
     if travel_m < 0.0:
         raise ValueError(
-            f"hoist[{hoist_id}]: hook_height_at_min_outreach_m {hook_height_m:g} m is above the "
+            f"hoist[{hoist_id}]: lowest_hook_height_m {hook_height_m:g} m is above the "
             f"support node {support_id!r} at {float(support['z']):g} m, so the required hook "
             f"travel is negative ({travel_m:g} m)"
         )
@@ -352,7 +351,7 @@ def derive_hook_geometry(
     )
     if reeved is None:
         return None
-    return travel_m, reeved + max(0.0, float(dead_turns_length_m))
+    return travel_m, reeved
 
 
 def reeved_length_at_angle_m(

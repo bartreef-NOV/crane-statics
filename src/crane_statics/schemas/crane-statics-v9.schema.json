@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/schemas/crane-statics-v8.schema.json",
+  "$id": "https://example.com/schemas/crane-statics-v9.schema.json",
   "title": "AuthoredDocument",
   "$defs": {
     "AuthoredBoomBody": {
@@ -481,19 +481,6 @@
         "vessel_motion": {
           "$ref": "#/$defs/AuthoredVesselMotion"
         },
-        "hook_height_at_min_outreach_m": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Absolute global Z the hook must reach at each payload hoist's minimum outreach. Every payload hoist's maximum hook travel and total rope length are derived from it. Omit to default to crane-frame z = 0.",
-          "title": "Hook Height At Min Outreach M"
-        },
         "structure": {
           "$ref": "#/$defs/AuthoredStructure"
         },
@@ -621,6 +608,19 @@
         "hook": {
           "$ref": "#/$defs/AuthoredHook"
         },
+        "lowest_hook_height_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Absolute global Z the hook must reach at this hoist's minimum outreach. The hoist's maximum hook travel and total rope length are derived from it. Omit to default to crane-frame z = 0.",
+          "title": "Lowest Hook Height M"
+        },
         "load_chart": {
           "items": {
             "$ref": "#/$defs/AuthoredLoadChartPoint"
@@ -657,27 +657,6 @@
           "minimum": 0,
           "title": "Linear Mass Kg M",
           "type": "number"
-        },
-        "drum_dead_turns": {
-          "default": 0,
-          "description": "Turns of rope that must remain on the drum when the hook is at its lowest point. Requires drum_diameter_m.",
-          "minimum": 0,
-          "title": "Drum Dead Turns",
-          "type": "integer"
-        },
-        "drum_diameter_m": {
-          "anyOf": [
-            {
-              "exclusiveMinimum": 0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Mean wrap diameter of the dead turns in metres. Dead rope length is drum_dead_turns * pi * drum_diameter_m and is added to the derived total rope length.",
-          "title": "Drum Diameter M"
         }
       },
       "title": "AuthoredPayloadHoistRope",
@@ -825,7 +804,7 @@
           "type": "string"
         },
         "version": {
-          "pattern": "^8\\.\\d+\\.\\d+$",
+          "pattern": "^9\\.\\d+\\.\\d+$",
           "title": "Version",
           "type": "string"
         }
@@ -1162,7 +1141,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "8.1.0"
+        "version": "9.0.0"
       }
     }
   ],

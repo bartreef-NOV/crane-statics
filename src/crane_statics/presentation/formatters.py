@@ -319,10 +319,9 @@ class HoistFormatter:
     ) -> list[Column]:
         """Column definitions for hoist table.
 
-        The two hoist kinds share the table but not the authored fields: a payload
-        hoist derives its rope length from the design hook height, while the boom
-        hoist authors it and owns no hook of its own. Columns that do not apply to
-        a row read blank there and refuse to be edited.
+        The two hoist kinds share the table but not the authored fields: the boom
+        hoist owns no hook of its own. Columns that do not apply to a row read
+        blank there and refuse to be edited.
         """
 
         def is_boom(hoist: Any) -> bool:
@@ -370,13 +369,6 @@ class HoistFormatter:
                 field="linear_mass_kg_m",
             ),
             Column(
-                "Rope Length (m)",
-                lambda h: h.rope_length_m,
-                decimals=3,
-                field="rope_length_m",
-                editable=is_boom,
-            ),
-            Column(
                 "Splittable",
                 payload_value(lambda h: h.splitable_block),
                 field="splitable_block",
@@ -420,25 +412,11 @@ class HoistFormatter:
                 editable=payload_only,
             ),
             Column(
-                "Drum Dead Turns",
-                payload_value(lambda h: h.drum_dead_turns),
-                decimals=1,
-                field="drum_dead_turns",
-                editor="int",
-                editable=payload_only,
-            ),
-            Column(
-                "Drum Diameter (m)",
-                payload_value(lambda h: h.drum_diameter_m),
+                "Lowest Hook Height (m)",
+                payload_value(lambda h: h.lowest_hook_height_m),
                 decimals=3,
-                field="drum_diameter_m",
+                field="lowest_hook_height_m",
                 editable=payload_only,
-            ),
-            # Derived from the design hook height, like the payload rope length.
-            Column(
-                "Max Hook Travel (m)",
-                payload_value(lambda h: h.max_hook_travel_m),
-                decimals=3,
             ),
         ]
 
@@ -466,7 +444,6 @@ class EnvironmentFormatter:
         "reference_z_m": "Reference Z (m)",
         "boom_width_m": "Boom Width (m)",
         "slewing_bearing_diameter_m": "Slewing Bearing Diameter (m)",
-        "hook_height_at_min_outreach_m": "Hook Height at Min Outreach (m)",
     }
 
     @staticmethod

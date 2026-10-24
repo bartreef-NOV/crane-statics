@@ -1,8 +1,7 @@
-schema: {name: crane-statics, version: 8.1.0}
+schema: {name: crane-statics, version: 9.0.0}
 metadata: {name: Blue Wind Crane Retracted}
 model_definition:
   environment: {gravity_m_s2: 9.81, air_density_kg_m3: 1.226, max_wind_speed_m_s: 20.0}
-  hook_height_at_min_outreach_m: -45.0
   structure:
     boom_width_m: 12.4
     boom_heel: {x_m: 5.6, z_m: 6.0}
@@ -110,6 +109,7 @@ model_definition:
       - {node: boom_sheave_2, body: boom, u_m: 94.4, w_m: 5.25, parts: 2}
       - {node: boom_sheave_3, body: boom, u_m: 96.5, w_m: -5.0, parts: 2}
       hook: {mass_t: 121.915, falls: 24, daf: 1.1, offlead_deg: 1.0, sidelead_deg: 2.5}
+      lowest_hook_height_m: -45.0
       load_chart:
       - {outreach_m: 19.0, load_t: 2500.0}
       - {outreach_m: 30.0, load_t: 2500.0}
@@ -124,6 +124,7 @@ model_definition:
       - {node: boom_sheave_1, body: boom, u_m: 30.75, w_m: 2.2}
       - {node: boom_sheave_2, body: boom, u_m: 103.5, w_m: -8.5}
       hook: {mass_t: 13.125, falls: 4, daf: 1.3, offlead_deg: 4.0, sidelead_deg: 4.5}
+      lowest_hook_height_m: -45.0
       load_chart:
       - {outreach_m: 23.1, load_t: 250.0}
       - {outreach_m: 105.0, load_t: 250.0}
@@ -135,6 +136,7 @@ model_definition:
       - {node: boom_sheave_3, body: boom, u_m: 94.4, w_m: 0.01}
       - {node: boom_sheave_4, body: boom, u_m: 101.05, w_m: -7.25}
       hook: {mass_t: 13.77, falls: 1, daf: 1.3, offlead_deg: 2.0, sidelead_deg: 4.5}
+      lowest_hook_height_m: -45.0
       load_chart:
       - {outreach_m: 31.4, load_t: 15.0}
       - {outreach_m: 119.0, load_t: 15.0}

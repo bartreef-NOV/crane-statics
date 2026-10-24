@@ -117,9 +117,6 @@ class EnvironmentSettings:
     boom_width_m: float = 0.0
     slewing_bearing_diameter_m: Optional[float] = None
 
-    # Design duty
-    hook_height_at_min_outreach_m: float = 0.0
-
     def to_dict(self) -> dict[str, Optional[float]]:
         """Convert to flat dict for QML or storage."""
         return {
@@ -137,7 +134,6 @@ class EnvironmentSettings:
             "reference_z_m": self.reference_z_m,
             "boom_width_m": self.boom_width_m,
             "slewing_bearing_diameter_m": self.slewing_bearing_diameter_m,
-            "hook_height_at_min_outreach_m": self.hook_height_at_min_outreach_m,
         }
 
     @classmethod
@@ -160,7 +156,6 @@ class EnvironmentSettings:
             slewing_bearing_diameter_m=(
                 float(v) if (v := data.get("slewing_bearing_diameter_m")) is not None else None
             ),
-            hook_height_at_min_outreach_m=float(data.get("hook_height_at_min_outreach_m", 0.0)),
         )
 
     @classmethod

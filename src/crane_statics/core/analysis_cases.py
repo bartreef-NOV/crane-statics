@@ -40,9 +40,7 @@ def iter_wind_lead_directional_cases(
 ) -> Iterator[DirectionalAnalysisCase]:
     """Yield all wind and signed-lead combinations for Auto-Set worst-case evaluation."""
     offlead_values = _signed_candidates(getattr(hoist, "offlead_deg", 0.0))
-    sidelead_values = _signed_candidates(
-        getattr(hoist, "sidelead_deg", getattr(hoist, "offlead_deg", 0.0))
-    )
+    sidelead_values = _signed_candidates(getattr(hoist, "sidelead_deg", 0.0))
     for offlead_deg in offlead_values:
         for sidelead_deg in sidelead_values:
             for wind_direction in candidate_wind_directions(wind_speed_m_s):

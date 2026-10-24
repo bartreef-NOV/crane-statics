@@ -148,7 +148,7 @@ def run_mode_sweep(
     # both signs; the chart reports the worst case over them, every slew and wind angle.
     vessel = condition.vessel_motion
     offlead_deg = float(getattr(hoist, "offlead_deg", 0.0))
-    sidelead_deg = float(getattr(hoist, "sidelead_deg", offlead_deg))
+    sidelead_deg = float(getattr(hoist, "sidelead_deg", 0.0))
 
     def _capacity(
         probes: ProbeSet, design_limits_map: dict[str, dict], hook_mass_t: float

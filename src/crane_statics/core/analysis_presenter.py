@@ -304,49 +304,55 @@ class AnalysisPresenter:
             offlead_deg=0.0,
             sidelead_deg=0.0,
         )
-        wind_env = dict(
-            zero_env, wind_speed_m_s=float(sc.wind_speed_m_s), wind_direction=str(sc.wind_direction)
-        )
-        inertia_env = dict(
-            wind_env,
-            accel_x_m_s2=float(sc.accel_x_m_s2),
-            accel_y_m_s2=float(sc.accel_y_m_s2),
-            accel_z_m_s2=float(sc.accel_z_m_s2),
-            pitch_accel_rad_s2=float(sc.pitch_accel_rad_s2),
-            roll_accel_rad_s2=float(sc.roll_accel_rad_s2),
-            # Tilt and slew change how the vessel motion and gravity load the crane, so
-            # they belong to the vessel-motion step of the breakdown.
-            vessel_roll_deg=float(sc.vessel_roll_deg),
-            vessel_pitch_deg=float(sc.vessel_pitch_deg),
-            crane_slewing_angle_deg=float(sc.crane_slewing_angle_deg),
-        )
-        offlead_env = dict(inertia_env, offlead_deg=float(sc.offlead_deg))
-        full_env = dict(offlead_env, sidelead_deg=float(sc.sidelead_deg))
-
-        dead = _demand(hook_load_kN=0.0, **zero_env)
-        with_hook = _demand(hook_load_kN=hook, **zero_env)
-        with_wind = _demand(hook_load_kN=hook, **wind_env)
-        with_inertia = _demand(hook_load_kN=hook, **inertia_env)
-        with_offlead = _demand(hook_load_kN=hook, **offlead_env)
-        full = _demand(hook_load_kN=hook, **full_env)
-        if (
-            dead is None
-            or with_hook is None
-            or with_wind is None
-            or with_inertia is None
-            or with_offlead is None
-            or full is None
-        ):
-            return None
-
-        terms: list[dict[str, Any]] = [
-            {"name": "Dead load baseline", "value_kN": float(dead)},
-            {"name": "Hook load", "value_kN": float(with_hook - dead)},
-            {"name": "Wind", "value_kN": float(with_wind - with_hook)},
-            {"name": "Inertia", "value_kN": float(with_inertia - with_wind)},
-            {"name": "Offlead", "value_kN": float(with_offlead - with_inertia)},
-            {"name": "Sidelead", "value_kN": float(full - with_offlead)},
+        # Each step switches on one more effect; a term is the demand increase over the
+        # previous step, so the terms always sum to the full-environment demand.
+        steps: list[tuple[str, float, dict[str, Any]]] = [
+            ("Dead weight", 0.0, {}),
+            ("Working load", hook, {}),
+            (
+                "Wind",
+                hook,
+                dict(
+                    wind_speed_m_s=float(sc.wind_speed_m_s),
+                    wind_direction=str(sc.wind_direction),
+                ),
+            ),
+            ("Vertical motion", hook, dict(accel_z_m_s2=float(sc.accel_z_m_s2))),
+            (
+                "Horizontal motion",
+                hook,
+                dict(
+                    accel_x_m_s2=float(sc.accel_x_m_s2),
+                    accel_y_m_s2=float(sc.accel_y_m_s2),
+                    pitch_accel_rad_s2=float(sc.pitch_accel_rad_s2),
+                    roll_accel_rad_s2=float(sc.roll_accel_rad_s2),
+                ),
+            ),
+            (
+                # Heel, trim and slew change how gravity and vessel motion load the crane.
+                "Vessel attitude",
+                hook,
+                dict(
+                    vessel_roll_deg=float(sc.vessel_roll_deg),
+                    vessel_pitch_deg=float(sc.vessel_pitch_deg),
+                    crane_slewing_angle_deg=float(sc.crane_slewing_angle_deg),
+                ),
+            ),
+            ("Off lead", hook, dict(offlead_deg=float(sc.offlead_deg))),
+            ("Side lead", hook, dict(sidelead_deg=float(sc.sidelead_deg))),
         ]
+
+        terms: list[dict[str, Any]] = []
+        env = dict(zero_env)
+        previous = 0.0
+        for name, step_hook, changes in steps:
+            env.update(changes)
+            demand = _demand(hook_load_kN=step_hook, **env)
+            if demand is None:
+                return None
+            terms.append({"name": name, "value_kN": float(demand) - previous})
+            previous = float(demand)
+        full = previous
         reconstructed = float(sum(float(t["value_kN"]) for t in terms))
         demand_kN_raw = row_meta.get("demand_kN")
         demand_kN = float(demand_kN_raw) if demand_kN_raw is not None else full
@@ -361,4 +367,5 @@ class AnalysisPresenter:
             "terms": terms,
             "reconstructed_kN": reconstructed,
             "delta_kN": reconstructed - demand_kN,
+            "note": "Effects interact: each line is the increase over the lines above it.",
         }

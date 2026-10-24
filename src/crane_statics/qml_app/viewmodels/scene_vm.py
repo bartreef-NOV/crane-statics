@@ -965,15 +965,10 @@ class SceneViewModel(QObject):
         self._kinematics.recompute_angle_bounds(doc)
 
         state = self._model.get_active_hoist_state()
-        selected_hoist = self._hoist_state.selected_hoist()
         selected_hoist_id = self._model.selected_hoist_id
         initialize_load = selected_hoist_id != self._initialized_load_hoist_id
         if initialize_load:
-            self._hook_load_t = (
-                max(0.0, float(selected_hoist.static_hook_load_t))
-                if selected_hoist is not None
-                else 0.0
-            )
+            self._hook_load_t = 0.0
             self._initialized_load_hoist_id = selected_hoist_id
         if state is not None:
             if initialize_load:

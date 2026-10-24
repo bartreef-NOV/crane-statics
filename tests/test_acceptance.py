@@ -598,7 +598,7 @@ class TestAuthoredSchemaPolicy:
 
     def _minimal_v6(self) -> dict:
         return {
-            "schema": {"name": "crane-statics", "version": "8.0.0"},
+            "schema": {"name": "crane-statics", "version": "9.0.0"},
             "metadata": {"name": "V6 Minimal"},
             "model_definition": {
                 "environment": {
@@ -678,13 +678,13 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "3.2.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 8 is supported"
+            ValueError, match="Only crane-statics schema major version 9 is supported"
         ):
             normalize_document(data)
 
     def test_v6_minor_version_bump_is_accepted_by_normalizer(self):
         data = self._minimal_v6()
-        data["schema"]["version"] = "8.1.0"
+        data["schema"]["version"] = "9.1.0"
         doc = normalize_document(data)
         assert doc is not None
 
@@ -692,7 +692,7 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "5.13.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 8 is supported"
+            ValueError, match="Only crane-statics schema major version 9 is supported"
         ):
             normalize_document(data)
 
@@ -776,13 +776,14 @@ class TestAuthoredSchemaPolicy:
         with pytest.raises(DocumentIOError, match="rope_length_m"):
             load_document(path)
 
-    def test_v6_dead_turns_require_a_drum_diameter(self, tmp_path):
+    @pytest.mark.parametrize("field", ["drum_dead_turns", "drum_diameter_m"])
+    def test_drum_fields_are_rejected_as_unknown(self, tmp_path, field):
         data = self._minimal_v6()
-        data["model_definition"]["payload_hoists"]["MH"]["rope"] = {"drum_dead_turns": 4}
-        path = tmp_path / "dead_turns.json"
+        data["model_definition"]["payload_hoists"]["MH"]["rope"] = {field: 1.5}
+        path = tmp_path / "drum.json"
         path.write_text(json.dumps(data), encoding="utf-8")
 
-        with pytest.raises(DocumentIOError, match="drum_diameter_m"):
+        with pytest.raises(DocumentIOError, match=field):
             load_document(path)
 
     def _reachable_v6(self) -> dict:
@@ -793,28 +794,14 @@ class TestAuthoredSchemaPolicy:
         ]
         return data
 
-    def test_v6_dead_turns_extend_the_derived_rope_length(self):
-        bare = normalize_document(self._reachable_v6())
-        data = self._reachable_v6()
-        data["model_definition"]["payload_hoists"]["MH"]["rope"] = {
-            "drum_dead_turns": 4,
-            "drum_diameter_m": 1.5,
-        }
-        with_dead_turns = normalize_document(data)
-
-        bare_mh = next(h for h in bare.hoists if h.id == "MH")
-        dead_mh = next(h for h in with_dead_turns.hoists if h.id == "MH")
-
-        assert dead_mh.max_hook_travel_m == pytest.approx(bare_mh.max_hook_travel_m)
-        assert dead_mh.rope_length_m - bare_mh.rope_length_m == pytest.approx(4 * math.pi * 1.5)
-
-    def test_v6_hook_height_defaults_to_crane_frame_zero(self):
+    def test_v6_lowest_hook_height_defaults_to_crane_frame_zero(self):
         doc = normalize_document(self._minimal_v6())
-        assert doc.hook_height_at_min_outreach_m == pytest.approx(0.0)
+        mh = next(h for h in doc.hoists if h.id == "MH")
+        assert mh.lowest_hook_height_m == pytest.approx(0.0)
 
-    def test_v6_authored_hook_height_drives_the_derived_travel(self):
+    def test_v6_authored_lowest_hook_height_drives_the_derived_travel(self):
         data = self._reachable_v6()
-        data["model_definition"]["hook_height_at_min_outreach_m"] = -60.0
+        data["model_definition"]["payload_hoists"]["MH"]["lowest_hook_height_m"] = -60.0
         deeper = normalize_document(data)
         shallower = normalize_document(self._reachable_v6())
 
@@ -1235,7 +1222,7 @@ class TestAuthoredSchemaPolicy:
 
         saved = json.loads(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "8.1.0"
+        assert saved["schema"]["version"] == "9.0.0"
         assert "model_definition" in saved
         assert "ropes" not in saved["model_definition"]
         assert "nodes" not in saved["model_definition"]
@@ -1243,9 +1230,9 @@ class TestAuthoredSchemaPolicy:
         assert "units" not in saved["metadata"]
         md = saved["model_definition"]
         assert "structure" in md
-        assert "hook_height_at_min_outreach_m" in md
+        assert "hook_height_at_min_outreach_m" not in md
         mh = md["payload_hoists"]["MH"]
-        assert set(mh) == {"reeving", "hook", "load_chart"}
+        assert set(mh) == {"reeving", "hook", "lowest_hook_height_m", "load_chart"}
         assert set(mh["hook"]) == {"mass_t", "falls", "daf", "offlead_deg"}
         assert "split" not in mh
         assert mh["reeving"][-1] == {"node": "hook", "body": "boom", "u_m": 0.0, "w_m": 0.0}

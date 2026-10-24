@@ -66,7 +66,6 @@ class DesignLimit:
     enabled: bool = False
     max_enabled: bool = True
     min_enabled: bool = False
-    pressure_D: Optional[float] = None
     required_factor: float = 1.0
     """Margin a rule requires on ``max_kN`` (the capacity): demand may use ``1 / factor`` of it."""
 
@@ -159,7 +158,7 @@ class SessionModel:
                     scene_state=SceneState(
                         tackle_length_m=0.0,
                         offlead_deg=float(hoist.offlead_deg),
-                        sidelead_deg=float(getattr(hoist, "sidelead_deg", hoist.offlead_deg)),
+                        sidelead_deg=float(hoist.sidelead_deg),
                         wind_speed_m_s=float(env.max_wind_speed_m_s),
                         wind_direction="+X",
                         # The Model's vessel motion values are ± limits; the Scene starts at +limit.

@@ -11,9 +11,9 @@ Item {
     readonly property int layoutSpacing: Math.round(
         8
     )
-    readonly property string bodyLabel: bodyTabs.currentIndex >= 0
-        && bodyTabs.currentIndex < modelVm.bodyLabels.length
-        ? modelVm.bodyLabels[bodyTabs.currentIndex] : ""
+    readonly property int bodyIndex: modelVm.bodyIds.indexOf(modelVm.selectedBodyId)
+    readonly property string bodyLabel: bodyIndex >= 0 && bodyIndex < modelVm.bodyLabels.length
+        ? modelVm.bodyLabels[bodyIndex] : ""
 
     GridLayout {
         anchors.fill: parent
@@ -48,12 +48,11 @@ Item {
 
                 TabBar {
                     id: sectionTabs
+                    objectName: "sectionTabs"
                     Layout.fillWidth: true
 
                     TabButton { text: qsTr("Components"); Layout.fillWidth: true }
                     TabButton { text: qsTr("Hoists"); Layout.fillWidth: true }
-                    TabButton { text: qsTr("Ropes"); Layout.fillWidth: true }
-                    TabButton { text: qsTr("Load Charts"); Layout.fillWidth: true }
                 }
 
                 Label {
@@ -73,152 +72,76 @@ Item {
                 Layout.fillHeight: true
                 currentIndex: sectionTabs.currentIndex
 
-                ColumnLayout {
+                RowLayout {
                     spacing: root.layoutSpacing
 
-                    TabBar {
-                        id: bodyTabs
-                        Layout.fillWidth: true
-                        onCurrentIndexChanged: {
-                            if (currentIndex >= 0 && currentIndex < modelVm.bodyIds.length)
-                                modelVm.selectBody(modelVm.bodyIds[currentIndex])
+                    ListView {
+                        id: bodyList
+                        objectName: "bodyList"
+                        Layout.preferredWidth: 220
+                        Layout.fillHeight: true
+                        clip: true
+                        model: modelVm.bodyLabels
+                        currentIndex: root.bodyIndex
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        delegate: ItemDelegate {
+                            required property int index
+                            required property string modelData
+
+                            width: ListView.view.width
+                            text: modelData
+                            highlighted: ListView.isCurrentItem
+                            onClicked: modelVm.selectBody(modelVm.bodyIds[index])
                         }
-
-                        Repeater {
-                            model: modelVm.bodyLabels
-                            TabButton {
-                                required property string modelData
-                                text: modelData
-                                Layout.fillWidth: true
-                            }
-                        }
                     }
 
-                    DataTable {
+                    ColumnLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        title: qsTr("Nodes")
-                        emptyText: qsTr("No nodes in this component.")
-                        editable: true
-                        model: modelVm.nodesModel
-                        editorChoices: modelVm.editableNodeIds
-                        onAddRequested: nodeDialog.openFor(-1, null)
-                        onDeleteRequested: row => modelVm.deleteNode(row)
-                    }
-
-                    DataTable {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        title: qsTr("Mass Points")
-                        emptyText: qsTr("No mass points in this component.")
-                        editable: true
-                        model: modelVm.massPointsModel
-                        onAddRequested: massPointDialog.openFor(-1, null)
-                        onDeleteRequested: row => modelVm.deleteMassPoint(row)
-                    }
-
-                    DataTable {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        title: qsTr("Wind Areas")
-                        emptyText: qsTr("No wind areas in this component.")
-                        editable: true
-                        model: modelVm.windAreasModel
-                        onAddRequested: windAreaDialog.openFor(-1, null)
-                        onDeleteRequested: row => modelVm.deleteWindArea(row)
-                    }
-                }
-
-                DataTable {
-                    title: qsTr("Hoists")
-                    emptyText: qsTr("No hoists defined.")
-                    editable: true
-                    model: modelVm.hoistsModel
-                    editorChoices: modelVm.editableNodeIds
-                    onAddRequested: hoistDialog.openFor(-1, null)
-                    onDeleteRequested: row => modelVm.deleteHoist(row)
-                }
-
-                ColumnLayout {
-                    spacing: root.layoutSpacing
-
-                    HoistSelector { payloadOnly: false }
-
-                    DataTable {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        title: qsTr("Rope Segments")
-                        emptyText: qsTr("No rope segments for this hoist.")
-                        editable: true
-                        model: modelVm.ropeSegmentsModel
-                        editorChoices: modelVm.editableNodeIds
-                        onAddRequested: segmentDialog.openFor(-1, null)
-                        onDeleteRequested: row => modelVm.deleteRopeSegment(row)
-                    }
-                }
-
-                ColumnLayout {
-                    spacing: root.layoutSpacing
-
-                    HoistSelector { payloadOnly: true }
-
-                    RowLayout {
-                        Layout.fillWidth: true
                         spacing: root.layoutSpacing
-                        visible: modelVm.hoistSplitable
 
-                        Label {
-                            text: qsTr("Hook Configuration")
+                        DataTable {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            title: qsTr("Nodes")
+                            emptyText: qsTr("No nodes in this component.")
+                            editable: true
+                            model: modelVm.nodesModel
+                            editorChoices: modelVm.editableNodeIds
+                            onAddRequested: nodeDialog.openFor(-1, null)
+                            onDeleteRequested: row => modelVm.deleteNode(row)
                         }
 
-                        Button {
-                            text: qsTr("Normal")
-                            checkable: true
-                            checked: modelVm.contractualMode === "normal"
-                            onClicked: modelVm.setContractualMode("normal")
+                        DataTable {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            title: qsTr("Mass Points")
+                            emptyText: qsTr("No mass points in this component.")
+                            editable: true
+                            model: modelVm.massPointsModel
+                            onAddRequested: massPointDialog.openFor(-1, null)
+                            onDeleteRequested: row => modelVm.deleteMassPoint(row)
                         }
 
-                        Button {
-                            text: qsTr("Split")
-                            checkable: true
-                            checked: modelVm.contractualMode === "split"
-                            onClicked: modelVm.setContractualMode("split")
+                        DataTable {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            title: qsTr("Wind Areas")
+                            emptyText: qsTr("No wind areas in this component.")
+                            editable: true
+                            model: modelVm.windAreasModel
+                            onAddRequested: windAreaDialog.openFor(-1, null)
+                            onDeleteRequested: row => modelVm.deleteWindArea(row)
                         }
-
-                        Item { Layout.fillWidth: true }
-                    }
-
-                    DataTable {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        title: qsTr("Contractual Points")
-                        emptyText: qsTr("No contractual points for this hoist.")
-                        editable: true
-                        model: modelVm.contractualModel
-                        onAddRequested: contractualDialog.openFor(-1, null)
-                        onDeleteRequested: row => modelVm.deleteContractualPoint(row)
                     }
                 }
-            }
-        }
-    }
 
-    component HoistSelector: RowLayout {
-        property bool payloadOnly: false
-        Layout.fillWidth: true
-        spacing: root.layoutSpacing
-
-        Label {
-            text: qsTr("Hoist")
-        }
-
-        ComboBox {
-            Layout.preferredWidth: 200
-            model: payloadOnly ? modelVm.payloadHoistIds : modelVm.hoistIds
-            currentIndex: Math.max(0, model.indexOf(modelVm.selectedHoistId))
-            onActivated: index => {
-                if (index >= 0 && index < model.length)
-                    modelVm.selectHoist(model[index])
+                HoistsPanel {
+                    onAddRequested: hoistDialog.openFor(-1, null)
+                    onAddSegmentRequested: segmentDialog.openFor(-1, null)
+                    onAddContractualPointRequested: contractualDialog.openFor(-1, null)
+                }
             }
         }
     }

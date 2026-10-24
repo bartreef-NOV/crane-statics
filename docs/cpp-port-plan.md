@@ -14,10 +14,10 @@ Python remains the oracle. Each layer is accepted only when it matches Python ou
 ### Phase 0 - Scaffolding and golden data
 - Add `cpp/` with CMake presets, `vcpkg.json`, a `crane_core` static library, a `crane_app` executable and a `tests/` target.
 - Write a Python script (under `tools/`, not `src/`) that runs each example in `examples/*.yaml` (22689, 13778_retracted, GT283) through the solver and exports golden JSON: inputs, solver outputs, scene frames, drawn loads and model-health results. Check the output into `cpp/tests/golden/`.
-- Reuse `schemas/crane-statics-v8.schema.json` as the shared contract; C++ validates documents against it.
+- Reuse `schemas/crane-statics-v9.schema.json` as the shared contract; C++ validates documents against it.
 
 ### Phase 1 - data + io (`data/`, `core/io.py`)
-- Port `data/authored_models.py` and `data/models.py` to C++ structs with explicit validation and normalization (pydantic has no C++ equivalent). Keep the v8 schema version table from `core/io.py`.
+- Port `data/authored_models.py` and `data/models.py` to C++ structs with explicit validation and normalization (pydantic has no C++ equivalent). Keep the v9 major-version gate from `core/io.py`.
 - YAML via yaml-cpp, JSON via nlohmann/json. Watch the YAML 1.1 int ambiguity fixed in commit 3f140f1.
 - Gate: all example YAMLs load and re-serialize; schema validation passes; invalid-document cases from `tests/` behave the same.
 

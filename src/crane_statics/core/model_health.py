@@ -98,7 +98,7 @@ def collect_model_health_issues(doc: Optional[CraneDocument]) -> tuple[list[str]
         )
     if unreachable:
         warnings.append(
-            f"Hoists that cannot reach the design hook height at maximum outreach: "
+            f"Hoists that cannot reach the lowest hook height at maximum outreach: "
             f"{_sample(unreachable)}"
         )
 
@@ -110,7 +110,7 @@ def _hoists_with_insufficient_rope_length(
 ) -> list[str]:
     """Boom-hoist ids whose authored rope_length_m is shorter than the reeving at 0 deg.
 
-    Payload hoists are exempt: their rope length is derived from the design hook
+    Payload hoists are exempt: their rope length is derived from the lowest hook
     height, so it is sufficient by construction.
     """
     from ..calculation.rope_mass import reeved_length_at_angle_m
@@ -132,16 +132,15 @@ def _hoists_with_insufficient_rope_length(
 def _payload_hook_height_issues(
     doc: CraneDocument, solve_hoist_ids: list[str]
 ) -> tuple[list[str], list[str]]:
-    """(derivation failed, design height unreachable at max outreach) payload hoist ids.
+    """(derivation failed, lowest hook height unreachable at max outreach) payload hoist ids.
 
     The second list is the honest form of the tackle clamp: at large outreach the
-    sheave can sit below the design hook height, and there the hook stops at the
+    sheave can sit below the lowest hook height, and there the hook stops at the
     sheave instead of reaching the water.
     """
     from ..calculation.rope_mass import hook_support_node_id
     from ..calculation.solver.kinematics import KinematicsAdapter
 
-    hook_height_m = doc.hook_height_at_min_outreach_m
     doc_dict = doc.model_dump()
     kin = KinematicsAdapter(doc_dict)
     undrivable: list[str] = []
@@ -152,6 +151,7 @@ def _payload_hook_height_issues(
         if hoist.rope_length_m is None or hoist.max_hook_travel_m is None:
             undrivable.append(hoist.id)
             continue
+        hook_height_m = hoist.lowest_hook_height_m
         if hook_height_m is None or hoist.outreach_max_m is None:
             continue
         support_id = hook_support_node_id(doc_dict, hoist.id)

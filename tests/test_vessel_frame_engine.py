@@ -481,7 +481,7 @@ def test_scene_state_tilt_and_slew_reach_the_engine():
     assert _flat(pt.baseline_reactions) == pytest.approx(_flat(expected.baseline_reactions))
 
 
-def test_load_breakdown_puts_tilt_and_slew_in_the_vessel_motion_step(monkeypatch):
+def test_load_breakdown_puts_tilt_and_slew_in_the_vessel_attitude_step(monkeypatch):
     session, _analysis, _hoist_svc, presenter = _session_services()
     state = session.get_active_hoist_state()
     assert state is not None
@@ -500,8 +500,9 @@ def test_load_breakdown_puts_tilt_and_slew_in_the_vessel_motion_step(monkeypatch
     tilt = [
         (c["vessel_roll_deg"], c["vessel_pitch_deg"], c["crane_slewing_angle_deg"]) for c in calls
     ]
-    # dead, hook, wind: level and unslewed; inertia, offlead, sidelead: the scene values.
-    assert tilt == [(0.0, 0.0, 0.0)] * 3 + [(2.0, 10.0, 30.0)] * 3
+    # Steps before "Vessel attitude" are level and unslewed; it and the lead steps use the
+    # scene values.
+    assert tilt == [(0.0, 0.0, 0.0)] * 5 + [(2.0, 10.0, 30.0)] * 3
 
 
 def test_sidelead_force_acts_at_the_support_node(calc):

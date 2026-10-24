@@ -59,8 +59,6 @@ VESSEL_MOTION_KEYS = [
 SUPPORT_WIDTH_KEYS = ["boom_width_m", "slewing_bearing_diameter_m"]
 # Support-width keys that may be cleared back to "unset" via clearEnvironmentValue.
 NULLABLE_SUPPORT_WIDTH_KEYS = {"slewing_bearing_diameter_m"}
-# Document-level design duty: edited alongside the environment, stored on the document.
-DOCUMENT_KEYS = ["hook_height_at_min_outreach_m"]
 
 # Authored primary-structure points and the runtime nodes they map to.
 PRIMARY_STRUCTURE_BINDINGS = [
@@ -154,6 +152,14 @@ class ModelViewModel(QObject):
     @pyqtProperty(list, notify=hoistsChanged)
     def hoistIds(self) -> list:
         return self._model.editor_hoist_ids()
+
+    @pyqtProperty(list, notify=hoistsChanged)
+    def hoistList(self) -> list:
+        """``{id, isBoom}`` per hoist, in the order the hoists model's rows use."""
+        doc = self._model.document
+        if doc is None:
+            return []
+        return [{"id": h.id, "isBoom": self._is_boom_hoist(h)} for h in doc.hoists]
 
     @pyqtProperty(list, notify=hoistsChanged)
     def payloadHoistIds(self) -> list:
@@ -317,11 +323,6 @@ class ModelViewModel(QObject):
                 for key in SUPPORT_WIDTH_KEYS
             }
         )
-        env_dict["hook_height_at_min_outreach_m"] = float(
-            doc.hook_height_at_min_outreach_m
-            if doc.hook_height_at_min_outreach_m is not None
-            else 0.0
-        )
         return EnvironmentSettings.from_dict(env_dict).to_dict()
 
     @pyqtSlot(str, float)
@@ -336,23 +337,12 @@ class ModelViewModel(QObject):
             target = doc.environment.vessel_motion
         elif key in SUPPORT_WIDTH_KEYS:
             target = doc.support_widths
-        elif key in DOCUMENT_KEYS:
-            target = doc
         else:
             return
         previous = getattr(target, key)
         if float(previous or 0.0) == float(value):
             return
         setattr(target, key, float(value))
-        if key in DOCUMENT_KEYS:
-            try:
-                DocumentEditor(doc).refresh_derived_geometry()
-            except ValueError as exc:
-                setattr(target, key, previous)
-                DocumentEditor(doc).refresh_derived_geometry()
-                self.editFailed.emit(str(exc))
-                return
-            self.refresh()
         self._model.mark_content_changed()
         self.environmentChanged.emit()
         self.healthChanged.emit()
@@ -634,6 +624,7 @@ class ModelViewModel(QObject):
             "hook_mass_t": float(hoist.hook_mass_t),
             "linear_mass_kg_m": float(hoist.linear_mass_kg_m),
             "rope_length_m": None if hoist.rope_length_m is None else float(hoist.rope_length_m),
+            "lowest_hook_height_m": float(hoist.lowest_hook_height_m or 0.0),
             "splitable_block": bool(hoist.splitable_block),
             "split_falls": int(hoist.split_falls or hoist.falls or 1),
             "split_hook_mass_t": float(
@@ -644,11 +635,6 @@ class ModelViewModel(QObject):
             "hook_daf": float(hoist.hook_daf),
             "offlead_deg": float(hoist.offlead_deg),
             "sidelead_deg": float(hoist.sidelead_deg),
-            "max_hook_travel_m": float(hoist.max_hook_travel_m or 0.0),
-            "drum_dead_turns": int(hoist.drum_dead_turns or 0),
-            "drum_diameter_m": (
-                None if hoist.drum_diameter_m is None else float(hoist.drum_diameter_m)
-            ),
         }
 
     def _is_boom_hoist(self, hoist: Any) -> bool:
@@ -688,6 +674,11 @@ class ModelViewModel(QObject):
                 current.id, build_payload_hoist(**_hoist_kwargs(fields))
             )
         )
+
+    @pyqtSlot(int, str, "QVariant", result=bool)
+    def setHoistField(self, row: int, field: str, value: Any) -> bool:
+        """Replace one field of the hoist in ``row``; the hoist form commits through this."""
+        return self._commit_hoist_cell(row, field, value)
 
     @pyqtSlot(int)
     def deleteHoist(self, row: int) -> None:
@@ -814,19 +805,13 @@ def _wind_kwargs(fields: dict) -> dict:
 
 def _hoist_kwargs(fields: dict) -> dict:
     splitable = bool(fields.get("splitable_block", False))
-    drum_diameter_m = fields.get("drum_diameter_m")
     return {
         "hoist_id": str(fields.get("id", "")),
         "support_node_id": str(fields.get("support_node_id", "")),
         "falls": int(fields.get("falls", 1)),
         "hook_mass_t": float(fields.get("hook_mass_t", 0.0)),
         "linear_mass_kg_m": max(0.0, float(fields.get("linear_mass_kg_m", 0.0))),
-        "drum_dead_turns": max(0, int(fields.get("drum_dead_turns", 0) or 0)),
-        "drum_diameter_m": (
-            None
-            if drum_diameter_m is None or drum_diameter_m == ""
-            else max(0.0, float(drum_diameter_m))
-        ),
+        "lowest_hook_height_m": float(fields.get("lowest_hook_height_m", 0.0)),
         "splitable_block": splitable,
         "split_falls": int(fields.get("split_falls", 1)) if splitable else None,
         "split_hook_mass_t": float(fields.get("split_hook_mass_t", 0.0)) if splitable else None,
