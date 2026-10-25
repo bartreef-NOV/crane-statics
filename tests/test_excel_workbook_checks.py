@@ -4,7 +4,10 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from tests.excel_workbook_helpers import LAYOUT, _Book, _build, _model
+from scripts.excel_workbook.build import build_workbook
+from scripts.excel_workbook.reference import CASES
+
+from tests.excel_workbook_helpers import LAYOUT, TIGHT, _Book, _build, _model
 
 
 def test_overflow_check_trips(tmp_path: Path) -> None:
@@ -74,3 +77,17 @@ def test_hanging_chain_check(tmp_path: Path) -> None:
     child = dict(parent, id="chained_hook", below_node_id=parent["id"])
     model["nodes"].append(child)
     assert _Book(_build(tmp_path, model))(LAYOUT.check("hanging_chain")) == 1
+
+
+def test_duplicate_label_ids_are_allowed(tmp_path: Path) -> None:
+    # Mass-point and wind-area ids are labels only; the app accepts duplicates there.
+    model = _model()
+    for body in model["bodies"]:
+        for key in ("mass_points", "wind_areas"):
+            if len(body[key]) > 1:
+                body[key][1]["id"] = body[key][0]["id"]
+    path = tmp_path / "labels.xlsx"
+    build_workbook(model, CASES["base"], path, TIGHT)
+    book = _Book(path)
+    assert book(TIGHT.check("duplicate_ids")) == 0
+    assert book(TIGHT.total_issues_addr) == 0

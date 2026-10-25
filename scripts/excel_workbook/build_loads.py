@@ -69,7 +69,7 @@ def _scene_formulas(lay: Layout) -> dict[str, str]:
         ),
         "scene_rope_id": (
             f'=IFERROR(INDEX({lay.loads_col_range("hoist_ropes", "rope_key")},'
-            f'MATCH({scene("hoist_id")},{lay.loads_col_range("hoist_ropes", "id_key")},0))&"",'
+            f'MATCH({scene("hoist_id")}&"",{lay.loads_col_range("hoist_ropes", "id_key")},0))&"",'
             f'"")'
         ),
     }
@@ -199,7 +199,7 @@ def _hoist_row(lay: Layout, i: int) -> dict[str, str]:
         "id_key": f'=IF({on},{inp("id")}&"","")',
         "rope_key": f'=IF({on},{inp("rope_id")}&"","")',
         "is_scene": (
-            f'=IF(AND({on},{me("id_key")}<>"",{me("id_key")}={lay.cell("scene", "hoist_id")}),'
+            f'=IF(AND({on},{me("id_key")}<>"",{me("id_key")}={lay.cell("scene", "hoist_id")}&""),'
             f"1,0)"
         ),
         "rope_ok": (

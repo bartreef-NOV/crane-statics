@@ -1117,8 +1117,19 @@ RESULT_ROWS: tuple[tuple[str, str, str, str], ...] = (
 #: ``build_checks`` a formula for each.
 CHECK_DESCRIPTIONS: dict[str, str] = {
     "overflow": "Rows that do not fit a table (generator) or typed into a guard row",
-    "duplicate_ids": "Active rows whose id is used by another active row of the same table",
+    "mirror": (
+        "Inputs tables with rows inserted or deleted (never do that: use spare rows), or a "
+        "calculation sheet whose rows no longer follow the Inputs rows"
+    ),
+    "duplicate_ids": (
+        "Active node, rope or hoist rows whose id is used by another active row of the same "
+        "table (mass-point and wind-area ids are labels only)"
+    ),
     "blank_ids": "Active rows with a blank id (or blank rope id on a segment)",
+    "invalid_values": (
+        "Cells outside their allowed values: Active not blank/0/1; on active rows a 1/0 column "
+        "not 0/1, or a body, frame or role not one of its list choices (a typo drops the row)"
+    ),
     "node_references": (
         "References to a missing or inactive node (segment ends, hoist hook/support "
         "nodes, hanging nodes' parent)"

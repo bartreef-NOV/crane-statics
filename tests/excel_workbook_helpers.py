@@ -1,4 +1,18 @@
-"""Shared helpers for the Excel validation workbook tests (tests/test_excel_workbook_*.py)."""
+"""Shared helpers for the Excel validation workbook tests (tests/test_excel_workbook_*.py).
+
+Besides the app internals listed in ``scripts/excel_workbook/reference.py``, these helpers
+call private or internal app functions directly, to compare intermediate values:
+
+* ``calculation.solver.crane_solver``: ``_accumulate_loads``, ``_run_statics``,
+  ``build_solver_static_context``;
+* ``calculation.engine.CraneCalculator``: ``compute_analysis_point``, ``_oop_geometry``,
+  ``_out_of_plane_variants``; ``engine.split_wind_speed_components``;
+* ``calculation.rope_mass.falls_override_effective_mult``;
+* ``core.drawn_loads``: ``build_body_loads``, ``FreeBodyFilter``, ``node_body_map``;
+* ``core.demand_extraction.extract_connection_component_response``.
+
+Re-run recipe after an app change: see the ``reference`` module docstring.
+"""
 
 import copy
 import dataclasses
@@ -265,7 +279,7 @@ def _workbook_results(book: "_Book", lay: layout.Layout, model: dict[str, Any]) 
     """The Results sheet as ``app_results`` keys (``tension.<hoist>``, ``reaction.*``)."""
     out: dict[str, Any] = {}
     for i, hoist in enumerate(model["hoists"], start=1):
-        assert book(lay.results_addr("tensions", "hoist_id", i)) == hoist["id"]
+        assert book(lay.results_addr("tensions", "hoist_id", i)) == str(hoist["id"])
         out[f"tension.{hoist['id']}"] = book(lay.results_addr("tensions", "tension_kN", i))
     for entity, component in lay.result_rows:
         out[f"reaction.{entity}.{component}"] = book(lay.result_cell(entity, component))
@@ -576,3 +590,30 @@ def case_book_factory(tmp_path_factory: pytest.TempPathFactory) -> Callable[[str
         return books[name]
 
     return get
+
+
+def fit_layout(model: dict[str, Any], spare: int = 2) -> layout.Layout:
+    """Capacities sized to ``model`` plus ``spare`` spare rows per table (quick rebuilds that
+    still exercise spare rows)."""
+    rows = {
+        "mass_points": sum(len(b["mass_points"]) for b in model["bodies"]),
+        "wind_areas": sum(len(b["wind_areas"]) for b in model["bodies"]),
+        "nodes": len(model["nodes"]),
+        "segments": sum(len(r["segments"]) for r in model["ropes"]),
+        "ropes": len(model["ropes"]),
+        "hoists": len(model["hoists"]),
+    }
+    return layout.Layout(layout.Capacities(**{k: v + spare for k, v in rows.items()}))
+
+
+#: Other example cranes: YAML file -> the scene state of their smoke test (the
+#: ``inplane_wind_accel`` motion and wind, with that crane's own MH hoist and a hook load and
+#: tackle that suit it).
+OTHER_CRANES: dict[str, SceneCase] = {
+    "crane_input_GT283.yaml": dataclasses.replace(
+        CASES["inplane_wind_accel"], hoist_id="MH", hook_load_kN=1500.0, tackle_length_m=30.0
+    ),
+    "crane_input_13778_retracted.yaml": dataclasses.replace(
+        CASES["inplane_wind_accel"], hoist_id="MH", hook_load_kN=6000.0, tackle_length_m=40.0
+    ),
+}

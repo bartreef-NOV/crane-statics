@@ -81,7 +81,7 @@ def _sidelead_formulas(lay: Layout) -> dict[str, str]:
         return f"=IF({me('node_row')}>0,INDEX({pos(col)},{me('node_row')}),0)"
 
     return {
-        "hoist_row": f'=IF({hoist}="",0,IFERROR(MATCH({hoist},{hoist_ids},0),0))',
+        "hoist_row": f'=IF({hoist}="",0,IFERROR(MATCH({hoist}&"",{hoist_ids},0),0))',
         "support_id": hoist_value("support_node_id"),
         "hook_id": hoist_value("load_node_id"),
         "support_row": node_row("support_id"),

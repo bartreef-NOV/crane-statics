@@ -29,6 +29,8 @@ def _scene_geometry_formulas(lay: Layout) -> dict[str, str]:
     scene = lambda key: lay.cell("scene", key)  # noqa: E731
     me = lambda key: lay.geo_cell("scene_geometry", key)  # noqa: E731
     ids = lay.geo_col_range("node_positions", "id")
+    # Ids are compared as text (``&""``): a numeric hoist id typed on Inputs still matches.
+    hoist_keys = lay.loads_col_range("hoist_ropes", "id_key")
     return {
         "boom_angle_rad": f"=RADIANS({scene('boom_angle_deg')})",
         "boom_cos": f"=COS({me('boom_angle_rad')})",
@@ -41,7 +43,7 @@ def _scene_geometry_formulas(lay: Layout) -> dict[str, str]:
         "tackle_m": f"=MAX(0,{scene('tackle_length_m')})",
         "hook_id": (
             f'=IFERROR(INDEX({lay.col_range("hoists", "load_node_id")},'
-            f'MATCH({scene("hoist_id")},{lay.col_range("hoists", "id")},0))&"","")'
+            f'MATCH({scene("hoist_id")}&"",{hoist_keys},0))&"","")'
         ),
         "hook_row": f'=IF({me("hook_id")}="",0,IFERROR(MATCH({me("hook_id")},{ids},0),0))',
         "hook_parent_id": (
@@ -51,7 +53,7 @@ def _scene_geometry_formulas(lay: Layout) -> dict[str, str]:
         "support_id": (
             f'=IF({me("hook_parent_id")}<>"",{me("hook_parent_id")},'
             f'IFERROR(INDEX({lay.col_range("hoists", "support_node_id")},'
-            f'MATCH({scene("hoist_id")},{lay.col_range("hoists", "id")},0))&"",""))'
+            f'MATCH({scene("hoist_id")}&"",{hoist_keys},0))&"",""))'
         ),
         "support_row": (
             f'=IF({me("support_id")}="",0,IFERROR(MATCH({me("support_id")},{ids},0),0))'

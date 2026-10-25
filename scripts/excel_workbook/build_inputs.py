@@ -62,7 +62,15 @@ def _validation(ws: Worksheet, f: Field, sqref: str) -> None:
     choices = ("1", "0") if f.kind == "flag" else f.choices
     if not choices:
         return
-    dv = DataValidation(type="list", formula1='"' + ",".join(choices) + '"', allow_blank=True)
+    dv = DataValidation(
+        type="list",
+        formula1='"' + ",".join(choices) + '"',
+        allow_blank=True,
+        showErrorMessage=True,
+        errorStyle="stop",
+        errorTitle="Not an allowed value",
+        error="Pick one of: " + ", ".join(choices),
+    )
     dv.add(sqref)
     ws.add_data_validation(dv)
 
@@ -115,7 +123,8 @@ def _write_table(ws: Worksheet, lay: Layout, table: Table, rows: list[dict[str, 
                 if t.name == "nodes" and f.key in ("x_m", "z_m") and row["id"] in FIXED_NODE_POINTS:
                     point = FIXED_NODE_POINTS[row["id"]]
                     value = f"={lay.cell('structure', f'{point}_{f.key}')}"
-            styles.put(ws, coord, value, styles.INPUT_FILL)
+            fill = styles.FORMULA_FILL if isinstance(value, str) and value.startswith("=") else None
+            styles.put(ws, coord, value, fill or styles.INPUT_FILL)
     note = ws[f"A{t.end_row}"]
     note.value = (
         f"End of {t.name} ({t.capacity} rows). Keep the red guard row blank: anything typed "
