@@ -539,6 +539,7 @@ def _drawn_category_sums(case: SceneCase) -> tuple[dict[str, dict[str, dict]], f
     """{body: {category: {"fx", "fz", "m"}}} of the Scene's free-body loads, and T_bh."""
     session, calculator, (pt, _rows, _conn) = _solve(YAML_PATH, case)
     inputs = _scene_inputs(session, calculator, pt)
+    assert inputs.document_dict is not None
     positions = inputs.node_positions()
     out: dict[str, dict[str, dict]] = {}
     for body in layout.BODIES:

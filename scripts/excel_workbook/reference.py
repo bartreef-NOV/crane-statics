@@ -308,8 +308,8 @@ def _wind_area(body_id: str, wa: dict[str, Any]) -> dict[str, Any]:
 
 def _expanded_model_from_document(doc: CraneDocument, source: str) -> dict[str, Any]:
     dd = doc.model_dump()
-    spool_by_hoist = {
-        h["id"]: (find_winch_node_ids(dd, h["id"]) or [None])[0] for h in dd["hoists"]
+    spool_by_hoist: dict[str, str | None] = {
+        h["id"]: next(iter(find_winch_node_ids(dd, h["id"])), None) for h in dd["hoists"]
     }
     spool_nodes = {node_id for node_id in spool_by_hoist.values() if node_id}
     node_by_id = {n["id"]: n for n in dd["nodes"]}
