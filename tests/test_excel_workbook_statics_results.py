@@ -54,7 +54,8 @@ def test_inplane_results_match_golden(case_book: Callable[[str], "_Book"], name:
 
 
 def test_singular_matrix_sets_flag_not_errors(tmp_path: Path) -> None:
-    # The app: np.linalg.solve raises, _run_statics returns {} and there is no point.
+    # The app: is_ill_conditioned (|det| / prod(row norms) <= 1e-12) holds, so _run_statics
+    # records the reason and returns {}, and there is no point.
     assert _solver_statics(CASES["base"], _collapse_rear_leg_doc) == {}
     assert _app_inplane(CASES["base"], _collapse_rear_leg_doc) is None
     model = _model()

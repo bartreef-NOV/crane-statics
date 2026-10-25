@@ -11,9 +11,10 @@ loads (the app composes the same linear solve from a baseline and unit channels)
 
 Each system is solved with ``MMULT(MINVERSE(A), b)`` written as a legacy array formula over
 the whole output column (Excel 2016, and the ``formulas`` evaluator, need the full ref). The
-app gives no result when ``np.linalg.solve`` raises; here a ``singular`` flag (relative
-determinant <= ``SINGULAR_REL_TOL`` or MINVERSE failing) zeroes the solution and Results
-shows a message.
+app gives no result, and records why, when a system is ill-conditioned
+(``crane_solver.is_ill_conditioned``: |det A| / prod(row norms of A) <= 1e-12). Here a
+``singular`` flag, set by the same test (``SINGULAR_REL_TOL``) or by MINVERSE failing, zeroes
+the solution and Results shows a message.
 """
 
 from __future__ import annotations
