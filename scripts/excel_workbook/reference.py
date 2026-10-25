@@ -4,6 +4,30 @@ Regenerate the golden file with ``python -m scripts.excel_workbook.reference`` f
 repo root (in a worktree whose venv has another checkout installed editable, set
 ``PYTHONPATH=src`` so this checkout's ``crane_statics`` is the one imported).
 
+App internals this tooling depends on (re-check them when the app changes):
+
+* ``core.session_model.SessionModel``: ``set_document``, ``select_payload_hoist``,
+  ``get_active_hoist_state``, ``selected_hoist_id``;
+* ``core.analysis_services.AnalysisCalculator.compute_current_result_rows``;
+* ``SceneInputs`` and its ``body_loads``; ``core.io.load_document``;
+* ``data.models.PRIMARY_STRUCTURE_TO_RUNTIME_NODE`` and the output shape of
+  ``normalize_document``;
+* ``calculation.rope_mass``: ``find_winch_node_ids``, ``active_hook_positions``,
+  ``rope_mass_at_nodes``;
+* ``core.drawn_loads``: ``REACTION_SPECS``, ``REACTIONS``, ``active_hoist_dict``;
+* ``calculation.engine`` calculator cache (``clear_calculator_cache`` or
+  ``_CALCULATOR_CACHE``, see ``_clear_calculator_cache``).
+
+The tests (``tests/excel_workbook_helpers.py``) also call private solver and engine
+functions; the list is there. After an app change, re-run in this order (``PYTHONPATH=src``
+in a worktree):
+
+1. ``python -m scripts.excel_workbook.reference``, then diff
+   ``tests/golden/22689_workbook_cases.json`` (any change is an app behaviour change);
+2. ``python -m scripts.excel_workbook.build examples/crane_input_22689.yaml
+   docs/crane-statics-validation-22689.xlsx``;
+3. ``python -m pytest tests/test_excel_workbook_*.py``.
+
 Everything here goes through the app's own code paths, so the golden values are what
 the Scene view shows -- nothing is re-derived:
 
@@ -166,7 +190,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from crane_statics.calculation.engine import AnalysisPoint, clear_calculator_cache
+from crane_statics.calculation import engine as _engine
+from crane_statics.calculation.engine import AnalysisPoint
 from crane_statics.calculation.rope_mass import (
     active_hook_positions,
     find_winch_node_ids,
@@ -263,6 +288,20 @@ CASES: dict[str, SceneCase] = {
         accel_z_m_s2=0.4,
     ),
 }
+
+
+def _clear_calculator_cache() -> None:
+    """Empty the app's per-document calculator cache, by whatever the app provides.
+
+    ``engine.clear_calculator_cache`` may be removed by app refactors; fall back to the cache
+    dict itself, and to a no-op when neither exists (then no cache is kept)."""
+    clear = getattr(_engine, "clear_calculator_cache", None)
+    if callable(clear):
+        clear()
+        return
+    cache = getattr(_engine, "_CALCULATOR_CACHE", None)
+    if cache is not None:
+        cache.clear()
 
 
 # -- expanded model -----------------------------------------------------------------
@@ -437,7 +476,7 @@ def expanded_model(yaml_path: Path) -> dict[str, Any]:
 
 def _scene_session(yaml_path: Path, case: SceneCase) -> tuple[SessionModel, AnalysisCalculator]:
     """A session opened on ``yaml_path`` with the case typed into the Scene."""
-    clear_calculator_cache()  # the calculator cache is keyed by id(document)
+    _clear_calculator_cache()  # the calculator cache is keyed by id(document)
     session = SessionModel()
     session.set_document(load_document(Path(yaml_path)), Path(yaml_path))
     session.select_payload_hoist(case.hoist_id)
