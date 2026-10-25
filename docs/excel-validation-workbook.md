@@ -17,7 +17,10 @@ crane or another operating state.
 The workbook needs Excel 2016 or later. It uses no dynamic-array functions; the two matrix
 solves are legacy array formulas (`MMULT(MINVERSE(A), b)`). The file has no cached values
 and is flagged `fullCalcOnLoad`, so Excel recalculates everything when you open it. If
-Excel is set to manual calculation, press F9.
+Excel is set to manual calculation, press F9. If Excel opens the file in Protected View
+(for example after a download), the cells show no values until you click **Enable
+Editing**, because the file stores formulas only and Excel recalculates them once editing is
+enabled.
 
 Cell colours: yellow = input (type here), blue = formula (do not edit), grey = generator
 marker (key rows), red = guard row (keep blank).
@@ -56,12 +59,20 @@ from the authored YAML, not the YAML itself. The workbook does only the simple g
 Every table has a fixed number of rows: 40 mass points, 40 wind areas, 80 nodes,
 60 segments, 8 ropes and 8 hoists.
 
+- **Never insert or delete rows** inside a table or above one. Use the spare rows (set
+  Active = 1 and fill the row), or regenerate with larger capacities. The calculation sheets
+  have one formula row per Inputs row, and an inserted or deleted row breaks that link; the
+  `mirror` check fires if it happens.
 - **Active (column A):** 1 = row in use, 0 = spare. A spare row must have Active = 0 and
   every other cell blank; spare rows change no result. Setting Active = 0 on a used row
   removes it from the calculation without deleting it.
 - **Guard row:** below each table there is a red guard row. Keep it blank. Anything typed
   there counts as overflow on Checks. If you need more rows, regenerate the workbook with
-  larger capacities (see "Regenerating").
+  larger capacities (`--capacity`, see "Regenerating").
+- **List columns** (Active, Body, Frame, Role, Spool node, wind direction) have a dropdown,
+  and Excel rejects other values typed into them. A value pasted in can bypass that, so the
+  `invalid_values` check also counts any value outside the list. A typo such as `Boom `
+  (trailing space) would otherwise drop the row from the calculation silently.
 - **Ids:** Excel matches ids case-insensitively and treats `*`, `?` and `~` as wildcards.
   Keep ids unique ignoring case, and free of those three characters.
 - **Unused coordinates:** leave them blank, for example the u/v/w of a global mass point or
@@ -177,7 +188,9 @@ Edit the **Scene state** block on Inputs:
   value directly;
 - tackle length (support sheave to hook);
 - offlead and sidelead (deg);
-- wind speed and direction (+X, -X, +Y or -Y);
+- wind speed and direction (+X, -X, +Y or -Y; pick it from the dropdown. Typed by hand,
+  `+X` or `-Y` is read by Excel as a formula and shows `#NAME?`; type a leading apostrophe,
+  `'+X`, to enter it as text);
 - vessel accelerations ax, ay, az;
 - pitch and roll angular accelerations;
 - vessel roll (positive to starboard) and pitch (positive bow-down);
@@ -197,8 +210,10 @@ Every count must be 0. The total is in C3, and its status reads `OK` or `CHECK I
 | Check | Counts |
 |---|---|
 | `overflow` | Rows that did not fit a table when the workbook was generated, plus anything typed in a guard row. |
-| `duplicate_ids` | Active rows whose id is used by another active row of the same table. |
+| `mirror` | An Inputs table whose rows were inserted or deleted (its range no longer has the generated number of rows), or a calculation sheet (Geometry, Loads, OutOfPlane, Results) whose Active column no longer copies the Inputs rows. |
+| `duplicate_ids` | Active node, rope or hoist rows whose id is used by another active row of the same table. Mass-point and wind-area ids are labels only and may repeat, as in the app. |
 | `blank_ids` | Active rows with a blank id, and segments with a blank rope id. |
+| `invalid_values` | Active cells that are not blank, 0 or 1; and on active rows, a 1/0 column (Spool node, Splitable block) that is not 0/1, or a Body, Frame or Role that is not one of its list choices. |
 | `node_references` | Segment ends, hoist hook and support nodes, and hanging nodes' parents that name a missing or inactive node. |
 | `rope_references` | Segments or hoists naming a missing or inactive rope. |
 | `hoist_without_segments` | Active hoists whose rope has no active segment. |
@@ -327,7 +342,11 @@ i. **Other differences and parity choices.** None of these affects 22689.
    - The Scene arrows apply the hoist's Falls to the hook segment. The results table,
      which the workbook matches, uses the segment multipliers. The two agree when Falls
      equals the multiplier of the hook segment.
-   - Ids are matched case-insensitively by Excel and case-sensitively by the app.
+   - Ids are matched case-insensitively by Excel and case-sensitively by the app. Ids are
+     compared as text, so a numeric id (a hoist called 7) works.
+   - If two active hoists share one rope, the rope's segments take the linear mass of both
+     hoist rows (Loads sums them), so its self-weight is doubled. Give each hoist its own
+     rope.
 
 ## Regenerating (developers)
 
@@ -338,6 +357,7 @@ The workbook is written by a script. Nobody edits it by hand. You need the dev t
 ```
 python -m scripts.excel_workbook.build examples/crane_input_22689.yaml docs/crane-statics-validation-22689.xlsx
 python -m scripts.excel_workbook.build <crane.yaml> <out.xlsx> --case idle_hoist
+python -m scripts.excel_workbook.build <crane.yaml> <out.xlsx> --capacity nodes=120 --capacity segments=90
 ```
 
 - The YAML is expanded with the app's own `normalize_document`
@@ -345,15 +365,18 @@ python -m scripts.excel_workbook.build <crane.yaml> <out.xlsx> --case idle_hoist
 - The scene state is a `CASES` entry; the default is the first, `base`.
 - The cases use 22689's hoist ids. For another crane, edit the scene block on Inputs
   afterwards, otherwise `scene_hoist` flags it.
-- Table capacities are `layout.Capacities`. Rows beyond capacity are not written and are
-  counted by the `overflow` check.
+- Table capacities default to `layout.Capacities` (40 mass points, 40 wind areas, 80 nodes,
+  60 segments, 8 ropes, 8 hoists). Change them with `--capacity TABLE=N`, which can be
+  repeated; TABLE is one of `mass_points`, `wind_areas`, `nodes`, `segments`, `ropes` and
+  `hoists`. Rows beyond capacity are not written and are counted by the `overflow` check.
 
 The golden app values are `tests/golden/22689_workbook_cases.json`. To regenerate them, run
 `python -m scripts.excel_workbook.reference`. The tests are in `tests/test_excel_workbook_*.py`, with shared helpers in
 `tests/excel_workbook_helpers.py`. In `tests/test_excel_workbook_acceptance_delivery.py`,
 `test_all_four_cases_within_tolerance` and `test_no_error_values_anywhere` are the
 acceptance tests, and `test_delivered_workbook_is_up_to_date` checks that the committed
-`.xlsx` matches the generator.
+`.xlsx` matches the generator. `tests/test_excel_workbook_other_cranes.py` builds the
+workbook for the GT283 and 13778 examples and compares it with the app for those cranes.
 
 In a git worktree whose virtual environment has another checkout installed in editable mode,
 set `PYTHONPATH=src` when running these commands by hand, so that this checkout's
