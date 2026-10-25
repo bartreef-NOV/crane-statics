@@ -349,7 +349,8 @@ python -m scripts.excel_workbook.build <crane.yaml> <out.xlsx> --case idle_hoist
   counted by the `overflow` check.
 
 The golden app values are `tests/golden/22689_workbook_cases.json`. To regenerate them, run
-`python -m scripts.excel_workbook.reference`. The tests are in `tests/test_excel_workbook.py`:
+`python -m scripts.excel_workbook.reference`. The tests are in `tests/test_excel_workbook_*.py`, with shared helpers in
+`tests/excel_workbook_helpers.py`. In `tests/test_excel_workbook_acceptance_delivery.py`,
 `test_all_four_cases_within_tolerance` and `test_no_error_values_anywhere` are the
 acceptance tests, and `test_delivered_workbook_is_up_to_date` checks that the committed
 `.xlsx` matches the generator.

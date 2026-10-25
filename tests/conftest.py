@@ -43,3 +43,12 @@ def memoized_blocking_sweeps(monkeypatch):
         return copy.deepcopy(_SWEEP_MEMO[key])
 
     monkeypatch.setattr(chart_vm_module, "run_mode_sweep", memoized)
+
+
+@pytest.fixture(scope="session")
+def case_book(tmp_path_factory):
+    """Excel workbook tests: ``case_book(name)`` is the recalculated default-layout workbook of
+    an unmodified 22689 case, built once per session (see tests/excel_workbook_helpers.py)."""
+    from tests.excel_workbook_helpers import case_book_factory
+
+    return case_book_factory(tmp_path_factory)
