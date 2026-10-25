@@ -1,9 +1,12 @@
 ---
 name: qml-ui-development
-description: Rules and patterns for building the Crane Statics Qt Quick/QML front end — native Qt Quick Controls (Fusion) styling with SystemPalette colors, the view-model/context-property bridge, QAbstractItemModel table models, the QQuickItem scene canvas, and keeping the Qt event loop unblocked. Use when editing anything under src/crane_statics/qml_app/ or any .qml file, adding a view model property or signal, wiring a new QML view, or debugging a frozen UI, a QML warning, or a binding loop.
+description: Rules for editing the Crane Statics QML front end and view models.
 ---
 
 # Crane Statics QML UI Development
+
+**Use when** editing anything under `src/crane_statics/qml_app/` or any `.qml` file, adding a view model property or signal, wiring a new QML view, or debugging a frozen UI, a QML warning, or a binding loop.
+Covers: Fusion styling with SystemPalette colors, the view-model/context-property bridge, QAbstractItemModel table models, the QQuickItem scene canvas, and keeping the Qt event loop unblocked.
 
 This app is **Qt Quick / QML only**. There are no QWidgets anywhere in `src/` — no
 `QWidget`, no `QVBoxLayout`, no `setStyleSheet`, no QSS. Advice written for PyQt6

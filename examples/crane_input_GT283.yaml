@@ -1,4 +1,4 @@
-schema: {name: crane-statics, version: 10.0.0}
+schema: {name: crane-statics, version: 11.0.0}
 metadata: {name: Crane Statics Example GT283}
 model_definition:
   environment: {gravity_m_s2: 9.81, air_density_kg_m3: 1.226, max_wind_speed_m_s: 0.01}
@@ -51,13 +51,13 @@ model_definition:
       position: {x_m: -2.0, z_m: 30.0}
       area_x_m2: 0.0
       area_y_m2: 264.5
-  boom_hoist:
-    rope: {linear_mass_kg_m: 20.3, length_m: 3560.0}
-    reeving:
-    - {node: winch, body: platform, x_m: -1.81, z_m: 3.99}
-    - {node: aframe_sheave_1, body: rear_leg, x_m: -9.385, z_m: 40.222, parts: 2}
-    - {node: boom_sheave_3, body: boom, u_m: 106.0, w_m: 3.75, parts: 28}
-  payload_hoists:
+  hoists:
+    BH:
+      rope: {linear_mass_kg_m: 20.3, length_m: 3560.0}
+      reeving:
+      - {node: winch, body: platform, x_m: -1.81, z_m: 3.99}
+      - {node: aframe_sheave_1, body: rear_leg, x_m: -9.385, z_m: 40.222, parts: 2}
+      - {node: boom_sheave_3, body: boom, u_m: 106.0, w_m: 3.75, parts: 28}
     MH:
       rope: {linear_mass_kg_m: 9.17}
       reeving:

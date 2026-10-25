@@ -112,18 +112,6 @@ class HoistStateService:
         mode = str(getattr(hs, "chart_mode", "normal")) if hs is not None else "normal"
         return self._session.contractual_points_for_mode(hoist.id, mode)
 
-    def normalize_contractual_idx(
-        self, hoist_id: Optional[str], idx: Optional[int]
-    ) -> Optional[int]:
-        """Validate contractual point index against current mode."""
-        if idx is None or hoist_id is None or self._session.document is None:
-            return None
-        hoist = self._session.payload_hoist_by_id(hoist_id)
-        if hoist is None:
-            return None
-        points = self.contractual_points_for_hoist_mode(hoist)
-        return idx if 0 <= idx < len(points) else None
-
     def gravity_abs(self) -> float:
         """Get absolute value of gravity from document, with sensible default."""
         doc = self._session.document

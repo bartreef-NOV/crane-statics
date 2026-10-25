@@ -5,7 +5,6 @@ and normalization according to the handoff data contract.
 """
 
 from typing import Any, Optional
-from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from copy import deepcopy
 
@@ -64,12 +63,6 @@ def _managed_hook_node_id(hoist_id: str) -> str:
 
 def _is_managed_hook_node_id(node_id: str) -> bool:
     return str(node_id).startswith(MANAGED_HOOK_NODE_PREFIX)
-
-
-class ModelType(str, Enum):
-    """Supported model types."""
-
-    FIXED_TOPOLOGY_CRANE_2D = "fixed_topology_crane_2d"
 
 
 class Metadata(BaseModel):
@@ -448,7 +441,7 @@ def _infer_solve_load_node_id(segments: list[dict[str, Any]], ctx: str) -> str:
 
 
 def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
-    """Convert authored JSON into the normalized runtime document shape."""
+    """Convert authored YAML into the normalized runtime document shape."""
     # Structural key presence/unknown-key checks and cross-field business rules
     # (e.g. split.falls <= falls) are owned by AuthoredDocument; this function
     # focuses on cross-reference rules that span the whole document (node ids,
@@ -559,21 +552,20 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
     )
     primary_nodes = _extract_primary_structure_nodes(primary_out)
 
-    boom_hoist_src = md.get("boom_hoist")
-    payload_hoists_src = md.get("payload_hoists")
-    if not isinstance(payload_hoists_src, dict) or not payload_hoists_src:
-        raise ValueError("model_definition.payload_hoists must contain at least one payload hoist")
-    if not isinstance(boom_hoist_src, dict):
-        raise ValueError("model_definition.boom_hoist must be an object")
-
     boom_id = BOOM_HOIST_ID
+    hoists_src = md.get("hoists")
+    if not isinstance(hoists_src, dict):
+        raise ValueError("model_definition.hoists must be an object")
+    boom_hoist_src = hoists_src.get(boom_id)
+    if not isinstance(boom_hoist_src, dict):
+        raise ValueError(f"model_definition.hoists[{boom_id}] must be an object")
+    payload_hoists_src = {k: v for k, v in hoists_src.items() if k != boom_id}
+    if not payload_hoists_src:
+        raise ValueError("model_definition.hoists must contain at least one payload hoist")
+
     expanded: dict[str, tuple[list[dict[str, Any]], list[str]]] = {}
     for hoist_key, hoist_src in [(boom_id, boom_hoist_src), *payload_hoists_src.items()]:
-        ctx = (
-            "model_definition.boom_hoist"
-            if hoist_key == boom_id
-            else f"model_definition.payload_hoists[{hoist_key}]"
-        )
+        ctx = f"model_definition.hoists[{hoist_key}]"
         hoist_nodes, hoist_segments, hoist_path = _expand_reeving(
             str(hoist_key), hoist_src["reeving"], f"{ctx}.reeving"
         )
@@ -621,10 +613,8 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
 
     for hoist_id, hoist in payload_hoists_src.items():
         hoist_key = str(hoist_id)
-        if hoist_key == boom_id:
-            raise ValueError("model_definition.payload_hoists cannot include the boom hoist id")
         if not isinstance(hoist, dict):
-            raise ValueError(f"model_definition.payload_hoists[{hoist_key}] must be an object")
+            raise ValueError(f"model_definition.hoists[{hoist_key}] must be an object")
 
         hoist_segments, hoist_path = expanded[hoist_key]
         hoist_prefix = hoist_node_prefix(hoist_key)
@@ -636,7 +626,7 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             matches = [n for n in hoist_path if n in candidates]
             if not matches:
                 raise ValueError(
-                    f"model_definition.payload_hoists[{hoist_key}].support_node "
+                    f"model_definition.hoists[{hoist_key}].support_node "
                     f"{support_name!r} is not a node on the reeving path"
                 )
             support_node_id = matches[0]
@@ -653,14 +643,14 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             managed_hook_node_id
         ):
             raise ValueError(
-                f"model_definition.payload_hoists[{hoist_key}] conflicts with reserved "
+                f"model_definition.hoists[{hoist_key}] conflicts with reserved "
                 f"managed hook node id {managed_hook_node_id!r}"
             )
 
         support_node = nodes_with_primary[support_node_id]
         if not isinstance(support_node, dict):
             raise ValueError(
-                f"model_definition.payload_hoists[{hoist_key}].support_node references "
+                f"model_definition.hoists[{hoist_key}].support_node references "
                 f"invalid node record {support_node_id!r}"
             )
         support_body = str(support_node.get("body") or "boom")
@@ -689,14 +679,14 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
 
         normal_curve = _normalize_contractual_curve_points(
             hoist["load_chart"],
-            f"model_definition.payload_hoists[{hoist_key}].load_chart",
+            f"model_definition.hoists[{hoist_key}].load_chart",
         )
 
         split_curve: list[dict[str, Any]] = []
         if split_mode_obj is not None:
             split_curve = _normalize_contractual_curve_points(
                 split_mode_obj["load_chart"],
-                f"model_definition.payload_hoists[{hoist_key}].split.load_chart",
+                f"model_definition.hoists[{hoist_key}].split.load_chart",
             )
 
         normal_min_outreach, normal_max_outreach = _hoist_curve_outreach_bounds(normal_curve)
@@ -740,9 +730,6 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             ),
         }
 
-    if boom_id in hoists_norm:
-        raise ValueError("model_definition.payload_hoists cannot include the boom hoist id")
-
     boom_runtime_rope_id = _runtime_rope_id_for_hoist(boom_id)
     ropes_norm[boom_runtime_rope_id] = {
         "tension_mode": "solve",
@@ -751,7 +738,9 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
     }
     hoists_norm[boom_id] = {
         "rope_id": boom_runtime_rope_id,
-        "load_node_id": _infer_solve_load_node_id(boom_segments, "model_definition.boom_hoist"),
+        "load_node_id": _infer_solve_load_node_id(
+            boom_segments, f"model_definition.hoists[{boom_id}]"
+        ),
         "linear_mass_kg_m": float(boom_hoist_src["rope"]["linear_mass_kg_m"]),
         "hook": {
             "mass_t": 0.0,
@@ -1401,7 +1390,7 @@ def _extract_primary_structure_nodes(primary_structure: Any) -> dict[str, Any]:
 
 
 def _synthesize_primary_nodes_into_nodes_map(nodes_src: dict[str, Any]) -> dict[str, Any]:
-    """Ensure internal canonical primary topology is present even when omitted by authored JSON."""
+    """Ensure internal canonical primary topology is present even when the document omits it."""
     merged = dict(nodes_src)
     for node_id, node_def in PRIMARY_NODE_DEFAULTS.items():
         merged.setdefault(node_id, dict(node_def))
@@ -1550,7 +1539,7 @@ def normalize_document(doc_data: dict[str, Any]) -> CraneDocument:
     4. Ensures canonical fixed-body order
 
     Args:
-        doc_data: Raw JSON data from file
+        doc_data: Raw parsed data from file
 
     Returns:
         Normalized CraneDocument ready for analysis
@@ -2055,8 +2044,7 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         section = {key: value for key, value in section.items() if value}
         if section:
             model_definition[body_id] = section
-    model_definition["boom_hoist"] = authored_boom_hoist
-    model_definition["payload_hoists"] = authored_payload_hoists
+    model_definition["hoists"] = {BOOM_HOIST_ID: authored_boom_hoist, **authored_payload_hoists}
     saved_limits = data.get("saved_limits") or {}
     if saved_limits:
         model_definition["limits"] = {

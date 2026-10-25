@@ -147,7 +147,7 @@ ApplicationWindow {
     FileDialog {
         id: openDialog
         title: qsTr("Open Crane Model")
-        nameFilters: [qsTr("Crane Model Files (*.json *.yaml *.yml)"), qsTr("JSON Files (*.json)"), qsTr("YAML Files (*.yaml *.yml)"), qsTr("All Files (*)")]
+        nameFilters: [qsTr("YAML Files (*.yaml *.yml)"), qsTr("All Files (*)")]
         onAccepted: appVm.open(selectedFile)
     }
 
@@ -156,7 +156,7 @@ ApplicationWindow {
         title: qsTr("Save Crane Model As")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "yaml"
-        nameFilters: [qsTr("YAML Files (*.yaml *.yml)"), qsTr("JSON Files (*.json)"), qsTr("All Files (*)")]
+        nameFilters: [qsTr("YAML Files (*.yaml *.yml)"), qsTr("All Files (*)")]
         onAccepted: {
             const saved = appVm.saveAs(selectedFile)
             if (!saved) {

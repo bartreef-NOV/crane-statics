@@ -387,7 +387,7 @@ def test_open_reports_error_for_missing_file(qml_engine):
     messages: list[tuple[str, str]] = []
     app_vm.notification.connect(lambda msg, level: messages.append((msg, level)))
 
-    app_vm.openPath(str(EXAMPLE.parent / "does_not_exist.json"))
+    app_vm.openPath(str(EXAMPLE.parent / "does_not_exist.yaml"))
 
     assert app_vm.hasDocument is False
     assert messages and messages[-1][1] == "error"

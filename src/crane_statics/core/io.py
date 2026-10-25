@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from copy import deepcopy
 from pathlib import Path
@@ -37,16 +36,11 @@ class DocumentIOError(Exception):
 
 
 _YAML_SUFFIXES = {".yaml", ".yml"}
-_JSON_SUFFIXES = {".json"}
 
 
-def _format_for_suffix(suffix: str) -> str:
-    suffix = suffix.lower()
-    if suffix in _JSON_SUFFIXES:
-        return "json"
-    if suffix in _YAML_SUFFIXES:
-        return "yaml"
-    raise DocumentIOError(f"Unsupported file extension {suffix!r}; expected .json, .yaml, or .yml")
+def _check_suffix(suffix: str) -> None:
+    if suffix.lower() not in _YAML_SUFFIXES:
+        raise DocumentIOError(f"Unsupported file extension {suffix!r}; expected .yaml or .yml")
 
 
 class _StrictIntSafeLoader(yaml.SafeLoader):
@@ -113,7 +107,7 @@ def load_document(path: Path) -> CraneDocument:
     Load and normalize a crane document from disk.
 
     Args:
-        path: Path to the JSON file
+        path: Path to the YAML file
 
     Returns:
         Normalized CraneDocument
@@ -121,11 +115,11 @@ def load_document(path: Path) -> CraneDocument:
     Raises:
         DocumentIOError: If load or validation fails
     """
-    fmt = _format_for_suffix(path.suffix)
+    _check_suffix(path.suffix)
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
-            data = json.load(f) if fmt == "json" else yaml.load(f, Loader=_StrictIntSafeLoader)
-    except (IOError, UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError) as e:
+            data = yaml.load(f, Loader=_StrictIntSafeLoader)
+    except (IOError, UnicodeDecodeError, yaml.YAMLError) as e:
         raise DocumentIOError(f"Failed to read file: {e}")
 
     if not isinstance(data, dict):
@@ -156,7 +150,7 @@ def save_document(
     Raises:
         DocumentIOError: If save fails
     """
-    fmt = _format_for_suffix(path.suffix)
+    _check_suffix(path.suffix)
     try:
         if limits is not None:
             doc = doc.model_copy(
@@ -167,17 +161,14 @@ def save_document(
         _validate_authored_schema(authored_data)
 
         with open(path, "w", encoding="utf-8") as f:
-            if fmt == "json":
-                json.dump(authored_data, f, indent=2)
-            else:
-                yaml.dump(
-                    authored_data,
-                    f,
-                    Dumper=_CompactSafeDumper,
-                    sort_keys=False,
-                    allow_unicode=True,
-                    width=100,
-                )
+            yaml.dump(
+                authored_data,
+                f,
+                Dumper=_CompactSafeDumper,
+                sort_keys=False,
+                allow_unicode=True,
+                width=100,
+            )
     except DocumentIOError:
         raise
     except Exception as e:

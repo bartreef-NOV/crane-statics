@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/schemas/crane-statics-v10.schema.json",
+  "$id": "https://example.com/schemas/crane-statics-v11.schema.json",
   "title": "AuthoredDocument",
   "$defs": {
     "AuthoredBoomBody": {
@@ -459,22 +459,25 @@
           "$ref": "#/$defs/AuthoredGlobalBody",
           "description": "The fixed platform/base body, in global coordinates."
         },
-        "boom_hoist": {
-          "$ref": "#/$defs/AuthoredBoomHoist",
-          "description": "The rope system that raises and lowers the boom."
-        },
-        "payload_hoists": {
-          "description": "Named payload hoists. Each is self-contained: deleting its block removes the hoist together with the sheaves it owns.",
-          "minProperties": 1,
+        "hoists": {
+          "description": "Named hoists. The required 'BH' entry is the rope system that raises and lowers the boom; every other entry is a payload hoist. Each is self-contained: deleting its block removes the hoist together with the sheaves it owns.",
+          "minProperties": 2,
           "patternProperties": {
             "^[A-Za-z][A-Za-z0-9_-]*$": {
-              "$ref": "#/$defs/AuthoredPayloadHoist"
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AuthoredBoomHoist"
+                },
+                {
+                  "$ref": "#/$defs/AuthoredPayloadHoist"
+                }
+              ]
             }
           },
           "propertyNames": {
             "minLength": 1
           },
-          "title": "Payload Hoists",
+          "title": "Hoists",
           "type": "object"
         },
         "limits": {
@@ -494,8 +497,7 @@
       "required": [
         "environment",
         "structure",
-        "boom_hoist",
-        "payload_hoists"
+        "hoists"
       ],
       "title": "AuthoredModelDefinition",
       "type": "object"
@@ -790,7 +792,7 @@
           "type": "string"
         },
         "version": {
-          "pattern": "^10\\.\\d+\\.\\d+$",
+          "pattern": "^11\\.\\d+\\.\\d+$",
           "title": "Version",
           "type": "string"
         }
@@ -1050,23 +1052,23 @@
         "name": "New Crane Model"
       },
       "model_definition": {
-        "boom_hoist": {
-          "reeving": [
-            {
-              "node": "boom_heel"
-            },
-            {
-              "node": "rear_top",
-              "parts": 2
-            }
-          ]
-        },
         "environment": {
           "air_density_kg_m3": 1.225,
           "gravity_m_s2": 9.81,
           "max_wind_speed_m_s": 20.0
         },
-        "payload_hoists": {
+        "hoists": {
+          "BH": {
+            "reeving": [
+              {
+                "node": "boom_heel"
+              },
+              {
+                "node": "rear_top",
+                "parts": 2
+              }
+            ]
+          },
           "MH": {
             "daf": 1.0,
             "falls": 1,
@@ -1114,7 +1116,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "10.0.0"
+        "version": "11.0.0"
       }
     }
   ],

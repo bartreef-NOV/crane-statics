@@ -1,9 +1,11 @@
 ---
 name: run-app
-description: Launch the Crane Statics QML desktop app, or capture a screenshot of a workspace headlessly, to confirm a change works in the real application rather than only in tests. Use when asked to run/start/open the app, to show a UI change working, or to screenshot the Scene, Load Chart or Model workspace.
+description: Launch the Crane Statics app or screenshot a workspace headlessly.
 ---
 
 # Running Crane Statics
+
+**Use when** asked to run/start/open the app, to show a UI change working, or to screenshot the Scene, Load Chart or Model workspace. Confirms a change works in the real app, not only in tests.
 
 The app needs a model file to show anything — with no argument it opens on
 `NoDocumentPage`. The bundled fixture is

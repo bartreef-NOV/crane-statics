@@ -1,6 +1,12 @@
 # Crane Statics
 
-A Qt Quick/QML desktop application for loading, editing, analyzing, and validating fixed-topology 2D crane models authored in JSON.
+[![CI](https://github.com/bartreef-NOV/crane-statics/actions/workflows/ci.yml/badge.svg)](https://github.com/bartreef-NOV/crane-statics/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000)](https://github.com/psf/black)
+[![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue)](https://mypy-lang.org/)
+[![Latest release](https://img.shields.io/github/v/release/bartreef-NOV/crane-statics)](https://github.com/bartreef-NOV/crane-statics/releases)
+
+A Qt Quick/QML desktop application for loading, editing, analyzing, and validating fixed-topology 2D crane models authored in YAML.
 
 ## Application
 
@@ -25,10 +31,10 @@ pip install -e ".[dev]"
 
 ```bash
 # Console command
-crane-statics path/to/crane_model.json
+crane-statics path/to/crane_model.yaml
 
 # Or via Python module
-python -m crane_statics path/to/crane_model.json
+python -m crane_statics path/to/crane_model.yaml
 ```
 
 ### Windows Executable
@@ -79,14 +85,14 @@ decisions that should not be re-litigated are in [docs/adr/](docs/adr/).
 
 ## Document Lifecycle
 
-Authored input (YAML or JSON) is strict `crane-statics` schema version `10.0.0`.
+Authored input (YAML) is strict `crane-statics` schema version `11.0.0`.
 
 Each hoist is self-contained: its `reeving` lists the rope path from the winch outwards, and an entry with `body` and coordinates defines a sheave or winch that belongs to that hoist (`boom` nodes use `u_m`/`w_m`, the others `x_m`/`z_m`). A hoist-local node `winch` in hoist `MH` becomes runtime node `mh_winch`. The last reeving entry is the support node the hook hangs from. Entries without coordinates pass through a node already defined (`boom_heel`, or a shared node under a body's `nodes`). Delete a hoist block to remove the hoist and its sheaves; copy one and rename its key to add a hoist.
 
 Defaults apply for gravity, air density and vessel motion. Body sections (`boom`, `rear_leg`, `front_leg`, `platform`) and their `mass_points`, `wind_areas` and `nodes` may be omitted when empty. The schema includes coordinate-frame examples and descriptions for schema-aware editors. See `examples/` for complete files.
 
 ### Load Path
-1. JSON file loaded from disk
+1. YAML file loaded from disk
 2. `normalize_document()` fills in defaults, adds derived nodes, canonical connections
 3. Pydantic validation enforces strict rules
 4. SessionState initialized from normalized document
@@ -95,12 +101,12 @@ Defaults apply for gravity, air density and vessel motion. Body sections (`boom`
 ### Save Path
 1. Session state synchronized back into document
 2. `document_to_authored_form()` removes derived fields, connections, topology-controlled fields
-3. Clean JSON written to disk (no internal machinery exposed)
+3. Clean YAML written to disk (no internal machinery exposed)
 
 ## Features
 
 - Document creation, opening, saving, and close-with-unsaved-changes protection
-- Strict JSON validation and normalized fixed-topology crane documents
+- Strict YAML validation and normalized fixed-topology crane documents
 - Interactive Scene workspace with geometry, loads, wind, free-body, results, reports, and tooltips
 - Load Chart workspace with capacity sweeps, contractual points, design limits, auto-set limits, and CSV/PNG export
 - Model workspace with structured editing, validation feedback, and health status
@@ -130,7 +136,7 @@ Keep QML declarative and route state changes through the owning view model. Add 
 
 ## References
 
-- `src/crane_statics/schemas/crane-statics-v10.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
+- `src/crane_statics/schemas/crane-statics-v11.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
 
 ## License
 

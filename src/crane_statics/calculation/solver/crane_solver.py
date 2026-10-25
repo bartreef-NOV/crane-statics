@@ -2,7 +2,7 @@
 
 Adapted from crane_app.solver.crane_solver.  Key differences from the original:
 - Reads from CraneDocument.model_dump() dicts (field names: x_m/z_m/local_x_m,
-    area_w_m2/area_v_m2/cd, from_node_id/to_node_id) instead of the original JSON schema.
+    area_w_m2/area_v_m2/cd, from_node_id/to_node_id) instead of the original authored schema.
 - No file I/O dependencies; caller passes doc_dict directly.
 """
 

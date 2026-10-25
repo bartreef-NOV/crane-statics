@@ -252,10 +252,6 @@ class SessionModel:
             state.chart_mode = normalized
         return normalized
 
-    def hook_mode_for_hoist(self, hoist_id: Optional[str]) -> str:
-        state = self.hoist_states.get(hoist_id) if hoist_id else None
-        return "split" if state is not None and state.split_mode_active else "normal"
-
     def set_hook_mode(self, hoist_id: Optional[str], mode: str) -> str:
         active_id = self.set_active_split_hoist(hoist_id if str(mode).lower() == "split" else None)
         for state in self.hoist_states.values():
@@ -286,20 +282,11 @@ class SessionModel:
             self._emit("history_changed")
         self._emit("content_changed")
 
-    def update_design_limits(self, limits: list[DesignLimit]) -> None:
-        self.design_limits = limits
-        self.design_limits_by_id = {limit.id: limit for limit in limits}
-        self.mark_content_changed()
-        self._emit("design_limits_changed", limits)
-
     def add_notification(self, message: str, level: str = "info") -> None:
         self.notification_history.append(f"[{level.upper()}] {message}")
         if len(self.notification_history) > self.max_notifications:
             self.notification_history.pop(0)
         self._emit("notification", message, level)
-
-    def clear_notifications(self) -> None:
-        self.notification_history.clear()
 
     def set_active_split_hoist(self, hoist_id: Optional[str]) -> Optional[str]:
         if hoist_id is not None:

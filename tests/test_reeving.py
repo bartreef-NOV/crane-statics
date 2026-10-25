@@ -14,7 +14,7 @@ EXAMPLES = sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
 
 def _authored() -> dict:
     return {
-        "schema": {"name": "crane-statics", "version": "10.0.0"},
+        "schema": {"name": "crane-statics", "version": "11.0.0"},
         "metadata": {"name": "Reeving"},
         "model_definition": {
             "environment": {
@@ -27,10 +27,10 @@ def _authored() -> dict:
                 "rear_hinge": {"x_m": -11.0, "z_m": 7.7},
                 "front_hinge": {"x_m": 6.87, "z_m": 7.7},
             },
-            "boom_hoist": {
-                "reeving": [{"node": "boom_heel"}, {"node": "rear_top", "parts": 4}],
-            },
-            "payload_hoists": {
+            "hoists": {
+                "BH": {
+                    "reeving": [{"node": "boom_heel"}, {"node": "rear_top", "parts": 4}],
+                },
                 "MH": {
                     "reeving": [
                         {"node": "winch", "body": "platform", "x_m": -5.0, "z_m": 3.0},
@@ -82,7 +82,7 @@ def test_reeving_can_reference_primary_nodes():
 
 def test_explicit_support_node_hangs_the_hook_mid_path():
     data = _authored()
-    data["model_definition"]["payload_hoists"]["MH"]["support_node"] = "sheave"
+    data["model_definition"]["hoists"]["MH"]["support_node"] = "sheave"
 
     doc = normalize_document(data)
 
@@ -99,7 +99,7 @@ def test_explicit_support_node_hangs_the_hook_mid_path():
 )
 def test_reeving_entry_validation(mutate, message):
     data = _authored()
-    mutate(data["model_definition"]["payload_hoists"]["MH"]["reeving"][0])
+    mutate(data["model_definition"]["hoists"]["MH"]["reeving"][0])
 
     with pytest.raises(ValueError, match=message):
         normalize_document(data)
@@ -107,7 +107,7 @@ def test_reeving_entry_validation(mutate, message):
 
 def test_duplicate_local_node_definition_is_rejected():
     data = _authored()
-    reeving = data["model_definition"]["payload_hoists"]["MH"]["reeving"]
+    reeving = data["model_definition"]["hoists"]["MH"]["reeving"]
     reeving.append(dict(reeving[1]))
 
     with pytest.raises(ValueError, match="defined twice"):
@@ -116,7 +116,7 @@ def test_duplicate_local_node_definition_is_rejected():
 
 def test_hoist_ids_differing_only_by_case_are_rejected():
     data = _authored()
-    hoists = data["model_definition"]["payload_hoists"]
+    hoists = data["model_definition"]["hoists"]
     hoists["mh"] = deepcopy(hoists["MH"])
 
     with pytest.raises(ValueError, match="differ ignoring case"):
@@ -133,7 +133,7 @@ def test_hoist_node_colliding_with_shared_body_node_is_rejected():
 
 def test_unknown_referenced_node_is_rejected():
     data = _authored()
-    data["model_definition"]["payload_hoists"]["MH"]["reeving"].append({"node": "nowhere"})
+    data["model_definition"]["hoists"]["MH"]["reeving"].append({"node": "nowhere"})
 
     with pytest.raises(ValueError, match="unknown node"):
         normalize_document(data)
@@ -143,9 +143,9 @@ def test_shared_node_is_written_by_global_id_and_round_trips(tmp_path):
     data = _authored()
     md = data["model_definition"]
     md["platform"] = {"nodes": {"shared": {"x_m": -2.0, "z_m": 5.0}}}
-    md["payload_hoists"]["AH"] = deepcopy(md["payload_hoists"]["MH"])
-    md["payload_hoists"]["AH"]["reeving"][0] = {"node": "shared"}
-    md["payload_hoists"]["MH"]["reeving"][0] = {"node": "shared"}
+    md["hoists"]["AH"] = deepcopy(md["hoists"]["MH"])
+    md["hoists"]["AH"]["reeving"][0] = {"node": "shared"}
+    md["hoists"]["MH"]["reeving"][0] = {"node": "shared"}
     path = tmp_path / "shared.yaml"
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     doc = load_document(path)
@@ -154,14 +154,14 @@ def test_shared_node_is_written_by_global_id_and_round_trips(tmp_path):
     saved = yaml.safe_load((tmp_path / "out.yaml").read_text(encoding="utf-8"))
 
     assert saved["model_definition"]["platform"]["nodes"] == {"shared": {"x_m": -2.0, "z_m": 5.0}}
-    assert saved["model_definition"]["payload_hoists"]["AH"]["reeving"][0] == {"node": "shared"}
+    assert saved["model_definition"]["hoists"]["AH"]["reeving"][0] == {"node": "shared"}
     reloaded = load_document(tmp_path / "out.yaml")
     assert _segments(reloaded, "AH") == _segments(doc, "AH")
 
 
 def test_non_chained_rope_round_trips_with_from(tmp_path):
     data = _authored()
-    reeving = data["model_definition"]["payload_hoists"]["MH"]["reeving"]
+    reeving = data["model_definition"]["hoists"]["MH"]["reeving"]
     reeving.append({"node": "sheave", "from": "winch", "parts": 2})
     path = tmp_path / "branch.yaml"
     path.write_text(yaml.safe_dump(data), encoding="utf-8")

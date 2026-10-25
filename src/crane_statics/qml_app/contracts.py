@@ -10,76 +10,11 @@ for data flowing between:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional
 
 # =====================================================================
 # Model Edit Payloads
 # =====================================================================
-
-
-class NodeFieldsDict(TypedDict, total=False):
-    """Typed dict for node field data crossing QML boundary.
-
-    Returned by ModelViewModel.nodeFields() for QML display and editing.
-    """
-
-    id: str
-    hanging: bool
-    below_node_id: str
-    x_m: float
-    z_m: float
-    local_x_m: float
-    local_z_m: float
-
-
-class MassPointFieldsDict(TypedDict, total=False):
-    """Typed dict for mass point field data crossing QML boundary."""
-
-    id: str
-    mass_t: float
-    x_m: float
-    y_m: float
-    z_m: float
-    local_x_m: float
-    local_y_m: float
-    local_z_m: float
-
-
-class WindAreaFieldsDict(TypedDict, total=False):
-    """Typed dict for wind area field data crossing QML boundary."""
-
-    id: str
-    area_w_m2: float
-    area_v_m2: float
-    x_m: float
-    z_m: float
-    local_x_m: float
-    local_z_m: float
-    cd: float
-
-
-class HoistFieldsDict(TypedDict, total=False):
-    """Typed dict for hoist field data crossing QML boundary."""
-
-    id: str
-    tackle_length_m: float
-
-
-class RopeSegmentFieldsDict(TypedDict, total=False):
-    """Typed dict for rope segment field data crossing QML boundary."""
-
-    id: str
-    hoist_id: str
-    from_node_id: str
-    to_node_id: str
-    tension_mode: str
-
-
-class ContractualPointFieldsDict(TypedDict, total=False):
-    """Typed dict for contractual point field data crossing QML boundary."""
-
-    outreach_m: float
-    load_t: float
 
 
 # =====================================================================

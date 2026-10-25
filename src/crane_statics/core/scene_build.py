@@ -18,7 +18,7 @@ Two deliberate choices in the interface:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Optional, Tuple, cast
 
 from crane_statics.calculation.rope_mass import compute_rope_on_winch, find_winch_node_ids
@@ -182,22 +182,6 @@ class SceneDisplay:
         """Build from a flat mapping, ignoring unknown keys."""
         known = {field_name for field_name in cls.__dataclass_fields__}
         return cls(**{key: value for key, value in data.items() if key in known})
-
-    def with_overlay(self, name: str, visible: bool) -> "SceneDisplay":
-        """Return a copy with one named overlay toggled."""
-        flag = {
-            "hook": "show_hook_forces",
-            "gravity": "show_gravity_forces",
-            "rope_weight": "show_rope_weight_forces",
-            "wind": "show_wind_forces",
-            "inertia": "show_inertia_forces",
-            "reactions": "show_reaction_forces",
-            "labels": "show_labels",
-            "winch_spools": "show_winch_spools",
-        }.get(name)
-        return (
-            self if flag is None else replace(self, **cast(dict[str, Any], {flag: bool(visible)}))
-        )
 
 
 @dataclass(frozen=True)

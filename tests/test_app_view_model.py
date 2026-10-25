@@ -78,7 +78,7 @@ class TestSaveGuards:
 
     def test_save_after_save_as_reuses_the_path(self, app_vm, tmp_path):
         app_vm.newDocument()
-        target = tmp_path / "model.json"
+        target = tmp_path / "model.yaml"
         app_vm.saveAs(QUrl.fromLocalFile(str(target)))
         app_vm.session.model.set_dirty(True)
 

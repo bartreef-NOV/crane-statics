@@ -1,4 +1,4 @@
-schema: {name: crane-statics, version: 10.0.0}
+schema: {name: crane-statics, version: 11.0.0}
 metadata: {name: Blue Wind Crane Retracted}
 model_definition:
   environment: {gravity_m_s2: 9.81, air_density_kg_m3: 1.226, max_wind_speed_m_s: 20.0}
@@ -93,14 +93,14 @@ model_definition:
       position: {x_m: -5.3, z_m: 29.4}
       area_x_m2: 0.0
       area_y_m2: 169.4
-  boom_hoist:
-    rope: {linear_mass_kg_m: 23.59, length_m: 3600.0}
-    reeving:
-    - {node: winch, body: platform, x_m: -13.05, z_m: -1.2}
-    - {node: aframe_sheave_1, body: front_leg, x_m: -10.0, z_m: 40.0, parts: 2}
-    - {node: boom_sheave_2, body: boom, u_m: 94.4, w_m: 5.25, parts: 16}
-    - {node: boom_sheave_3, body: boom, u_m: 90.0, w_m: 4.3, from: aframe_sheave_1, parts: 6}
-  payload_hoists:
+  hoists:
+    BH:
+      rope: {linear_mass_kg_m: 23.59, length_m: 3600.0}
+      reeving:
+      - {node: winch, body: platform, x_m: -13.05, z_m: -1.2}
+      - {node: aframe_sheave_1, body: front_leg, x_m: -10.0, z_m: 40.0, parts: 2}
+      - {node: boom_sheave_2, body: boom, u_m: 94.4, w_m: 5.25, parts: 16}
+      - {node: boom_sheave_3, body: boom, u_m: 90.0, w_m: 4.3, from: aframe_sheave_1, parts: 6}
     MH:
       rope: {linear_mass_kg_m: 20.3}
       reeving:

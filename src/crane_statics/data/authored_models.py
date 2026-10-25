@@ -18,13 +18,20 @@ versions) is not built; treat it as a review discipline for now.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
-AUTHORED_SCHEMA_MAJOR_VERSION = 10
-AUTHORED_SCHEMA_VERSION = "10.0.0"
+AUTHORED_SCHEMA_MAJOR_VERSION = 11
+AUTHORED_SCHEMA_VERSION = "11.0.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -527,13 +534,11 @@ class AuthoredModelDefinition(BaseModel):
         default_factory=AuthoredGlobalBody,
         description="The fixed platform/base body, in global coordinates.",
     )
-    boom_hoist: AuthoredBoomHoist = Field(
-        description="The rope system that raises and lowers the boom."
-    )
-    payload_hoists: dict[IdName, AuthoredPayloadHoist] = Field(
-        min_length=1,
-        description="Named payload hoists. Each is self-contained: deleting its block removes "
-        "the hoist together with the sheaves it owns.",
+    hoists: dict[IdName, Union[AuthoredBoomHoist, AuthoredPayloadHoist]] = Field(
+        min_length=2,
+        description=f"Named hoists. The required '{BOOM_HOIST_ID}' entry is the rope system that "
+        "raises and lowers the boom; every other entry is a payload hoist. Each is "
+        "self-contained: deleting its block removes the hoist together with the sheaves it owns.",
     )
     limits: dict[IdName, AuthoredLimit] = Field(
         default_factory=dict,
@@ -543,14 +548,36 @@ class AuthoredModelDefinition(BaseModel):
         "(for example 'rear_hinge_Fx'). Limits not listed keep their default.",
     )
 
+    @field_validator("hoists", mode="before")
+    @classmethod
+    def _parse_hoists_by_kind(cls, value: Any) -> Any:
+        """Validate each entry against its own model so errors name the real problem: the
+        ``BH`` entry is the boom hoist, every other entry a payload hoist."""
+        if not isinstance(value, dict):
+            return value
+        if BOOM_HOIST_ID not in value:
+            raise ValueError(f"hoists must include the boom hoist '{BOOM_HOIST_ID}'")
+        parsed: dict[Any, Any] = {}
+        for hoist_id, hoist in value.items():
+            if isinstance(hoist, dict):
+                try:
+                    if hoist_id == BOOM_HOIST_ID:
+                        hoist = AuthoredBoomHoist.model_validate(hoist)
+                    else:
+                        hoist = AuthoredPayloadHoist.model_validate(hoist)
+                except ValidationError as error:
+                    raise ValueError(f"{hoist_id}: {format_authored_validation_error(error)}")
+            parsed[hoist_id] = hoist
+        return parsed
+
     @model_validator(mode="after")
     def _check_hoist_prefixes_unique(self) -> "AuthoredModelDefinition":
-        seen: dict[str, str] = {hoist_node_prefix(BOOM_HOIST_ID): "boom_hoist"}
-        for hoist_id in self.payload_hoists:
+        seen: dict[str, str] = {}
+        for hoist_id in self.hoists:
             prefix = hoist_node_prefix(hoist_id)
             if prefix in seen:
                 raise ValueError(
-                    f"payload hoist {hoist_id!r} clashes with {seen[prefix]!r}: hoist IDs must "
+                    f"hoist {hoist_id!r} clashes with {seen[prefix]!r}: hoist IDs must "
                     "differ ignoring case"
                 )
             seen[prefix] = hoist_id
@@ -574,10 +601,10 @@ EXAMPLE_DOCUMENT: dict = {
             "rear_hinge": {"x_m": 0.0, "z_m": 0.0},
             "front_hinge": {"x_m": 0.0, "z_m": 0.0},
         },
-        "boom_hoist": {
-            "reeving": [{"node": "boom_heel"}, {"node": "rear_top", "parts": 2}],
-        },
-        "payload_hoists": {
+        "hoists": {
+            "BH": {
+                "reeving": [{"node": "boom_heel"}, {"node": "rear_top", "parts": 2}],
+            },
             "MH": {
                 "reeving": [
                     {"node": "boom_heel"},
@@ -588,7 +615,7 @@ EXAMPLE_DOCUMENT: dict = {
                 "daf": 1.0,
                 "offlead_deg": 0.0,
                 "load_chart": [{"outreach_m": 0.0, "load_t": 0.0}],
-            }
+            },
         },
     },
 }

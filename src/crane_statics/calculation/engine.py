@@ -89,11 +89,6 @@ def get_calculator(document: CraneDocument) -> "CraneCalculator":
     return _CALCULATOR_CACHE[doc_id]
 
 
-def clear_calculator_cache() -> None:
-    """Clear all cached calculators (useful for session cleanup)."""
-    _CALCULATOR_CACHE.clear()
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Numeric Tolerance Constants
 # ─────────────────────────────────────────────────────────────────────────────
@@ -341,11 +336,6 @@ class CraneCalculator:
         self._kinematics = KinematicsAdapter(self._doc_dict)
         self._solver_ctx = build_solver_static_context(self._doc_dict)
         self._oop_geometry: Optional[tuple[tuple[Any, ...], _OutOfPlaneGeometry]] = None
-
-    def _build_connection_map(self) -> dict[str, dict]:
-        if self.doc.connections is None:
-            self.doc.connections = []
-        return {str(c.get("id")): c for c in self.doc.connections}
 
     def _build_out_of_plane_reactions(
         self,
@@ -841,13 +831,6 @@ class CraneCalculator:
         except Exception:
             return None
 
-    def _compute_outreach(self, boom_angle_deg: float, hoist_id: str) -> float:
-        try:
-            return self._kinematics.compute_outreach(boom_angle_deg, hoist_id)
-        except Exception:
-            angle_rad = math.radians(boom_angle_deg)
-            return 100.0 + 50.0 * math.cos(angle_rad)
-
     def resolve_limit_target(self, limit_key: str, component: str) -> tuple[str, str]:
         """``(entity_id, rope_channel)`` that ``compute_allowable_load`` checks for a limit.
 
@@ -1100,32 +1083,3 @@ class CraneCalculator:
             ):
                 best_capacity = capacity
         return best_capacity
-
-    def evaluate_contractual_point(
-        self,
-        hoist_id: str,
-        required_load_t: float,
-        required_outreach_m: float,
-        point: AnalysisPoint,
-        design_limits: dict[str, dict],
-    ) -> dict:
-        """Evaluate whether a contractual point passes or fails."""
-        capacity = self.compute_allowable_load(
-            point,
-            design_limits,
-            hook_daf=self.hoists[hoist_id].hook_daf,
-            hook_mass_t=self.hoists[hoist_id].hook_mass_t,
-        )
-
-        margin_t = capacity.max_allowable_load_t - required_load_t
-        passes = margin_t >= -self.TOLERANCE
-
-        return {
-            "hoist_id": hoist_id,
-            "required_load_t": required_load_t,
-            "required_outreach_m": required_outreach_m,
-            "allowable_load_t": capacity.max_allowable_load_t,
-            "margin_t": margin_t,
-            "passes": passes,
-            "governing_limit_id": capacity.governing_limit_id,
-        }

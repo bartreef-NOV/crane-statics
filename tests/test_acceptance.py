@@ -5,6 +5,7 @@ import pytest
 from dataclasses import fields, replace
 from pathlib import Path
 import json
+import yaml
 from importlib import resources
 from jsonschema import Draft202012Validator
 from PyQt6.QtGui import QGuiApplication
@@ -598,7 +599,7 @@ class TestAuthoredSchemaPolicy:
 
     def _minimal_v6(self) -> dict:
         return {
-            "schema": {"name": "crane-statics", "version": "10.0.0"},
+            "schema": {"name": "crane-statics", "version": "11.0.0"},
             "metadata": {"name": "V6 Minimal"},
             "model_definition": {
                 "environment": {
@@ -652,10 +653,10 @@ class TestAuthoredSchemaPolicy:
                         }
                     ],
                 },
-                "boom_hoist": {
-                    "reeving": [{"node": "boom_heel"}, {"node": "rear_top", "parts": 2}],
-                },
-                "payload_hoists": {
+                "hoists": {
+                    "BH": {
+                        "reeving": [{"node": "boom_heel"}, {"node": "rear_top", "parts": 2}],
+                    },
                     "MH": {
                         "reeving": [
                             {"node": "boom_heel"},
@@ -672,7 +673,7 @@ class TestAuthoredSchemaPolicy:
                         "daf": 1.0,
                         "offlead_deg": 0.0,
                         "load_chart": [{"outreach_m": 60.0, "load_t": 100.0}],
-                    }
+                    },
                 },
             },
         }
@@ -681,13 +682,13 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "3.2.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 10 is supported"
+            ValueError, match="Only crane-statics schema major version 11 is supported"
         ):
             normalize_document(data)
 
     def test_v6_minor_version_bump_is_accepted_by_normalizer(self):
         data = self._minimal_v6()
-        data["schema"]["version"] = "10.1.0"
+        data["schema"]["version"] = "11.1.0"
         doc = normalize_document(data)
         assert doc is not None
 
@@ -695,15 +696,15 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "5.13.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 10 is supported"
+            ValueError, match="Only crane-statics schema major version 11 is supported"
         ):
             normalize_document(data)
 
     def test_unsupported_version_is_rejected_by_loader(self, tmp_path):
         data = self._minimal_v6()
         data["schema"]["version"] = "3.2.0"
-        path = tmp_path / "legacy.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / "legacy.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Unsupported authored schema version"):
             load_document(path)
@@ -752,29 +753,29 @@ class TestAuthoredSchemaPolicy:
     def test_v6_rejects_zero_max_wind_speed(self, tmp_path):
         data = self._minimal_v6()
         data["model_definition"]["environment"]["max_wind_speed_m_s"] = 0.0
-        path = tmp_path / "zero_wind.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / "zero_wind.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
     def test_v6_rejects_authored_hook_travel(self, tmp_path):
         data = self._minimal_v6()
-        data["model_definition"]["payload_hoists"]["MH"]["hook_travel"] = {
+        data["model_definition"]["hoists"]["MH"]["hook_travel"] = {
             "min_m": 5.0,
             "max_m": 80.0,
         }
-        path = tmp_path / "authored_travel.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / "authored_travel.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="hook_travel"):
             load_document(path)
 
     def test_v6_rejects_authored_payload_rope_length(self, tmp_path):
         data = self._minimal_v6()
-        data["model_definition"]["payload_hoists"]["MH"]["rope_length_m"] = 500.0
-        path = tmp_path / "authored_rope_length.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        data["model_definition"]["hoists"]["MH"]["rope_length_m"] = 500.0
+        path = tmp_path / "authored_rope_length.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="rope_length_m"):
             load_document(path)
@@ -782,9 +783,9 @@ class TestAuthoredSchemaPolicy:
     @pytest.mark.parametrize("field", ["drum_dead_turns", "drum_diameter_m"])
     def test_drum_fields_are_rejected_as_unknown(self, tmp_path, field):
         data = self._minimal_v6()
-        data["model_definition"]["payload_hoists"]["MH"]["rope"] = {field: 1.5}
-        path = tmp_path / "drum.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        data["model_definition"]["hoists"]["MH"]["rope"] = {field: 1.5}
+        path = tmp_path / "drum.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match=field):
             load_document(path)
@@ -792,7 +793,7 @@ class TestAuthoredSchemaPolicy:
     def _reachable_v6(self) -> dict:
         """_minimal_v6 with a contractual outreach the 40 m boom can actually reach."""
         data = self._minimal_v6()
-        data["model_definition"]["payload_hoists"]["MH"]["load_chart"] = [
+        data["model_definition"]["hoists"]["MH"]["load_chart"] = [
             {"outreach_m": 30.0, "load_t": 100.0}
         ]
         return data
@@ -804,7 +805,7 @@ class TestAuthoredSchemaPolicy:
 
     def test_v6_authored_lowest_hook_height_drives_the_derived_travel(self):
         data = self._reachable_v6()
-        data["model_definition"]["payload_hoists"]["MH"]["lowest_hook_height_m"] = -60.0
+        data["model_definition"]["hoists"]["MH"]["lowest_hook_height_m"] = -60.0
         deeper = normalize_document(data)
         shallower = normalize_document(self._reachable_v6())
 
@@ -996,8 +997,8 @@ class TestAuthoredSchemaPolicy:
 
     def test_v6_named_authored_input_loads(self, tmp_path):
         data = self._minimal_v6()
-        path = tmp_path / "v5.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / "v5.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         doc = load_document(path)
         assert doc.model_type == "fixed_topology_crane_2d"
@@ -1008,8 +1009,8 @@ class TestAuthoredSchemaPolicy:
         data["model_definition"].setdefault("boom", {}).setdefault("nodes", {})["user_hook"] = {
             "hang_from_node_id": "boom_heel",
         }
-        path = tmp_path / "authored_hanging_node.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / "authored_hanging_node.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
@@ -1020,7 +1021,7 @@ class TestAuthoredSchemaPolicy:
 
     def test_v6_split_mode_points_normalize_into_runtime_fields(self):
         data = self._minimal_v6()
-        mh = data["model_definition"]["payload_hoists"]["MH"]
+        mh = data["model_definition"]["hoists"]["MH"]
         mh["split"] = {
             "hook_mass_t": 0.0,
             "falls": 1,
@@ -1038,7 +1039,7 @@ class TestAuthoredSchemaPolicy:
 
     def test_v6_rejects_removed_modes_wrapper(self, tmp_path):
         data = self._minimal_v6()
-        hoist = data["model_definition"]["payload_hoists"]["MH"]
+        hoist = data["model_definition"]["hoists"]["MH"]
         hoist["modes"] = {
             "normal": {
                 "hook_mass_t": hoist.pop("hook_mass_t"),
@@ -1047,14 +1048,14 @@ class TestAuthoredSchemaPolicy:
             }
         }
 
-        path = tmp_path / "removed_modes.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / "removed_modes.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
     def test_v6_rejects_split_values_above_normal_values(self):
         data = self._minimal_v6()
-        data["model_definition"]["payload_hoists"]["MH"]["split"] = {
+        data["model_definition"]["hoists"]["MH"]["split"] = {
             "hook_mass_t": 1.0,
             "falls": 3,
             "load_chart": [{"outreach_m": 50.0, "load_t": 80.0}],
@@ -1063,15 +1064,15 @@ class TestAuthoredSchemaPolicy:
         with pytest.raises(ValueError, match="split.falls must be <= falls"):
             normalize_document(data)
 
-        data["model_definition"]["payload_hoists"]["MH"]["split"]["falls"] = 1
+        data["model_definition"]["hoists"]["MH"]["split"]["falls"] = 1
         with pytest.raises(ValueError, match="split.hook_mass_t must be <= hook_mass_t"):
             normalize_document(data)
 
     def test_v6_rejects_missing_solve_hoist(self, tmp_path):
         data = self._minimal_v6()
-        del data["model_definition"]["boom_hoist"]
-        path = tmp_path / "v5_no_solve.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        del data["model_definition"]["hoists"]["BH"]
+        path = tmp_path / "v5_no_solve.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
@@ -1082,8 +1083,8 @@ class TestAuthoredSchemaPolicy:
     def test_v6_requires_each_primary_structure_point(self, tmp_path, primary_key):
         data = self._minimal_v6()
         del data["model_definition"]["structure"][primary_key]
-        path = tmp_path / f"missing_{primary_key}.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / f"missing_{primary_key}.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
@@ -1092,8 +1093,8 @@ class TestAuthoredSchemaPolicy:
     def test_v6_requires_support_dimensions(self, tmp_path, dimension_key):
         data = self._minimal_v6()
         data["model_definition"]["structure"].pop(dimension_key, None)
-        path = tmp_path / f"missing_{dimension_key}.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / f"missing_{dimension_key}.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
@@ -1101,8 +1102,8 @@ class TestAuthoredSchemaPolicy:
     def test_v6_allows_missing_slewing_bearing_diameter(self, tmp_path):
         data = self._minimal_v6()
         data["model_definition"]["structure"].pop("slewing_bearing_diameter_m", None)
-        path = tmp_path / "missing_slewing_bearing_diameter.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / "missing_slewing_bearing_diameter.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         doc = load_document(path)
 
@@ -1113,8 +1114,8 @@ class TestAuthoredSchemaPolicy:
 
         data = self._minimal_v6()
         data["model_definition"]["structure"].pop("slewing_bearing_diameter_m", None)
-        path = tmp_path / "missing_slewing_bearing_diameter.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / "missing_slewing_bearing_diameter.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         doc = load_document(path)
         authored = document_to_authored_form(doc)
@@ -1123,10 +1124,10 @@ class TestAuthoredSchemaPolicy:
 
     def test_v6_linear_mass_round_trips_for_boom_and_payload(self, tmp_path):
         data = self._minimal_v6()
-        data["model_definition"]["boom_hoist"]["rope"] = {"linear_mass_kg_m": 4.2}
-        data["model_definition"]["payload_hoists"]["MH"]["rope"] = {"linear_mass_kg_m": 3.1}
-        path = tmp_path / "linear_mass.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        data["model_definition"]["hoists"]["BH"]["rope"] = {"linear_mass_kg_m": 4.2}
+        data["model_definition"]["hoists"]["MH"]["rope"] = {"linear_mass_kg_m": 3.1}
+        path = tmp_path / "linear_mass.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         doc = load_document(path)
         rope_by_hoist = {
@@ -1137,11 +1138,11 @@ class TestAuthoredSchemaPolicy:
         assert rope_by_hoist["MH"].linear_mass_kg_m == pytest.approx(3.1)
         assert len(rope_by_hoist) == 2
 
-        out_path = tmp_path / "linear_mass_saved.json"
+        out_path = tmp_path / "linear_mass_saved.yaml"
         save_document(doc, out_path)
-        saved = json.loads(out_path.read_text())
-        boom_rope = saved["model_definition"]["boom_hoist"]["rope"]
-        mh_rope = saved["model_definition"]["payload_hoists"]["MH"]["rope"]
+        saved = yaml.safe_load(out_path.read_text())
+        boom_rope = saved["model_definition"]["hoists"]["BH"]["rope"]
+        mh_rope = saved["model_definition"]["hoists"]["MH"]["rope"]
         assert boom_rope["linear_mass_kg_m"] == pytest.approx(4.2)
         assert mh_rope["linear_mass_kg_m"] == pytest.approx(3.1)
 
@@ -1155,9 +1156,9 @@ class TestAuthoredSchemaPolicy:
 
     def test_v6_rejects_negative_linear_mass(self, tmp_path):
         data = self._minimal_v6()
-        data["model_definition"]["boom_hoist"]["rope"] = {"linear_mass_kg_m": -0.1}
-        path = tmp_path / "negative_linear_mass.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        data["model_definition"]["hoists"]["BH"]["rope"] = {"linear_mass_kg_m": -0.1}
+        path = tmp_path / "negative_linear_mass.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
@@ -1176,15 +1177,15 @@ class TestAuthoredSchemaPolicy:
                 },
             }
         }
-        path = tmp_path / "scene_defaults.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / "scene_defaults.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
     def test_v6_accepts_additional_payload_hoist(self, tmp_path):
         data = self._minimal_v6()
-        data["model_definition"]["payload_hoists"]["AH"] = {
+        data["model_definition"]["hoists"]["AH"] = {
             "reeving": [{"node": "boom_heel"}, {"node": "front_base", "parts": 2}],
             "hook_mass_t": 0.0,
             "falls": 2,
@@ -1192,8 +1193,8 @@ class TestAuthoredSchemaPolicy:
             "offlead_deg": 0.0,
             "load_chart": [{"outreach_m": 60.0, "load_t": 100.0}],
         }
-        path = tmp_path / "v5_payload_extra.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path = tmp_path / "v5_payload_extra.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         # This one is valid in v5.4 because payload hoists no longer carry per-hoist tension mode.
         doc = load_document(path)
@@ -1201,19 +1202,19 @@ class TestAuthoredSchemaPolicy:
 
     def test_v6_rejects_payload_fields_on_boom_hoist(self, tmp_path):
         data = self._minimal_v6()
-        data["model_definition"]["boom_hoist"]["load_node_id"] = "boom_heel"
-        path = tmp_path / "v5_solve_payload_fields.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        data["model_definition"]["hoists"]["BH"]["load_node_id"] = "boom_heel"
+        path = tmp_path / "v5_solve_payload_fields.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
         with pytest.raises(DocumentIOError, match="Schema validation failed"):
             load_document(path)
 
     def test_saved_document_validates_against_v6_schema(self, tmp_path):
         doc = create_default_document()
-        out_path = tmp_path / "saved_schema_valid.json"
+        out_path = tmp_path / "saved_schema_valid.yaml"
         save_document(doc, out_path)
 
-        saved = json.loads(out_path.read_text())
+        saved = yaml.safe_load(out_path.read_text())
         schema = json.loads(
             resources.files("crane_statics.schemas")
             .joinpath(SCHEMA_FILENAME)
@@ -1226,12 +1227,12 @@ class TestAuthoredSchemaPolicy:
 
     def test_save_outputs_compact_v6_schema(self, tmp_path):
         doc = create_default_document()
-        out_path = tmp_path / "saved_v6.json"
+        out_path = tmp_path / "saved_v6.yaml"
         save_document(doc, out_path)
 
-        saved = json.loads(out_path.read_text())
+        saved = yaml.safe_load(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "10.0.0"
+        assert saved["schema"]["version"] == "11.0.0"
         assert "model_definition" in saved
         assert "ropes" not in saved["model_definition"]
         assert "nodes" not in saved["model_definition"]
@@ -1240,7 +1241,7 @@ class TestAuthoredSchemaPolicy:
         md = saved["model_definition"]
         assert "structure" in md
         assert "hook_height_at_min_outreach_m" not in md
-        mh = md["payload_hoists"]["MH"]
+        mh = md["hoists"]["MH"]
         assert set(mh) == {
             "reeving",
             "hook_mass_t",
@@ -1252,19 +1253,19 @@ class TestAuthoredSchemaPolicy:
         }
         assert "split" not in mh
         assert mh["reeving"][-1] == {"node": "hook", "body": "boom", "u_m": 0.0, "w_m": 0.0}
-        assert set(md["boom_hoist"]) == {"reeving"}
-        assert md["boom_hoist"]["reeving"][-1] == {"node": "rear_top", "parts": 2}
+        assert set(md["hoists"]["BH"]) == {"reeving"}
+        assert md["hoists"]["BH"]["reeving"][-1] == {"node": "rear_top", "parts": 2}
         # Empty bodies and all-zero vessel motion are not written out.
         assert not {"boom", "rear_leg", "front_leg", "platform"} & set(md)
         assert "vessel_motion" not in md
 
     def test_save_emits_split_mode_without_legacy_splitable_flag(self, tmp_path):
         doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml")
-        out_path = tmp_path / "saved_v6_split.json"
+        out_path = tmp_path / "saved_v6_split.yaml"
         save_document(doc, out_path)
 
-        saved = json.loads(out_path.read_text())
-        mh = saved["model_definition"]["payload_hoists"]["MH"]
+        saved = yaml.safe_load(out_path.read_text())
+        mh = saved["model_definition"]["hoists"]["MH"]
         assert "split" in mh
         assert "splitable_block" not in mh
         assert mh["split"]["falls"] == 12

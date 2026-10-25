@@ -6,7 +6,7 @@ model: inherit
 ---
 
 You review the authored-document contract for drift. This project loads and
-validates user-authored JSON crane models against a JSON Schema that is
+validates user-authored YAML crane models against a JSON Schema that is
 **generated from** `src/crane_statics/data/authored_models.py`'s pydantic
 models, not hand-authored — so most of what used to be "two independently
 maintained copies disagreeing" is now "is the checked-in generated file
@@ -93,6 +93,6 @@ Round-tripping through save and load must stay valid.
 ## Output
 
 Findings only, most severe first. For each: **file:line**, what's inconsistent,
-the concrete document that would break (a snippet of offending JSON is
+the concrete document that would break (a snippet of offending YAML is
 ideal), and the specific fix. Say plainly when the contract is consistent, and list
 what you verified.

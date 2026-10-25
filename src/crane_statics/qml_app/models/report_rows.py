@@ -41,11 +41,6 @@ def result_rows_to_dicts(rows: list[ResultRow]) -> list[dict[str, Any]]:
     return ResultRowFormatter.result_rows_to_dicts(rows)
 
 
-def _number(value: Any) -> str:
-    """Format a numeric value for display (or empty string if None)."""
-    return "" if value is None else f"{float(value):.1f}"
-
-
 def report_to_rows(report: dict) -> list[dict[str, Any]]:
     """Flatten an equilibrium / load-summary report into displayable rows."""
     return ResultRowFormatter.report_rows_to_dicts(report)
