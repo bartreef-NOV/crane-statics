@@ -555,8 +555,8 @@ class _LoadBuilder:
                 if point is None:
                     continue
                 xw, zw = point
-                is_boom_local = wind_area.get("local_x_m") is not None and body_id == "boom"
-                area_proj = area * abs(math.sin(angle)) if is_boom_local else area
+                # Same rule as crane_solver: every boom-body area is projected for X wind.
+                area_proj = area * abs(math.sin(angle)) if body_id == "boom" else area
 
                 v_eff = abs(wind)
                 force = 0.5 * rho * cd * area_proj * v_eff**2 / 1000.0

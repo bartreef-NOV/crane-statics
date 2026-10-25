@@ -109,17 +109,22 @@ def test_platform_base_sign_applies_to_hook_and_sidelead():
 
 
 def test_sign_agnostic_consumers_unchanged():
-    """Values captured from the code before the sign change (case 3: Y wind, roll, sidelead)."""
+    """Sign-agnostic values (case 3: Y wind, roll, sidelead).
+
+    Captured before the sign change; fradial, mradial and the bearing line loads were
+    re-baselined in the wind-scaling task because the example's boom-local area_v_m2 is no
+    longer multiplied by |sin(boom angle)| for Y wind. The resultant is unchanged.
+    """
     calc = _calc()
     point = _platform(
         calc, wind_speed_m_s=15.0, wind_direction="+Y", vessel_roll_deg=3.0, sidelead_deg=4.5
     )
     expected = {
         "resultant": 25813.675823060286,
-        "fradial": 1106.7070878225763,
-        "mradial": 754757.7929947668,
-        "max_bearing_line_load": 969204.2169511968,
-        "min_bearing_line_load": 952770.7205247495,
+        "fradial": 1080.0615734455357,
+        "mradial": 754713.2826163806,
+        "max_bearing_line_load": 969147.5445772843,
+        "min_bearing_line_load": 952714.048150837,
     }
     for component, value in expected.items():
         got = extract_connection_component_response(point, 1000.0, "platform_base", component)
@@ -188,3 +193,84 @@ def test_reaction_arrows_sit_on_the_matching_side():
     assert ConnectionFormatter.child_display_name("heel_right") == "Right"
     assert ConnectionFormatter.display_name("heel_left") == "Heel Left"
     assert ConnectionFormatter.display_name("heel_right") == "Heel Right"
+
+
+# --- Wind scaling parity -------------------------------------------------------------------
+
+RHO = 1.225
+
+
+def _doc_with_single_wind_area(body_id: str, **area_kwargs):
+    from crane_statics.data.models import WindArea
+
+    doc = load_document(EXAMPLE_22689).model_copy(deep=True)
+    for body in doc.bodies:
+        body.wind_areas = []
+    body = next(b for b in doc.bodies if b.id == body_id)
+    body.wind_areas.append(WindArea(id="probe", cd=1.3, **area_kwargs))
+    doc.environment.air_density_kg_m3 = RHO
+    return doc
+
+
+@pytest.mark.parametrize("angle", [30.0, 75.0])
+def test_y_wind_on_boom_does_not_scale_with_boom_angle(angle):
+    doc = _doc_with_single_wind_area(
+        "boom", area_w_m2=40.0, area_v_m2=25.0, x_m=0.0, z_m=0.0, local_x_m=20.0, local_z_m=0.0
+    )
+    calc = CraneCalculator(doc)
+    geometry = calc._out_of_plane_geometry(angle, ())
+    speed = 15.0
+    total_kN = float(geometry.wind_coef.sum()) * speed**2
+    assert total_kN == pytest.approx(0.5 * RHO * 1.3 * 25.0 * speed**2 / 1000.0, rel=1e-12)
+
+
+@pytest.mark.parametrize("angle", [30.0, 60.0])
+def test_x_wind_boom_areas_scale_in_arrow_and_solver_alike(angle):
+    from crane_statics.core import drawn_loads as dl
+    from tests.test_acceptance import scene_inputs_at_drawn_tackle
+
+    # Boom-body wind area given in global coordinates (not boom-local).
+    doc = _doc_with_single_wind_area("boom", area_w_m2=40.0, area_v_m2=25.0, x_m=10.0, z_m=15.0)
+    speed = 20.0
+    inputs = scene_inputs_at_drawn_tackle(
+        doc, doc.hoists[0].id, angle=angle, wind_speed_m_s=speed, wind_direction="+X"
+    )
+    loads = inputs.body_loads(inputs.node_positions(), "boom")
+    arrows = loads.category(dl.WIND)
+    assert len(arrows) == 1
+    expected = 0.5 * RHO * 1.3 * 40.0 * abs(math.sin(math.radians(angle))) * speed**2 / 1000.0
+    assert arrows[0].fx_kN == pytest.approx(expected, rel=1e-12)
+
+    # Solver: the only wind load is this area, so the change in the platform-base reaction
+    # (a reaction is minus the applied load) is the solver wind Fx.
+    calc = CraneCalculator(doc)
+    windy = _platform_at(calc, angle, wind_speed_m_s=speed)
+    calm = _platform_at(calc, angle, wind_speed_m_s=0.0)
+    solver_fx = -(
+        windy.baseline_reactions["platform_base"]["Fx"]
+        - calm.baseline_reactions["platform_base"]["Fx"]
+    )
+    assert solver_fx == pytest.approx(arrows[0].fx_kN, rel=1e-9)
+
+
+def _platform_at(calc, angle, **overrides):
+    point = calc.compute_analysis_point(angle, 0.0, "MH", **{**LEVEL, **overrides})
+    assert point is not None
+    return point
+
+
+@pytest.mark.parametrize("angle", [0.0, 90.0])
+@pytest.mark.parametrize("direction", ["+X", "+Y"])
+def test_wind_speed_zero_gives_zero_and_no_error(angle, direction):
+    doc = _doc_with_single_wind_area(
+        "boom", area_w_m2=40.0, area_v_m2=25.0, x_m=0.0, z_m=0.0, local_x_m=20.0, local_z_m=0.0
+    )
+    calc = CraneCalculator(doc)
+    still = _platform_at(calc, angle, wind_speed_m_s=0.0, wind_direction=direction)
+    base = _platform_at(calc, angle, wind_speed_m_s=0.0, wind_direction="+X")
+    assert still.baseline_reactions["platform_base"]["Fy"] == pytest.approx(0.0, abs=1e-9)
+    assert still.baseline_reactions["platform_base"]["Mx"] == pytest.approx(
+        base.baseline_reactions["platform_base"]["Mx"], abs=1e-9
+    )
+    windy = _platform_at(calc, angle, wind_speed_m_s=10.0, wind_direction=direction)
+    assert windy is not None

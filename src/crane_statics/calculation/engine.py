@@ -19,7 +19,6 @@ from .solver.crane_solver import (
     build_solver_static_context,
     build_directional_response_basis,
     compose_unit_basis_point,
-    boom_wind_projection_scale,
     inertia_force,
     rotate_boom_local_point,
 )
@@ -412,18 +411,16 @@ class CraneCalculator:
         masses.extend((m, x, 0.0, z) for m, x, z in lumped)
 
         winds: list[tuple[float, float, float]] = []  # (force per speed squared, x, z)
-        boom_proj = boom_wind_projection_scale(boom_angle_deg)
         for body in self.doc.bodies:
             for wa in body.wind_areas:
                 if body.id == "boom" and wa.local_x_m is not None:
                     xw, zw = rotate_boom_local_point(
                         float(wa.local_x_m), float(wa.local_z_m or 0.0), node_pos, boom_angle_deg
                     )
-                    area_proj = float(wa.area_v_m2) * boom_proj
                 else:
                     xw, zw = float(wa.x_m), float(wa.z_m)
-                    area_proj = float(wa.area_v_m2)
-                winds.append((0.5 * rho * float(wa.cd) * area_proj / 1000.0, xw, zw))
+                # Y wind sees the full area_v_m2 at any boom angle; only X wind is projected.
+                winds.append((0.5 * rho * float(wa.cd) * float(wa.area_v_m2) / 1000.0, xw, zw))
 
         m_arr = np.array(masses, dtype=float).reshape(-1, 4)
         w_arr = np.array(winds, dtype=float).reshape(-1, 3)
