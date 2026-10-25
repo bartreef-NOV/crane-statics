@@ -62,7 +62,8 @@ Every table has a fixed number of rows: 40 mass points, 40 wind areas, 80 nodes,
 - **Never insert or delete rows** inside a table or above one. Use the spare rows (set
   Active = 1 and fill the row), or regenerate with larger capacities. The calculation sheets
   have one formula row per Inputs row, and an inserted or deleted row breaks that link; the
-  `mirror` check fires if it happens.
+  `mirror` check fires if it happens, including for a row inserted above the first data row
+  or just above the guard row.
 - **Active (column A):** 1 = row in use, 0 = spare. A spare row must have Active = 0 and
   every other cell blank; spare rows change no result. Setting Active = 0 on a used row
   removes it from the calculation without deleting it.
@@ -85,7 +86,8 @@ Every table has a fixed number of rows: 40 mass points, 40 wind areas, 80 nodes,
 Columns: Active, Id, Body, Frame, Mass [t], then u, v, w [m] or x, y, z [m].
 
 - Frame `boom_local`: u runs along the boom from the heel, w is normal to it (positive
-  toward +z at a 0 degree boom), and v is lateral. Use this frame only for body `boom`.
+  toward +z at a 0 degree boom), and v is lateral. Use this frame only for body `boom`
+  (the `boom_local_non_boom` check flags it on another body).
 - Frame `global`: x, y, z in the crane frame.
 - y (or v) is used only by the out-of-plane pass.
 
@@ -105,7 +107,8 @@ Spool node (1/0).
 
 - **Frame `global`:** type x and z.
 - **Frame `boom_local`:** type u and w along and normal to the boom from the heel. The
-  global position is computed at the scene boom angle.
+  global position is computed at the scene boom angle. Use it only for body `boom` (the
+  `boom_local_non_boom` check flags it on another body).
 - **Frame `hanging`:** a hook block. Type `Hangs below node` (the sheave it hangs from)
   and `Hanging drop`, which is how far an idle hook hangs below that sheave (blank counts
   as 1 m, the app default). The scene hoist's hook ignores the drop and hangs the scene
@@ -211,10 +214,11 @@ Every count must be 0. The total is in C3, and its status reads `OK` or `CHECK I
 | Check | Counts |
 |---|---|
 | `overflow` | Rows that did not fit a table when the workbook was generated, plus anything typed in a guard row. |
-| `mirror` | An Inputs table whose rows were inserted or deleted (its range no longer has the generated number of rows), or a calculation sheet (Geometry, Loads, OutOfPlane, Results) whose Active column no longer copies the Inputs rows. |
+| `mirror` | An Inputs table whose rows were inserted or deleted (its range no longer has the generated number of rows, or a row was inserted above its first data row or between its last data row and the guard row, so the key row and the guard row are no longer capacity + 1 rows apart), or a calculation sheet (Geometry, Loads, OutOfPlane, Results) whose Active column no longer copies the Inputs rows. |
 | `duplicate_ids` | Active node, rope or hoist rows whose id is used by another active row of the same table. Mass-point and wind-area ids are labels only and may repeat, as in the app. |
 | `blank_ids` | Active rows with a blank id, and segments with a blank rope id. |
 | `invalid_values` | Active cells that are not blank, 0 or 1; and on active rows, a 1/0 column (Spool node, Splitable block) that is not 0/1, or a Body, Frame or Role that is not one of its list choices. |
+| `boom_local_non_boom` | Active mass-point, wind-area or node rows with frame `boom_local` on a body other than `boom`. The app ignores u/v/w on such a row and uses x/z, while the workbook would rotate it with the boom. |
 | `node_references` | Segment ends, hoist hook and support nodes, and hanging nodes' parents that name a missing or inactive node. |
 | `rope_references` | Segments or hoists naming a missing or inactive rope. |
 | `hoist_without_segments` | Active hoists whose rope has no active segment. |
@@ -226,7 +230,7 @@ Every count must be 0. The total is in C3, and its status reads `OK` or `CHECK I
 | `hanging_chain` | Hanging nodes whose parent is itself hanging. Only one level is resolved. |
 | `singular_matrix` | Singular Statics systems (boom 3x3, leg frame 6x6). The boom one is singular when there is no solve rope. |
 | `zero_boom_width` | 1 if the boom width is not > 0. The out-of-plane split divides by it, so Results shows a message. |
-| `invalid_bearing_diameter` | 1 if the slewing bearing diameter is typed but is not a number > 0. Blank is allowed and shows the bearing rows as n/a. |
+| `invalid_bearing_diameter` | 1 if the slewing bearing diameter is typed but is not a number > 0 (the app rejects 0 or less). Blank is allowed and shows the bearing rows as n/a. The cell also has a validation that rejects a typed value other than a number > 0; a pasted value can bypass it, which this check catches. |
 
 When Statics has no solution (no solve rope, or a singular matrix) or the boom width is not
 > 0, every Results value shows the reason as text, because the app shows no results in that
@@ -299,8 +303,10 @@ b. **Verification was not done in Excel.** The workbook was verified by recalcul
    `inplane_wind_accel`, `outofplane_wind_roll_sidelead` and `idle_hoist`), every result
    the workbook produces matched the app within 0.01 kN / 0.01 kNm (0.01 kN/m for the
    bearing line loads). The largest difference measured was about 1e-6. No formula cell
-   evaluated to an error value. Please open the workbook in Excel 2016 or later and compare
-   the Results with the app before relying on it.
+   evaluated to an error value. The row insertions that the `mirror` check catches were
+   simulated by moving every formula reference the way Excel does, not made in Excel.
+   Please open the workbook in Excel 2016 or later and compare the Results with the app
+   before relying on it.
 
 c. **A hoist with no active rope segments still shows a tension.** It reports its hook block
    weight over one part, hook mass x (|g| + az') / 1, not zero, because the app's parts

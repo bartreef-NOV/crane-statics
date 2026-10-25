@@ -1119,8 +1119,9 @@ RESULT_ROWS: tuple[tuple[str, str, str, str], ...] = (
 CHECK_DESCRIPTIONS: dict[str, str] = {
     "overflow": "Rows that do not fit a table (generator) or typed into a guard row",
     "mirror": (
-        "Inputs tables with rows inserted or deleted (never do that: use spare rows), or a "
-        "calculation sheet whose rows no longer follow the Inputs rows"
+        "Inputs tables with rows inserted or deleted (never do that: use spare rows), including "
+        "a row inserted above the first data row or above the guard row, or a calculation "
+        "sheet whose rows no longer follow the Inputs rows"
     ),
     "duplicate_ids": (
         "Active node, rope or hoist rows whose id is used by another active row of the same "
@@ -1130,6 +1131,10 @@ CHECK_DESCRIPTIONS: dict[str, str] = {
     "invalid_values": (
         "Cells outside their allowed values: Active not blank/0/1; on active rows a 1/0 column "
         "not 0/1, or a body, frame or role not one of its list choices (a typo drops the row)"
+    ),
+    "boom_local_non_boom": (
+        "Active mass-point, wind-area or node rows with frame boom_local on a body other than "
+        "boom (the app ignores u/v/w there and uses x/z)"
     ),
     "node_references": (
         "References to a missing or inactive node (segment ends, hoist hook/support "

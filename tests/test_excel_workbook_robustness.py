@@ -3,10 +3,12 @@
 import dataclasses
 import math
 from pathlib import Path
+import re
 from typing import Any, Callable
 
 import pytest
 from openpyxl import load_workbook
+from openpyxl.worksheet.formula import ArrayFormula
 
 from scripts.excel_workbook import layout
 from scripts.excel_workbook.build import build_workbook
@@ -76,7 +78,9 @@ def test_list_validations_reject_other_values(tmp_path: Path) -> None:
     validations = load_workbook(path)[layout.INPUTS].data_validations.dataValidation
     assert validations
     for dv in validations:
-        assert dv.type == "list" and dv.showErrorMessage and dv.errorStyle == "stop", dv.sqref
+        assert dv.showErrorMessage and dv.errorStyle == "stop", dv.sqref
+        # The one non-list validation: the bearing diameter must be a number > 0.
+        assert dv.type == "list" or (dv.type, dv.formula1) == ("decimal", "0"), dv.sqref
 
 
 @pytest.mark.parametrize(
@@ -101,6 +105,74 @@ def test_mirror_check_fires_when_a_row_sheet_is_out_of_step(
     assert _Book(path)(TIGHT.check("mirror")) == 1
     _set_cell(path, mirror(TIGHT), "=#REF!")  # a deleted Inputs row leaves #REF!
     assert _Book(path)(TIGHT.check("mirror")) == 1
+
+
+_CELL_REF = re.compile(
+    r"(?<![A-Za-z0-9_.!$])(?:(?P<sheet>[A-Za-z_][A-Za-z0-9_]*)!)?"
+    r"(?P<c1>\$?[A-Z]{1,3})(?P<r1>\$?)(?P<n1>\d+)"
+    r"(?::(?P<c2>\$?[A-Z]{1,3})(?P<r2>\$?)(?P<n2>\d+))?(?![A-Za-z0-9_(])"
+)
+
+
+def _shift_refs(formula: str, own_sheet: str, sheet: str, at: int) -> str:
+    """``formula`` with every reference to rows >= ``at`` of ``sheet`` moved down one row."""
+
+    def shift(m: re.Match[str]) -> str:
+        if (m["sheet"] or own_sheet) != sheet:
+            return m[0]
+        out = (m["sheet"] + "!") if m["sheet"] else ""
+        n1 = int(m["n1"])
+        out += f"{m['c1']}{m['r1']}{n1 + 1 if n1 >= at else n1}"
+        if m["n2"] is not None:
+            n2 = int(m["n2"])
+            out += f":{m['c2']}{m['r2']}{n2 + 1 if n2 >= at else n2}"
+        return out
+
+    return _CELL_REF.sub(shift, formula)
+
+
+def _insert_row(path: Path, sheet: str, at: int) -> None:
+    """Insert a blank row above sheet row ``at``, adjusting every formula as Excel does
+    (openpyxl's ``insert_rows`` moves the cells but leaves the formulas alone)."""
+    wb = load_workbook(path)
+    wb[sheet].insert_rows(at)
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                value = cell.value
+                if isinstance(value, str) and value.startswith("="):
+                    cell.value = _shift_refs(value, ws.title, sheet, at)
+                elif isinstance(value, ArrayFormula):
+                    value.text = _shift_refs(value.text, ws.title, sheet, at)
+                    if ws.title == sheet:
+                        value.ref = _shift_refs(value.ref, sheet, sheet, at)
+    wb.save(path)
+
+
+def test_insert_row_helper_shifts_references() -> None:
+    f = "=SUM(Inputs!$A$5:$A$9)+Inputs!B4+LOG10(C7)+Loads!$A$9+ATAN2(1,2)"
+    assert _shift_refs(f, "Inputs", "Inputs", 5) == (
+        "=SUM(Inputs!$A$6:$A$10)+Inputs!B4+LOG10(C8)+Loads!$A$9+ATAN2(1,2)"
+    )
+
+
+@pytest.mark.parametrize(
+    ("table", "where"),
+    [("nodes", "first"), ("nodes", "last"), ("mass_points", "first"), ("hoists", "last")],
+)
+def test_row_inserted_at_table_start_or_end_is_flagged(
+    tmp_path: Path, table: str, where: str
+) -> None:
+    # Inserted as the first data row, or between the last data row and the guard row, the
+    # row lies outside every table range: ROWS() is unchanged and the row sheets still copy
+    # the shifted Inputs rows, so only the header-to-guard distance shows it.
+    path = tmp_path / "inserted.xlsx"
+    build_workbook(_model(), CASES["base"], path, TIGHT)
+    t = TIGHT.tables[table]
+    _insert_row(path, layout.INPUTS, t.first_row if where == "first" else t.guard_row)
+    book = _Book(path)
+    assert book(TIGHT.check("mirror")) == 1
+    assert book(TIGHT.total_issues_addr) >= 1
 
 
 def test_numeric_hoist_and_node_ids(tmp_path: Path) -> None:

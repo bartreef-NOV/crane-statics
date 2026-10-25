@@ -58,7 +58,26 @@ def _cell_value(value: Any) -> Any:
     return value
 
 
+#: Single-value inputs the app rejects unless > 0 (blank allowed); a stop-style decimal
+#: validation keeps them positive, and a Checks count catches pasted values.
+_POSITIVE_FIELDS = ("slewing_bearing_diameter_m",)
+
+
 def _validation(ws: Worksheet, f: Field, sqref: str) -> None:
+    if f.key in _POSITIVE_FIELDS:
+        dv = DataValidation(
+            type="decimal",
+            operator="greaterThan",
+            formula1="0",
+            allow_blank=True,
+            showErrorMessage=True,
+            errorStyle="stop",
+            errorTitle="Not an allowed value",
+            error="Type a number > 0, or leave the cell blank.",
+        )
+        dv.add(sqref)
+        ws.add_data_validation(dv)
+        return
     choices = ("1", "0") if f.kind == "flag" else f.choices
     if not choices:
         return

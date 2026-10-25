@@ -94,10 +94,21 @@ def mirror_pairs(lay: Layout) -> list[tuple[str, int, str]]:
 
 def mirror_formula(lay: Layout) -> str:
     """``mirror``: rows inserted into or deleted from an Inputs table (its range no longer has
-    ``capacity`` rows), or a row-wise sheet whose Active column no longer copies Inputs."""
+    ``capacity`` rows), or a row-wise sheet whose Active column no longer copies Inputs.
+
+    A row inserted as the first data row or between the last data row and the guard row lies
+    outside the table range, so ``ROWS`` does not change and the row sheets still copy the
+    (shifted) Inputs rows. The last term catches it: the distance from the key row (above the
+    first data row) to the guard row is ``capacity + 1`` only while no row was inserted there.
+    """
     terms = [
         f"IFERROR(1*(ROWS({src})<>{cap})+1*(SUM({src})<>SUM({mirror})),1)"
         for src, cap, mirror in mirror_pairs(lay)
+    ]
+    terms += [
+        f"IFERROR(1*(ROW({t.sheet}!$A${t.guard_row})-ROW({t.sheet}!$A${t.key_row})"
+        f"<>{t.capacity + 1}),1)"
+        for t in lay.tables.values()
     ]
     return "=" + "+".join(terms)
 
@@ -171,6 +182,11 @@ def input_check_formulas(
             f"{r('nodes', 'frame')},\"hanging\",{r('nodes', 'active')},1)>0)",
         ),
         "invalid_values": "=" + "+".join(invalid_value_terms(lay)),
+        "boom_local_non_boom": "="
+        + "+".join(
+            _sp(_active(lay, t), f'({r(t, "frame")}="boom_local")', f'({r(t, "body")}<>"boom")')
+            for t in ("mass_points", "wind_areas", "nodes")
+        ),
         "mirror": mirror_formula(lay),
         "invalid_bearing_diameter": (
             f'=IF({diameter}="",0,IF(ISNUMBER({diameter}),IF({diameter}>0,0,1),1))'
