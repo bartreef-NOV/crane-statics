@@ -2,7 +2,8 @@
 
 Sheets, in order (``layout.SHEETS``): Conventions, Inputs, Geometry, Loads, Statics,
 Results, Checks. Addresses come only from ``layout``; each sheet has its own writer
-module (``build_inputs``, ``build_checks``, ``conventions``).
+module (``build_inputs``, ``build_geometry``, ``build_loads``, ``build_checks``,
+``conventions``).
 """
 
 from __future__ import annotations
@@ -16,12 +17,12 @@ from . import layout, styles
 from .build_checks import write_checks
 from .build_geometry import write_geometry
 from .build_inputs import write_inputs
+from .build_loads import write_loads
 from .conventions import write_conventions
 from .layout import DEFAULT_LAYOUT, Layout
 from .reference import SceneCase
 
 _PLACEHOLDER_TITLES = {
-    layout.LOADS: "Loads -- mass, wind, rope and hook loads",
     layout.STATICS: "Statics -- boom and leg equilibrium solves",
     layout.RESULTS: "Results -- rope tensions and support reactions",
 }
@@ -41,6 +42,7 @@ def build_workbook(
     write_conventions(sheets[layout.CONVENTIONS])
     write_inputs(sheets[layout.INPUTS], lay, model, case)
     write_geometry(sheets[layout.GEOMETRY], lay)
+    write_loads(sheets[layout.LOADS], lay)
     for name, title in _PLACEHOLDER_TITLES.items():
         sheets[name]["A1"] = title
         sheets[name]["A1"].font = styles.TITLE_FONT

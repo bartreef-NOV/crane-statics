@@ -108,8 +108,10 @@ CONVENTIONS_TEXT: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
         (
             (
                 "Hook load (kN) acts at the hook node in -z. Offlead adds sin(offlead) x hook "
-                "load in +x at the hook; sidelead adds sin(sidelead) x hook load in +y.",
-                "core/drawn_loads.py; calculation/engine.py; core/lead_channels.py",
+                "load in +x at the node the hook hangs from (its parent node; the hook itself "
+                "if it has none); sidelead adds sin(sidelead) x hook load in +y.",
+                "calculation/solver/crane_solver.py _accumulate_loads; core/drawn_loads.py "
+                "hook_load; calculation/engine.py; core/lead_channels.py",
             ),
         ),
     ),
