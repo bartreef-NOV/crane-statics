@@ -609,8 +609,9 @@ class CraneCalculator:
                 )
                 d_fx = float(moments[group]["Mz"]) / float(width)
                 d_fz = float(moments[group]["Mx"]) / float(width)
-                split[left_entity] = {"Fx": 0.5 * total_fx + d_fx, "Fz": 0.5 * total_fz + d_fz}
-                split[right_entity] = {"Fx": 0.5 * total_fx - d_fx, "Fz": 0.5 * total_fz - d_fz}
+                # +Y is port (left looking along +x), so the side with the -d share is "left".
+                split[right_entity] = {"Fx": 0.5 * total_fx + d_fx, "Fz": 0.5 * total_fz + d_fz}
+                split[left_entity] = {"Fx": 0.5 * total_fx - d_fx, "Fz": 0.5 * total_fz - d_fz}
             # Applied-load sums negated: reactions are what the support exerts on the crane.
             results.append(
                 (split, -float(moments["platform_base"]["Mx"]), -float(total_fy_platform))

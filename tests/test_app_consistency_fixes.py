@@ -124,3 +124,67 @@ def test_sign_agnostic_consumers_unchanged():
     for component, value in expected.items():
         got = extract_connection_component_response(point, 1000.0, "platform_base", component)
         assert got == pytest.approx(value, rel=1e-9), component
+
+
+GROUPS = (
+    ("heel_left", "heel_right", "heel_point"),
+    ("front_leg_left", "front_leg_right", "front_hinge"),
+    ("rear_leg_left", "rear_leg_right", "rear_hinge"),
+)
+
+
+def _calc_with_mass_at_y(y: float) -> CraneCalculator:
+    doc = load_document(EXAMPLE_22689)
+    platform_body = next(b for b in doc.bodies if b.id == "platform")
+    platform_body.mass_points.append(MassPoint(id="probe", mass_t=50.0, x_m=5.0, y_m=y, z_m=10.0))
+    return CraneCalculator(doc)
+
+
+@pytest.mark.parametrize("y", [5.0, -5.0])
+def test_heel_left_carries_more_when_mass_is_to_port(y):
+    # Compare against the same crane with the mass on the centreline so only the lateral
+    # offset is being measured.
+    centred = _platform(_calc_with_mass_at_y(0.0))
+    offset = _platform(_calc_with_mass_at_y(y))
+    for left, right, _total in GROUPS:
+        d_left = offset.baseline_reactions[left]["Fz"] - centred.baseline_reactions[left]["Fz"]
+        d_right = offset.baseline_reactions[right]["Fz"] - centred.baseline_reactions[right]["Fz"]
+        if y > 0.0:  # port
+            assert d_left > d_right, left
+        else:
+            assert d_right > d_left, right
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {},
+        {"accel_y_m_s2": 1.0},
+        {"accel_x_m_s2": 1.0, "crane_slewing_angle_deg": 90.0},
+        {"vessel_roll_deg": 5.0},
+        {"wind_speed_m_s": 20.0, "wind_direction": "+Y"},
+        {"wind_speed_m_s": 20.0, "wind_direction": "+X", "sidelead_deg": 4.5},
+    ],
+)
+def test_left_right_sum_to_total(overrides):
+    point = _platform(_calc(), **overrides)
+    for left, right, total in GROUPS:
+        for comp in ("Fx", "Fz"):
+            pair = point.baseline_reactions[left][comp] + point.baseline_reactions[right][comp]
+            assert pair == pytest.approx(point.baseline_reactions[total][comp], abs=1e-6)
+            sens = point.sensitivity_reactions
+            pair_s = sens[left].get(comp, 0.0) + sens[right].get(comp, 0.0)
+            assert pair_s == pytest.approx(sens[total].get(comp, 0.0), abs=1e-6)
+
+
+def test_reaction_arrows_sit_on_the_matching_side():
+    """Arrows are drawn from the XZ group totals (no y position); only the table labels
+    carry a side, and they must pair the entity with the name it is called."""
+    from crane_statics.core.drawn_loads import REACTION_SPECS
+    from crane_statics.presentation.formatters import ConnectionFormatter
+
+    assert not [e for e in REACTION_SPECS if e.endswith(("_left", "_right"))]
+    assert ConnectionFormatter.child_display_name("heel_left") == "Left"
+    assert ConnectionFormatter.child_display_name("heel_right") == "Right"
+    assert ConnectionFormatter.display_name("heel_left") == "Heel Left"
+    assert ConnectionFormatter.display_name("heel_right") == "Heel Right"
