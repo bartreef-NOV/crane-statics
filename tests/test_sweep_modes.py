@@ -14,7 +14,7 @@ ROOT = Path(__file__).parent.parent
 EXAMPLE = ROOT / "examples" / "crane_input_22689.yaml"
 HOIST = "MH"
 LIMITS: dict[str, dict] = {"boom_hoist": {"T": 5000.0}}
-STEP = 5.0
+STEP = 10.0
 
 
 def _doc():

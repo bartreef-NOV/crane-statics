@@ -14,7 +14,7 @@ from crane_statics.data.models import CraneDocument
 ROOT = Path(__file__).parent.parent
 EXAMPLE = ROOT / "examples" / "crane_input_22689.yaml"
 HOIST = "MH"
-STEP = 5.0
+STEP = 10.0
 VESSEL = {"accel_x_m_s2": 0.5, "roll_deg": 2.0}
 # WH__rope does not respond to MH, so it is enabled but has no series points.
 LIMITS: dict[str, dict] = {

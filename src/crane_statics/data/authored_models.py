@@ -23,8 +23,8 @@ from typing import Annotated, Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
-AUTHORED_SCHEMA_MAJOR_VERSION = 9
-AUTHORED_SCHEMA_VERSION = "9.0.0"
+AUTHORED_SCHEMA_MAJOR_VERSION = 10
+AUTHORED_SCHEMA_VERSION = "10.0.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -386,37 +386,21 @@ class AuthoredPayloadHoistRope(BaseModel):
     linear_mass_kg_m: float = Field(default=0.0, ge=0)
 
 
-class AuthoredHook(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    mass_t: float = Field(ge=0)
-    falls: int = Field(ge=1, description="Rope falls between the support sheave and the hook.")
-    daf: float = Field(ge=1, description="Hook dynamic amplification factor.")
-    offlead_deg: float = Field(ge=0)
-    sidelead_deg: float = Field(default=0.0, ge=0)
-
-
-class AuthoredSplitHook(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    mass_t: float = Field(ge=0)
-    falls: int = Field(ge=1)
-
-
 class AuthoredSplitMode(BaseModel):
-    """Optional split-block operating mode with its own hook block and load chart."""
+    """Optional split-block operating mode with its own hook mass, falls and load chart."""
 
     model_config = ConfigDict(extra="forbid")
 
-    hook: AuthoredSplitHook
+    hook_mass_t: float = Field(ge=0, description="Hook block mass in split mode.")
+    falls: int = Field(ge=1, description="Rope falls between the support sheave and the hook.")
     load_chart: list[AuthoredLoadChartPoint] = Field(min_length=1)
 
 
 class AuthoredPayloadHoist(BaseModel):
     """Self-contained payload hoist: its rope, its reeving path with the sheaves it
-    owns, its hook block and its load chart. The hook hangs from the last reeving
-    node unless support_node names another; the application creates the managed
-    hook node automatically."""
+    owns, its hook mass, falls, lift factors and its load chart. The hook hangs from the
+    last reeving node unless support_node names another; the application creates the
+    managed hook node automatically."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -434,12 +418,10 @@ class AuthoredPayloadHoist(BaseModel):
                             "parts": 2,
                         },
                     ],
-                    "hook": {
-                        "mass_t": 50.0,
-                        "falls": 20,
-                        "daf": 1.1,
-                        "offlead_deg": 1.0,
-                    },
+                    "hook_mass_t": 50.0,
+                    "falls": 20,
+                    "daf": 1.1,
+                    "offlead_deg": 1.0,
                     "load_chart": [{"outreach_m": 16.0, "load_t": 1000.0}],
                 }
             ]
@@ -452,7 +434,11 @@ class AuthoredPayloadHoist(BaseModel):
         default=None,
         description="Reeving node the hook hangs from. Omit to use the last reeving entry.",
     )
-    hook: AuthoredHook
+    hook_mass_t: float = Field(ge=0, description="Hook block mass.")
+    falls: int = Field(ge=1, description="Rope falls between the support sheave and the hook.")
+    daf: float = Field(ge=1, description="Hook dynamic amplification factor.")
+    offlead_deg: float = Field(ge=0)
+    sidelead_deg: float = Field(default=0.0, ge=0)
     lowest_hook_height_m: Optional[float] = Field(
         default=None,
         description="Absolute global Z the hook must reach at this hoist's minimum outreach. "
@@ -470,10 +456,10 @@ class AuthoredPayloadHoist(BaseModel):
     @model_validator(mode="after")
     def _check_split_within_normal_bounds(self) -> "AuthoredPayloadHoist":
         if self.split is not None:
-            if self.split.hook.falls > self.hook.falls:
-                raise ValueError("split.hook.falls must be <= hook.falls")
-            if self.split.hook.mass_t > self.hook.mass_t:
-                raise ValueError("split.hook.mass_t must be <= hook.mass_t")
+            if self.split.falls > self.falls:
+                raise ValueError("split.falls must be <= falls")
+            if self.split.hook_mass_t > self.hook_mass_t:
+                raise ValueError("split.hook_mass_t must be <= hook_mass_t")
         return self
 
 
@@ -597,7 +583,10 @@ EXAMPLE_DOCUMENT: dict = {
                     {"node": "boom_heel"},
                     {"node": "hook", "body": "boom", "u_m": 0.0, "w_m": 0.0},
                 ],
-                "hook": {"mass_t": 0.0, "falls": 1, "daf": 1.0, "offlead_deg": 0.0},
+                "hook_mass_t": 0.0,
+                "falls": 1,
+                "daf": 1.0,
+                "offlead_deg": 0.0,
                 "load_chart": [{"outreach_m": 0.0, "load_t": 0.0}],
             }
         },

@@ -2,7 +2,7 @@
 
 Use the project venv (`.venv/Scripts/python.exe` on Windows, `.venv/bin/python` elsewhere); the global `python` lacks the dev tools.
 
-- Tests: `.venv/Scripts/python.exe -m pytest` (add `--no-cov` for a single file; `pythonpath = ["src"]` is configured)
+- Tests: `.venv/Scripts/python.exe -m pytest -n auto --dist loadfile` (add `--no-cov` for a single file, and drop `-n` there; `pythonpath = ["src"]` is configured)
 - Lint/type/boundaries: `.venv/Scripts/python.exe -m pre_commit run --all-files` (black, flake8, mypy, `tests/test_architecture.py`)
 - Run or screenshot the app: use the `run-app` skill
 

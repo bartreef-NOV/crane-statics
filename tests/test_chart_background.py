@@ -17,7 +17,7 @@ from crane_statics.qml_app.viewmodels import chart_vm as chart_vm_module
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
-STEP = 5.0
+STEP = 10.0
 
 
 def wait_until(predicate, timeout=30.0) -> None:

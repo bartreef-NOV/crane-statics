@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/schemas/crane-statics-v9.schema.json",
+  "$id": "https://example.com/schemas/crane-statics-v10.schema.json",
   "title": "AuthoredDocument",
   "$defs": {
     "AuthoredBoomBody": {
@@ -276,47 +276,6 @@
       "title": "AuthoredGlobalPosition3D",
       "type": "object"
     },
-    "AuthoredHook": {
-      "additionalProperties": false,
-      "properties": {
-        "mass_t": {
-          "minimum": 0,
-          "title": "Mass T",
-          "type": "number"
-        },
-        "falls": {
-          "description": "Rope falls between the support sheave and the hook.",
-          "minimum": 1,
-          "title": "Falls",
-          "type": "integer"
-        },
-        "daf": {
-          "description": "Hook dynamic amplification factor.",
-          "minimum": 1,
-          "title": "Daf",
-          "type": "number"
-        },
-        "offlead_deg": {
-          "minimum": 0,
-          "title": "Offlead Deg",
-          "type": "number"
-        },
-        "sidelead_deg": {
-          "default": 0.0,
-          "minimum": 0,
-          "title": "Sidelead Deg",
-          "type": "number"
-        }
-      },
-      "required": [
-        "mass_t",
-        "falls",
-        "daf",
-        "offlead_deg"
-      ],
-      "title": "AuthoredHook",
-      "type": "object"
-    },
     "AuthoredLimit": {
       "additionalProperties": false,
       "properties": {
@@ -543,21 +502,19 @@
     },
     "AuthoredPayloadHoist": {
       "additionalProperties": false,
-      "description": "Self-contained payload hoist: its rope, its reeving path with the sheaves it\nowns, its hook block and its load chart. The hook hangs from the last reeving\nnode unless support_node names another; the application creates the managed\nhook node automatically.",
+      "description": "Self-contained payload hoist: its rope, its reeving path with the sheaves it\nowns, its hook mass, falls, lift factors and its load chart. The hook hangs from the\nlast reeving node unless support_node names another; the application creates the\nmanaged hook node automatically.",
       "examples": [
         {
-          "hook": {
-            "daf": 1.1,
-            "falls": 20,
-            "mass_t": 50.0,
-            "offlead_deg": 1.0
-          },
+          "daf": 1.1,
+          "falls": 20,
+          "hook_mass_t": 50.0,
           "load_chart": [
             {
               "load_t": 1000.0,
               "outreach_m": 16.0
             }
           ],
+          "offlead_deg": 1.0,
           "reeving": [
             {
               "body": "platform",
@@ -605,8 +562,34 @@
           "description": "Reeving node the hook hangs from. Omit to use the last reeving entry.",
           "title": "Support Node"
         },
-        "hook": {
-          "$ref": "#/$defs/AuthoredHook"
+        "hook_mass_t": {
+          "description": "Hook block mass.",
+          "minimum": 0,
+          "title": "Hook Mass T",
+          "type": "number"
+        },
+        "falls": {
+          "description": "Rope falls between the support sheave and the hook.",
+          "minimum": 1,
+          "title": "Falls",
+          "type": "integer"
+        },
+        "daf": {
+          "description": "Hook dynamic amplification factor.",
+          "minimum": 1,
+          "title": "Daf",
+          "type": "number"
+        },
+        "offlead_deg": {
+          "minimum": 0,
+          "title": "Offlead Deg",
+          "type": "number"
+        },
+        "sidelead_deg": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Sidelead Deg",
+          "type": "number"
         },
         "lowest_hook_height_m": {
           "anyOf": [
@@ -643,7 +626,10 @@
       },
       "required": [
         "reeving",
-        "hook",
+        "hook_mass_t",
+        "falls",
+        "daf",
+        "offlead_deg",
         "load_chart"
       ],
       "title": "AuthoredPayloadHoist",
@@ -804,7 +790,7 @@
           "type": "string"
         },
         "version": {
-          "pattern": "^9\\.\\d+\\.\\d+$",
+          "pattern": "^10\\.\\d+\\.\\d+$",
           "title": "Version",
           "type": "string"
         }
@@ -816,33 +802,21 @@
       "title": "AuthoredSchemaBlock",
       "type": "object"
     },
-    "AuthoredSplitHook": {
+    "AuthoredSplitMode": {
       "additionalProperties": false,
+      "description": "Optional split-block operating mode with its own hook mass, falls and load chart.",
       "properties": {
-        "mass_t": {
+        "hook_mass_t": {
+          "description": "Hook block mass in split mode.",
           "minimum": 0,
-          "title": "Mass T",
+          "title": "Hook Mass T",
           "type": "number"
         },
         "falls": {
+          "description": "Rope falls between the support sheave and the hook.",
           "minimum": 1,
           "title": "Falls",
           "type": "integer"
-        }
-      },
-      "required": [
-        "mass_t",
-        "falls"
-      ],
-      "title": "AuthoredSplitHook",
-      "type": "object"
-    },
-    "AuthoredSplitMode": {
-      "additionalProperties": false,
-      "description": "Optional split-block operating mode with its own hook block and load chart.",
-      "properties": {
-        "hook": {
-          "$ref": "#/$defs/AuthoredSplitHook"
         },
         "load_chart": {
           "items": {
@@ -854,7 +828,8 @@
         }
       },
       "required": [
-        "hook",
+        "hook_mass_t",
+        "falls",
         "load_chart"
       ],
       "title": "AuthoredSplitMode",
@@ -1093,18 +1068,16 @@
         },
         "payload_hoists": {
           "MH": {
-            "hook": {
-              "daf": 1.0,
-              "falls": 1,
-              "mass_t": 0.0,
-              "offlead_deg": 0.0
-            },
+            "daf": 1.0,
+            "falls": 1,
+            "hook_mass_t": 0.0,
             "load_chart": [
               {
                 "load_t": 0.0,
                 "outreach_m": 0.0
               }
             ],
+            "offlead_deg": 0.0,
             "reeving": [
               {
                 "node": "boom_heel"
@@ -1141,7 +1114,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "9.0.0"
+        "version": "10.0.0"
       }
     }
   ],

@@ -92,9 +92,29 @@ Item {
         }
     }
 
+    // The guide a point lands on, by its label only: the dashed lines run across the
+    // scene and would otherwise swallow clicks meant for the force arrows beneath them.
+    function guideDragKindAt(itemX, itemY) {
+        for (let index = 0; index < guideRepeater.count; ++index) {
+            const guide = guideRepeater.itemAt(index)
+            if (guide === null)
+                continue
+            const label = guide.label
+            if (itemX >= label.x && itemX <= label.x + label.width
+                    && itemY >= label.y && itemY <= label.y + label.height)
+                return guide.isOutreach ? "outreach" : "tackle_length"
+        }
+        return ""
+    }
+
     function dragTargetAt(itemX, itemY) {
+        const guideKind = guideDragKindAt(itemX, itemY)
+        if (guideKind.length > 0)
+            return guideKind
         const point = scenePointAt(itemX, itemY)
-        return sceneVm.sceneDragTargetAt(point.x, point.y)
+        const kind = sceneVm.sceneDragTargetAt(point.x, point.y)
+        // The frame's guide hit targets span the whole line; only the label grabs.
+        return kind === "boom_angle" ? kind : ""
     }
 
     function distanceToSegment(point, startX, startY, endX, endY) {
@@ -273,10 +293,15 @@ Item {
     }
 
     Repeater {
+        id: guideRepeater
         model: root.frame ? root.frame.guides : []
 
         delegate: Item {
             required property var modelData
+            property alias label: guideLabel
+            // Behind the scene layer so the dashed guides never cover a force arrow
+            // the user is trying to click.
+            z: -1
             readonly property bool isOutreach: modelData.kind === "outreach"
             readonly property real anchorX: root.mapSceneX(modelData.scene_x)
             readonly property real anchorY: root.mapSceneY(modelData.scene_y)

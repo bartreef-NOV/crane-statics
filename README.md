@@ -31,6 +31,20 @@ crane-statics path/to/crane_model.json
 python -m crane_statics path/to/crane_model.json
 ```
 
+### Windows Executable
+
+Tagged releases (`v*`) publish `crane-statics-<tag>-windows-x64.zip` on the GitHub Releases
+page: unzip it and run `crane-statics.exe` (no Python needed). The build is unsigned, so
+Windows SmartScreen or antivirus software may warn about it.
+
+To build it locally:
+
+```bash
+pip install -e ".[build]"
+pyinstaller packaging/crane-statics.spec --noconfirm
+# -> dist/crane-statics/crane-statics.exe
+```
+
 ### Running Tests
 
 ```bash
@@ -65,7 +79,7 @@ decisions that should not be re-litigated are in [docs/adr/](docs/adr/).
 
 ## Document Lifecycle
 
-Authored input (YAML or JSON) is strict `crane-statics` schema version `9.0.0`.
+Authored input (YAML or JSON) is strict `crane-statics` schema version `10.0.0`.
 
 Each hoist is self-contained: its `reeving` lists the rope path from the winch outwards, and an entry with `body` and coordinates defines a sheave or winch that belongs to that hoist (`boom` nodes use `u_m`/`w_m`, the others `x_m`/`z_m`). A hoist-local node `winch` in hoist `MH` becomes runtime node `mh_winch`. The last reeving entry is the support node the hook hangs from. Entries without coordinates pass through a node already defined (`boom_heel`, or a shared node under a body's `nodes`). Delete a hoist block to remove the hoist and its sheaves; copy one and rename its key to add a hoist.
 
@@ -116,7 +130,7 @@ Keep QML declarative and route state changes through the owning view model. Add 
 
 ## References
 
-- `src/crane_statics/schemas/crane-statics-v9.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
+- `src/crane_statics/schemas/crane-statics-v10.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
 
 ## License
 

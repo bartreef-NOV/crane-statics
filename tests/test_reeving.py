@@ -14,7 +14,7 @@ EXAMPLES = sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
 
 def _authored() -> dict:
     return {
-        "schema": {"name": "crane-statics", "version": "9.0.0"},
+        "schema": {"name": "crane-statics", "version": "10.0.0"},
         "metadata": {"name": "Reeving"},
         "model_definition": {
             "environment": {
@@ -37,7 +37,10 @@ def _authored() -> dict:
                         {"node": "sheave", "body": "rear_leg", "x_m": -9.0, "z_m": 40.0},
                         {"node": "tip", "body": "boom", "u_m": 100.0, "w_m": -1.0, "parts": 2},
                     ],
-                    "hook": {"mass_t": 5.0, "falls": 4, "daf": 1.1, "offlead_deg": 1.0},
+                    "hook_mass_t": 5.0,
+                    "falls": 4,
+                    "daf": 1.1,
+                    "offlead_deg": 1.0,
                     "load_chart": [{"outreach_m": 30.0, "load_t": 100.0}],
                 },
             },

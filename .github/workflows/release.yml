@@ -1,0 +1,87 @@
+name: Release
+
+# Builds the Windows executable (PyInstaller one-folder, zipped). Pushing a v* tag
+# also publishes the zip as a GitHub Release; a manual run only uploads an artifact.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[build]"
+
+      - name: Build
+        run: pyinstaller packaging/crane-statics.spec --noconfirm
+
+      - name: Sign executable
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.NOV_INTERNAL_CODE_SIGN_PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.NOV_INTERNAL_CODE_SIGN_PFX_PASSWORD }}
+        run: |
+          if (-not $env:PFX_BASE64) {
+            Write-Warning "Code-signing secrets are not available; the executable stays unsigned."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_BASE64))
+          try {
+            $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+              Sort-Object FullName -Descending | Select-Object -First 1
+            & $signtool.FullName sign /f $pfx /p $env:PFX_PASSWORD /fd SHA256 `
+              /tr http://timestamp.digicert.com /td SHA256 dist\crane-statics\crane-statics.exe
+            if ($LASTEXITCODE -ne 0) { throw "signtool sign failed ($LASTEXITCODE)" }
+            & $signtool.FullName verify /pa /v dist\crane-statics\crane-statics.exe
+          } finally {
+            Remove-Item $pfx -Force
+          }
+
+      - name: Smoke test (the app must stay up after loading its QML)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\crane-statics\crane-statics.exe `
+            -ArgumentList "examples\crane_input_22689.yaml" -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { throw "crane-statics.exe exited early with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { "dev" }
+          $zip = "crane-statics-$name-windows-x64.zip"
+          Copy-Item -Recurse examples dist\crane-statics\examples
+          Compress-Archive -Path dist\crane-statics -DestinationPath $zip
+          "ZIP=$zip" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP }}
+          path: ${{ env.ZIP }}
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$env:GITHUB_REF_NAME" "$env:ZIP" --title "$env:GITHUB_REF_NAME" --generate-notes

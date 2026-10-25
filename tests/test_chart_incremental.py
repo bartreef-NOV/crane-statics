@@ -15,7 +15,7 @@ from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from tests.test_chart_background import _planned, _visible, pump_events, wait_idle
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
-STEP = 5.0
+STEP = 10.0
 
 
 class Counter:

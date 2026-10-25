@@ -11,7 +11,7 @@ from crane_statics.core.io import DocumentIOError, save_document
 
 def _minimal_v6() -> dict:
     return {
-        "schema": {"name": "crane-statics", "version": "9.0.0"},
+        "schema": {"name": "crane-statics", "version": "10.0.0"},
         "metadata": {"name": "V6 Minimal"},
         "model_definition": {
             "environment": {
@@ -36,7 +36,10 @@ def _minimal_v6() -> dict:
                         {"node": "boom_heel"},
                         {"node": "hook", "body": "boom", "u_m": 40.0, "w_m": -2.0},
                     ],
-                    "hook": {"mass_t": 0.0, "falls": 1, "daf": 1.0, "offlead_deg": 0.0},
+                    "hook_mass_t": 0.0,
+                    "falls": 1,
+                    "daf": 1.0,
+                    "offlead_deg": 0.0,
                     "load_chart": [{"outreach_m": 0.0, "load_t": 0.0}],
                 }
             },

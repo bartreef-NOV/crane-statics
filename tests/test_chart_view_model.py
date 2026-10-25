@@ -11,6 +11,8 @@ from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mod
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+# Coarse grid: these tests check wiring and caching, not curve resolution.
+STEP = 10.0
 
 
 @pytest.fixture
@@ -19,6 +21,7 @@ def chart_vm():
         pytest.skip("Example file not found")
     session = SessionState()
     vm = ChartViewModel(session)
+    vm.setOutreachStep(STEP)
     session.model.set_document(load_document(EXAMPLE))
     return vm
 
@@ -29,6 +32,7 @@ def rendered_chart_vm():
         pytest.skip("Example file not found")
     session = SessionState()
     vm = ChartViewModel(session)
+    vm.setOutreachStep(STEP)
     session.model.set_document(load_document(EXAMPLE))
     vm.drawBlocking()
     return vm

@@ -1,4 +1,4 @@
-schema: {name: crane-statics, version: 9.0.0}
+schema: {name: crane-statics, version: 10.0.0}
 metadata: {name: Crane Statics Example 22689 (Full Geometry)}
 model_definition:
   environment: {gravity_m_s2: 9.81, air_density_kg_m3: 1.225, max_wind_speed_m_s: 15.1}
@@ -98,7 +98,11 @@ model_definition:
       - {node: aframe_sheave_2, body: front_leg, x_m: 8.5, z_m: 9.25, parts: 2}
       - {node: boom_sheave_3, body: boom, u_m: 23.5, w_m: 3.85, parts: 2}
       - {node: boom_sheave_4, body: boom, u_m: 155.0, w_m: -6.05, parts: 2}
-      hook: {mass_t: 102.0, falls: 20, daf: 1.1, offlead_deg: 1.0, sidelead_deg: 2.5}
+      hook_mass_t: 102.0
+      falls: 20
+      daf: 1.1
+      offlead_deg: 1.0
+      sidelead_deg: 2.5
       lowest_hook_height_m: -53.0
       load_chart:
       - {outreach_m: 27.2, load_t: 2000.0}
@@ -110,7 +114,8 @@ model_definition:
       - {outreach_m: 151.0, load_t: 100.0}
       - {outreach_m: 162.0, load_t: 100.0}
       split:
-        hook: {mass_t: 91.51, falls: 12}
+        hook_mass_t: 91.51
+        falls: 12
         load_chart:
         - {outreach_m: 27.2, load_t: 1300.0}
         - {outreach_m: 55.0, load_t: 1300.0}
@@ -123,7 +128,11 @@ model_definition:
       - {node: aframe_sheave_2, body: front_leg, x_m: 8.5, z_m: 9.25}
       - {node: boom_sheave_3, body: boom, u_m: 23.5, w_m: 3.85}
       - {node: boom_sheave_4, body: boom, u_m: 164.0, w_m: -9.5}
-      hook: {mass_t: 13.77, falls: 4, daf: 1.3, offlead_deg: 2.0, sidelead_deg: 4.5}
+      hook_mass_t: 13.77
+      falls: 4
+      daf: 1.3
+      offlead_deg: 2.0
+      sidelead_deg: 4.5
       lowest_hook_height_m: -53.0
       load_chart:
       - {outreach_m: 31.4, load_t: 300.0}
@@ -136,7 +145,11 @@ model_definition:
       - {node: winch, body: boom, u_m: 77.8, w_m: 0.0}
       - {node: boom_sheave_1, body: boom, u_m: 155.6, w_m: 3.1}
       - {node: boom_sheave_2, body: boom, u_m: 160.8, w_m: -8.33}
-      hook: {mass_t: 1.632, falls: 1, daf: 1.3, offlead_deg: 4.0, sidelead_deg: 4.5}
+      hook_mass_t: 1.632
+      falls: 1
+      daf: 1.3
+      offlead_deg: 4.0
+      sidelead_deg: 4.5
       lowest_hook_height_m: -53.0
       load_chart:
       - {outreach_m: 31.4, load_t: 15.0}

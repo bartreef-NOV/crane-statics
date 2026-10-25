@@ -598,7 +598,7 @@ class TestAuthoredSchemaPolicy:
 
     def _minimal_v6(self) -> dict:
         return {
-            "schema": {"name": "crane-statics", "version": "9.0.0"},
+            "schema": {"name": "crane-statics", "version": "10.0.0"},
             "metadata": {"name": "V6 Minimal"},
             "model_definition": {
                 "environment": {
@@ -667,7 +667,10 @@ class TestAuthoredSchemaPolicy:
                                 "parts": 2,
                             },
                         ],
-                        "hook": {"mass_t": 0.0, "falls": 2, "daf": 1.0, "offlead_deg": 0.0},
+                        "hook_mass_t": 0.0,
+                        "falls": 2,
+                        "daf": 1.0,
+                        "offlead_deg": 0.0,
                         "load_chart": [{"outreach_m": 60.0, "load_t": 100.0}],
                     }
                 },
@@ -678,13 +681,13 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "3.2.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 9 is supported"
+            ValueError, match="Only crane-statics schema major version 10 is supported"
         ):
             normalize_document(data)
 
     def test_v6_minor_version_bump_is_accepted_by_normalizer(self):
         data = self._minimal_v6()
-        data["schema"]["version"] = "9.1.0"
+        data["schema"]["version"] = "10.1.0"
         doc = normalize_document(data)
         assert doc is not None
 
@@ -692,7 +695,7 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "5.13.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 9 is supported"
+            ValueError, match="Only crane-statics schema major version 10 is supported"
         ):
             normalize_document(data)
 
@@ -1019,7 +1022,8 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         mh = data["model_definition"]["payload_hoists"]["MH"]
         mh["split"] = {
-            "hook": {"mass_t": 0.0, "falls": 1},
+            "hook_mass_t": 0.0,
+            "falls": 1,
             "load_chart": [{"outreach_m": 50.0, "load_t": 80.0}],
         }
 
@@ -1037,7 +1041,8 @@ class TestAuthoredSchemaPolicy:
         hoist = data["model_definition"]["payload_hoists"]["MH"]
         hoist["modes"] = {
             "normal": {
-                "hook": hoist.pop("hook"),
+                "hook_mass_t": hoist.pop("hook_mass_t"),
+                "falls": hoist.pop("falls"),
                 "load_chart": hoist.pop("load_chart"),
             }
         }
@@ -1050,15 +1055,16 @@ class TestAuthoredSchemaPolicy:
     def test_v6_rejects_split_values_above_normal_values(self):
         data = self._minimal_v6()
         data["model_definition"]["payload_hoists"]["MH"]["split"] = {
-            "hook": {"mass_t": 1.0, "falls": 3},
+            "hook_mass_t": 1.0,
+            "falls": 3,
             "load_chart": [{"outreach_m": 50.0, "load_t": 80.0}],
         }
 
-        with pytest.raises(ValueError, match="split.hook.falls must be <= hook.falls"):
+        with pytest.raises(ValueError, match="split.falls must be <= falls"):
             normalize_document(data)
 
-        data["model_definition"]["payload_hoists"]["MH"]["split"]["hook"]["falls"] = 1
-        with pytest.raises(ValueError, match="split.hook.mass_t must be <= hook.mass_t"):
+        data["model_definition"]["payload_hoists"]["MH"]["split"]["falls"] = 1
+        with pytest.raises(ValueError, match="split.hook_mass_t must be <= hook_mass_t"):
             normalize_document(data)
 
     def test_v6_rejects_missing_solve_hoist(self, tmp_path):
@@ -1180,7 +1186,10 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["model_definition"]["payload_hoists"]["AH"] = {
             "reeving": [{"node": "boom_heel"}, {"node": "front_base", "parts": 2}],
-            "hook": {"mass_t": 0.0, "falls": 2, "daf": 1.0, "offlead_deg": 0.0},
+            "hook_mass_t": 0.0,
+            "falls": 2,
+            "daf": 1.0,
+            "offlead_deg": 0.0,
             "load_chart": [{"outreach_m": 60.0, "load_t": 100.0}],
         }
         path = tmp_path / "v5_payload_extra.json"
@@ -1222,7 +1231,7 @@ class TestAuthoredSchemaPolicy:
 
         saved = json.loads(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "9.0.0"
+        assert saved["schema"]["version"] == "10.0.0"
         assert "model_definition" in saved
         assert "ropes" not in saved["model_definition"]
         assert "nodes" not in saved["model_definition"]
@@ -1232,8 +1241,15 @@ class TestAuthoredSchemaPolicy:
         assert "structure" in md
         assert "hook_height_at_min_outreach_m" not in md
         mh = md["payload_hoists"]["MH"]
-        assert set(mh) == {"reeving", "hook", "lowest_hook_height_m", "load_chart"}
-        assert set(mh["hook"]) == {"mass_t", "falls", "daf", "offlead_deg"}
+        assert set(mh) == {
+            "reeving",
+            "hook_mass_t",
+            "falls",
+            "daf",
+            "offlead_deg",
+            "lowest_hook_height_m",
+            "load_chart",
+        }
         assert "split" not in mh
         assert mh["reeving"][-1] == {"node": "hook", "body": "boom", "u_m": 0.0, "w_m": 0.0}
         assert set(md["boom_hoist"]) == {"reeving"}
@@ -1251,8 +1267,8 @@ class TestAuthoredSchemaPolicy:
         mh = saved["model_definition"]["payload_hoists"]["MH"]
         assert "split" in mh
         assert "splitable_block" not in mh
-        assert mh["split"]["hook"]["falls"] == 12
-        assert mh["split"]["hook"]["mass_t"] == pytest.approx(91.51)
+        assert mh["split"]["falls"] == 12
+        assert mh["split"]["hook_mass_t"] == pytest.approx(91.51)
 
 
 class TestSplitModeAutosetAndChart:
@@ -1721,10 +1737,11 @@ class TestResponsiveLayoutRegression:
         offlead = next(v for v in vectors if v.label.startswith("Offlead"))
         hook = next(v for v in vectors if v.label.startswith("Hook"))
 
-        # Offlead acts at the sheave so it carries no tackle-length moment arm.
+        # Both act at the support sheave, so neither carries a tackle-length moment arm.
         assert offlead.world_z == pytest.approx(positions[ref_nid]["z"])
-        assert hook.world_z == pytest.approx(positions[load_nid]["z"])
-        assert hook.world_z < offlead.world_z
+        assert hook.world_z == pytest.approx(positions[ref_nid]["z"])
+        assert hook.world_x == pytest.approx(positions[ref_nid]["x"])
+        assert hook.world_z > positions[load_nid]["z"]
 
     def test_scene_equilibrium_detects_omitted_hook_force(self, monkeypatch):
         harness = self._scene_harness()

@@ -4,7 +4,7 @@
 The load chart must report the lowest allowable load of a fully revolving crane. Capacity is the minimum over:
 - every crane slewing angle, 0-360 degrees;
 - wind from any direction relative to the crane, 0-360 degrees, at the Model's maximum wind speed;
-- both signs of the hoist's authored offlead and sidelead angles (`hook.offlead_deg`, `hook.sidelead_deg`), as Auto-Set does (`iter_wind_lead_directional_cases`);
+- both signs of the hoist's authored offlead and sidelead angles (`offlead_deg`, `sidelead_deg`), as Auto-Set does (`iter_wind_lead_directional_cases`);
 - both signs of each of seven vessel motion limits: surge, sway, heave (m/s^2), roll, pitch (rad/s^2), roll angle, pitch angle (deg).
 
 It must also be fast. Today (commit of this session) the chart enumerates the 128 sign combinations, each with 4 axis-aligned wind cases, through full solves; GT283 with all seven limits set takes about 0.5 s per outreach point.

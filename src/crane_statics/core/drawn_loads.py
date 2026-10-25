@@ -634,10 +634,26 @@ class _LoadBuilder:
             )
         return tuple(vectors)
 
-    def hook_load(self) -> tuple[LoadVector, ...]:
-        """Hook payload weight plus its offlead component, applied at the hook node."""
-        load_node_id = self._hoist.get("load_node_id")
+    def _hook_anchor_id(self) -> Optional[str]:
+        """Node the hook load is drawn at: the support node, not the lowered hook.
+
+        Both components enter the boom at the sheave the tackle hangs from; the
+        tackle below carries no moment arm, and the hook load is vertical.
+        """
+        load_node_id = str(self._hoist.get("load_node_id") or "")
         if not load_node_id or load_node_id not in self._positions:
+            return None
+        node_defs = {n.get("id"): n for n in self._doc.get("nodes", [])}
+        below_id = (node_defs.get(load_node_id, {}) or {}).get("below_node_id")
+        if below_id and below_id in self._positions:
+            return str(below_id)
+        return load_node_id
+
+    def hook_load(self) -> tuple[LoadVector, ...]:
+        """Hook payload weight plus its offlead component, applied at the support node."""
+        load_node_id = self._hoist.get("load_node_id")
+        anchor_id = self._hook_anchor_id()
+        if anchor_id is None:
             return ()
         if self._filter.is_free_body and not self._filter.owns_node(str(load_node_id)):
             return ()
@@ -645,11 +661,11 @@ class _LoadBuilder:
         if hook_kN <= 0:
             return ()
 
-        hook = self._positions[load_node_id]
+        anchor = self._positions[anchor_id]
         vectors = [
             LoadVector(
-                world_x=float(hook["x"]),
-                world_z=float(hook["z"]),
+                world_x=float(anchor["x"]),
+                world_z=float(anchor["z"]),
                 fx_kN=0.0,
                 fz_kN=-hook_kN,
                 category=HOOK_LOAD,
@@ -660,14 +676,6 @@ class _LoadBuilder:
         offlead = float(self._c.offlead_deg)
         if abs(offlead) > 1e-6:
             offlead_fx = math.sin(math.radians(offlead)) * hook_kN
-            # Offlead enters the boom at the sheave; the tackle below carries no moment arm.
-            node_defs = {n.get("id"): n for n in self._doc.get("nodes", [])}
-            below_id = (node_defs.get(load_node_id, {}) or {}).get("below_node_id")
-            anchor = (
-                self._positions[below_id]
-                if below_id and below_id in self._positions
-                else self._positions[load_node_id]
-            )
             vectors.append(
                 LoadVector(
                     world_x=float(anchor["x"]),
@@ -984,13 +992,13 @@ class _LoadBuilder:
             return loaded
 
         load_node_id = str(self._hoist.get("load_node_id", "")).strip()
+        anchor_id = self._hook_anchor_id()
         if (
-            load_node_id
-            and load_node_id in self._positions
+            anchor_id is not None
             and self._filter.owns_node(load_node_id)
             and max(0.0, float(self._c.hook_load_kN)) > 0.0
         ):
-            loaded.add(load_node_id)
+            loaded.add(anchor_id)
 
         support_mass_t = split_support_mass_t(
             self._hoist, split_mode_active=self._c.split_mode_active

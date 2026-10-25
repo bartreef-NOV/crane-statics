@@ -640,14 +640,13 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                     f"{support_name!r} is not a node on the reeving path"
                 )
             support_node_id = matches[0]
-        hook_src = hoist["hook"]
         split_mode_obj = hoist.get("split")
-        normal_falls = int(hook_src["falls"])
+        normal_falls = int(hoist["falls"])
         # falls >= 1, split falls <= falls, and split hook mass <= hook mass are
         # enforced by AuthoredPayloadHoist's validators above; only derive here.
         split_falls = normal_falls
         if split_mode_obj is not None:
-            split_falls = int(split_mode_obj["hook"]["falls"])
+            split_falls = int(split_mode_obj["falls"])
 
         managed_hook_node_id = _managed_hook_node_id(hoist_key)
         if managed_hook_node_id in nodes_with_primary and not _is_managed_hook_node_id(
@@ -716,15 +715,15 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             "splitable_block": split_mode_obj is not None,
             "split_falls": split_falls,
             "split_hook_mass_t": float(
-                split_mode_obj["hook"]["mass_t"]
+                split_mode_obj["hook_mass_t"]
                 if split_mode_obj is not None
-                else hook_src["mass_t"]
+                else hoist["hook_mass_t"]
             ),
             "hook": {
-                "mass_t": float(hook_src["mass_t"]),
-                "daf": float(hook_src["daf"]),
-                "offlead_deg_limit": float(hook_src["offlead_deg"]),
-                "sidelead_deg_limit": float(hook_src["sidelead_deg"]),
+                "mass_t": float(hoist["hook_mass_t"]),
+                "daf": float(hoist["daf"]),
+                "offlead_deg_limit": float(hoist["offlead_deg"]),
+                "sidelead_deg_limit": float(hoist["sidelead_deg"]),
             },
             "operating_envelope": {
                 "outreach_min_m": float(min_outreach),
@@ -1976,14 +1975,6 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
                 for cp in points
             ]
 
-        hook_out: dict[str, Any] = {
-            "mass_t": hook_mass,
-            "falls": int(falls),
-            "daf": float(hoist.get("hook_daf", 1.0)),
-            "offlead_deg": hook_offlead,
-        }
-        if hook_sidelead:
-            hook_out["sidelead_deg"] = hook_sidelead
         hoist_out: dict[str, Any] = {}
 
         rope_out = {}
@@ -2003,17 +1994,20 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         )
         if support_name != last:
             hoist_out["support_node"] = support_name
-        hoist_out["hook"] = hook_out
+        hoist_out["hook_mass_t"] = hook_mass
+        hoist_out["falls"] = int(falls)
+        hoist_out["daf"] = float(hoist.get("hook_daf", 1.0))
+        hoist_out["offlead_deg"] = hook_offlead
+        if hook_sidelead:
+            hoist_out["sidelead_deg"] = hook_sidelead
         hoist_out["lowest_hook_height_m"] = float(hoist.get("lowest_hook_height_m") or 0.0)
         hoist_out["load_chart"] = _chart(hoist.get("contractual_points", []))
         if bool(hoist.get("splitable_block", False)):
             split_falls = hoist.get("split_falls")
             split_mass = hoist.get("split_hook_mass_t")
             hoist_out["split"] = {
-                "hook": {
-                    "mass_t": float(hook_mass if split_mass is None else split_mass),
-                    "falls": int(falls if split_falls is None else split_falls),
-                },
+                "hook_mass_t": float(hook_mass if split_mass is None else split_mass),
+                "falls": int(falls if split_falls is None else split_falls),
                 "load_chart": _chart(hoist.get("split_contractual_points", [])),
             }
         authored_payload_hoists[hid] = hoist_out
