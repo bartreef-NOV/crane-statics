@@ -1139,6 +1139,10 @@ CHECK_DESCRIPTIONS: dict[str, str] = {
         "1 if the boom width is not > 0 (the app rejects it; the out-of-plane split divides by "
         "it, so Results shows a message)"
     ),
+    "invalid_bearing_diameter": (
+        "1 if the slewing bearing diameter is typed but not a number > 0 (blank is allowed and "
+        "hides the bearing line-load rows)"
+    ),
 }
 
 CHECKS_TITLE_ROW = 1

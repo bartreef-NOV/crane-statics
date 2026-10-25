@@ -1276,3 +1276,77 @@ def test_blank_bearing_diameter_hides_bearing_rows(tmp_path: Path) -> None:
     for comp in ("fradial", "mradial", "fy", "mx"):
         got = book(TIGHT.result_cell("platform_base", comp))
         assert math.isclose(got, golden[f"reaction.platform_base.{comp}"], abs_tol=LOAD_TOL)
+
+
+# -- acceptance: the four 22689 cases, every sheet -----------------------------------
+
+#: Golden keys the workbook deliberately does not produce: the heel's boom_axial and
+#: boom_normal projections need the app's name-based heel axis node (reference.py rule 6).
+EXPECTED_OMISSIONS = {
+    f"reaction.{entity}.{component}"
+    for entity in ("heel_point", "heel_left", "heel_right")
+    for component in ("boom_axial", "boom_normal")
+}
+#: Acceptance tolerance: 0.01 kN for forces, 0.01 kNm for moments and 0.01 kN/m for the
+#: platform bearing line loads (the same absolute figure in each row's own unit).
+ACCEPT_TOL = 0.01
+
+_CASE_BOOKS: dict[str, "_Book"] = {}
+
+
+@pytest.fixture(scope="module")
+def case_book(tmp_path_factory: pytest.TempPathFactory) -> Callable[[str], "_Book"]:
+    """The recalculated delivered-layout workbook of a case (built once per module)."""
+
+    def get(name: str) -> "_Book":
+        if name not in _CASE_BOOKS:
+            path = tmp_path_factory.mktemp(name) / f"accept_{name}.xlsx"
+            build_workbook(_model(), CASES[name], path)
+            _CASE_BOOKS[name] = _Book(path)
+        return _CASE_BOOKS[name]
+
+    return get
+
+
+@pytest.mark.parametrize("name", sorted(CASE_NAMES))
+def test_all_four_cases_within_tolerance(case_book: Callable[[str], "_Book"], name: str) -> None:
+    book = case_book(name)
+    golden = _golden()["cases"][name]["app_results"]
+    got = _workbook_results(book, LAYOUT, _model())
+    assert set(golden) - set(got) == EXPECTED_OMISSIONS, name
+    assert set(got) <= set(golden), set(got) - set(golden)
+    for key, value in got.items():
+        assert isinstance(value, float), (name, key, value)
+        assert math.isclose(value, golden[key], rel_tol=0.0, abs_tol=ACCEPT_TOL), (
+            name,
+            key,
+            value,
+            golden[key],
+        )
+    assert book(LAYOUT.results_cell("results_status", "message")) == "OK"
+    assert book(LAYOUT.total_issues_addr) == 0
+
+
+@pytest.mark.parametrize("name", sorted(CASE_NAMES))
+def test_no_error_values_anywhere(case_book: Callable[[str], "_Book"], name: str) -> None:
+    # Only a singular matrix may show #NUM!, in the raw MMULT(MINVERSE) column on
+    # Statics; none of the 22689 cases is singular, so every sheet must be error-free.
+    book = case_book(name)
+    assert set(book.values) == set(layout.SHEETS)
+    _assert_book_clean(book, *layout.SHEETS)
+    assert sum(len(v) for v in book.values.values()) > 1000
+
+
+def test_workbook_recalculates_on_open(tmp_path: Path) -> None:
+    assert load_workbook(_build(tmp_path)).calculation.fullCalcOnLoad is True
+
+
+@pytest.mark.parametrize(("diameter", "count"), [(0.0, 1), (-2.0, 1), (None, 0), (12.5, 0)])
+def test_invalid_bearing_diameter_check(tmp_path: Path, diameter: float | None, count: int) -> None:
+    model = _model()
+    model["structure"]["slewing_bearing_diameter_m"] = diameter
+    path = tmp_path / "bearing.xlsx"
+    build_workbook(model, CASES["base"], path, TIGHT)
+    book = _Book(path)
+    assert book(TIGHT.check("invalid_bearing_diameter")) == count
+    assert book(TIGHT.total_issues_addr) == count

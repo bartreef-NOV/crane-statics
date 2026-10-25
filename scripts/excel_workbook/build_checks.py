@@ -75,6 +75,7 @@ def input_check_formulas(
     solve_count = f"COUNTIFS({r('ropes', 'active')},1,{r('ropes', 'role')},\"solve\")"
     hoist = lay.cell("scene", "hoist_id")
     wind = lay.cell("scene", "wind_direction")
+    diameter = lay.cell("structure", "slewing_bearing_diameter_m")
     hoist_rope = f"INDEX({r('hoists', 'rope_id')},MATCH({hoist},{r('hoists', 'id')},0))"
     return {
         "overflow": f"=SUM({overflow_range})",
@@ -103,6 +104,9 @@ def input_check_formulas(
             f"({r('nodes', 'frame')}=\"hanging\")",
             f"(COUNTIFS({r('nodes', 'id')},{r('nodes', 'below_node_id')},"
             f"{r('nodes', 'frame')},\"hanging\",{r('nodes', 'active')},1)>0)",
+        ),
+        "invalid_bearing_diameter": (
+            f'=IF({diameter}="",0,IF(ISNUMBER({diameter}),IF({diameter}>0,0,1),1))'
         ),
     }
 
