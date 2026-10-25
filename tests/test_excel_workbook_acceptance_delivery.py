@@ -101,3 +101,18 @@ def test_delivered_workbook_is_up_to_date(tmp_path: Path) -> None:
                     assert (got.ref, got.text) == (want.ref, want.text), cell.coordinate
                 else:
                     assert got == want, (ws.title, cell.coordinate, got, want)
+
+
+def test_cli_capacity_option(tmp_path: Path) -> None:
+    from scripts.excel_workbook.build import main
+
+    out = tmp_path / "cap.xlsx"
+    assert main([str(YAML_PATH), str(out), "--capacity", "nodes=31", "--capacity", "hoists=5"]) == 0
+    lay = layout.Layout(layout.Capacities(nodes=31, hoists=5))
+    wb = load_workbook(out)
+    sheet, coord = layout.split(lay.tables["nodes"].capacity_addr)
+    assert wb[sheet][coord].value == 31
+    sheet, coord = layout.split(lay.addr("hoists", "active", 5))
+    assert wb[sheet][coord].value == 0
+    with pytest.raises(SystemExit):
+        main([str(YAML_PATH), str(out), "--capacity", "no_table=3"])
