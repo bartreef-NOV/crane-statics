@@ -4,10 +4,20 @@ Sheets, in order (``layout.SHEETS``): Conventions, Inputs, Geometry, Loads, Stat
 OutOfPlane, Results, Checks. Addresses come only from ``layout``; each sheet has its own writer
 module (``build_inputs``, ``build_geometry``, ``build_loads``, ``build_statics``,
 ``build_oop``, ``build_results``, ``build_checks``, ``conventions``).
+
+Command line (from the repo root; in a worktree set ``PYTHONPATH=src``)::
+
+    python -m scripts.excel_workbook.build examples/crane_input_22689.yaml out.xlsx
+    python -m scripts.excel_workbook.build <yaml> <out.xlsx> --case idle_hoist
+
+The YAML is expanded with ``reference.expanded_model``; the scene state is a
+``reference.CASES`` entry (default: the first, ``base``).
 """
 
 from __future__ import annotations
 
+import argparse
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +33,7 @@ from .build_results import write_results
 from .build_statics import statics_check_formulas, write_statics
 from .conventions import write_conventions
 from .layout import DEFAULT_LAYOUT, Layout
-from .reference import SceneCase
+from .reference import CASES, SceneCase, expanded_model
 
 
 def build_workbook(
@@ -47,4 +57,30 @@ def build_workbook(
     write_checks(
         sheets[layout.CHECKS], lay, {**statics_check_formulas(lay), **oop_check_formulas(lay)}
     )
+    # Formulas are written without cached values: Excel recalculates them on open.
+    wb.calculation.fullCalcOnLoad = True
     wb.save(Path(out))
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """``python -m scripts.excel_workbook.build <yaml> <out.xlsx> [--case NAME]``."""
+    parser = argparse.ArgumentParser(
+        prog="python -m scripts.excel_workbook.build",
+        description="Write the Crane Statics validation workbook for a crane YAML.",
+    )
+    parser.add_argument("yaml", type=Path, help="authored crane input YAML")
+    parser.add_argument("out", type=Path, help="workbook to write (.xlsx)")
+    parser.add_argument(
+        "--case",
+        choices=list(CASES),
+        default=next(iter(CASES)),
+        help="scene state typed on Inputs (default: %(default)s)",
+    )
+    args = parser.parse_args(argv)
+    build_workbook(expanded_model(args.yaml), CASES[args.case], args.out)
+    print(f"wrote {args.out} (scene case {args.case!r})")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

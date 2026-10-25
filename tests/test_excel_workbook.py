@@ -1350,3 +1350,51 @@ def test_invalid_bearing_diameter_check(tmp_path: Path, diameter: float | None, 
     book = _Book(path)
     assert book(TIGHT.check("invalid_bearing_diameter")) == count
     assert book(TIGHT.total_issues_addr) == count
+
+
+# -- delivery: command line ------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("args", "case"), [((), "base"), (("--case", "idle_hoist"), "idle_hoist")])
+def test_cli_writes_workbook_for_a_case(tmp_path: Path, args: tuple[str, ...], case: str) -> None:
+    from scripts.excel_workbook.build import main
+
+    assert next(iter(CASES)) == "base"
+    out = tmp_path / "cli.xlsx"
+    assert main([str(YAML_PATH), str(out), *args]) == 0
+    wb = load_workbook(out)
+    assert wb.sheetnames == list(layout.SHEETS)
+    assert wb.calculation.fullCalcOnLoad is True
+    for key, value in dataclasses.asdict(CASES[case]).items():
+        sheet, coord = layout.split(LAYOUT.cell("scene", key))
+        assert _same(wb[sheet][coord].value, value), (case, key)
+
+
+def test_cli_rejects_unknown_case(tmp_path: Path) -> None:
+    from scripts.excel_workbook.build import main
+
+    with pytest.raises(SystemExit):
+        main([str(YAML_PATH), str(tmp_path / "x.xlsx"), "--case", "no_such_case"])
+
+
+DELIVERED = Path(__file__).resolve().parents[1] / "docs" / "crane-statics-validation-22689.xlsx"
+
+
+def test_delivered_workbook_is_up_to_date(tmp_path: Path) -> None:
+    # Regenerate with: python -m scripts.excel_workbook.build
+    #   examples/crane_input_22689.yaml docs/crane-statics-validation-22689.xlsx
+    fresh = load_workbook(_build(tmp_path))
+    shipped = load_workbook(DELIVERED)
+    assert shipped.sheetnames == fresh.sheetnames
+    assert shipped.calculation.fullCalcOnLoad is True
+    for ws in fresh.worksheets:
+        other = shipped[ws.title]
+        assert other.max_row == ws.max_row and other.max_column == ws.max_column, ws.title
+        for row in ws.iter_rows():
+            for cell in row:
+                want, got = cell.value, other[cell.coordinate].value
+                if isinstance(want, ArrayFormula):
+                    assert isinstance(got, ArrayFormula), (ws.title, cell.coordinate)
+                    assert (got.ref, got.text) == (want.ref, want.text), cell.coordinate
+                else:
+                    assert got == want, (ws.title, cell.coordinate, got, want)
