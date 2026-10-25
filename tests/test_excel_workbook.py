@@ -1,5 +1,6 @@
 """Tests for the Excel validation workbook tooling."""
 
+import copy
 import dataclasses
 import json
 import math
@@ -8,9 +9,11 @@ from typing import Any
 
 import numpy as np
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.formula import ArrayFormula
 
+from scripts.excel_workbook import layout
+from scripts.excel_workbook.build import build_workbook
 from scripts.excel_workbook.recalc import recalculate
 from scripts.excel_workbook.reference import (
     CASES,
@@ -177,3 +180,197 @@ def test_expanded_model_is_json_serialisable() -> None:
     json.dumps(model)
     for key in ("environment", "structure", "bodies", "nodes", "ropes", "hoists"):
         assert key in model
+
+
+# -- workbook: inputs and checks ----------------------------------------------------
+
+LAYOUT = layout.DEFAULT_LAYOUT
+
+#: expanded_model keys deliberately not typed on Inputs (derived in later sheets, or
+#: kept once on the hoist row -- the app reads the hoist's linear mass).
+DERIVED_HOIST_KEYS = {"is_payload", "parts_at_hook", "spool_node_id"}
+OMITTED_ROPE_KEYS = {"tension_mode", "linear_mass_kg_m", "segments"}
+
+
+def _model() -> dict[str, Any]:
+    return copy.deepcopy(expanded_model(YAML_PATH))
+
+
+def _build(tmp_path: Path, model: dict[str, Any] | None = None, case: str = "base") -> Path:
+    path = tmp_path / f"wb_{case}.xlsx"
+    build_workbook(_model() if model is None else model, CASES[case], path)
+    return path
+
+
+class _Book:
+    """Read cells by sheet-qualified address; formula cells are recalculated."""
+
+    def __init__(self, path: Path) -> None:
+        self.wb = load_workbook(path)
+        self.values = recalculate(path)
+
+    def __call__(self, address: str) -> Any:
+        sheet, coord = address.replace("$", "").split("!")
+        raw = self.wb[sheet][coord].value
+        if isinstance(raw, str) and raw.startswith("="):
+            return self.values[sheet][coord]
+        return raw
+
+
+def _expected_rows(model: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    return {
+        "mass_points": [
+            {"body": b["id"], **mp} for b in model["bodies"] for mp in b["mass_points"]
+        ],
+        "wind_areas": [{"body": b["id"], **wa} for b in model["bodies"] for wa in b["wind_areas"]],
+        "nodes": model["nodes"],
+        "segments": [{"rope_id": r["id"], **s} for r in model["ropes"] for s in r["segments"]],
+        "ropes": [{"id": r["id"], "role": r["tension_mode"]} for r in model["ropes"]],
+        "hoists": model["hoists"],
+    }
+
+
+def _same(got: Any, expected: Any) -> bool:
+    if expected is None:
+        return got is None
+    if isinstance(expected, bool):
+        return bool(got == (1 if expected else 0))
+    if isinstance(expected, (int, float)):
+        return isinstance(got, (int, float)) and math.isclose(got, expected, abs_tol=1e-12)
+    return bool(got == expected)
+
+
+def test_inputs_round_trip(tmp_path: Path) -> None:
+    model = _model()
+    book = _Book(_build(tmp_path, model))
+    rows = _expected_rows(model)
+    assert set(rows) == set(LAYOUT.tables)
+    assert set(model["hoists"][0]) - set(LAYOUT.tables["hoists"].keys) == DERIVED_HOIST_KEYS
+    assert set(model["ropes"][0]) - set(LAYOUT.tables["ropes"].keys) == OMITTED_ROPE_KEYS
+    for name, table in LAYOUT.tables.items():
+        assert len(rows[name]) <= table.capacity, name
+        for i, row in enumerate(rows[name], start=1):
+            assert book(LAYOUT.addr(name, "active", i)) == 1, (name, i)
+            for key in table.keys:
+                if key != "active":
+                    got = book(LAYOUT.addr(name, key, i))
+                    assert _same(got, row[key]), (name, i, key, got, row[key])
+        for i in range(len(rows[name]) + 1, table.capacity + 1):
+            assert book(LAYOUT.addr(name, "active", i)) == 0, (name, i)
+            for key in table.keys:
+                if key != "active":
+                    assert book(LAYOUT.addr(name, key, i)) is None, (name, i, key)
+        assert book(table.overflow_addr) == 0, name
+
+    env = model["environment"]
+    for key in ("gravity_m_s2", "air_density_kg_m3", "max_wind_speed_m_s"):
+        assert _same(book(LAYOUT.cell("environment", key)), env[key]), key
+    for key in ("reference_x_m", "reference_z_m"):
+        assert _same(book(LAYOUT.cell("environment", key)), env["vessel_motion"][key]), key
+    structure = model["structure"]
+    for key in ("boom_width_m", "slewing_bearing_diameter_m"):
+        assert _same(book(LAYOUT.cell("structure", key)), structure[key]), key
+    for point, values in structure["points"].items():
+        for axis in ("x_m", "z_m"):
+            got = book(LAYOUT.cell("structure", f"{point}_{axis}"))
+            assert _same(got, values[axis]), (point, axis)
+
+
+@pytest.mark.parametrize("name", sorted(CASE_NAMES))
+def test_scene_state_cells_hold_the_case(tmp_path: Path, name: str) -> None:
+    book = _Book(_build(tmp_path, case=name))
+    for key, value in dataclasses.asdict(CASES[name]).items():
+        assert _same(book(LAYOUT.cell("scene", key)), value), (name, key)
+
+
+def test_checks_are_clean_for_22689(tmp_path: Path) -> None:
+    book = _Book(_build(tmp_path))
+    for key in layout.CHECK_DESCRIPTIONS:
+        assert book(LAYOUT.check(key)) == 0, key
+    assert book(LAYOUT.total_issues_addr) == 0
+
+
+def test_overflow_check_trips(tmp_path: Path) -> None:
+    model = _model()
+    capacity = LAYOUT.tables["segments"].capacity
+    extra = capacity + 1 - sum(len(r["segments"]) for r in model["ropes"])
+    seg = model["ropes"][0]["segments"][0]
+    model["ropes"][0]["segments"].extend(dict(seg) for _ in range(extra))
+    path = _build(tmp_path, model)
+    book = _Book(path)
+    assert book(LAYOUT.tables["segments"].overflow_addr) == 1
+    assert book(LAYOUT.check("overflow")) == 1
+    assert book(LAYOUT.total_issues_addr) > 0
+    assert book(LAYOUT.addr("segments", "active", capacity)) == 1
+
+
+def test_overflow_check_counts_rows_typed_below_a_table(tmp_path: Path) -> None:
+    path = _build(tmp_path)
+    wb = load_workbook(path)
+    sheet, coord = LAYOUT.tables["nodes"].guard_addr("id").replace("$", "").split("!")
+    wb[sheet][coord] = "typed_below_the_table"
+    wb.save(path)
+    assert _Book(path)(LAYOUT.check("overflow")) == 1
+
+
+def test_duplicate_id_check(tmp_path: Path) -> None:
+    model = _model()
+    model["nodes"].append(dict(model["nodes"][3]))
+    assert _Book(_build(tmp_path, model))(LAYOUT.check("duplicate_ids")) > 0
+
+
+def test_missing_node_reference_check(tmp_path: Path) -> None:
+    model = _model()
+    model["ropes"][0]["segments"][0]["to_node_id"] = "no_such_node"
+    assert _Book(_build(tmp_path, model))(LAYOUT.check("node_references")) == 1
+
+
+def test_inactive_node_reference_check(tmp_path: Path) -> None:
+    path = _build(tmp_path)
+    ids = [n["id"] for n in _model()["nodes"]]
+    wb = load_workbook(path)
+    row = ids.index("mh_aframe_sheave_1") + 1
+    sheet, coord = LAYOUT.addr("nodes", "active", row).replace("$", "").split("!")
+    wb[sheet][coord] = 0
+    wb.save(path)
+    # Two MH segments touch the deactivated sheave.
+    assert _Book(path)(LAYOUT.check("node_references")) == 2
+
+
+def test_two_solve_ropes_check(tmp_path: Path) -> None:
+    model = _model()
+    next(r for r in model["ropes"] if r["id"] == "MH__rope")["tension_mode"] = "solve"
+    book = _Book(_build(tmp_path, model))
+    assert book(LAYOUT.check("multiple_solve_ropes")) == 1
+    assert book(LAYOUT.check("no_solve_rope")) == 0
+
+
+def test_hoist_rope_without_active_segments_check(tmp_path: Path) -> None:
+    model = _model()
+    next(r for r in model["ropes"] if r["id"] == "SH__rope")["segments"] = []
+    assert _Book(_build(tmp_path, model))(LAYOUT.check("hoist_without_segments")) == 1
+
+
+def test_custom_capacities(tmp_path: Path) -> None:
+    lay = layout.Layout(layout.Capacities(nodes=30, segments=16, hoists=5))
+    assert lay.tables["segments"].first_row != LAYOUT.tables["segments"].first_row
+    path = tmp_path / "small.xlsx"
+    build_workbook(_model(), CASES["base"], path, lay)
+    book = _Book(path)
+    assert book(lay.addr("segments", "active", 16)) == 1
+    assert book(lay.addr("nodes", "active", 30)) == 0
+    assert book(lay.total_issues_addr) == 0
+
+
+def test_workbook_sheets_in_order(tmp_path: Path) -> None:
+    wb = load_workbook(_build(tmp_path))
+    assert wb.sheetnames == list(layout.SHEETS)
+    assert layout.SHEETS == (
+        "Conventions",
+        "Inputs",
+        "Geometry",
+        "Loads",
+        "Statics",
+        "Results",
+        "Checks",
+    )
