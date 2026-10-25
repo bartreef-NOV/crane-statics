@@ -43,6 +43,21 @@ rows, so the boom hoist (the ``tension_mode == "solve"`` rope) reads ``tension.B
   The hinge totals have no Fy row in the app; the front/rear leg left/right splits are
   computed by the engine but are not shown in the Scene, so they are not keys.
 
+  Sign conventions (observed app behaviour; the workbook must replicate it -- possibly
+  app sign bugs, reported to the user separately):
+
+  - ``platform_base.fy`` and ``platform_base.mx`` carry the sign of the *applied loads*
+    (their resultant force / moment about x: a +Y wind gives positive ``fy`` and
+    ``mx = -z * fy``), whereas ``fx``, ``fz`` and ``my`` (and every hinge/heel Fx/Fz) are
+    *support reactions* opposing the loads (weight gives positive ``fz``; a +X vessel
+    acceleration gives positive ``fx``).
+  - ``heel_left`` behaves as the -Y side: ``heel_left = 0.5 * total + M / boom_width`` and
+    ``heel_right = 0.5 * total - M / boom_width`` (per component; ``Fz`` uses ``Mx``, ``Fx``
+    uses ``Mz``), with ``M`` the moment of the *applied loads* about the heel
+    (``Mx = y * fz - z * fy``, ``Mz = x_rel * fy - y * fx``). So a mass at +Y loads
+    ``heel_right``, not ``heel_left``. The heel moments include every mass and wind area of
+    the crane, platform masses included, not only the boom's.
+
 ``expanded_model`` keys (read by Task 3)
 ----------------------------------------
 ``expanded_model(yaml_path)`` is the runtime model after ``normalize_document``, as plain
