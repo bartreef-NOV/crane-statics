@@ -51,6 +51,21 @@ Fixed structure nodes
 The nine fixed-topology node ids (``FIXED_NODE_POINTS``) are rows in the ``nodes`` table
 like any other node, but their ``x_m``/``z_m`` cells are formulas linking to the
 ``structure`` block, so each structure point is typed once.
+
+Geometry sheet
+--------------
+All formulas; nothing is typed here. Top to bottom: the conventions notes
+(``GEOMETRY_NOTES``), the single-value blocks ``scene_geometry`` (boom rotation, the
+active hook) and ``frame_motion`` (gravity, ``k = g - a`` and the other crane-frame
+motion values), then the ``node_positions`` table, one row per ``nodes`` row (row i
+here is Inputs ``nodes`` row i). Later sheets read them like this::
+
+    lay.geo_cell("frame_motion", "kx")              # 'Geometry!$B$40'
+    lay.geo_addr("node_positions", "z_m", 3)        # 'Geometry!$L$75'  (3rd node)
+    lay.geo_col_range("node_positions", "x_m")      # all node rows
+    lay.geo_tables["node_positions"].sheet_row(3)
+
+Spare node rows read 0 in every numeric column (the ``id`` column reads "").
 """
 
 from __future__ import annotations
@@ -374,6 +389,89 @@ HOIST_FIELDS = (
     _f("split_hook_mass_t", "Split hook mass", "t", note="split mode unsupported"),
 )
 
+# -- Geometry sheet ------------------------------------------------------------------
+
+#: Sign and angle conventions printed at the top of the Geometry sheet.
+GEOMETRY_NOTES: tuple[str, ...] = (
+    "Crane (global) frame: x horizontal outboard, y lateral, z up; node positions are (x, z).",
+    "Boom angle: degrees from +x toward +z, about the boom heel (node boom_heel). "
+    "Boom-local (u, w): u along the boom, w normal (left of u). "
+    "x = heel_x + u*cos(a) - w*sin(a); z = heel_z + u*sin(a) + w*cos(a).",
+    "Hanging nodes sit directly below their parent node (same x, z lower by the drop). "
+    "A missing drop counts as 1 m (the app's default). One level of hanging only "
+    "(a hanging node whose parent is hanging trips the hanging_chain check).",
+    "The active hook (the scene hoist's hook node) hangs the tackle length below its support "
+    "node instead of its idle drop. Support node = the hook node's parent, else the hoist's "
+    "support node. A negative tackle length counts as 0.",
+    "Vessel frame: x forward, y port, z up. Pitch positive bow-down, roll positive to "
+    "starboard; yaw drops out. Gravity in the vessel frame: (g sin p, -g sin r cos p, "
+    "-g cos r cos p), g = |gravity|.",
+    "Crane frame = vessel frame rotated about z by the slewing angle: a horizontal vessel "
+    "vector (x, y) becomes (cos s x + sin s y, -sin s x + cos s y). z is unchanged.",
+    "Load acceleration k = g - a (crane frame); the solver's equivalent reference "
+    "acceleration is -k horizontally and -g - kz vertically (solver_ax/ay/az).",
+)
+
+GEOMETRY_SCENE_FIELDS = (
+    _f("boom_angle_rad", "Boom angle", "rad"),
+    _f("boom_cos", "cos(boom angle)"),
+    _f("boom_sin", "sin(boom angle)"),
+    _f("heel_row", "Row of node boom_heel in nodes", "row", note="0 = missing"),
+    _f("heel_x_m", "Boom heel x", "m"),
+    _f("heel_z_m", "Boom heel z", "m"),
+    _f("tackle_m", "Tackle length used", "m", note="max(0, scene value)"),
+    _f("hook_id", "Active hook node id", kind="text"),
+    _f("hook_row", "Row of the hook node in nodes", "row", note="0 = missing"),
+    _f("hook_parent_id", "Hook node's parent (below_node_id)", kind="text"),
+    _f("support_id", "Hook support node id", kind="text"),
+    _f("support_row", "Row of the support node in nodes", "row", note="0 = missing"),
+    _f("support_z_m", "Support node z (before the hook moves)", "m"),
+    _f("hook_moves", "Hook is lowered by the tackle", "1/0", "flag"),
+)
+
+GEOMETRY_MOTION_FIELDS = (
+    _f("g_m_s2", "Gravity magnitude |g|", "m/s^2"),
+    _f("roll_rad", "Vessel roll", "rad"),
+    _f("pitch_rad", "Vessel pitch", "rad"),
+    _f("slew_rad", "Slewing angle", "rad"),
+    _f("slew_cos", "cos(slew)"),
+    _f("slew_sin", "sin(slew)"),
+    _f("gx_vessel", "Gravity x, vessel frame", "m/s^2"),
+    _f("gy_vessel", "Gravity y, vessel frame", "m/s^2"),
+    _f("gz_vessel", "Gravity z, vessel frame", "m/s^2"),
+    _f("kx_vessel", "k x = g - a, vessel frame", "m/s^2"),
+    _f("ky_vessel", "k y = g - a, vessel frame", "m/s^2"),
+    _f("gx", "Gravity x, crane frame", "m/s^2"),
+    _f("gy", "Gravity y, crane frame", "m/s^2"),
+    _f("gz", "Gravity z, crane frame", "m/s^2"),
+    _f("ax", "Vessel acceleration x, crane frame", "m/s^2"),
+    _f("ay", "Vessel acceleration y, crane frame", "m/s^2"),
+    _f("az", "Vessel acceleration z, crane frame", "m/s^2"),
+    _f("kx", "Load acceleration kx = gx - ax", "m/s^2"),
+    _f("ky", "Load acceleration ky = gy - ay", "m/s^2"),
+    _f("kz", "Load acceleration kz = gz - az", "m/s^2"),
+    _f("solver_ax", "Solver reference acceleration x (= -kx)", "m/s^2"),
+    _f("solver_ay", "Solver reference acceleration y (= -ky)", "m/s^2"),
+    _f("solver_az", "Solver reference acceleration z (= -g - kz)", "m/s^2"),
+    _f("pitch_accel_crane", "Pitch angular acceleration, crane frame", "rad/s^2"),
+    _f("roll_accel_crane", "Roll angular acceleration, crane frame", "rad/s^2"),
+)
+
+NODE_POSITION_FIELDS = (
+    _f("active", "Active", "1/0", "flag", note="from Inputs"),
+    _f("id", "Id", kind="text"),
+    _f("frame", "Frame", kind="text"),
+    _f("x_base_m", "x (boom-local rotated, or global; 0 if hanging)", "m"),
+    _f("z_base_m", "z (boom-local rotated, or global; 0 if hanging)", "m"),
+    _f("parent_row", "Row of the parent node (hanging)", "row", note="0 = none"),
+    _f("drop_m", "Drop below parent (hanging)", "m"),
+    _f("x_kin_m", "x (kinematics: hanging resolved)", "m"),
+    _f("z_kin_m", "z (kinematics: hanging resolved)", "m"),
+    _f("is_hook", "Active hook node", "1/0", "flag"),
+    _f("x_m", "x global", "m", note="the position the solver uses"),
+    _f("z_m", "z global", "m", note="the position the solver uses"),
+)
+
 # -- checks ----------------------------------------------------------------------------
 
 #: Check key -> description, in Checks-sheet order. Every check cell is a live count;
@@ -394,6 +492,7 @@ CHECK_DESCRIPTIONS: dict[str, str] = {
     "scene_hoist": "1 if the scene hoist is not an active hoist with a fixed rope",
     "wind_direction": "1 if the scene wind direction is not +X, -X, +Y or -Y",
     "fixed_nodes_missing": "Fixed structure node ids with no active node row",
+    "hanging_chain": "Hanging nodes whose parent is itself hanging (only one level is resolved)",
 }
 
 CHECKS_TITLE_ROW = 1
@@ -427,6 +526,8 @@ _BLOCK_DEFS: tuple[tuple[str, str, tuple[Field, ...]], ...] = (
 
 INPUTS_FIRST_ROW = 4  # rows 1-3: title and colour legend
 _GAP = 2  # blank rows between sections
+#: Geometry sheet: row 1 title, then the notes, then the blocks.
+GEOMETRY_FIRST_ROW = 3 + len(GEOMETRY_NOTES) + _GAP
 
 
 @dataclass(frozen=True, eq=False)
@@ -436,6 +537,10 @@ class Layout:
     capacities: Capacities = field(default_factory=Capacities)
     blocks: dict[str, Block] = field(init=False)
     tables: dict[str, Table] = field(init=False)
+    #: Geometry-sheet blocks (``scene_geometry``, ``frame_motion``) and tables
+    #: (``node_positions``); kept apart from the Inputs ones, which the writers iterate.
+    geo_blocks: dict[str, Block] = field(init=False)
+    geo_tables: dict[str, Table] = field(init=False)
 
     def __post_init__(self) -> None:
         row = INPUTS_FIRST_ROW
@@ -453,6 +558,27 @@ class Layout:
         object.__setattr__(self, "blocks", blocks)
         object.__setattr__(self, "tables", tables)
 
+        row = GEOMETRY_FIRST_ROW
+        geo_blocks: dict[str, Block] = {}
+        for name, title, fields in (
+            ("scene_geometry", "Boom rotation and active hook", GEOMETRY_SCENE_FIELDS),
+            ("frame_motion", "Vessel-frame motion in the crane frame", GEOMETRY_MOTION_FIELDS),
+        ):
+            geo_blocks[name] = Block(name, title, GEOMETRY, fields, row)
+            row = geo_blocks[name].end_row + _GAP
+        geo_tables = {
+            "node_positions": Table(
+                "node_positions",
+                "Node positions (row i = Inputs nodes row i)",
+                GEOMETRY,
+                NODE_POSITION_FIELDS,
+                tables["nodes"].capacity,
+                row,
+            )
+        }
+        object.__setattr__(self, "geo_blocks", geo_blocks)
+        object.__setattr__(self, "geo_tables", geo_tables)
+
     # -- inputs ---------------------------------------------------------------------
 
     def addr(self, table: str, key: str, row: int) -> str:
@@ -467,6 +593,21 @@ class Layout:
         """Sheet-qualified address of a single-value input (``environment``, ``structure``,
         ``scene``)."""
         return self.blocks[block].addr(key)
+
+    # -- geometry -------------------------------------------------------------------
+
+    def geo_addr(self, table: str, key: str, row: int) -> str:
+        """Geometry-sheet address of ``key`` in data row ``row`` (1-based)."""
+        return self.geo_tables[table].addr(key, row)
+
+    def geo_col_range(self, table: str, key: str) -> str:
+        """Geometry-sheet range of ``key`` over all rows."""
+        return self.geo_tables[table].col_range(key)
+
+    def geo_cell(self, block: str, key: str) -> str:
+        """Geometry-sheet address of a single-value cell (``scene_geometry``,
+        ``frame_motion``)."""
+        return self.geo_blocks[block].addr(key)
 
     # -- checks ---------------------------------------------------------------------
 

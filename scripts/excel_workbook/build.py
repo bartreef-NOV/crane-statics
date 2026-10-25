@@ -14,13 +14,13 @@ from openpyxl import Workbook
 
 from . import layout, styles
 from .build_checks import write_checks
+from .build_geometry import write_geometry
 from .build_inputs import write_inputs
 from .conventions import write_conventions
 from .layout import DEFAULT_LAYOUT, Layout
 from .reference import SceneCase
 
 _PLACEHOLDER_TITLES = {
-    layout.GEOMETRY: "Geometry -- node positions and crane-frame motion",
     layout.LOADS: "Loads -- mass, wind, rope and hook loads",
     layout.STATICS: "Statics -- boom and leg equilibrium solves",
     layout.RESULTS: "Results -- rope tensions and support reactions",
@@ -40,6 +40,7 @@ def build_workbook(
     sheets = {name: wb.create_sheet(name) for name in layout.SHEETS}
     write_conventions(sheets[layout.CONVENTIONS])
     write_inputs(sheets[layout.INPUTS], lay, model, case)
+    write_geometry(sheets[layout.GEOMETRY], lay)
     for name, title in _PLACEHOLDER_TITLES.items():
         sheets[name]["A1"] = title
         sheets[name]["A1"].font = styles.TITLE_FONT

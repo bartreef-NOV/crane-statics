@@ -97,6 +97,13 @@ def input_check_formulas(
         ),
         "wind_direction": (f'=IF(OR({wind}="+X",{wind}="-X",{wind}="+Y",{wind}="-Y"),0,1)'),
         "fixed_nodes_missing": f"=COUNTIF({fixed_count_range},0)",
+        "hanging_chain": "="
+        + _sp(
+            _active(lay, "nodes"),
+            f"({r('nodes', 'frame')}=\"hanging\")",
+            f"(COUNTIFS({r('nodes', 'id')},{r('nodes', 'below_node_id')},"
+            f"{r('nodes', 'frame')},\"hanging\",{r('nodes', 'active')},1)>0)",
+        ),
     }
 
 
