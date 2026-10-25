@@ -21,11 +21,8 @@ from __future__ import annotations
 from openpyxl.worksheet.worksheet import Worksheet
 
 from . import styles
-from .layout import GEOMETRY_NOTES, Block, Layout, Table, split
-
-
-def _local(address: str) -> str:
-    return split(address)[1]
+from .layout import GEOMETRY_NOTES, Layout, Table
+from .sheet_writers import local, write_block
 
 
 def _scene_geometry_formulas(lay: Layout) -> dict[str, str]:
@@ -144,18 +141,6 @@ def _node_row_formulas(lay: Layout, i: int) -> dict[str, str]:
     }
 
 
-def _write_block(ws: Worksheet, block: Block, formulas: dict[str, str]) -> None:
-    ws[f"A{block.title_row}"] = block.title
-    ws[f"A{block.title_row}"].font = styles.SECTION_FONT
-    for f in block.fields:
-        row = block.row(f.key)
-        ws[f"A{row}"] = f.header
-        styles.put(ws, f"B{row}", formulas[f.key])
-        ws[f"C{row}"] = f.unit or None
-        ws[f"D{row}"] = f.key + (f"  -- {f.note}" if f.note else "")
-        ws[f"D{row}"].font = styles.KEY_FONT
-
-
 def _write_table(ws: Worksheet, lay: Layout, table: Table) -> None:
     ws[f"A{table.title_row}"] = table.title
     ws[f"A{table.title_row}"].font = styles.SECTION_FONT
@@ -170,7 +155,7 @@ def _write_table(ws: Worksheet, lay: Layout, table: Table) -> None:
         key.font = styles.KEY_FONT
     for i in range(1, table.capacity + 1):
         for key, formula in _node_row_formulas(lay, i).items():
-            styles.put(ws, _local(lay.geo_addr(table.name, key, i)), formula)
+            styles.put(ws, local(lay.geo_addr(table.name, key, i)), formula)
 
 
 def write_geometry(ws: Worksheet, lay: Layout) -> None:
@@ -180,8 +165,8 @@ def write_geometry(ws: Worksheet, lay: Layout) -> None:
     for k, note in enumerate(GEOMETRY_NOTES):
         ws[f"A{3 + k}"] = note
         ws[f"A{3 + k}"].font = styles.NOTE_FONT
-    _write_block(ws, lay.geo_blocks["scene_geometry"], _scene_geometry_formulas(lay))
-    _write_block(ws, lay.geo_blocks["frame_motion"], _frame_motion_formulas(lay))
+    write_block(ws, lay.geo_blocks["scene_geometry"], _scene_geometry_formulas(lay))
+    write_block(ws, lay.geo_blocks["frame_motion"], _frame_motion_formulas(lay))
     _write_table(ws, lay, lay.geo_tables["node_positions"])
     ws.column_dimensions["A"].width = 44
     for col in "BCDEFGHIJKLMNOP":

@@ -25,11 +25,8 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from . import styles
 from .build_oop import oop_component_formula
-from .layout import RESULT_ROWS, RESULTS_NOTES, Block, Layout, Table, split
-
-
-def _local(address: str) -> str:
-    return split(address)[1]
+from .layout import RESULT_ROWS, RESULTS_NOTES, Layout, Table
+from .sheet_writers import local, write_block
 
 
 def _status_formulas(lay: Layout) -> dict[str, str]:
@@ -129,18 +126,6 @@ _ROW_FORMULAS: dict[str, Callable[[Layout, int], dict[str, str]]] = {
 }
 
 
-def _write_block(ws: Worksheet, block: Block, formulas: dict[str, str]) -> None:
-    ws[f"A{block.title_row}"] = block.title
-    ws[f"A{block.title_row}"].font = styles.SECTION_FONT
-    for f in block.fields:
-        row = block.row(f.key)
-        ws[f"A{row}"] = f.header
-        styles.put(ws, f"B{row}", formulas[f.key])
-        ws[f"C{row}"] = f.unit or None
-        ws[f"D{row}"] = f.key + (f"  -- {f.note}" if f.note else "")
-        ws[f"D{row}"].font = styles.KEY_FONT
-
-
 def _write_table(ws: Worksheet, lay: Layout, table: Table) -> None:
     ws[f"A{table.title_row}"] = table.title
     ws[f"A{table.title_row}"].font = styles.SECTION_FONT
@@ -156,7 +141,7 @@ def _write_table(ws: Worksheet, lay: Layout, table: Table) -> None:
     rows = _ROW_FORMULAS[table.name]
     for i in range(1, table.capacity + 1):
         for key, value in rows(lay, i).items():
-            styles.put(ws, _local(lay.results_addr(table.name, key, i)), value)
+            styles.put(ws, local(lay.results_addr(table.name, key, i)), value)
 
 
 def write_results(ws: Worksheet, lay: Layout) -> None:
@@ -166,7 +151,7 @@ def write_results(ws: Worksheet, lay: Layout) -> None:
     for k, note in enumerate(RESULTS_NOTES):
         ws[f"A{3 + k}"] = note
         ws[f"A{3 + k}"].font = styles.NOTE_FONT
-    _write_block(ws, lay.results_blocks["results_status"], _status_formulas(lay))
+    write_block(ws, lay.results_blocks["results_status"], _status_formulas(lay))
     for table in lay.results_tables.values():
         _write_table(ws, lay, table)
     ws.column_dimensions["A"].width = 44

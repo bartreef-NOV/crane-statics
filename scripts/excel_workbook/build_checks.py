@@ -15,8 +15,8 @@ from .layout import (
     CHECKS_TOTAL_ROW,
     FIXED_NODE_POINTS,
     Layout,
-    split,
 )
+from .sheet_writers import local
 
 _ID_TABLES = ("mass_points", "wind_areas", "nodes", "ropes", "hoists")
 _BAD_FILL = PatternFill("solid", fgColor="F8CBAD")
@@ -111,10 +111,6 @@ def input_check_formulas(
     }
 
 
-def _local(address: str) -> str:
-    return split(address)[1]
-
-
 def write_checks(
     ws: Worksheet, lay: Layout, extra_formulas: Mapping[str, str] | None = None
 ) -> None:
@@ -166,10 +162,10 @@ def write_checks(
         rr = lay.check_row(key)
         ws[f"A{rr}"] = key
         ws[f"B{rr}"] = description
-        styles.put(ws, _local(lay.check(key)), formulas[key])
+        styles.put(ws, local(lay.check(key)), formulas[key])
         styles.put(ws, f"D{rr}", f'=IF(C{rr}=0,"OK","CHECK")')
     last = lay.check_row(list(CHECK_DESCRIPTIONS)[-1])
-    total = _local(lay.total_issues_addr)
+    total = local(lay.total_issues_addr)
     ws[f"B{CHECKS_TOTAL_ROW}"] = "Total issues"
     ws[f"B{CHECKS_TOTAL_ROW}"].font = styles.HEADER_FONT
     styles.put(ws, total, f"=SUM(C{header + 1}:C{last})")

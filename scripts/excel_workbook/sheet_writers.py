@@ -1,6 +1,7 @@
 """Shared writers for formula sheets: labelled blocks, tables and the notes header.
 
-New sheets use these; the older ``build_*`` modules keep their own copies for now.
+Every formula-sheet writer uses ``local`` and ``write_block``; ``build_inputs`` keeps its own
+block and table writers (they write typed values and validations, not formulas).
 """
 
 from __future__ import annotations

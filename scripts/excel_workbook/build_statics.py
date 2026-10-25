@@ -27,15 +27,10 @@ from .layout import (
     STATICS_NODES,
     STATICS_NOTES,
     SYSTEM_STATUS_FIELDS,
-    Block,
     Layout,
     MatrixSystem,
-    split,
 )
-
-
-def _local(address: str) -> str:
-    return split(address)[1]
+from .sheet_writers import local, write_block
 
 
 def _node(lay: Layout, node: str, axis: str) -> str:
@@ -169,18 +164,6 @@ def _leg_axis_formulas(lay: Layout) -> dict[str, str]:
     return out
 
 
-def _write_block(ws: Worksheet, block: Block, formulas: dict[str, str]) -> None:
-    ws[f"A{block.title_row}"] = block.title
-    ws[f"A{block.title_row}"].font = styles.SECTION_FONT
-    for f in block.fields:
-        row = block.row(f.key)
-        ws[f"A{row}"] = f.header
-        styles.put(ws, f"B{row}", formulas[f.key])
-        ws[f"C{row}"] = f.unit or None
-        ws[f"D{row}"] = f.key + (f"  -- {f.note}" if f.note else "")
-        ws[f"D{row}"].font = styles.KEY_FONT
-
-
 def _write_system(
     ws: Worksheet, system: MatrixSystem, a: list[list[str | float]], b: list[str]
 ) -> None:
@@ -205,16 +188,16 @@ def _write_system(
         unknown = system.unknowns[i - 1]
         ws[f"A{row}"] = equation
         for j in range(1, system.n + 1):
-            styles.put(ws, _local(system.a_addr(i, j)), a[i - 1][j - 1], styles.GENERATED_FILL)
-        styles.put(ws, _local(system.b_addr(i)), b[i - 1])
+            styles.put(ws, local(system.a_addr(i, j)), a[i - 1][j - 1], styles.GENERATED_FILL)
+        styles.put(ws, local(system.b_addr(i)), b[i - 1])
         ws[f"{system.name_column}{row}"] = f"{unknown.key}: {unknown.header} [{unknown.unit}]"
         styles.put(
             ws,
-            _local(system.x_addr(unknown.key)),
+            local(system.x_addr(unknown.key)),
             f"=IF({singular}=1,0,{system.raw_addr(unknown.key)})",
         )
         first, last = system.matrix_column(1), system.matrix_column(system.n)
-        styles.put(ws, _local(system.norm_addr(i)), f"=SQRT(SUMSQ({first}{row}:{last}{row}))")
+        styles.put(ws, local(system.norm_addr(i)), f"=SQRT(SUMSQ({first}{row}:{last}{row}))")
     raw = system.raw_range.replace("$", "")
     ws[raw.split(":")[0]] = ArrayFormula(
         raw, f"=MMULT(MINVERSE({system.a_range}),{system.b_range})"
@@ -266,7 +249,7 @@ def write_statics(ws: Worksheet, lay: Layout) -> None:
         "leg_axes": _leg_axis_formulas(lay),
     }
     for name, block in lay.statics_blocks.items():
-        _write_block(ws, block, blocks[name])
+        write_block(ws, block, blocks[name])
     matrices = {"boom_system": _boom_matrix(lay), "leg_system": _leg_matrix(lay)}
     for name, system in lay.statics_systems.items():
         _write_system(ws, system, *matrices[name])
