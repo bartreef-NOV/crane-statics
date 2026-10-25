@@ -11,7 +11,8 @@ Sources:
   ``extract_connection_component_response`` (resultant) and ``calculation/engine.py``
   ``resolve_connection_component_linear_response`` (leg_axial / leg_normal).
 * out-of-plane rows (heel_left/right, platform base Fy, Mx and the radial / bearing rows) --
-  ``build_oop.oop_component_formula`` (OutOfPlane sheet).
+  ``build_oop.oop_component_formula`` (OutOfPlane sheet). heel_left is the +Y (port) side;
+  platform base Fy and Mx are support reactions, like every other row.
 
 When Statics has no solution or the boom width is not > 0, every value cell shows the short
 reason (text), never an error value; spare hoist rows read 0 and "".

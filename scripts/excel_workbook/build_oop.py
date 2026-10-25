@@ -5,12 +5,13 @@ Source: ``calculation/engine.py``
 * ``_out_of_plane_geometry`` -- the points: every document mass point (boom-local ones
   rotated about the heel, lateral offset ``v``), the lumped masses of
   ``crane_solver.lumped_point_masses`` (rope self-weight, idle hook blocks; y = 0) and every
-  wind area (boom-local areas scaled by ``boom_wind_projection_scale`` = |sin(boom angle)|);
-  the support-group origins boom_heel, front_base, rear_base, platform_heel.
+  wind area (its full ``area_v_m2``: Y wind is not scaled by the boom angle); the
+  support-group origins boom_heel, front_base, rear_base, platform_heel.
 * ``_out_of_plane_variants`` -- ``Fy = -m (ay' - roll' (z - z_ref))`` per mass, Y wind
   ``sign 0.5 rho Cd A_y V^2 / 1000``, the side force at the hoist's support node (else its
   hook node), the moments ``Mx = y Fz - (z - oz) Fy`` and ``Mz = (x - ox) Fy - y Fx`` about
-  each group, the split ``0.5 total +/- M / width`` and the platform Fy and Mx.
+  each group, the split ``0.5 total -/+ M / width`` (left = +Y = port takes ``-M / width``)
+  and the platform Fy and Mx as support reactions (minus the applied-load sums).
 * ``_augment_point_with_out_of_plane_loads`` -- the side force is ``sin(sidelead) x hook
   load``; the variants there are the linear decomposition of the single evaluation here.
 
@@ -54,7 +55,6 @@ def _scene_formulas(lay: Layout) -> dict[str, str]:
         "roll": f"={geo('roll_accel_crane')}",
         "wind_y_sign": f'=IF({speed}=0,0,IF({wind}="+Y",1,IF({wind}="-Y",-1,0)))',
         "wind_q_kN_m2": f"={ld('wind_q_kN_m2')}",
-        "boom_wind_scale": f"={ld('boom_wind_scale')}",
         "hook_kN": f"={ld('hook_kN')}",
         "sidelead_kN": f"=SIN(RADIANS({lay.cell('scene', 'sidelead_deg')}))*{me('hook_kN')}",
         "boom_width_m": f"={width}+0",
@@ -147,10 +147,7 @@ def _wind_row(lay: Layout, i: int) -> dict[str, str]:
         "z_m": f"={ld('z_m')}",
         "cd": f"=IF({on},{inp('cd')}+0,0)",
         "area_y_m2": f"=IF({on},{inp('area_y_m2')}+0,0)",
-        "scale": f'=IF({on},IF({me("frame")}="boom_local",{s("boom_wind_scale")},1),0)',
-        "fy_kN": (
-            f"={s('wind_y_sign')}*{s('wind_q_kN_m2')}*{me('cd')}*{me('area_y_m2')}*{me('scale')}"
-        ),
+        "fy_kN": f"={s('wind_y_sign')}*{s('wind_q_kN_m2')}*{me('cd')}*{me('area_y_m2')}",
     }
 
 
@@ -214,8 +211,9 @@ def _platform_formulas(lay: Layout) -> dict[str, str]:
         "fy_lumped": f"=SUM({lay.oop.col_range('oop_lumped', 'fy_kN')})",
         "fy_wind": f"=SUM({lay.oop.col_range('oop_winds', 'fy_kN')})",
         "fy_side": f"={lay.oop.cell('sidelead', 'fy_kN')}",
-        "fy_kN": "=" + "+".join(me(part) for part in parts),
-        "mx_kNm": f"={lay.oop.moment('platform_base', 'mx')}",
+        # Support reactions: minus the applied-load sums.
+        "fy_kN": "=-(" + "+".join(me(part) for part in parts) + ")",
+        "mx_kNm": f"=-{lay.oop.moment('platform_base', 'mx')}",
     }
 
 

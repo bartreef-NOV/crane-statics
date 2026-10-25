@@ -554,7 +554,7 @@ LOADS_SCENE_FIELDS = (
     _f("idle_accel", "Idle rope acceleration |g| + solver_az", "m/s^2"),
     _f("wind_sign", "In-plane wind sign", "+1/-1/0", note="+X: 1, -X: -1, +Y/-Y: 0"),
     _f("wind_q_kN_m2", "0.5 rho V^2 / 1000", "kN/m^2"),
-    _f("boom_wind_scale", "|sin(boom angle)| (body boom areas)"),
+    _f("boom_wind_scale", "|sin(boom angle)| (body boom areas, X wind only)"),
     _f("hook_kN", "Hook load", "kN", note="scene value, as the solver uses it"),
     _f("offlead_fx_kN", "Offlead force sin(offlead) x hook load", "kN", note="+x"),
     _f("hook_row", "Row of the hook node in nodes", "row", note="0 = missing"),
@@ -755,10 +755,10 @@ STATICS_NOTES: tuple[str, ...] = (
     "Body loads = known loads (Loads body totals fx/fz/m) + T_bh x solve-rope coefficients "
     "(bh_fx/bh_fz/bh_m). Unknowns are the forces the supports exert on the body solved for "
     "(heel and leg-base reactions: weight gives positive Fz).",
-    "Each system A x = b is solved with MMULT(MINVERSE(A), b) (a legacy array formula). The "
-    "app calls np.linalg.solve and gives no result when it raises (an exactly singular "
-    "matrix). Here a matrix is flagged singular when |det A| <= 1e-12 x the product of its "
-    "row norms (Hadamard bound), or when MINVERSE fails; the solution column then reads 0 and "
+    "Each system A x = b is solved with MMULT(MINVERSE(A), b) (a legacy array formula). A "
+    "matrix is flagged singular when |det A| <= 1e-12 x the product of its row norms "
+    "(Hadamard bound), or when MINVERSE fails -- the app's own test (crane_solver "
+    "is_ill_conditioned), where it gives no result; the solution column then reads 0 and "
     "Results shows a message.",
     "With no active solve rope the boom matrix's third column is all zero: the app shows no "
     "results (compute_analysis_point returns None); Results says so.",
@@ -1039,10 +1039,11 @@ RESULTS_NOTES: tuple[str, ...] = (
     "not > 0, every value cell shows the reason instead of a number, as the app shows no "
     "results.",
     "Out-of-plane rows (OutOfPlane sheet, calculation/engine.py _out_of_plane_variants): "
-    "heel_left/heel_right = 0.5 heel_point +/- M_heel / boom width (the app's split), platform "
-    "base Fy/Mx with the sign of the applied loads; fradial = sqrt(Fx^2 + Fy^2), mradial = "
-    "sqrt(Mx^2 + My^2), bearing line loads Fz/(pi D) +/- 4 mradial/(pi D^2) (min shows uplift "
-    "only, core/demand_extraction.py); n/a without a bearing diameter (the app hides them).",
+    "heel_left/heel_right = 0.5 heel_point -/+ M_heel / boom width (left = +Y = port), "
+    "platform base Fy/Mx as support reactions (minus the applied loads); fradial = "
+    "sqrt(Fx^2 + Fy^2), mradial = sqrt(Mx^2 + My^2), bearing line loads Fz/(pi D) +/- 4 "
+    "mradial/(pi D^2) (min shows uplift only, core/demand_extraction.py); n/a without a "
+    "bearing diameter (the app hides them).",
 )
 
 RESULTS_STATUS_FIELDS = (
@@ -1091,14 +1092,14 @@ RESULT_ROWS: tuple[tuple[str, str, str, str], ...] = (
     ("platform_base", "fz", "kN", "Statics r_g_z"),
     ("platform_base", "my", "kNm", "Statics m_g (in-plane base moment)"),
     # Out-of-plane rows (OutOfPlane sheet, build_oop.oop_component_formula).
-    ("heel_left", "fx", "kN", "OutOfPlane split: 0.5 Hx + Mz_heel / width"),
-    ("heel_left", "fz", "kN", "OutOfPlane split: 0.5 Hz + Mx_heel / width"),
+    ("heel_left", "fx", "kN", "OutOfPlane split: 0.5 Hx - Mz_heel / width (+Y side)"),
+    ("heel_left", "fz", "kN", "OutOfPlane split: 0.5 Hz - Mx_heel / width (+Y side)"),
     ("heel_left", "resultant", "kN", "sqrt(Fx^2 + Fz^2)"),
-    ("heel_right", "fx", "kN", "OutOfPlane split: 0.5 Hx - Mz_heel / width"),
-    ("heel_right", "fz", "kN", "OutOfPlane split: 0.5 Hz - Mx_heel / width"),
+    ("heel_right", "fx", "kN", "OutOfPlane split: 0.5 Hx + Mz_heel / width (-Y side)"),
+    ("heel_right", "fz", "kN", "OutOfPlane split: 0.5 Hz + Mx_heel / width (-Y side)"),
     ("heel_right", "resultant", "kN", "sqrt(Fx^2 + Fz^2)"),
-    ("platform_base", "fy", "kN", "OutOfPlane: sum of applied Fy (load sign)"),
-    ("platform_base", "mx", "kNm", "OutOfPlane: applied Mx about platform_heel (load sign)"),
+    ("platform_base", "fy", "kN", "OutOfPlane: -(sum of applied Fy), reaction"),
+    ("platform_base", "mx", "kNm", "OutOfPlane: -(applied Mx about platform_heel), reaction"),
     ("platform_base", "fradial", "kN", "sqrt(Fx^2 + Fy^2)"),
     ("platform_base", "mradial", "kNm", "sqrt(Mx^2 + My^2)"),
     ("platform_base", "max_bearing_line_load", "kN/m", "Fz/(pi D) + 4 mradial/(pi D^2)"),

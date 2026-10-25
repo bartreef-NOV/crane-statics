@@ -23,7 +23,11 @@ CONVENTIONS_TEXT: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
         "Axes (crane frame)",
         (
             ("x: horizontal in the boom plane, positive toward the boom tip (outreach).", ""),
-            ("z: up. y: lateral, completing a right-handed x-y-z frame.", ""),
+            (
+                "z: up. y: lateral, completing a right-handed x-y-z frame: +y points to port "
+                "(left, looking along +x).",
+                "",
+            ),
             (
                 "The crane frame is the vessel frame (x forward, y port, z up) rotated about z "
                 "by the crane slewing angle; a vessel-frame horizontal vector (vx, vy) is "
@@ -98,8 +102,8 @@ CONVENTIONS_TEXT: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
             (
                 "Force = sign x 0.5 rho Cd A V^2 / 1000 (kN). X wind uses 'Area for X wind', Y "
                 "wind uses 'Area for Y wind'. X wind: areas of body 'boom' are scaled by |sin "
-                "theta|; Y wind: boom-local areas are (the in-plane solver and the out-of-plane "
-                "pass test this differently; identical when boom areas are boom-local).",
+                "theta| (the boom's projection seen along x). Y wind: every area is used in "
+                "full at any boom angle (the boom's side face does not turn with luffing).",
                 "calculation/solver/crane_solver.py _wind_fx; calculation/engine.py",
             ),
         ),
@@ -146,23 +150,19 @@ CONVENTIONS_TEXT: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
         "Reaction signs (as the app reports them)",
         (
             (
-                "Fx, Fz and My of every support (heel point, hinges, platform base) are support "
-                "reactions opposing the applied loads: weight gives positive Fz; a +X vessel "
-                "acceleration gives positive Fx.",
-                "scripts/excel_workbook/reference.py",
+                "Every reported reaction is the force (or moment) the support exerts on the "
+                "crane, opposing the applied loads: weight gives positive Fz; a +X vessel "
+                "acceleration gives positive Fx. This holds for Fx, Fz and My of every support "
+                "(heel point, hinges, platform base) and for platform base Fy and Mx: a +Y "
+                "wind gives negative Fy, and Mx = -(applied Mx about platform_heel).",
+                "scripts/excel_workbook/reference.py; calculation/engine.py",
             ),
             (
-                "Possible app sign bug, replicated: platform base Fy and Mx carry the sign of "
-                "the applied loads, not of the reaction (a +Y wind gives positive Fy, and Mx = "
-                "-z Fy).",
-                "scripts/excel_workbook/reference.py",
-            ),
-            (
-                "Possible app sign bug, replicated: heel_left behaves as the -Y side. "
-                "heel_left = 0.5 total + M / boom width, heel_right = 0.5 total - M / boom "
-                "width (Fz uses Mx, Fx uses Mz), with M the applied-load moment about the heel: "
-                "Mx = y Fz - z Fy, Mz = x_rel Fy - y Fx. A mass at +Y loads heel_right. The "
-                "heel moments include every mass and wind area of the crane.",
+                "Left/right: +Y is port, so heel_left is the +Y side. heel_left = 0.5 total - "
+                "M / boom width, heel_right = 0.5 total + M / boom width (Fz uses Mx, Fx uses "
+                "Mz), with M the applied-load moment about the heel: Mx = y Fz - z Fy, Mz = "
+                "x_rel Fy - y Fx. A mass at +Y loads heel_left. The heel moments include every "
+                "mass and wind area of the crane.",
                 "scripts/excel_workbook/reference.py; calculation/engine.py",
             ),
             ("Pinned connections (heel, hinges) carry no moment.", ""),
@@ -199,8 +199,8 @@ CONVENTIONS_TEXT: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
             ),
             (
                 "A system counts as singular when |det A| <= 1e-12 x the product of its row "
-                "norms or MINVERSE fails (the app: np.linalg.solve raising, exactly singular "
-                "only). Results then show the reason instead of numbers.",
+                "norms or MINVERSE fails (the app uses the same test, is_ill_conditioned). "
+                "Results then show the reason instead of numbers.",
                 "calculation/solver/crane_solver.py _run_statics",
             ),
         ),

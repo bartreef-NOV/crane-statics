@@ -8,7 +8,7 @@ manageable. Read the cells like this::
     oop.addr("oop_masses", "fy_kN", 3)              # row i = Inputs mass points row i
     oop.moment("heel", "mx")                        # Mx of the applied loads about the heel
     oop.split_value("heel_left", "fz")              # left/right split
-    oop.cell("platform", "fy_kN")                   # platform base Fy (sign of the loads)
+    oop.cell("platform", "fy_kN")                   # platform base Fy (support reaction)
 
 Sheet layout, top to bottom: title and ``OOP_NOTES``, the blocks ``oop_scene`` and
 ``sidelead``, the per-row tables ``oop_masses`` (Inputs mass points), ``oop_lumped`` (Inputs
@@ -35,20 +35,22 @@ OOP_NOTES: tuple[str, ...] = (
     "support split and the platform base Fy and Mx.",
     "Y loads: every mass point and every lumped mass (rope self-weight, idle hook blocks; "
     "y = 0) carries Fy = -m (ay' - roll' (z - z_ref)) (crane-frame ay' = Geometry solver_ay, "
-    "roll' = roll_accel_crane); Y wind Fy = sign q Cd A_y scale (scale = |sin(boom angle)| "
-    "for boom-local areas only); the sidelead force sin(sidelead) x hook load acts in +y at "
-    "the scene hoist's support node (its hook node if the support is missing), at its "
-    "kinematic position (before the tackle moves the hook).",
+    "roll' = roll_accel_crane); Y wind Fy = sign q Cd A_y (the full Y area at any boom "
+    "angle; only X wind on boom areas is scaled by |sin(boom angle)|); the sidelead force "
+    "sin(sidelead) x hook load acts in +y at the scene hoist's support node (its hook node "
+    "if the support is missing), at its kinematic position (before the tackle moves the "
+    "hook).",
     "Moments of the applied loads about each support group origin (heel = boom_heel, "
     "front_leg = front_base, rear_leg = rear_base, platform_base = platform_heel): "
     "Mx = y Fz - (z - oz) Fy, Mz = (x - ox) Fy - y Fx. Mass Fx/Fz are the Loads mass "
     "loads (weight + inertia); wind and side forces have y = 0.",
-    "Split (as the app, possibly an app sign bug): left = 0.5 total + M / boom width, "
-    "right = 0.5 total - M / boom width, Fx using Mz and Fz using Mx; total = the in-plane "
-    "reaction (Statics). So heel_left behaves as the -Y side.",
-    "Platform base Fy = the sum of all applied Fy, Mx = Mx of the applied loads about "
-    "platform_heel: the sign of the loads, not of a reaction (as the app). The front/rear "
-    "leg splits are shown but the Scene does not report them.",
+    "Split: left (+Y, port) = 0.5 total - M / boom width, right (-Y, starboard) = 0.5 "
+    "total + M / boom width, Fx using Mz and Fz using Mx; total = the in-plane reaction "
+    "(Statics). A mass at +Y loads the left side.",
+    "Platform base Fy and Mx are support reactions (the force the support exerts on the "
+    "crane), like Fx, Fz and My: Fy = -(sum of all applied Fy), Mx = -(Mx of the applied "
+    "loads about platform_heel). The front/rear leg splits are shown but the Scene does not "
+    "report them.",
     "Boom width must be > 0: the app rejects 0 and its split divides by it; Results then "
     "shows a message (check zero_boom_width).",
 )
@@ -59,7 +61,6 @@ OOP_SCENE_FIELDS = (
     _f("roll", "Roll angular acceleration, crane frame", "rad/s^2", note="Geometry"),
     _f("wind_y_sign", "Y wind sign", "+1/-1/0", note="+Y: 1, -Y: -1, X wind or speed 0: 0"),
     _f("wind_q_kN_m2", "0.5 rho V^2 / 1000", "kN/m^2", note="Loads"),
-    _f("boom_wind_scale", "|sin(boom angle)| (boom-local areas)", note="Loads"),
     _f("hook_kN", "Hook load", "kN", note="scene value"),
     _f("sidelead_kN", "Side force sin(sidelead) x hook load", "kN", note="+y"),
     _f("boom_width_m", "Boom width (heel left/right spacing)", "m", note="Inputs structure"),
@@ -111,9 +112,8 @@ OOP_WIND_FIELDS = (
     _f("x_m", "x global", "m", note="Loads"),
     _f("z_m", "z global", "m", note="Loads"),
     _f("cd", "Cd"),
-    _f("area_y_m2", "Area for Y wind", "m^2"),
-    _f("scale", "Area scale", note="|sin(boom angle)| if boom-local, else 1"),
-    _f("fy_kN", "Wind Fy = sign q Cd A_y scale", "kN"),
+    _f("area_y_m2", "Area for Y wind", "m^2", note="not scaled by the boom angle"),
+    _f("fy_kN", "Wind Fy = sign q Cd A_y", "kN"),
 )
 
 #: Support groups of the engine's out-of-plane pass and their origin nodes.
@@ -141,21 +141,22 @@ MOMENT_FIELDS = (
     _f("mz", "Mz total", "kNm"),
 )
 
-#: (side entity, support group, in-plane total entity, side sign: +1 left, -1 right).
+#: (side entity, support group, in-plane total entity, side sign). +Y is port (left looking
+#: along +x), so the left side takes ``-M / width`` (sign -1) and the right side ``+M / width``.
 OOP_SPLITS: tuple[tuple[str, str, str, int], ...] = (
-    ("heel_left", "heel", "heel_point", 1),
-    ("heel_right", "heel", "heel_point", -1),
-    ("front_leg_left", "front_leg", "front_hinge", 1),
-    ("front_leg_right", "front_leg", "front_hinge", -1),
-    ("rear_leg_left", "rear_leg", "rear_hinge", 1),
-    ("rear_leg_right", "rear_leg", "rear_hinge", -1),
+    ("heel_left", "heel", "heel_point", -1),
+    ("heel_right", "heel", "heel_point", 1),
+    ("front_leg_left", "front_leg", "front_hinge", -1),
+    ("front_leg_right", "front_leg", "front_hinge", 1),
+    ("rear_leg_left", "rear_leg", "rear_hinge", -1),
+    ("rear_leg_right", "rear_leg", "rear_hinge", 1),
 )
 
 SPLIT_FIELDS = (
     _f("entity", "Side support", kind="text"),
     _f("group", "Support group", kind="text"),
     _f("total_entity", "In-plane total", kind="text"),
-    _f("side", "Side sign", "+1/-1", note="+1 left, -1 right"),
+    _f("side", "Side sign", "+1/-1", note="-1 left (+Y, port), +1 right (-Y)"),
     _f("total_fx", "Total Fx (in-plane reaction)", "kN", note="Statics"),
     _f("total_fz", "Total Fz (in-plane reaction)", "kN", note="Statics"),
     _f("mz", "Mz about the group", "kNm"),
@@ -165,12 +166,17 @@ SPLIT_FIELDS = (
 )
 
 PLATFORM_OOP_FIELDS = (
-    _f("fy_masses", "Fy of the mass points", "kN"),
-    _f("fy_lumped", "Fy of the lumped masses", "kN"),
-    _f("fy_wind", "Fy of the Y wind", "kN"),
-    _f("fy_side", "Side force", "kN"),
-    _f("fy_kN", "Platform base Fy = sum of applied Fy", "kN", note="reaction.platform_base.fy"),
-    _f("mx_kNm", "Platform base Mx = Mx about platform_heel", "kNm", note="platform_base.mx"),
+    _f("fy_masses", "Applied Fy of the mass points", "kN"),
+    _f("fy_lumped", "Applied Fy of the lumped masses", "kN"),
+    _f("fy_wind", "Applied Fy of the Y wind", "kN"),
+    _f("fy_side", "Applied side force", "kN"),
+    _f("fy_kN", "Platform base Fy = -(sum of applied Fy)", "kN", note="reaction.platform_base.fy"),
+    _f(
+        "mx_kNm",
+        "Platform base Mx = -(applied Mx about platform_heel)",
+        "kNm",
+        note="reaction.platform_base.mx",
+    ),
 )
 
 #: Sheet sections, top to bottom: (kind, name, title, fields, capacity source).

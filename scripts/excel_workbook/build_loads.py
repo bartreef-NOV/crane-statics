@@ -8,7 +8,8 @@ Sources (the app code the formulas reproduce; the solver wins where the Scene di
   ``gravity``/``inertia`` draw them.
 * wind -- ``_accumulate_loads`` ``_wind_fx``: ``sign 0.5 rho Cd A V^2 / 1000``, body
   ``boom`` areas times ``|sin(boom angle)|``; the sign is +1/-1 for +X/-X and 0 for Y wind
-  (``calculation/engine.py`` ``split_wind_speed_components``).
+  (``calculation/engine.py`` ``split_wind_speed_components``). Only X wind is scaled: Y wind
+  (OutOfPlane sheet) uses the full Y area at any boom angle.
 * rope self-weight -- ``calculation/rope_mass.py`` ``rope_mass_at_nodes``, loaded at nodes
   like a mass point (``crane_solver.lumped_point_masses``).
 * rope segment forces -- the rope loop of ``_accumulate_loads``: fixed ropes carry

@@ -44,7 +44,8 @@ def test_outofplane_results_match_golden(case_book: Callable[[str], "_Book"]) ->
     # The case loads the left/right split and the platform out of plane.
     assert abs(got["reaction.heel_left.fz"] - got["reaction.heel_right.fz"]) > 1000.0
     assert abs(got["reaction.heel_left.fx"] - got["reaction.heel_right.fx"]) > 1000.0
-    assert got["reaction.platform_base.fy"] > 100.0
+    # Support reaction: the platform pushes back against the +Y wind, roll and sidelead.
+    assert got["reaction.platform_base.fy"] < -100.0
     assert book(LAYOUT.results_cell("results_status", "message")) == "OK"
     assert book(LAYOUT.total_issues_addr) == 0
     _assert_statics_match_solver(book, LAYOUT, _solver_statics(CASES[name]), name)
@@ -98,13 +99,14 @@ def test_wind_y_direction_signs(tmp_path: Path, direction: str) -> None:
     assert set(got) == set(want)
     for key, value in want.items():
         assert math.isclose(got[key], value, abs_tol=LOAD_TOL), (direction, key, got[key], value)
-    assert got["reaction.platform_base.fy"] * sign > 10.0
-    assert got["reaction.platform_base.mx"] * sign < -100.0
+    # Support reactions oppose the wind: Fy against it, Mx = -(applied -z Fy) = +z Fy_wind.
+    assert got["reaction.platform_base.fy"] * sign < -10.0
+    assert got["reaction.platform_base.mx"] * sign > 100.0
     wind = sum(
         book(TIGHT.oop.addr("oop_winds", "fy_kN", i))
         for i in range(1, TIGHT.oop.tables["oop_winds"].capacity + 1)
     )
-    assert math.isclose(wind, got["reaction.platform_base.fy"], abs_tol=1e-9)
+    assert math.isclose(wind, -got["reaction.platform_base.fy"], abs_tol=1e-9)
     _assert_oop_matches_engine(book, TIGHT, _model(), case, direction)
 
 

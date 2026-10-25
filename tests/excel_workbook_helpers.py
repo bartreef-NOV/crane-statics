@@ -471,7 +471,9 @@ def _engine_oop(case: SceneCase) -> dict[str, Any]:
     ``CraneCalculator.compute_analysis_point`` runs it (and leaves its point geometry, with
     the lumped hook and rope masses, in ``_oop_geometry``); ``_out_of_plane_variants`` is then
     evaluated once with the actual hook load and side force ``sin(sidelead) x hook load``.
-    The group moments are recovered from the split: ``M = (left - right) x width / 2``.
+    The group moments (of the applied loads) are recovered from the split: ``M = (right -
+    left) x width / 2`` (left is +Y, taking ``-M / width``); the platform Mx the engine returns
+    is the support reaction, ``-M``.
     """
     from crane_statics.calculation.engine import CraneCalculator
 
@@ -502,12 +504,12 @@ def _engine_oop(case: SceneCase) -> dict[str, Any]:
     width = float(doc.support_widths.boom_width_m)
     moments: dict[str, dict[str, float]] = {
         group: {
-            "mx": (split[left]["Fz"] - split[right]["Fz"]) * width / 2.0,
-            "mz": (split[left]["Fx"] - split[right]["Fx"]) * width / 2.0,
+            "mx": (split[right]["Fz"] - split[left]["Fz"]) * width / 2.0,
+            "mz": (split[right]["Fx"] - split[left]["Fx"]) * width / 2.0,
         }
         for group, (left, right) in OOP_SIDES.items()
     }
-    moments["platform_base"] = {"mx": platform_mx}
+    moments["platform_base"] = {"mx": -platform_mx}
     assert doc.environment.vessel_motion is not None
     ref_z = float(doc.environment.vessel_motion.reference_z_m)
     # _out_of_plane_variants' fy_m and fy_w, on the engine's own point geometry.
@@ -556,7 +558,7 @@ def _assert_oop_matches_engine(
         for comp, value in comps.items():
             close(book(oop.split_value(entity, comp.lower())), value, (entity, comp))
     close(book(oop.cell("platform", "fy_kN")), want["platform_fy"], "platform fy")
-    close(book(oop.cell("platform", "mx_kNm")), want["moments"]["platform_base"]["mx"], "mx")
+    close(book(oop.cell("platform", "mx_kNm")), -want["moments"]["platform_base"]["mx"], "mx")
 
 
 #: Golden keys the workbook deliberately does not produce: the heel's boom_axial and
