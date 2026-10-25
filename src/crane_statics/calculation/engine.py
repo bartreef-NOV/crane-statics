@@ -465,7 +465,9 @@ class CraneCalculator:
 
         ``variants`` are ``(hook_force_kN, side_lateral_force_kN)`` pairs; the mass and wind
         loads do not depend on them, so they are accumulated once and each variant adds its
-        own side force and totals. Returns one ``(split, platform_mx, platform_fy)`` per variant.
+        own side force and totals. Returns one ``(split, platform_mx, platform_fy)`` per variant;
+        the platform values are reactions (what the support exerts on the crane), the negative of
+        the applied-load sums, while ``split`` is unchanged.
 
         All accelerations are the equivalent crane-frame values (``CraneFrameMotion``), so
         each mass carries the same in-plane (Fx, Fz) load as in the X-Z solve plus
@@ -609,7 +611,10 @@ class CraneCalculator:
                 d_fz = float(moments[group]["Mx"]) / float(width)
                 split[left_entity] = {"Fx": 0.5 * total_fx + d_fx, "Fz": 0.5 * total_fz + d_fz}
                 split[right_entity] = {"Fx": 0.5 * total_fx - d_fx, "Fz": 0.5 * total_fz - d_fz}
-            results.append((split, float(moments["platform_base"]["Mx"]), float(total_fy_platform)))
+            # Applied-load sums negated: reactions are what the support exerts on the crane.
+            results.append(
+                (split, -float(moments["platform_base"]["Mx"]), -float(total_fy_platform))
+            )
         return results
 
     def _augment_point_with_out_of_plane_loads(

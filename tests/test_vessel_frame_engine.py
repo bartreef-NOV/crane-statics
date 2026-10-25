@@ -193,8 +193,9 @@ def test_slew_90_vessel_ax_loads_the_left_right_supports(calc):
         assert at90.baseline_reactions[entity]["Fx"] != pytest.approx(
             level.baseline_reactions[entity]["Fx"]
         )
-    # Vessel +x at slew 90 is crane -y: every crane mass is pushed toward +y.
-    assert at90.baseline_reactions["platform_base"]["Fy"] > 0.0
+    # Vessel +x at slew 90 is crane -y: the crane accelerates toward -y, so the support
+    # (whose reaction is the force it exerts on the crane) pushes -y.
+    assert at90.baseline_reactions["platform_base"]["Fy"] < 0.0
     assert _flat(at90.baseline_reactions) == pytest.approx(_flat(equiv.baseline_reactions))
 
 
@@ -208,8 +209,9 @@ def test_roll_tilts_gravity_into_the_left_right_supports(calc):
         accel_z_m_s2=-G * (1.0 - math.cos(gamma)),
     )
     assert _flat(rolled.baseline_reactions) == pytest.approx(_flat(equiv.baseline_reactions))
-    # Roll to starboard pulls every mass toward starboard (crane -y at slew 0).
-    assert rolled.baseline_reactions["platform_base"]["Fy"] < 0.0
+    # Roll to starboard pulls every mass toward starboard (crane -y at slew 0); the support
+    # reacts toward +y.
+    assert rolled.baseline_reactions["platform_base"]["Fy"] > 0.0
 
 
 def test_split_support_comp_mass_feels_the_acceleration(calc):
@@ -218,7 +220,7 @@ def test_split_support_comp_mass_feels_the_acceleration(calc):
     comp = _point(calc, wind_speed_m_s=0.0, accel_y_m_s2=1.0, hoist_runtime_overrides=overrides)
     # The comp mass sits on the support node (y = 0) and gets fy = -m * ay.
     assert comp.baseline_reactions["platform_base"]["Fy"] == pytest.approx(
-        base.baseline_reactions["platform_base"]["Fy"] - 10.0 * 1.0
+        base.baseline_reactions["platform_base"]["Fy"] + 10.0 * 1.0
     )
 
 
@@ -313,8 +315,9 @@ def _idle_hook_heights_above_platform(calc):
 def test_roll_tilt_loads_idle_hooks_and_rope_masses_out_of_plane(calc):
     """Roll 5 deg: crane-frame accel_y = g*sin(5 deg), so each mass gets Fy = -m*g*sin(5 deg).
 
-    Idle hooks: 7.0 + 7.7 = 14.7 t -> dFy = -14.7 * 9.81 * 0.0871557 = -12.568 kN, and
-    dMx = sum(-(z - z_platform) * fy) = sum((z - z_platform) * m) * 9.81 * 0.0871557.
+    Idle hooks: 7.0 + 7.7 = 14.7 t -> applied dFy = -14.7 * 9.81 * 0.0871557 = -12.568 kN, so
+    the support reaction is dFy = +12.568 kN, and
+    dMx = -sum(-(z - z_platform) * fy) = -sum((z - z_platform) * m) * 9.81 * 0.0871557.
     """
     s = math.sin(math.radians(5.0))
     with_hooks = _point(calc, wind_speed_m_s=0.0, vessel_roll_deg=5.0)
@@ -325,19 +328,19 @@ def test_roll_tilt_loads_idle_hooks_and_rope_masses_out_of_plane(calc):
         with_hooks.baseline_reactions["platform_base"],
         no_hooks.baseline_reactions["platform_base"],
     )
-    assert pb["Fy"] - pb0["Fy"] == pytest.approx(-14.7 * G * s)
-    assert pb["Fy"] - pb0["Fy"] == pytest.approx(-12.568, abs=1e-3)
+    assert pb["Fy"] - pb0["Fy"] == pytest.approx(14.7 * G * s)
+    assert pb["Fy"] - pb0["Fy"] == pytest.approx(12.568, abs=1e-3)
     arm_mass = sum(m * dz for m, dz in _idle_hook_heights_above_platform(calc))
-    assert pb["Mx"] - pb0["Mx"] == pytest.approx(arm_mass * G * s)
+    assert pb["Mx"] - pb0["Mx"] == pytest.approx(-arm_mass * G * s)
     # Every mass (points, idle hooks, rope self-weight) is pushed to starboard.
     total_t = sum(m for m, _z in _all_point_masses(calc))
-    assert pb["Fy"] == pytest.approx(-total_t * G * s)
+    assert pb["Fy"] == pytest.approx(total_t * G * s)
 
 
 def test_slew_90_vessel_ax_loads_idle_hooks_out_of_plane(calc):
-    """Vessel ax = 1 at slew 90 is crane accel_y = -1: each mass gets Fy = +m * 1.
+    """Vessel ax = 1 at slew 90 is crane accel_y = -1: each mass gets applied Fy = +m * 1.
 
-    Idle hooks: dFy = +14.7 kN, dMx = -sum((z - z_platform) * m).
+    Support reaction (negated): idle hooks dFy = -14.7 kN, dMx = +sum((z - z_platform) * m).
     """
     with_hooks = _point(calc, wind_speed_m_s=0.0, accel_x_m_s2=1.0, crane_slewing_angle_deg=90.0)
     no_hooks = _point(
@@ -351,11 +354,11 @@ def test_slew_90_vessel_ax_loads_idle_hooks_out_of_plane(calc):
         with_hooks.baseline_reactions["platform_base"],
         no_hooks.baseline_reactions["platform_base"],
     )
-    assert pb["Fy"] - pb0["Fy"] == pytest.approx(14.7)
+    assert pb["Fy"] - pb0["Fy"] == pytest.approx(-14.7)
     arm_mass = sum(m * dz for m, dz in _idle_hook_heights_above_platform(calc))
-    assert pb["Mx"] - pb0["Mx"] == pytest.approx(-arm_mass)
+    assert pb["Mx"] - pb0["Mx"] == pytest.approx(arm_mass)
     total_t = sum(m for m, _z in _all_point_masses(calc))
-    assert pb["Fy"] == pytest.approx(total_t)
+    assert pb["Fy"] == pytest.approx(-total_t)
 
 
 def test_reported_idle_rope_tension_carries_heave(calc):
@@ -372,7 +375,8 @@ def test_roll_acceleration_is_right_handed_about_x(calc):
     expected = _expected_roll_fy(calc, 0.1)
     assert expected > 0.0  # the GT283 masses sit above the reference point
     fy = rolled.baseline_reactions["platform_base"]["Fy"]
-    assert fy - level.baseline_reactions["platform_base"]["Fy"] == pytest.approx(expected)
+    # Reaction convention: the support exerts the opposite of the applied inertia force.
+    assert fy - level.baseline_reactions["platform_base"]["Fy"] == pytest.approx(-expected)
 
 
 def test_slew_90_swaps_roll_and_pitch_accelerations(calc):
@@ -381,7 +385,7 @@ def test_slew_90_swaps_roll_and_pitch_accelerations(calc):
     c_roll = _point(calc, wind_speed_m_s=0.0, roll_accel_rad_s2=0.1)
     assert _flat(v_pitch.baseline_reactions) == pytest.approx(_flat(c_roll.baseline_reactions))
     assert v_pitch.baseline_reactions["platform_base"]["Fy"] == pytest.approx(
-        _expected_roll_fy(calc, 0.1)
+        -_expected_roll_fy(calc, 0.1)
     )
     # Vessel roll accel 0.1 at slew 90 -> crane roll 0, crane pitch -0.1.
     v_roll = _point(calc, wind_speed_m_s=0.0, roll_accel_rad_s2=0.1, crane_slewing_angle_deg=90.0)
@@ -520,5 +524,6 @@ def test_sidelead_force_acts_at_the_support_node(calc):
     nodes = calc._kinematics.compute_all_node_positions(45.0)
     z_support = float(nodes[calc.hoists["MH"].support_node_id]["z"])
     z_heel = float(nodes["platform_heel"]["z"])
-    assert fy1 - fy0 == pytest.approx(100.0)
-    assert mx1 - mx0 == pytest.approx(-(z_support - z_heel) * 100.0)
+    # Reactions: the support exerts the opposite of the applied side force.
+    assert fy1 - fy0 == pytest.approx(-100.0)
+    assert mx1 - mx0 == pytest.approx((z_support - z_heel) * 100.0)
