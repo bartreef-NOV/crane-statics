@@ -1049,11 +1049,20 @@ def build_directional_response_basis(
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
     tackle_length_m: float | None = None,
 ) -> DirectionalResponseBasis | None:
+    ctx = solver_ctx or build_solver_static_context(doc_dict)
     hoist_data = next((h for h in doc_dict.get("hoists", []) if h["id"] == hoist_id), None)
     if hoist_data is None:
+        _record_unavailable(
+            ctx, f"Analysis unavailable: hoist {hoist_id!r} is not defined in the document."
+        )
         return None
-
-    ctx = solver_ctx or build_solver_static_context(doc_dict)
+    if not any(r.get("tension_mode") == "solve" for r in doc_dict.get("ropes", [])):
+        _record_unavailable(
+            ctx,
+            "No rope is set to solve its tension (tension_mode: solve), "
+            "so the boom-hoist rope force cannot be found; mark the boom-hoist rope as solve.",
+        )
+        return None
     # A sweep builds several bases at one angle that differ only in their channel references,
     # and the probes that load no in-plane channel share one. The invariants and the bases
     # are kept (last angle only) in the static context.
@@ -1082,6 +1091,10 @@ def build_directional_response_basis(
         ctx["_angle_invariants"] = last
     _, invariants, bases = last
     if invariants is None:
+        ctx.setdefault(
+            UNAVAILABLE_REASON_KEY,
+            "Analysis unavailable: the dead-load statics could not be solved.",
+        )
         return None
     refs = (
         abs(float(wind_speed_m_s)),
@@ -1095,6 +1108,11 @@ def build_directional_response_basis(
             doc_dict, hoist_data, boom_angle_deg, refs, ctx, hoist_runtime_overrides, invariants
         )
     basis: DirectionalResponseBasis | None = bases[refs]
+    if basis is None:
+        ctx.setdefault(
+            UNAVAILABLE_REASON_KEY,
+            "Analysis unavailable: a wind, acceleration or pitch load case could not be solved.",
+        )
     return basis
 
 

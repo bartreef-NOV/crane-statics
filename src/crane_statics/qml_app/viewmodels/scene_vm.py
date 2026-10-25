@@ -96,6 +96,7 @@ class SceneViewModel(QObject):
         self._governing_label = ""
         self._snapshot: Optional[_InputsSnapshot] = None
         self._applying = False
+        self._last_unavailable_text: Optional[str] = None
 
         self._rope_rows_model = DictListModel(RESULT_ROLES, self)
         self._connection_rows_model = DictListModel(RESULT_ROLES, self)
@@ -1002,8 +1003,17 @@ class SceneViewModel(QObject):
         # Reaction overlays are only ever drawn from the point just solved for, so a
         # failed solve clears them rather than leaving the previous one on screen.
         self._analysis_point = pt
+        self._announce_unavailable(pt)
         self._set_result_rows(rope_rows, conn_rows)
         self._publish_scene_frame()
+
+    def _announce_unavailable(self, pt: Any) -> None:
+        """Say why the Scene shows no analysis; once per distinct reason, not on every refresh."""
+        reason = None if pt is not None else self._calculator.unavailable_reason()
+        if reason != self._last_unavailable_text:
+            self._last_unavailable_text = reason
+            if reason:
+                self.statusMessage.emit(reason)
 
     def _set_result_rows(self, rope_rows, connection_rows) -> None:
         self._rope_rows_model.set_rows(result_rows_to_dicts(rope_rows))

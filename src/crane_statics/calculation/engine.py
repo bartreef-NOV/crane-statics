@@ -740,6 +740,9 @@ class CraneCalculator:
         self.unavailable_reason = None
         try:
             if not self.hoists.get(hoist_id):
+                self.unavailable_reason = (
+                    f"Analysis unavailable: hoist {hoist_id!r} is not defined in the document."
+                )
                 return None
 
             env = self.doc.environment
@@ -838,7 +841,14 @@ class CraneCalculator:
                 hoist_runtime_overrides=hoist_runtime_overrides,
             )
             return point
-        except Exception:
+        except KeyError as exc:
+            self.unavailable_reason = (
+                f"Analysis unavailable: required geometry {exc} is missing from the document "
+                "(a node or body the statics need is not defined)."
+            )
+            return None
+        except Exception as exc:
+            self.unavailable_reason = f"Analysis unavailable: {type(exc).__name__}: {exc}"
             return None
 
     def resolve_limit_target(self, limit_key: str, component: str) -> tuple[str, str]:

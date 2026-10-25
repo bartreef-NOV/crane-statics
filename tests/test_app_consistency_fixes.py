@@ -354,3 +354,126 @@ def test_chart_sweep_skips_unsolvable_points(monkeypatch):
     assert [r is None for r in results] == [False, False, True, False]
     assert _collapsed_calc().compute_analysis_point(45.0, 0.0, "MH") is None
     assert build_probes(_collapsed_calc(), "MH", 45.0, 0.0, None) is None
+
+
+# --- Task 5: the Scene says why nothing is shown -------------------------------------
+
+
+def _no_solve_doc():
+    doc = load_document(EXAMPLE_22689)
+    for rope in doc.ropes:
+        if rope.tension_mode == "solve":
+            rope.tension_mode = "fixed"
+    return doc
+
+
+def _missing_node_doc():
+    doc = load_document(EXAMPLE_22689)
+    doc.nodes = [n for n in doc.nodes if n.id != "rear_top"]
+    return doc
+
+
+def test_no_solve_rope_gives_reason():
+    calc = CraneCalculator(_no_solve_doc())
+    assert calc.compute_analysis_point(45.0, 0.0, "MH") is None
+    reason = calc.unavailable_reason
+    assert reason is not None and "solve" in reason and "rope" in reason
+
+
+@pytest.mark.parametrize(
+    "make_calc, hoist_id",
+    [
+        pytest.param(_calc, "nope", id="no_hoist"),
+        pytest.param(lambda: CraneCalculator(_no_solve_doc()), "MH", id="no_solve_rope"),
+        pytest.param(_collapsed_calc, "MH", id="singular"),
+        pytest.param(lambda: CraneCalculator(_missing_node_doc()), "MH", id="missing_node"),
+    ],
+)
+def test_each_none_path_has_a_reason(make_calc, hoist_id):
+    calc = make_calc()
+    assert calc.compute_analysis_point(45.0, 0.0, hoist_id) is None
+    assert calc.unavailable_reason and calc.unavailable_reason.strip()
+
+
+def test_none_path_reasons_are_distinct():
+    reasons = set()
+    for calc, hoist_id in (
+        (_calc(), "nope"),
+        (CraneCalculator(_no_solve_doc()), "MH"),
+        (_collapsed_calc(), "MH"),
+        (CraneCalculator(_missing_node_doc()), "MH"),
+    ):
+        assert calc.compute_analysis_point(45.0, 0.0, hoist_id) is None
+        reasons.add(calc.unavailable_reason)
+    assert len(reasons) == 4
+
+
+def test_guard_paths_have_generic_reason(monkeypatch):
+    from crane_statics.calculation.solver import crane_solver
+
+    calc = _calc()
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("kaput")
+
+    monkeypatch.setattr(crane_solver, "_run_statics", boom)
+    assert calc.compute_analysis_point(45.0, 0.0, "MH") is None
+    assert calc.unavailable_reason.startswith("Analysis unavailable:")
+
+
+def test_success_clears_reason():
+    calc = CraneCalculator(_no_solve_doc())
+    assert calc.compute_analysis_point(45.0, 0.0, "MH") is None
+    assert calc.unavailable_reason
+    good = _calc()
+    good.unavailable_reason = "stale"
+    assert good.compute_analysis_point(45.0, 0.0, "MH") is not None
+    assert good.unavailable_reason is None
+
+
+def _scene_vm_with(doc):
+    from PyQt6.QtCore import QObject, pyqtSignal
+
+    from crane_statics.qml_app.scene.scene_renderer import CraneSceneRenderer
+    from crane_statics.qml_app.session import SessionState
+    from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
+
+    class Canvas(QObject):
+        boomAngleChanged = pyqtSignal(float)
+        tackleLengthChanged = pyqtSignal(float)
+
+        def __init__(self):
+            super().__init__()
+            self.renderer = CraneSceneRenderer(self)
+
+        def setSceneViewModel(self, vm):
+            pass
+
+    session = SessionState()
+    vm = SceneViewModel(session)
+    canvas = Canvas()
+    vm.bindCanvas(canvas)
+    messages: list[str] = []
+    vm.statusMessage.connect(messages.append)
+    session.model.set_document(doc)
+    return vm, session, messages, canvas
+
+
+def test_scene_vm_emits_reason():
+    vm, _session, messages, _canvas = _scene_vm_with(_no_solve_doc())
+    reasons = [m for m in messages if "solve" in m and "rope" in m]
+    assert len(reasons) == 1
+    vm._after_state_changed()
+    vm._after_state_changed()
+    assert [m for m in messages if "solve" in m and "rope" in m] == reasons
+
+
+def test_scene_vm_success_emits_nothing_and_clears():
+    vm, session, messages, _canvas = _scene_vm_with(load_document(EXAMPLE_22689))
+    assert messages == []
+    session.model.set_document(_no_solve_doc())
+    assert len(messages) == 1
+    session.model.set_document(load_document(EXAMPLE_22689))
+    assert len(messages) == 1
+    session.model.set_document(_no_solve_doc())
+    assert len(messages) == 2

@@ -232,9 +232,15 @@ class AnalysisCalculator:
         self._session = session
         self._kinematics = kinematics_svc
         self._hoist = hoist_svc
+        self._unavailable_reason: Optional[str] = None
+
+    def unavailable_reason(self) -> Optional[str]:
+        """Why the last ``compute_analysis_point`` returned ``None`` (``None`` after a success)."""
+        return self._unavailable_reason
 
     def compute_analysis_point(self) -> Optional[AnalysisPoint]:
         """Compute equilibrium check for current geometry and loads."""
+        self._unavailable_reason = None
         doc = self._session.document
         hoist_id = self._session.selected_hoist_id
         if not doc or not hoist_id:
@@ -245,7 +251,7 @@ class AnalysisCalculator:
         sc = state.scene_state
         calc = get_calculator(doc)
         overrides = self._hoist.active_hoist_runtime_overrides()
-        return calc.compute_analysis_point(
+        point = calc.compute_analysis_point(
             sc.boom_angle_deg,
             0.0,
             hoist_id,
@@ -264,6 +270,8 @@ class AnalysisCalculator:
             vessel_pitch_deg=sc.vessel_pitch_deg,
             crane_slewing_angle_deg=sc.crane_slewing_angle_deg,
         )
+        self._unavailable_reason = None if point is not None else calc.unavailable_reason
+        return point
 
     def drawn_load_conditions(self) -> LoadConditions:
         """The in-plane conditions the drawn loads are evaluated at.
