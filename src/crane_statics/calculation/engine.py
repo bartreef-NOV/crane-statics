@@ -16,6 +16,7 @@ import numpy as np
 from ..data.models import CraneDocument
 from .solver.kinematics import KinematicsAdapter
 from .solver.crane_solver import (
+    UNAVAILABLE_REASON_KEY,
     build_solver_static_context,
     build_directional_response_basis,
     compose_unit_basis_point,
@@ -335,6 +336,8 @@ class CraneCalculator:
         self._kinematics = KinematicsAdapter(self._doc_dict)
         self._solver_ctx = build_solver_static_context(self._doc_dict)
         self._oop_geometry: Optional[tuple[tuple[Any, ...], _OutOfPlaneGeometry]] = None
+        #: Why the last ``compute_analysis_point`` returned ``None`` (``None`` when it solved).
+        self.unavailable_reason: Optional[str] = None
 
     def _build_out_of_plane_reactions(
         self,
@@ -731,7 +734,10 @@ class CraneCalculator:
         It moves rope weight between the falls and the winch, so an interactive
         caller passes what the scene draws; leaving it ``None`` evaluates the
         designed operating position (see ``rope_mass.active_hook_positions``).
+
+        When it returns ``None`` for a known cause, ``unavailable_reason`` says why.
         """
+        self.unavailable_reason = None
         try:
             if not self.hoists.get(hoist_id):
                 return None
@@ -791,6 +797,7 @@ class CraneCalculator:
                 tackle_length_m=tackle_length_m,
             )
             if basis is None:
+                self.unavailable_reason = self._solver_ctx.get(UNAVAILABLE_REASON_KEY)
                 return None
 
             def _sign_of(v: float) -> float:

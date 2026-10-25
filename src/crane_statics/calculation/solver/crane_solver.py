@@ -726,6 +726,39 @@ def _accumulate_loads(
 # ---------------------------------------------------------------------------
 
 
+#: Smallest ``abs(det) / prod(row norms)`` (Hadamard ratio, 1 for orthogonal rows) a
+#: statics matrix may have before its solution is treated as meaningless.
+SINGULAR_RATIO = 1e-12
+
+#: ``solver_ctx`` key under which ``_run_statics`` leaves the reason it returned ``{}``.
+UNAVAILABLE_REASON_KEY = "_unavailable_reason"
+
+
+def _record_unavailable(solver_ctx: Dict[str, Any] | None, reason: str) -> None:
+    if solver_ctx is not None:
+        solver_ctx[UNAVAILABLE_REASON_KEY] = reason
+
+
+def is_ill_conditioned(matrix: np.ndarray) -> bool:
+    """True when ``matrix`` is singular or so close to it that a solve is unreliable.
+
+    The test is scale-free: ``abs(det) / prod(row norms) <= SINGULAR_RATIO``. A zero row
+    (zero product of norms) counts as ill-conditioned.
+    """
+    norms = np.linalg.norm(matrix, axis=1)
+    scale = float(np.prod(norms))
+    if not np.isfinite(scale) or scale <= 0.0:
+        return True
+    return bool(abs(float(np.linalg.det(matrix))) / scale <= SINGULAR_RATIO)
+
+
+def _singular_reason(matrix_name: str) -> str:
+    return (
+        f"The {matrix_name} statics are singular for this geometry "
+        "(its supports do not restrain the structure); check the hinge and heel positions."
+    )
+
+
 def _run_statics(
     doc_dict: Dict[str, Any],
     node_pos: Dict[str, Tuple[float, float]],
@@ -774,9 +807,13 @@ def _run_statics(
         dtype=float,
     )
     b_boom = np.array([-bm["Fx"], -bm["Fz"], -bm["M"]], dtype=float)
+    if is_ill_conditioned(A_boom):
+        _record_unavailable(solver_ctx, _singular_reason("boom"))
+        return {}
     try:
         h_x, h_z, t_bh = np.linalg.solve(A_boom, b_boom)
     except np.linalg.LinAlgError:
+        _record_unavailable(solver_ctx, _singular_reason("boom"))
         return {}
 
     rb_x, rb_z = node_pos["rear_base"]
@@ -817,9 +854,13 @@ def _run_statics(
         ],
         dtype=float,
     )
+    if is_ill_conditioned(A_af):
+        _record_unavailable(solver_ctx, _singular_reason("leg frame"))
+        return {}
     try:
         r_rb_x, r_rb_z, r_fb_x, r_fb_z, r_top_x, r_top_z = np.linalg.solve(A_af, b_af)
     except np.linalg.LinAlgError:
+        _record_unavailable(solver_ctx, _singular_reason("leg frame"))
         return {}
 
     # Platform: resultant at ground pin
@@ -1024,6 +1065,7 @@ def build_directional_response_basis(
     )
     last: _InvariantsEntry | None = ctx.get("_angle_invariants")
     if last is None or last[0] != cache_key:
+        ctx.pop(UNAVAILABLE_REASON_KEY, None)
         last = (
             cache_key,
             _angle_invariants(

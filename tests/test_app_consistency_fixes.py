@@ -274,3 +274,83 @@ def test_wind_speed_zero_gives_zero_and_no_error(angle, direction):
     )
     windy = _platform_at(calc, angle, wind_speed_m_s=10.0, wind_direction=direction)
     assert windy is not None
+
+
+# --- Task 4: near-singular statics fail clearly, with a reason -----------------------------
+
+EXAMPLES = sorted((ROOT / "examples").glob("*.yaml"))
+
+
+def test_is_ill_conditioned_flags_singular_and_near_singular():
+    import numpy as np
+
+    from crane_statics.calculation.solver.crane_solver import is_ill_conditioned
+
+    assert not is_ill_conditioned(np.eye(3))
+    assert is_ill_conditioned(np.array([[1.0, 2.0], [1.0, 2.0]]))
+    assert is_ill_conditioned(np.array([[1.0, 2.0], [1.0, 2.0 + 1e-15]]))
+    assert is_ill_conditioned(np.array([[1.0, 0.0], [0.0, 0.0]]))
+
+
+def _angle_span(calc, hoist):
+    kin = calc._kinematics
+    angles = [
+        kin.outreach_to_angle(hoist.outreach_min_m or 0.0, hoist.id),
+        kin.outreach_to_angle(hoist.outreach_max_m or 200.0, hoist.id),
+    ]
+    lo, hi = (0.0, 90.0) if None in angles else (min(angles), max(angles))
+    return [lo + (hi - lo) * i / 9 for i in range(10)]
+
+
+@pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.stem)
+def test_all_examples_still_solve(path):
+    calc = CraneCalculator(load_document(path))
+    for hoist in calc.doc.hoists:
+        for angle in [0.0, *_angle_span(calc, hoist)]:
+            point = calc.compute_analysis_point(angle, 0.0, hoist.id)
+            assert point is not None, (hoist.id, angle)
+            assert calc.unavailable_reason is None
+
+
+def _collapsed_calc() -> CraneCalculator:
+    doc = load_document(EXAMPLE_22689)
+    nodes = {n.id: n for n in doc.nodes}
+    for name in ("x_m", "z_m"):
+        setattr(nodes["front_base"], name, getattr(nodes["rear_base"], name))
+        setattr(nodes["front_top"], name, getattr(nodes["rear_top"], name))
+    return CraneCalculator(doc)
+
+
+def test_collapsed_geometry_reports_reason():
+    calc = _collapsed_calc()
+    assert calc.compute_analysis_point(45.0, 0.0, "MH") is None
+    reason = calc.unavailable_reason
+    assert reason is not None and "singular" in reason
+    assert "boom" in reason or "leg frame" in reason
+
+
+def test_unavailable_reason_resets_on_next_call():
+    calc = _collapsed_calc()
+    assert calc.compute_analysis_point(45.0, 0.0, "MH") is None
+    assert calc.unavailable_reason is not None
+    good = _calc()
+    good.unavailable_reason = "stale"
+    assert good.compute_analysis_point(45.0, 0.0, "MH") is not None
+    assert good.unavailable_reason is None
+
+
+def test_chart_sweep_skips_unsolvable_points(monkeypatch):
+    from crane_statics.calculation.solver import crane_solver
+    from crane_statics.core.chart_envelope import build_probes
+
+    real = crane_solver.is_ill_conditioned
+    state = {"bad": False}
+    monkeypatch.setattr(crane_solver, "is_ill_conditioned", lambda m: state["bad"] or real(m))
+    calc = _calc()
+    results = []
+    for angle in (20.0, 30.0, 40.0, 50.0):
+        state["bad"] = angle == 40.0
+        results.append(build_probes(calc, "MH", angle, 0.0, None))
+    assert [r is None for r in results] == [False, False, True, False]
+    assert _collapsed_calc().compute_analysis_point(45.0, 0.0, "MH") is None
+    assert build_probes(_collapsed_calc(), "MH", 45.0, 0.0, None) is None
