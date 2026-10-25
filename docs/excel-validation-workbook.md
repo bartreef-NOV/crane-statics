@@ -34,7 +34,7 @@ marker (key rows), red = guard row (keep blank).
 | Geometry | The boom rotation, the active hook position and the vessel-to-crane frame motion (gravity components, `k = g - a`, rotated accelerations). One row per Inputs node gives the final x/z. |
 | Loads | In-plane loads per row: mass weight and inertia, X wind, rope tensions, segment forces, rope self-weight (reeved and spooled), hook load and offlead, idle hook blocks. Then the per-body totals for boom, rear leg, front leg and platform. The solve rope appears as coefficients per kN of its tension (`bh_*`). |
 | Statics | The boom 3x3 solve `[Hx, Hz, T_bh]`, the leg-frame 6x6 solve and the platform resultant. Each system shows A, b, the raw `MMULT(MINVERSE)` column, the "x used" column (0 if singular), row norms, det, rel_det and the singular flag. |
-| OutOfPlane | Y loads from masses, lumped rope and hook masses, Y wind and sidelead. Moments about the heel, front base, rear base and platform heel. The left/right split `0.5 total +/- M / boom width`, then platform Fy and Mx. |
+| OutOfPlane | Y loads from masses, lumped rope and hook masses, Y wind and sidelead. Moments about the heel, front base, rear base and platform heel. The left/right split (left = +Y = port: `0.5 total - M / boom width`; right: `+ M`), then platform Fy and Mx as support reactions. |
 | Results | Status (`OK` or the reason there are no results), the rope tension per hoist, and one row per reaction component keyed `reaction.<entity>.<component>`, with units and the formula source. |
 | Checks | One live count per input check (0 = OK) and the total in C3. Counts above 0 turn red. Below the list: overflow per table and the fixed structure nodes present. |
 
@@ -95,7 +95,8 @@ Columns: Active, Id, Body, Frame, Cd, Area for X wind [m^2], Area for Y wind [m^
 u, w or x, z.
 
 There is no lateral coordinate: wind acts at y = 0. Force = 0.5 rho Cd A V^2 / 1000 kN.
-Boom areas are scaled by |sin(boom angle)|; the exact rule is under "Known limits", item (e).
+For X wind, the areas of body `boom` are scaled by |sin(boom angle)| (the boom's projection
+seen along x). Y wind uses every area in full at any boom angle.
 
 ### Nodes
 
@@ -241,7 +242,8 @@ These are copied from the Conventions sheet, which also cites the source of each
 - **Axes:**
   - x is horizontal in the boom plane, positive toward the boom tip (outreach);
   - z is up;
-  - y is lateral, completing a right-handed frame.
+  - y is lateral, completing a right-handed frame: +y points to port (left, looking
+    along +x).
   - The crane frame is the vessel frame (x forward, y port, z up) rotated about z by the
     slewing angle.
   - In-plane moments are about +y, with M = x Fz - z Fx.
@@ -256,18 +258,23 @@ These are copied from the Conventions sheet, which also cites the source of each
   - The load acceleration is k = g - a.
   - Mass load: Fx = -m (ax' + pitch' dz), Fz = -m (|g| + az' - pitch' dx) and
     Fy = -m (ay' - roll' dz), with dx and dz measured from the vessel motion reference.
-- **Wind:** the direction is where the wind blows toward, so +X wind pushes in +x.
+- **Wind:** the direction is where the wind blows toward, so +X wind pushes in +x. X wind
+  on body `boom` areas is scaled by |sin(boom angle)|; Y wind is not scaled.
 - **Hook:**
   - The hook load acts at the hook node in -z.
   - Offlead adds sin(offlead) x hook load in +x at the node the hook hangs from.
   - Sidelead adds sin(sidelead) x hook load in +y at the scene hoist's support node, at its
     position before the tackle moves the hook.
 - **Reactions:**
-  - Fx, Fz and My of every support are support reactions opposing the applied loads: weight
-    gives positive Fz, and a +X vessel acceleration gives positive Fx.
+  - Every reported reaction is the force (or moment) the support exerts on the crane,
+    opposing the applied loads: weight gives positive Fz, and a +X vessel acceleration
+    gives positive Fx. This includes platform base Fy and Mx: a +Y wind gives negative Fy,
+    and Mx = -(applied Mx about the platform heel).
   - Pinned supports (heel, hinges) carry no moment.
-  - Platform base Fy and Mx, and the heel left/right split, follow the app's own convention
-    (see "Known limits", item (d)).
+  - Left/right: `heel_left` is the +Y (port) side. heel_left = 0.5 total - M / boom width
+    and heel_right = 0.5 total + M / boom width. Fz uses Mx, Fx uses Mz, and M is the
+    moment of the applied loads about the heel, including the platform masses. A mass at
+    +Y loads `heel_left`.
 
 ## Comparing with the app
 
@@ -299,40 +306,25 @@ c. **A hoist with no active rope segments still shows a tension.** It reports it
    weight over one part, hook mass x (|g| + az') / 1, not zero, because the app's parts
    count defaults to 1. The `hoist_without_segments` check flags this case.
 
-d. **The app's sign conventions are copied exactly, including possible app sign quirks.**
-   - Platform base Fy and Mx carry the sign of the applied loads, not of the reaction. A +Y
-     wind gives positive Fy, and Mx = -z Fy. Fx, Fz and My are reactions.
-   - `heel_left` behaves as the -Y side: heel_left = 0.5 total + M / boom width and
-     heel_right = 0.5 total - M / boom width. Fz uses Mx, Fx uses Mz, and M is the moment
-     of the applied loads about the heel, including the platform masses. A mass at +Y loads
-     `heel_right`.
-
-e. **Boom wind areas are scaled by |sin(boom angle)| by two different rules, as in the app.**
-   - The in-plane solve (Loads sheet, X wind) scales every wind area whose body is `boom`.
-   - The out-of-plane pass (OutOfPlane sheet, Y wind) scales only `boom_local` areas.
-   - The workbook copies each rule. The two agree when every boom area is boom-local, as in
-     22689.
-
-f. **Not provided:** the `boom_axial` and `boom_normal` rows of `heel_point`, `heel_left`
+d. **Not provided:** the `boom_axial` and `boom_normal` rows of `heel_point`, `heel_left`
    and `heel_right`. The app takes that axis from a name-based list of boom sheave node ids.
    All other rows of the app's results table are provided. Hinge Fy rows and the
    front/rear leg left/right splits are not shown in the app's Scene table. The OutOfPlane
    sheet does compute the leg splits.
 
-g. **Geometry limits:**
+e. **Geometry limits:**
    - Only one level of hanging nodes (`hanging_chain` check).
    - No outreach-to-angle conversion: type the boom angle.
    - The hook load is typed in kN; there is no payload-in-tonnes input.
 
-h. **The singular tolerance is the workbook's own.** A Statics system counts as singular when
-   |det A| / (product of the row norms of A) <= 1e-12, or when MINVERSE fails. The app fails
-   only on an exactly singular matrix: where the workbook flags a nearly singular matrix,
-   the app returns very large numbers. When a matrix is singular, the raw
+f. **Singular statics.** A Statics system counts as singular when |det A| / (product of the
+   row norms of A) <= 1e-12, or when MINVERSE fails; the app uses the same test and shows
+   why no results are available. When a matrix is singular, the raw
    `MMULT(MINVERSE(A), b)` column on Statics shows `#NUM!`. That is the only place an error
    value can appear: the "x used" column and everything downstream stay numeric, and Results
    shows a message.
 
-i. **Other differences and parity choices.** None of these affects 22689.
+g. **Other differences and parity choices.** None of these affects 22689.
    - The spool node is chosen by its flag, not by "winch" in the node id.
    - If several active hoists share one rope, the workbook takes the idle tension from the
      first of them and the app's solver from the last. Authored documents do not produce

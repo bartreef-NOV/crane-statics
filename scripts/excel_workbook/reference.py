@@ -16,7 +16,12 @@ App internals this tooling depends on (re-check them when the app changes):
   ``rope_mass_at_nodes``;
 * ``core.drawn_loads``: ``REACTION_SPECS``, ``REACTIONS``, ``active_hoist_dict``;
 * ``calculation.engine`` calculator cache (``clear_calculator_cache`` or
-  ``_CALCULATOR_CACHE``, see ``_clear_calculator_cache``).
+  ``_CALCULATOR_CACHE``, see ``_clear_calculator_cache``; v11 has only the dict);
+* ``calculation.engine.CraneCalculator._out_of_plane_variants`` and its return order
+  ``(split, platform_mx, platform_fy)`` (platform values are reactions since the
+  app-consistency fixes), ``_oop_geometry`` (tests);
+* ``calculation.solver.crane_solver``: ``boom_wind_projection_scale`` (X wind only),
+  ``is_ill_conditioned`` / ``SINGULAR_RATIO`` (the workbook's singular test copies it).
 
 The tests (``tests/excel_workbook_helpers.py``) also call private solver and engine
 functions; the list is there. After an app change, re-run in this order (``PYTHONPATH=src``
@@ -26,7 +31,11 @@ in a worktree):
    ``tests/golden/22689_workbook_cases.json`` (any change is an app behaviour change);
 2. ``python -m scripts.excel_workbook.build examples/crane_input_22689.yaml
    docs/crane-statics-validation-22689.xlsx``;
-3. ``python -m pytest tests/test_excel_workbook_*.py``.
+3. ``python -m pytest tests/test_excel_workbook_*.py`` (slow: add ``--no-cov -n auto
+   --dist loadfile``). An app change that moves golden numbers makes these fail at
+   exactly the moved keys; update the workbook formulas, the Conventions sheet and the
+   guide's "Known limits" section, then rebuild the ``.xlsx`` (step 2) so
+   ``test_delivered_workbook_is_up_to_date`` passes.
 
 Everything here goes through the app's own code paths, so the golden values are what
 the Scene view shows -- nothing is re-derived:
@@ -67,20 +76,22 @@ rows, so the boom hoist (the ``tension_mode == "solve"`` rope) reads ``tension.B
   The hinge totals have no Fy row in the app; the front/rear leg left/right splits are
   computed by the engine but are not shown in the Scene, so they are not keys.
 
-  Sign conventions (observed app behaviour; the workbook must replicate it -- possibly
-  app sign bugs, reported to the user separately):
+  Sign conventions (app behaviour since the app-consistency fixes on schema v11; the
+  workbook replicates it):
 
-  - ``platform_base.fy`` and ``platform_base.mx`` carry the sign of the *applied loads*
-    (their resultant force / moment about x: a +Y wind gives positive ``fy`` and
-    ``mx = -z * fy``), whereas ``fx``, ``fz`` and ``my`` (and every hinge/heel Fx/Fz) are
-    *support reactions* opposing the loads (weight gives positive ``fz``; a +X vessel
-    acceleration gives positive ``fx``).
-  - ``heel_left`` behaves as the -Y side: ``heel_left = 0.5 * total + M / boom_width`` and
-    ``heel_right = 0.5 * total - M / boom_width`` (per component; ``Fz`` uses ``Mx``, ``Fx``
+  - Every reaction is the force (or moment) the support exerts on the crane, opposing the
+    applied loads: ``fx``, ``fz``, ``my`` of every support (weight gives positive ``fz``;
+    a +X vessel acceleration gives positive ``fx``) and ``platform_base.fy`` /
+    ``platform_base.mx`` (minus the applied-load sums: a +Y wind gives negative ``fy``,
+    and ``mx = -(applied Mx about platform_heel)``).
+  - +Y is port (left looking along +x), so ``heel_left`` is the +Y side:
+    ``heel_left = 0.5 * total - M / boom_width`` and
+    ``heel_right = 0.5 * total + M / boom_width`` (per component; ``Fz`` uses ``Mx``, ``Fx``
     uses ``Mz``), with ``M`` the moment of the *applied loads* about the heel
-    (``Mx = y * fz - z * fy``, ``Mz = x_rel * fy - y * fx``). So a mass at +Y loads
-    ``heel_right``, not ``heel_left``. The heel moments include every mass and wind area of
-    the crane, platform masses included, not only the boom's.
+    (``Mx = y * fz - z * fy``, ``Mz = x_rel * fy - y * fx``). A mass at +Y loads
+    ``heel_left``. The heel moments include every mass and wind area of the crane,
+    platform masses included, not only the boom's. The engine's front/rear leg splits
+    follow the same rule.
 
 ``expanded_model`` keys (read by Task 3)
 ----------------------------------------
@@ -110,7 +121,8 @@ JSON. Lengths m, masses t, areas m^2, angles deg. Top level:
     the unused triple is ``null``.
   - wind area: {``id``, ``cd``, ``area_x_m2`` (X wind; runtime ``area_w_m2``),
     ``area_y_m2`` (Y wind; runtime ``area_v_m2``), ``frame``, ``u_m``, ``w_m``, ``x_m``,
-    ``z_m``}. Boom-local areas are scaled by ``|sin(boom angle)|`` in both directions.
+    ``z_m``}. For X wind the app scales body ``boom`` areas by ``|sin(boom angle)|``; Y wind
+    uses ``area_y_m2`` unscaled at any boom angle.
 * ``nodes``: list of {``id``, ``body``, ``frame``, ``x_m``, ``z_m``, ``u_m``, ``w_m``,
   ``below_node_id``, ``hanging_drop_m``, ``spool_node``}. ``frame`` is ``"boom_local"``
   (``u_m``/``w_m``), ``"global"`` (``x_m``/``z_m``) or ``"hanging"`` (the node hangs
@@ -154,8 +166,9 @@ Rules that key on id strings rather than on explicit fields:
    ``kinematics.KinematicsAdapter``). Workbook: fixed structure-point inputs.
 5. Fixed body ids: ``boom``, ``rear_leg``, ``front_leg``, ``platform``. Only body
    ``boom`` resolves boom-local (u, w) coordinates (kinematics, mass/wind rotation) and
-   gets the ``|sin(angle)|`` wind-area scale (``crane_solver._wind_fx`` checks
-   ``body_ids[bidx] == "boom"``; the out-of-plane pass checks ``body.id == "boom"``).
+   gets the ``|sin(angle)|`` X-wind area scale (``crane_solver._wind_fx`` checks
+   ``body_ids[bidx] == "boom"``; the out-of-plane pass rotates ``body.id == "boom"`` areas
+   but does not scale Y wind).
    Note ``build_solver_static_context`` treats any mass/wind with ``local_x_m`` as
    boom-local regardless of body. A node whose body is unknown defaults to ``boom`` for
    hook loads (``node_body_map.get(node_id, "boom")``).
@@ -176,10 +189,12 @@ Rules that key on id strings rather than on explicit fields:
 
 No-solve-rope behaviour: an authored document always yields one solve rope (the
 required ``model_definition.boom_hoist`` becomes ``BH__rope`` with
-``tension_mode="solve"``). A runtime document without one gives an all-zero third column
-in the boom 3x3 matrix ``[Hx, Hz, T_bh]``; ``np.linalg.solve`` raises, ``_run_statics``
-returns ``{}``, the basis is ``None`` and ``compute_analysis_point`` returns ``None`` --
-the Scene shows no results and no reaction arrows. There is no supported fallback.
+``tension_mode="solve"``). For a runtime document without one,
+``build_directional_response_basis`` returns ``None`` before any solve and
+``compute_analysis_point`` returns ``None`` with ``unavailable_reason`` saying no rope is
+set to solve; the Scene shows that message and no results or reaction arrows. A
+near-singular boom 3x3 or leg 6x6 (``crane_solver.is_ill_conditioned``) likewise gives
+``None`` with a reason. There is no supported fallback.
 """
 
 from __future__ import annotations
