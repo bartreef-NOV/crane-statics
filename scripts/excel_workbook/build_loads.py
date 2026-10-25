@@ -95,17 +95,17 @@ def _mass_row(lay: Layout, i: int) -> dict[str, str]:
     inp = lambda key: lay.addr("mass_points", key, i)  # noqa: E731
     me = lambda key: lay.loads_addr("mass_loads", key, i)  # noqa: E731
     sg = lambda key: lay.geo_cell("scene_geometry", key)  # noqa: E731
-    on, local = f"{me('active')}=1", f'{inp("frame")}="boom_local"'
+    on, is_local = f"{me('active')}=1", f'{inp("frame")}="boom_local"'
     cos, sin = sg("boom_cos"), sg("boom_sin")
     row = {
         "active": f"={inp('active')}",
         "body": f'=IF({on},{inp("body")}&"","")',
         "x_m": (
-            f"=IF({on},IF({local},{sg('heel_x_m')}+{inp('u_m')}*{cos}-{inp('w_m')}*{sin},"
+            f"=IF({on},IF({is_local},{sg('heel_x_m')}+{inp('u_m')}*{cos}-{inp('w_m')}*{sin},"
             f"{inp('x_m')}+0),0)"
         ),
         "z_m": (
-            f"=IF({on},IF({local},{sg('heel_z_m')}+{inp('u_m')}*{sin}+{inp('w_m')}*{cos},"
+            f"=IF({on},IF({is_local},{sg('heel_z_m')}+{inp('u_m')}*{sin}+{inp('w_m')}*{cos},"
             f"{inp('z_m')}+0),0)"
         ),
         "mass_t": f"=IF({on},{inp('mass_t')}+0,0)",
@@ -125,17 +125,17 @@ def _wind_row(lay: Layout, i: int) -> dict[str, str]:
     me = lambda key: lay.loads_addr("wind_loads", key, i)  # noqa: E731
     sg = lambda key: lay.geo_cell("scene_geometry", key)  # noqa: E731
     s = lambda key: lay.loads_cell("load_scene", key)  # noqa: E731
-    on, local = f"{me('active')}=1", f'{inp("frame")}="boom_local"'
+    on, is_local = f"{me('active')}=1", f'{inp("frame")}="boom_local"'
     cos, sin = sg("boom_cos"), sg("boom_sin")
     return {
         "active": f"={inp('active')}",
         "body": f'=IF({on},{inp("body")}&"","")',
         "x_m": (
-            f"=IF({on},IF({local},{sg('heel_x_m')}+{inp('u_m')}*{cos}-{inp('w_m')}*{sin},"
+            f"=IF({on},IF({is_local},{sg('heel_x_m')}+{inp('u_m')}*{cos}-{inp('w_m')}*{sin},"
             f"{inp('x_m')}+0),0)"
         ),
         "z_m": (
-            f"=IF({on},IF({local},{sg('heel_z_m')}+{inp('u_m')}*{sin}+{inp('w_m')}*{cos},"
+            f"=IF({on},IF({is_local},{sg('heel_z_m')}+{inp('u_m')}*{sin}+{inp('w_m')}*{cos},"
             f"{inp('z_m')}+0),0)"
         ),
         "area_m2": f"=IF({on},{inp('area_x_m2')}+0,0)",

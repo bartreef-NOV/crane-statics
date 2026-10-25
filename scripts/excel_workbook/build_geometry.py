@@ -105,17 +105,17 @@ def _node_row_formulas(lay: Layout, i: int) -> dict[str, str]:
     sg = lambda key: lay.geo_cell("scene_geometry", key)  # noqa: E731
     ids = lay.geo_col_range("node_positions", "id")
     cos, sin = sg("boom_cos"), sg("boom_sin")
-    local, hanging = f'{me("frame")}="boom_local"', f'{me("frame")}="hanging"'
+    is_local, hanging = f'{me("frame")}="boom_local"', f'{me("frame")}="hanging"'
     return {
         "active": f"={inp('active')}",
         "id": f'=IF({me("active")}=1,{inp("id")}&"","")',
         "frame": f'=IF({me("active")}=1,{inp("frame")}&"","")',
         "x_base_m": (
-            f'=IF({local},{sg("heel_x_m")}+{inp("u_m")}*{cos}-{inp("w_m")}*{sin},'
+            f'=IF({is_local},{sg("heel_x_m")}+{inp("u_m")}*{cos}-{inp("w_m")}*{sin},'
             f'IF({me("frame")}="global",{inp("x_m")},0))'
         ),
         "z_base_m": (
-            f'=IF({local},{sg("heel_z_m")}+{inp("u_m")}*{sin}+{inp("w_m")}*{cos},'
+            f'=IF({is_local},{sg("heel_z_m")}+{inp("u_m")}*{sin}+{inp("w_m")}*{cos},'
             f'IF({me("frame")}="global",{inp("z_m")},0))'
         ),
         "parent_row": (
