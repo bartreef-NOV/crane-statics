@@ -1,0 +1,1027 @@
+{
+  "source": "examples/crane_input_22689.yaml",
+  "generator": "python -m scripts.excel_workbook.reference",
+  "units": "kN, kNm, kN/m, m, t",
+  "cases": {
+    "base": {
+      "inputs": {
+        "hoist_id": "MH",
+        "boom_angle_deg": 60.0,
+        "hook_load_kN": 6500.0,
+        "tackle_length_m": 40.0,
+        "offlead_deg": 0.0,
+        "sidelead_deg": 0.0,
+        "wind_speed_m_s": 0.0,
+        "wind_direction": "+X",
+        "accel_x_m_s2": 0.0,
+        "accel_y_m_s2": 0.0,
+        "accel_z_m_s2": 0.0,
+        "pitch_accel_rad_s2": 0.0,
+        "roll_accel_rad_s2": 0.0,
+        "vessel_roll_deg": 0.0,
+        "vessel_pitch_deg": 0.0,
+        "crane_slewing_angle_deg": 0.0
+      },
+      "app_results": {
+        "tension.BH": 770.2006202370246,
+        "tension.MH": 325.0,
+        "tension.WH": 33.770925,
+        "tension.SH": 16.00992,
+        "reaction.platform_base.fx": 7.093876774888486e-08,
+        "reaction.platform_base.fy": 0.0,
+        "reaction.platform_base.fz": 31347.728771793427,
+        "reaction.platform_base.mx": 1300.2174,
+        "reaction.platform_base.my": 995825.5301329242,
+        "reaction.platform_base.fradial": 7.093876774888486e-08,
+        "reaction.platform_base.mradial": 995826.3789586048,
+        "reaction.platform_base.max_bearing_line_load": 2830.6734231802034,
+        "reaction.platform_base.min_bearing_line_load": 1962.9958599219503,
+        "reaction.heel_point.fx": 13944.893800389631,
+        "reaction.heel_point.fz": 28045.834774846895,
+        "reaction.heel_point.resultant": 31321.38105706957,
+        "reaction.heel_point.boom_axial": 31164.2536576462,
+        "reaction.heel_point.boom_normal": -3133.4015516754303,
+        "reaction.heel_left.fx": 6972.4469001948155,
+        "reaction.heel_left.fz": 14090.991596847532,
+        "reaction.heel_left.resultant": 15721.67484584464,
+        "reaction.heel_left.boom_axial": 15645.80816407338,
+        "reaction.heel_left.boom_normal": -1542.642813965287,
+        "reaction.heel_right.fx": 6972.4469001948155,
+        "reaction.heel_right.fz": 13954.843177999363,
+        "reaction.heel_right.resultant": 15599.764866772564,
+        "reaction.heel_right.boom_axial": 15518.445493572817,
+        "reaction.heel_right.boom_normal": -1590.7587377101434,
+        "reaction.front_hinge.fx": -15935.400542691066,
+        "reaction.front_hinge.fz": 38448.190392140445,
+        "reaction.front_hinge.resultant": 41619.71089383346,
+        "reaction.front_hinge.leg_axial": 41616.80012190324,
+        "reaction.front_hinge.leg_normal": 492.222002590704,
+        "reaction.rear_hinge.fx": 1964.0014912981178,
+        "reaction.rear_hinge.fz": -48927.93527194095,
+        "reaction.rear_hinge.resultant": 48967.33760204923,
+        "reaction.rear_hinge.leg_axial": -48927.93527194095,
+        "reaction.rear_hinge.leg_normal": -1964.0014912981178,
+        "reaction.upper_hinge.fx": 15950.610921129875,
+        "reaction.upper_hinge.fz": -39694.57545306836,
+        "reaction.upper_hinge.resultant": 42779.44961259559
+      },
+      "debug": {
+        "node_positions": {
+          "bh_winch": {
+            "x_m": -8.35,
+            "z_m": 5.85
+          },
+          "bh_aframe_sheave_1": {
+            "x_m": -9.4,
+            "z_m": 47.0
+          },
+          "bh_aframe_sheave_2": {
+            "x_m": -11.0,
+            "z_m": 58.3
+          },
+          "bh_boom_sheave_3": {
+            "x_m": 81.70910346561915,
+            "z_m": 142.40188677901912
+          },
+          "mh_winch": {
+            "x_m": -8.374,
+            "z_m": 2.218
+          },
+          "mh_aframe_sheave_1": {
+            "x_m": -7.5,
+            "z_m": 46.55
+          },
+          "mh_aframe_sheave_2": {
+            "x_m": 8.5,
+            "z_m": 9.25
+          },
+          "mh_boom_sheave_3": {
+            "x_m": 16.91580219542991,
+            "z_m": 30.27659698893431
+          },
+          "mh_boom_sheave_4": {
+            "x_m": 91.23945369289586,
+            "z_m": 139.20893758658798
+          },
+          "wh_winch": {
+            "x_m": -8.25,
+            "z_m": 8.32
+          },
+          "wh_aframe_sheave_1": {
+            "x_m": -8.28,
+            "z_m": 49.3
+          },
+          "wh_aframe_sheave_2": {
+            "x_m": 8.5,
+            "z_m": 9.25
+          },
+          "wh_boom_sheave_3": {
+            "x_m": 16.91580219542991,
+            "z_m": 30.27659698893431
+          },
+          "wh_boom_sheave_4": {
+            "x_m": 98.72724133595219,
+            "z_m": 145.27816622064793
+          },
+          "sh_winch": {
+            "x_m": 47.400000000000006,
+            "z_m": 75.37677641442932
+          },
+          "sh_boom_sheave_1": {
+            "x_m": 83.61532124826824,
+            "z_m": 144.30355282885864
+          },
+          "sh_boom_sheave_2": {
+            "x_m": 96.11399161352439,
+            "z_m": 143.09188492853775
+          },
+          "boom_heel": {
+            "x_m": 8.5,
+            "z_m": 8.0
+          },
+          "rear_top": {
+            "x_m": -11.0,
+            "z_m": 52.3
+          },
+          "rear_base": {
+            "x_m": -11.0,
+            "z_m": 7.7
+          },
+          "front_base": {
+            "x_m": 6.87,
+            "z_m": 7.7
+          },
+          "platform_base": {
+            "x_m": 0.0,
+            "z_m": 0.0
+          },
+          "front_top": {
+            "x_m": -11.0,
+            "z_m": 52.3
+          },
+          "platform_rear": {
+            "x_m": -11.0,
+            "z_m": 7.7
+          },
+          "platform_front": {
+            "x_m": 6.87,
+            "z_m": 7.7
+          },
+          "platform_heel": {
+            "x_m": 8.5,
+            "z_m": 8.0
+          },
+          "__hook__MH": {
+            "x_m": 91.23945369289586,
+            "z_m": 99.20893758658798
+          },
+          "__hook__WH": {
+            "x_m": 98.72724133595219,
+            "z_m": 144.27816622064793
+          },
+          "__hook__SH": {
+            "x_m": 96.11399161352439,
+            "z_m": 142.09188492853775
+          }
+        },
+        "rope_mass_t_by_node": {
+          "__hook__MH": 8.12,
+          "__hook__SH": 0.0023,
+          "__hook__WH": 0.0268,
+          "bh_aframe_sheave_1": 1.0672949546927704,
+          "bh_aframe_sheave_2": 30.72365086128154,
+          "bh_boom_sheave_3": 30.49197280340812,
+          "bh_winch": 29.06708138061757,
+          "mh_aframe_sheave_1": 1.7240269322444002,
+          "mh_aframe_sheave_2": 1.2836720568199338,
+          "mh_boom_sheave_3": 3.136763941555986,
+          "mh_boom_sheave_4": 10.797004341311384,
+          "mh_winch": 71.94144997113624,
+          "sh_boom_sheave_1": 0.207963702898569,
+          "sh_boom_sheave_2": 0.03118170910801508,
+          "sh_winch": 1.1882247192703885,
+          "wh_aframe_sheave_1": 0.565501251405947,
+          "wh_aframe_sheave_2": 0.44267849417037036,
+          "wh_boom_sheave_3": 1.0973332012896617,
+          "wh_boom_sheave_4": 0.9723898849527739,
+          "wh_winch": 12.208647792795846
+        },
+        "crane_frame_motion": {
+          "accel_x_m_s2": -0.0,
+          "accel_y_m_s2": 0.0,
+          "accel_z_m_s2": 0.0,
+          "pitch_accel_rad_s2": 0.0,
+          "roll_accel_rad_s2": 0.0,
+          "load_accel_m_s2": [
+            0.0,
+            -0.0,
+            -9.81
+          ]
+        },
+        "in_plane_load_totals": {
+          "Gravity": {
+            "fx_kN": 0.0,
+            "fz_kN": -22684.644,
+            "m_about_platform_base_kNm": -356817.2768593668
+          },
+          "Rope weight": {
+            "fx_kN": 0.0,
+            "fz_kN": -2011.9911517697929,
+            "m_about_platform_base_kNm": -31076.585903264266
+          },
+          "Idle hook mass": {
+            "fx_kN": 0.0,
+            "fz_kN": -151.09362,
+            "m_about_platform_base_kNm": -14875.218367066562
+          },
+          "Hook load": {
+            "fx_kN": 0.0,
+            "fz_kN": -6500.0,
+            "m_about_platform_base_kNm": -593056.4490038231
+          },
+          "Wind": {
+            "fx_kN": 0,
+            "fz_kN": 0,
+            "m_about_platform_base_kNm": 0
+          },
+          "Inertia": {
+            "fx_kN": 0,
+            "fz_kN": 0,
+            "m_about_platform_base_kNm": 0
+          },
+          "Rope interface": {
+            "fx_kN": -7.526097800525378e-13,
+            "fz_kN": -1.3571366253017914e-12,
+            "m_about_platform_base_kNm": 6.696154741803184e-11
+          }
+        },
+        "outreach_m": 91.23945369289586
+      }
+    },
+    "inplane_wind_accel": {
+      "inputs": {
+        "hoist_id": "MH",
+        "boom_angle_deg": 45.0,
+        "hook_load_kN": 8000.0,
+        "tackle_length_m": 60.0,
+        "offlead_deg": 1.0,
+        "sidelead_deg": 0.0,
+        "wind_speed_m_s": 15.1,
+        "wind_direction": "+X",
+        "accel_x_m_s2": 0.6,
+        "accel_y_m_s2": 0.0,
+        "accel_z_m_s2": -0.8,
+        "pitch_accel_rad_s2": 0.03,
+        "roll_accel_rad_s2": 0.0,
+        "vessel_roll_deg": 0.0,
+        "vessel_pitch_deg": 1.5,
+        "crane_slewing_angle_deg": 0.0
+      },
+      "app_results": {
+        "tension.BH": 902.2077942959903,
+        "tension.MH": 400.0,
+        "tension.WH": 31.005352547450165,
+        "tension.SH": 14.698833800272673,
+        "reaction.platform_base.fx": 3088.475658558741,
+        "reaction.platform_base.fy": 0.0,
+        "reaction.platform_base.fz": 29046.587127031926,
+        "reaction.platform_base.mx": 1242.0906469706742,
+        "reaction.platform_base.my": 1187320.3362856982,
+        "reaction.platform_base.fradial": 3088.475658558741,
+        "reaction.platform_base.mradial": 1187320.9859792585,
+        "reaction.platform_base.max_bearing_line_load": 3259.7311834001835,
+        "reaction.platform_base.min_bearing_line_load": 2455.7471971016535,
+        "reaction.heel_point.fx": 21979.58722771348,
+        "reaction.heel_point.fz": 24045.252352837317,
+        "reaction.heel_point.resultant": 32577.237688488785,
+        "reaction.heel_point.boom_axial": 32352.474900757137,
+        "reaction.heel_point.boom_normal": -3820.1810439000524,
+        "reaction.heel_left.fx": 10987.997961691144,
+        "reaction.heel_left.fz": 12087.657100344279,
+        "reaction.heel_left.resultant": 16335.46918155803,
+        "reaction.heel_left.boom_axial": 16228.00297623824,
+        "reaction.heel_left.boom_normal": -1870.687783900604,
+        "reaction.heel_right.fx": 10991.589266019018,
+        "reaction.heel_right.fz": 11957.595252493948,
+        "reaction.heel_right.resultant": 16241.893941758464,
+        "reaction.heel_right.boom_axial": 16124.471924517698,
+        "reaction.heel_right.boom_normal": -1949.4932599962215,
+        "reaction.front_hinge.fx": -22702.15343751951,
+        "reaction.front_hinge.fz": 54695.72135448977,
+        "reaction.front_hinge.resultant": 59220.01101982899,
+        "reaction.front_hinge.leg_axial": 59215.503998031636,
+        "reaction.front_hinge.leg_normal": 730.6103255268428,
+        "reaction.rear_hinge.fx": 2758.3034226079426,
+        "reaction.rear_hinge.fz": -61798.378293958594,
+        "reaction.rear_hinge.resultant": 61859.90460334047,
+        "reaction.rear_hinge.leg_axial": -61798.378293958594,
+        "reaction.rear_hinge.leg_normal": -2758.3034226079426,
+        "reaction.upper_hinge.fx": 22524.373158780512,
+        "reaction.upper_hinge.fz": -56103.416826773886,
+        "reaction.upper_hinge.resultant": 60456.10610876892
+      },
+      "debug": {
+        "node_positions": {
+          "bh_winch": {
+            "x_m": -8.35,
+            "z_m": 5.85
+          },
+          "bh_aframe_sheave_1": {
+            "x_m": -9.4,
+            "z_m": 47.0
+          },
+          "bh_aframe_sheave_2": {
+            "x_m": -11.0,
+            "z_m": 58.3
+          },
+          "bh_boom_sheave_3": {
+            "x_m": 114.0003317530329,
+            "z_m": 118.87434329005066
+          },
+          "mh_winch": {
+            "x_m": -8.374,
+            "z_m": 2.218
+          },
+          "mh_aframe_sheave_1": {
+            "x_m": -7.5,
+            "z_m": 46.55
+          },
+          "mh_aframe_sheave_2": {
+            "x_m": 8.5,
+            "z_m": 9.25
+          },
+          "mh_boom_sheave_3": {
+            "x_m": 22.39464825031566,
+            "z_m": 27.339370465452077
+          },
+          "mh_boom_sheave_4": {
+            "x_m": 122.37954711009348,
+            "z_m": 113.32355505773626
+          },
+          "wh_winch": {
+            "x_m": -8.25,
+            "z_m": 8.32
+          },
+          "wh_aframe_sheave_1": {
+            "x_m": -8.28,
+            "z_m": 49.3
+          },
+          "wh_aframe_sheave_2": {
+            "x_m": 8.5,
+            "z_m": 9.25
+          },
+          "wh_boom_sheave_3": {
+            "x_m": 22.39464825031566,
+            "z_m": 27.339370465452077
+          },
+          "wh_boom_sheave_4": {
+            "x_m": 131.18302653586602,
+            "z_m": 117.24799769332161
+          },
+          "sh_winch": {
+            "x_m": 63.5129075763134,
+            "z_m": 63.0129075763134
+          },
+          "sh_boom_sheave_1": {
+            "x_m": 116.3337841309485,
+            "z_m": 120.21784617430511
+          },
+          "sh_boom_sheave_2": {
+            "x_m": 128.0929699020808,
+            "z_m": 115.81257092751292
+          },
+          "boom_heel": {
+            "x_m": 8.5,
+            "z_m": 8.0
+          },
+          "rear_top": {
+            "x_m": -11.0,
+            "z_m": 52.3
+          },
+          "rear_base": {
+            "x_m": -11.0,
+            "z_m": 7.7
+          },
+          "front_base": {
+            "x_m": 6.87,
+            "z_m": 7.7
+          },
+          "platform_base": {
+            "x_m": 0.0,
+            "z_m": 0.0
+          },
+          "front_top": {
+            "x_m": -11.0,
+            "z_m": 52.3
+          },
+          "platform_rear": {
+            "x_m": -11.0,
+            "z_m": 7.7
+          },
+          "platform_front": {
+            "x_m": 6.87,
+            "z_m": 7.7
+          },
+          "platform_heel": {
+            "x_m": 8.5,
+            "z_m": 8.0
+          },
+          "__hook__MH": {
+            "x_m": 122.37954711009348,
+            "z_m": 53.32355505773626
+          },
+          "__hook__WH": {
+            "x_m": 131.18302653586602,
+            "z_m": 116.24799769332161
+          },
+          "__hook__SH": {
+            "x_m": 128.0929699020808,
+            "z_m": 114.81257092751292
+          }
+        },
+        "rope_mass_t_by_node": {
+          "__hook__MH": 12.18,
+          "__hook__SH": 0.0023,
+          "__hook__WH": 0.0268,
+          "bh_aframe_sheave_1": 1.0672949546927704,
+          "bh_aframe_sheave_2": 34.06870367068044,
+          "bh_boom_sheave_3": 33.83702561280702,
+          "bh_winch": 22.376975761819786,
+          "mh_aframe_sheave_1": 1.7240269322444002,
+          "mh_aframe_sheave_2": 1.2869512176010485,
+          "mh_boom_sheave_3": 3.1400431023371005,
+          "mh_boom_sheave_4": 14.857004341311384,
+          "mh_winch": 63.81489164957401,
+          "sh_boom_sheave_1": 0.20796370289856903,
+          "sh_boom_sheave_2": 0.031181709108015074,
+          "sh_winch": 1.1882247192703885,
+          "wh_aframe_sheave_1": 0.565501251405947,
+          "wh_aframe_sheave_2": 0.443760778763152,
+          "wh_boom_sheave_3": 1.0984154858824435,
+          "wh_boom_sheave_4": 0.9723898849527739,
+          "wh_winch": 12.206483223610283
+        },
+        "crane_frame_motion": {
+          "accel_x_m_s2": 0.34320413709976433,
+          "accel_y_m_s2": -0.0,
+          "accel_z_m_s2": -0.8033616419897847,
+          "pitch_accel_rad_s2": 0.03,
+          "roll_accel_rad_s2": 0.0,
+          "load_accel_m_s2": [
+            -0.34320413709976433,
+            0.0,
+            -9.006638358010216
+          ]
+        },
+        "in_plane_load_totals": {
+          "Gravity": {
+            "fx_kN": 593.814753370505,
+            "fz_kN": -22676.870539062824,
+            "m_about_platform_base_kNm": -514565.4905872012
+          },
+          "Rope weight": {
+            "fx_kN": -347.19230783629786,
+            "fz_kN": -1658.629142245477,
+            "m_about_platform_base_kNm": -1329.2088925673015
+          },
+          "Idle hook mass": {
+            "fx_kN": 3.9551698803894295,
+            "fz_kN": -151.04184399007335,
+            "m_about_platform_base_kNm": -20223.850626252733
+          },
+          "Hook load": {
+            "fx_kN": 139.61925149826808,
+            "fz_kN": -8000.0,
+            "m_about_platform_base_kNm": -994858.5268150318
+          },
+          "Wind": {
+            "fx_kN": 143.9845315998288,
+            "fz_kN": 0.0,
+            "m_about_platform_base_kNm": -6480.39844316238
+          },
+          "Inertia": {
+            "fx_kN": -3622.6570570262347,
+            "fz_kN": 3439.9543982664572,
+            "m_about_platform_base_kNm": 350137.1390791844
+          },
+          "Rope interface": {
+            "fx_kN": -1.768384050304661e-12,
+            "fz_kN": -9.130474154517287e-13,
+            "m_about_platform_base_kNm": -5.95434812566964e-11
+          }
+        },
+        "outreach_m": 122.37954711009348
+      }
+    },
+    "outofplane_wind_roll_sidelead": {
+      "inputs": {
+        "hoist_id": "MH",
+        "boom_angle_deg": 70.0,
+        "hook_load_kN": 5000.0,
+        "tackle_length_m": 30.0,
+        "offlead_deg": 0.0,
+        "sidelead_deg": 2.5,
+        "wind_speed_m_s": 15.1,
+        "wind_direction": "+Y",
+        "accel_x_m_s2": 0.0,
+        "accel_y_m_s2": 0.5,
+        "accel_z_m_s2": 0.0,
+        "pitch_accel_rad_s2": 0.0,
+        "roll_accel_rad_s2": 0.02,
+        "vessel_roll_deg": 2.0,
+        "vessel_pitch_deg": 0.0,
+        "crane_slewing_angle_deg": 15.0
+      },
+      "app_results": {
+        "tension.BH": 541.8099639562384,
+        "tension.MH": 250.0,
+        "tension.WH": 33.75035266494985,
+        "tension.SH": 16.00016718930956,
+        "reaction.platform_base.fx": 33.87169505504289,
+        "reaction.platform_base.fy": 229.9336858611819,
+        "reaction.platform_base.fz": 29978.15761155466,
+        "reaction.platform_base.mx": -119621.69738725497,
+        "reaction.platform_base.my": 641109.2437308724,
+        "reaction.platform_base.fradial": 232.41512777702425,
+        "reaction.platform_base.mradial": 652173.6063986177,
+        "reaction.platform_base.max_bearing_line_load": 1984.58815927777,
+        "reaction.platform_base.min_bearing_line_load": 1154.8191212487527,
+        "reaction.heel_point.fx": 7476.256497415603,
+        "reaction.heel_point.fz": 24680.203203456178,
+        "reaction.heel_point.resultant": 25787.726564764052,
+        "reaction.heel_point.boom_axial": 25638.97679931498,
+        "reaction.heel_point.boom_normal": -2765.81092326028,
+        "reaction.heel_left.fx": 6665.465343596561,
+        "reaction.heel_left.fz": 6077.185508154544,
+        "reaction.heel_left.resultant": 9020.011748729068,
+        "reaction.heel_left.boom_axial": 7208.686530865083,
+        "reaction.heel_left.boom_normal": -5421.757136476583,
+        "reaction.heel_right.fx": 810.7911538190422,
+        "reaction.heel_right.fz": 18603.01769529709,
+        "reaction.heel_right.resultant": 18620.67801307589,
+        "reaction.heel_right.boom_axial": 18430.29026844543,
+        "reaction.heel_right.boom_normal": 2655.946213215459,
+        "reaction.front_hinge.fx": -8838.544216621629,
+        "reaction.front_hinge.fz": 21226.59299294612,
+        "reaction.front_hinge.resultant": 22993.218868991895,
+        "reaction.front_hinge.leg_axial": 22991.133139184007,
+        "reaction.front_hinge.leg_normal": 309.6949041874953,
+        "reaction.rear_hinge.fx": 1114.5133587368089,
+        "reaction.rear_hinge.fz": -30355.356448143903,
+        "reaction.rear_hinge.resultant": 30375.809538523816,
+        "reaction.rear_hinge.leg_axial": -30355.356448143903,
+        "reaction.rear_hinge.leg_normal": -1114.5133587368089,
+        "reaction.upper_hinge.fx": 8944.544063955123,
+        "reaction.upper_hinge.fz": -22223.67754192611,
+        "reaction.upper_hinge.resultant": 23956.141425520633
+      },
+      "debug": {
+        "node_positions": {
+          "bh_winch": {
+            "x_m": -8.35,
+            "z_m": 5.85
+          },
+          "bh_aframe_sheave_1": {
+            "x_m": -9.4,
+            "z_m": 47.0
+          },
+          "bh_aframe_sheave_2": {
+            "x_m": -11.0,
+            "z_m": 58.3
+          },
+          "bh_boom_sheave_3": {
+            "x_m": 57.258249969840875,
+            "z_m": 153.07264752488152
+          },
+          "mh_winch": {
+            "x_m": -8.374,
+            "z_m": 2.218
+          },
+          "mh_aframe_sheave_1": {
+            "x_m": -7.5,
+            "z_m": 46.55
+          },
+          "mh_aframe_sheave_2": {
+            "x_m": 8.5,
+            "z_m": 9.25
+          },
+          "mh_boom_sheave_3": {
+            "x_m": 12.919656778127468,
+            "z_m": 31.39955414027267
+          },
+          "mh_boom_sheave_4": {
+            "x_m": 67.19826257123341,
+            "z_m": 151.5831343546955
+          },
+          "wh_winch": {
+            "x_m": -8.25,
+            "z_m": 8.32
+          },
+          "wh_aframe_sheave_1": {
+            "x_m": -8.28,
+            "z_m": 49.3
+          },
+          "wh_aframe_sheave_2": {
+            "x_m": 8.5,
+            "z_m": 9.25
+          },
+          "wh_boom_sheave_3": {
+            "x_m": 12.919656778127468,
+            "z_m": 31.39955414027267
+          },
+          "wh_boom_sheave_4": {
+            "x_m": 73.51838340287581,
+            "z_m": 158.8603984472951
+          },
+          "sh_winch": {
+            "x_m": 35.109167150737036,
+            "z_m": 81.10808589714367
+          },
+          "sh_boom_sheave_1": {
+            "x_m": 58.80528717703775,
+            "z_m": 155.27643423859692
+          },
+          "sh_boom_sheave_2": {
+            "x_m": 71.32447857791416,
+            "z_m": 156.25354562847124
+          },
+          "boom_heel": {
+            "x_m": 8.5,
+            "z_m": 8.0
+          },
+          "rear_top": {
+            "x_m": -11.0,
+            "z_m": 52.3
+          },
+          "rear_base": {
+            "x_m": -11.0,
+            "z_m": 7.7
+          },
+          "front_base": {
+            "x_m": 6.87,
+            "z_m": 7.7
+          },
+          "platform_base": {
+            "x_m": 0.0,
+            "z_m": 0.0
+          },
+          "front_top": {
+            "x_m": -11.0,
+            "z_m": 52.3
+          },
+          "platform_rear": {
+            "x_m": -11.0,
+            "z_m": 7.7
+          },
+          "platform_front": {
+            "x_m": 6.87,
+            "z_m": 7.7
+          },
+          "platform_heel": {
+            "x_m": 8.5,
+            "z_m": 8.0
+          },
+          "__hook__MH": {
+            "x_m": 67.19826257123341,
+            "z_m": 121.58313435469549
+          },
+          "__hook__WH": {
+            "x_m": 73.51838340287581,
+            "z_m": 157.8603984472951
+          },
+          "__hook__SH": {
+            "x_m": 71.32447857791416,
+            "z_m": 155.25354562847124
+          }
+        },
+        "rope_mass_t_by_node": {
+          "__hook__MH": 6.09,
+          "__hook__SH": 0.0023,
+          "__hook__WH": 0.0268,
+          "bh_aframe_sheave_1": 1.0672949546927704,
+          "bh_aframe_sheave_2": 28.682910214350454,
+          "bh_boom_sheave_3": 28.451232156477033,
+          "bh_winch": 33.148562674479756,
+          "mh_aframe_sheave_1": 1.7240269322444002,
+          "mh_aframe_sheave_2": 1.2824121746623103,
+          "mh_boom_sheave_3": 3.135504059398362,
+          "mh_boom_sheave_4": 8.767004341311385,
+          "mh_winch": 76.00396973545149,
+          "sh_boom_sheave_1": 0.20796370289856903,
+          "sh_boom_sheave_2": 0.031181709108015068,
+          "sh_winch": 1.1882247192703885,
+          "wh_aframe_sheave_1": 0.565501251405947,
+          "wh_aframe_sheave_2": 0.44226267099519406,
+          "wh_boom_sheave_3": 1.0969173781144854,
+          "wh_boom_sheave_4": 0.9723898849527737,
+          "wh_winch": 12.209479439146198
+        },
+        "crane_frame_motion": {
+          "accel_x_m_s2": 0.2180198623241501,
+          "accel_y_m_s2": 0.8136612032529,
+          "accel_z_m_s2": -0.0059759869426709855,
+          "pitch_accel_rad_s2": -0.005176380902050415,
+          "roll_accel_rad_s2": 0.019318516525781367,
+          "load_accel_m_s2": [
+            -0.2180198623241501,
+            -0.8136612032529,
+            -9.80402401305733
+          ]
+        },
+        "in_plane_load_totals": {
+          "Gravity": {
+            "fx_kN": -204.90254969083026,
+            "fz_kN": -22670.82512779377,
+            "m_about_platform_base_kNm": -242380.60797127816
+          },
+          "Rope weight": {
+            "fx_kN": 2.7033256883759265,
+            "fz_kN": -2018.3718541285175,
+            "m_about_platform_base_kNm": -19085.319234954764
+          },
+          "Idle hook mass": {
+            "fx_kN": -1.3647764531820479,
+            "fz_kN": -151.001577849109,
+            "m_about_platform_base_kNm": -10851.221878456441
+          },
+          "Hook load": {
+            "fx_kN": 0.0,
+            "fz_kN": -5000.0,
+            "m_about_platform_base_kNm": -335991.3128561671
+          },
+          "Wind": {
+            "fx_kN": 0,
+            "fz_kN": 0,
+            "m_about_platform_base_kNm": 0
+          },
+          "Inertia": {
+            "fx_kN": 169.6923054051491,
+            "fz_kN": -137.95905181964943,
+            "m_about_platform_base_kNm": -32800.78178997914
+          },
+          "Rope interface": {
+            "fx_kN": -2.263675358271655e-13,
+            "fz_kN": -5.240252676230739e-13,
+            "m_about_platform_base_kNm": -5.1443294069031253e-11
+          }
+        },
+        "outreach_m": 67.19826257123341
+      }
+    },
+    "idle_hoist": {
+      "inputs": {
+        "hoist_id": "WH",
+        "boom_angle_deg": 55.0,
+        "hook_load_kN": 1450.0,
+        "tackle_length_m": 50.0,
+        "offlead_deg": 0.0,
+        "sidelead_deg": 0.0,
+        "wind_speed_m_s": 0.0,
+        "wind_direction": "+X",
+        "accel_x_m_s2": 0.0,
+        "accel_y_m_s2": 0.0,
+        "accel_z_m_s2": 0.4,
+        "pitch_accel_rad_s2": 0.0,
+        "roll_accel_rad_s2": 0.0,
+        "vessel_roll_deg": 0.0,
+        "vessel_pitch_deg": 0.0,
+        "crane_slewing_angle_deg": 0.0
+      },
+      "app_results": {
+        "tension.BH": 551.1534418805197,
+        "tension.MH": 52.071,
+        "tension.WH": 362.5,
+        "tension.SH": 16.66272,
+        "reaction.platform_base.fx": 1.3185854186303914e-08,
+        "reaction.platform_base.fy": 0.0,
+        "reaction.platform_base.fz": 28211.716246953543,
+        "reaction.platform_base.mx": 1353.2334,
+        "reaction.platform_base.my": 716040.8543055968,
+        "reaction.platform_base.fradial": 1.3185854186303914e-08,
+        "reaction.platform_base.mradial": 716042.1330308181,
+        "reaction.platform_base.max_bearing_line_load": 2113.8652699178615,
+        "reaction.platform_base.min_bearing_line_load": 1332.9897753424545,
+        "reaction.heel_point.fx": 10838.304044693952,
+        "reaction.heel_point.fz": 19357.98212670503,
+        "reaction.heel_point.resultant": 22185.587812430407,
+        "reaction.heel_point.boom_axial": 22143.06365472341,
+        "reaction.heel_point.boom_normal": -1372.967066585229,
+        "reaction.heel_left.fx": 5419.152022346317,
+        "reaction.heel_left.fz": 9749.840979584198,
+        "reaction.heel_left.resultant": 11154.667532852762,
+        "reaction.heel_left.boom_axial": 11135.375258154565,
+        "reaction.heel_left.boom_normal": -655.7633937318295,
+        "reaction.heel_right.fx": 5419.152022346317,
+        "reaction.heel_right.fz": 9608.141147120828,
+        "reaction.heel_right.resultant": 11031.028281366,
+        "reaction.heel_right.boom_axial": 11007.688396568275,
+        "reaction.heel_right.boom_normal": -717.2036728522114,
+        "reaction.front_hinge.fx": -12376.165075369627,
+        "reaction.front_hinge.fz": 29909.873548959247,
+        "reaction.front_hinge.resultant": 32369.275519966937,
+        "reaction.front_hinge.leg_axial": 32367.229178960406,
+        "reaction.front_hinge.leg_normal": 363.9683560215013,
+        "reaction.rear_hinge.fx": 1511.5306503518705,
+        "reaction.rear_hinge.fz": -36257.9438444063,
+        "reaction.rear_hinge.resultant": 36289.43671002726,
+        "reaction.rear_hinge.leg_axial": -36257.9438444063,
+        "reaction.rear_hinge.leg_normal": -1511.5306503518705,
+        "reaction.upper_hinge.fx": 12344.981816511183,
+        "reaction.upper_hinge.fz": -30737.826510385887,
+        "reaction.upper_hinge.resultant": 33124.19892816388
+      },
+      "debug": {
+        "node_positions": {
+          "bh_winch": {
+            "x_m": -8.35,
+            "z_m": 5.85
+          },
+          "bh_aframe_sheave_1": {
+            "x_m": -9.4,
+            "z_m": 47.0
+          },
+          "bh_aframe_sheave_2": {
+            "x_m": -11.0,
+            "z_m": 58.3
+          },
+          "bh_boom_sheave_3": {
+            "x_m": 93.14441699341187,
+            "z_m": 135.50985323434975
+          },
+          "mh_winch": {
+            "x_m": -8.374,
+            "z_m": 2.218
+          },
+          "mh_aframe_sheave_1": {
+            "x_m": -7.5,
+            "z_m": 46.55
+          },
+          "mh_aframe_sheave_2": {
+            "x_m": 8.5,
+            "z_m": 9.25
+          },
+          "mh_boom_sheave_3": {
+            "x_m": 18.825310883736964,
+            "z_m": 29.458342320742833
+          },
+          "mh_boom_sheave_4": {
+            "x_m": 102.36021750236053,
+            "z_m": 131.4984294248699
+          },
+          "wh_winch": {
+            "x_m": -8.25,
+            "z_m": 8.32
+          },
+          "wh_aframe_sheave_1": {
+            "x_m": -8.28,
+            "z_m": 49.3
+          },
+          "wh_aframe_sheave_2": {
+            "x_m": 8.5,
+            "z_m": 9.25
+          },
+          "wh_boom_sheave_3": {
+            "x_m": 18.825310883736964,
+            "z_m": 29.458342320742833
+          },
+          "wh_boom_sheave_4": {
+            "x_m": 110.34847998231697,
+            "z_m": 136.8919591180597
+          },
+          "sh_winch": {
+            "x_m": 53.12424674811138,
+            "z_m": 71.73002904568355
+          },
+          "sh_boom_sheave_1": {
+            "x_m": 95.20912215892689,
+            "z_m": 137.23814504405536
+          },
+          "sh_boom_sheave_2": {
+            "x_m": 107.55462749417552,
+            "z_m": 134.94175700686569
+          },
+          "boom_heel": {
+            "x_m": 8.5,
+            "z_m": 8.0
+          },
+          "rear_top": {
+            "x_m": -11.0,
+            "z_m": 52.3
+          },
+          "rear_base": {
+            "x_m": -11.0,
+            "z_m": 7.7
+          },
+          "front_base": {
+            "x_m": 6.87,
+            "z_m": 7.7
+          },
+          "platform_base": {
+            "x_m": 0.0,
+            "z_m": 0.0
+          },
+          "front_top": {
+            "x_m": -11.0,
+            "z_m": 52.3
+          },
+          "platform_rear": {
+            "x_m": -11.0,
+            "z_m": 7.7
+          },
+          "platform_front": {
+            "x_m": 6.87,
+            "z_m": 7.7
+          },
+          "platform_heel": {
+            "x_m": 8.5,
+            "z_m": 8.0
+          },
+          "__hook__MH": {
+            "x_m": 102.36021750236053,
+            "z_m": 130.4984294248699
+          },
+          "__hook__WH": {
+            "x_m": 110.34847998231697,
+            "z_m": 86.8919591180597
+          },
+          "__hook__SH": {
+            "x_m": 107.55462749417552,
+            "z_m": 133.94175700686569
+          }
+        },
+        "rope_mass_t_by_node": {
+          "__hook__MH": 0.203,
+          "__hook__SH": 0.0023,
+          "__hook__WH": 1.34,
+          "bh_aframe_sheave_1": 1.0672949546927704,
+          "bh_aframe_sheave_2": 31.812819564921142,
+          "bh_boom_sheave_3": 31.58114150704772,
+          "bh_winch": 26.888743973338364,
+          "mh_aframe_sheave_1": 1.7240269322444002,
+          "mh_aframe_sheave_2": 1.284587913304485,
+          "mh_boom_sheave_3": 3.1376797980405366,
+          "mh_boom_sheave_4": 2.8800043413113845,
+          "mh_winch": 87.77361825816713,
+          "sh_boom_sheave_1": 0.207963702898569,
+          "sh_boom_sheave_2": 0.03118170910801508,
+          "sh_winch": 1.1882247192703885,
+          "wh_aframe_sheave_1": 0.565501251405947,
+          "wh_aframe_sheave_2": 0.4429807719263552,
+          "wh_boom_sheave_3": 1.0976354790456464,
+          "wh_boom_sheave_4": 2.2855898849527736,
+          "wh_winch": 9.581643237283878
+        },
+        "crane_frame_motion": {
+          "accel_x_m_s2": -0.0,
+          "accel_y_m_s2": 0.0,
+          "accel_z_m_s2": 0.40000000000000036,
+          "pitch_accel_rad_s2": 0.0,
+          "roll_accel_rad_s2": 0.0,
+          "load_accel_m_s2": [
+            0.0,
+            -0.0,
+            -10.21
+          ]
+        },
+        "in_plane_load_totals": {
+          "Gravity": {
+            "fx_kN": 0.0,
+            "fz_kN": -22684.644,
+            "m_about_platform_base_kNm": -406345.8580065442
+          },
+          "Rope weight": {
+            "fx_kN": 0.0,
+            "fz_kN": -2094.029526969377,
+            "m_about_platform_base_kNm": -24728.931519870966
+          },
+          "Idle hook mass": {
+            "fx_kN": 0.0,
+            "fz_kN": -1016.62992,
+            "m_about_platform_base_kNm": -104145.62181902354
+          },
+          "Hook load": {
+            "fx_kN": 0.0,
+            "fz_kN": -1450.0,
+            "m_about_platform_base_kNm": -160005.29597435961
+          },
+          "Wind": {
+            "fx_kN": 0,
+            "fz_kN": 0,
+            "m_about_platform_base_kNm": 0
+          },
+          "Inertia": {
+            "fx_kN": 0.0,
+            "fz_kN": -966.4128000000001,
+            "m_about_platform_base_kNm": -20815.146985751995
+          },
+          "Rope interface": {
+            "fx_kN": 4.39870362356487e-13,
+            "fz_kN": 1.2789769243681803e-13,
+            "m_about_platform_base_kNm": -2.4590462999185547e-10
+          }
+        },
+        "outreach_m": 110.34847998231697
+      }
+    }
+  }
+}

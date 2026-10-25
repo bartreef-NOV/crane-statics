@@ -1,13 +1,27 @@
 """Tests for the Excel validation workbook tooling."""
 
+import dataclasses
+import json
 import math
 from pathlib import Path
+from typing import Any
 
 import numpy as np
+import pytest
 from openpyxl import Workbook
 from openpyxl.worksheet.formula import ArrayFormula
 
 from scripts.excel_workbook.recalc import recalculate
+from scripts.excel_workbook.reference import (
+    CASES,
+    GOLDEN_PATH,
+    YAML_PATH,
+    app_results,
+    expanded_model,
+    scene_reaction_arrows,
+)
+
+CASE_NAMES = {"base", "inplane_wind_accel", "outofplane_wind_roll_sidelead", "idle_hoist"}
 
 
 def _num(value: float | str | None) -> float:
@@ -95,3 +109,71 @@ def test_recalculate_extra_functions(tmp_path: Path) -> None:
 
     for cell, (_, expected) in formulas.items():
         assert math.isclose(_num(values[cell]), expected, abs_tol=1e-12), cell
+
+
+def _golden() -> dict[str, Any]:
+    golden: dict[str, Any] = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
+    return golden
+
+
+def test_golden_cases_match_live_app() -> None:
+    golden = _golden()
+    assert set(golden["cases"]) == CASE_NAMES
+    assert set(CASES) == CASE_NAMES
+    for name, entry in golden["cases"].items():
+        assert entry["inputs"] == dataclasses.asdict(CASES[name]), name
+        live = app_results(YAML_PATH, CASES[name])
+        stored = entry["app_results"]
+        assert set(stored) == set(live), name
+        for key, value in stored.items():
+            assert math.isclose(value, live[key], rel_tol=0.0, abs_tol=1e-9), (name, key)
+
+
+@pytest.mark.parametrize("name", sorted(CASE_NAMES))
+def test_reaction_arrows_match_result_rows(name: str) -> None:
+    results = app_results(YAML_PATH, CASES[name])
+    arrows = scene_reaction_arrows(YAML_PATH, CASES[name])
+    assert set(arrows) == {
+        "heel_point",
+        "rear_hinge",
+        "front_hinge",
+        "upper_hinge",
+        "platform_base",
+    }
+    for entity, comps in arrows.items():
+        for comp, value in comps.items():
+            assert math.isclose(
+                value, results[f"reaction.{entity}.{comp}"], rel_tol=0.0, abs_tol=1e-9
+            ), (name, entity, comp)
+
+
+def test_cases_exercise_their_feature() -> None:
+    base, wind, oop, idle = (
+        CASES[k]
+        for k in ("base", "inplane_wind_accel", "outofplane_wind_roll_sidelead", "idle_hoist")
+    )
+    assert base.hook_load_kN > 0 and base.wind_speed_m_s == 0 and base.accel_x_m_s2 == 0
+    assert wind.wind_direction in {"+X", "-X"} and wind.wind_speed_m_s > 0
+    assert wind.accel_x_m_s2 != 0 and wind.accel_z_m_s2 != 0 and wind.pitch_accel_rad_s2 != 0
+    assert oop.wind_direction in {"+Y", "-Y"} and oop.wind_speed_m_s > 0
+    assert oop.vessel_roll_deg != 0 and oop.sidelead_deg != 0 and oop.roll_accel_rad_s2 != 0
+    assert idle.hoist_id != base.hoist_id
+    assert idle.vessel_roll_deg == 0 and idle.vessel_pitch_deg == 0
+    oop_results = app_results(YAML_PATH, oop)
+    assert abs(oop_results["reaction.platform_base.fy"]) > 1.0
+    assert abs(oop_results["reaction.platform_base.mx"]) > 1.0
+    # The base case's hook-loaded hoist is idle in the idle-hoist case: its rope
+    # carries only its hook block, m_hook * (g + az) / falls (no vessel tilt here).
+    idle_results = app_results(YAML_PATH, idle)
+    model = expanded_model(YAML_PATH)
+    mh = next(h for h in model["hoists"] if h["id"] == base.hoist_id)
+    g = abs(model["environment"]["gravity_m_s2"])
+    expected = mh["hook_mass_t"] * (g + idle.accel_z_m_s2) / mh["falls"]
+    assert math.isclose(idle_results[f"tension.{base.hoist_id}"], expected, abs_tol=1e-9)
+
+
+def test_expanded_model_is_json_serialisable() -> None:
+    model = expanded_model(YAML_PATH)
+    json.dumps(model)
+    for key in ("environment", "structure", "bodies", "nodes", "ropes", "hoists"):
+        assert key in model
