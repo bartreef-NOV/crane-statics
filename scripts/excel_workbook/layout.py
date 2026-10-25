@@ -79,6 +79,29 @@ table per Inputs list (row i = the Inputs row i: ``mass_loads``, ``wind_loads``,
     lay.loads_addr("node_loads", "bh_fx", 3)
     lay.loads_col_range("rope_tensions", "tension_kN")
     lay.loads_cell("load_scene", "hook_kN")
+
+Statics sheet
+-------------
+All formulas. The notes (``STATICS_NOTES``), then ``_STATICS_SECTIONS`` top to bottom: the
+blocks ``statics_status``, ``structure_nodes``, ``leg_loads``, ``platform``, ``leg_axes`` and
+the matrix systems ``boom_system`` (3x3) and ``leg_system`` (6x6), each a ``MatrixSystem``
+(matrix A, right-hand side b, raw MMULT(MINVERSE) column, solution used, row norms, then
+det / rel_det / singular rows)::
+
+    lay.statics_value("t_bh")             # any _run_statics output (STATICS_UNKNOWNS)
+    lay.statics_flag("leg_system")        # 1 = singular
+    lay.statics_cell("statics_status", "ok")
+    lay.statics_systems["boom_system"].a_addr(3, 1)
+
+Results sheet
+-------------
+The notes, the ``results_status`` block (``ok``, ``reason``, ``message``), the
+``tensions`` table (row i = Inputs hoists row i) and the ``reactions`` table (one row per
+``RESULT_ROWS`` entry; Task 7 appends out-of-plane rows there)::
+
+    lay.results_addr("tensions", "tension_kN", 2)
+    lay.result_cell("platform_base", "my")     # value of reaction.platform_base.my
+    lay.result_rows                            # ((entity, component), ...)
 """
 
 from __future__ import annotations
@@ -711,6 +734,347 @@ _LOADS_TABLE_DEFS: tuple[tuple[str, str, tuple[Field, ...], str | None], ...] = 
     ("body_totals", "Body totals (Statics reads these)", BODY_TOTAL_FIELDS, None),
 )
 
+# -- Statics sheet -------------------------------------------------------------------
+
+#: Notes printed at the top of the Statics sheet.
+STATICS_NOTES: tuple[str, ...] = (
+    "The app's in-plane statics, solved once with the actual loads "
+    "(calculation/solver/crane_solver.py _run_statics): boom 3x3, then the leg frame 6x6, "
+    "then the platform resultant. Moments are about the origin (M = x Fz - z Fx).",
+    "Body loads = known loads (Loads body totals fx/fz/m) + T_bh x solve-rope coefficients "
+    "(bh_fx/bh_fz/bh_m). Unknowns are the forces the supports exert on the body solved for "
+    "(heel and leg-base reactions: weight gives positive Fz).",
+    "Each system A x = b is solved with MMULT(MINVERSE(A), b) (a legacy array formula). The "
+    "app calls np.linalg.solve and gives no result when it raises (an exactly singular "
+    "matrix). Here a matrix is flagged singular when |det A| <= 1e-12 x the product of its "
+    "row norms (Hadamard bound), or when MINVERSE fails; the solution column then reads 0 and "
+    "Results shows a message.",
+    "With no active solve rope the boom matrix's third column is all zero: the app shows no "
+    "results (compute_analysis_point returns None); Results says so.",
+)
+
+STATICS_STATUS_FIELDS = (
+    _f("solve_ropes", "Active solve ropes", "count", note="the app needs one"),
+    _f("boom_singular", "Boom 3x3 singular", "1/0", "flag"),
+    _f("leg_singular", "Leg frame 6x6 singular", "1/0", "flag"),
+    _f("ok", "Statics solved", "1/0", "flag", note="a solve rope and no singular matrix"),
+)
+
+#: Fixed nodes ``_run_statics`` reads (``node_pos[...]``), in the order shown.
+STATICS_NODES = (
+    "boom_heel",
+    "rear_base",
+    "rear_top",
+    "front_base",
+    "front_top",
+    "platform_heel",
+    "platform_rear",
+    "platform_front",
+)
+STATICS_NODE_FIELDS = tuple(
+    _f(f"{node}_{axis}_m", f"Node {node} {axis}", "m", note="Geometry x_m/z_m; 0 if missing")
+    for node in STATICS_NODES
+    for axis in ("x", "z")
+)
+
+BOOM_UNKNOWNS = (
+    _f("h_x", "Hx: heel on boom", "kN", note="reaction heel_point Fx"),
+    _f("h_z", "Hz: heel on boom", "kN", note="reaction heel_point Fz"),
+    _f("t_bh", "T_bh: solve-rope tension", "kN", note="boom hoist rope"),
+)
+BOOM_EQUATIONS = (
+    "Boom: sum Fx = 0",
+    "Boom: sum Fz = 0",
+    "Boom: sum M about the origin = 0",
+)
+
+LEG_LOAD_FIELDS = tuple(
+    _f(
+        f"{leg}_{comp}",
+        f"{leg.capitalize()} leg load {comp.upper()} = ld + T_bh bh",
+        "kNm" if comp == "m" else "kN",
+    )
+    for leg in ("rear", "front")
+    for comp in ("fx", "fz", "m")
+)
+
+LEG_UNKNOWNS = (
+    _f("r_rb_x", "Rear base on rear leg x", "kN", note="reaction rear_hinge Fx"),
+    _f("r_rb_z", "Rear base on rear leg z", "kN", note="reaction rear_hinge Fz"),
+    _f("r_fb_x", "Front base on front leg x", "kN", note="reaction front_hinge Fx"),
+    _f("r_fb_z", "Front base on front leg z", "kN", note="reaction front_hinge Fz"),
+    _f("r_top_x", "Top joint x (on front leg; rear leg gets -)", "kN", note="upper_hinge Fx"),
+    _f("r_top_z", "Top joint z (on front leg; rear leg gets -)", "kN", note="upper_hinge Fz"),
+)
+LEG_EQUATIONS = (
+    "Rear leg: sum Fx = 0",
+    "Rear leg: sum Fz = 0",
+    "Rear leg: sum M about the origin = 0",
+    "Front leg: sum Fx = 0",
+    "Front leg: sum Fz = 0",
+    "Front leg: sum M about the origin = 0",
+)
+
+PLATFORM_FIELDS = (
+    _f("load_fx", "Platform load Fx = ld + T_bh bh", "kN"),
+    _f("load_fz", "Platform load Fz = ld + T_bh bh", "kN"),
+    _f("load_m", "Platform load M = ld + T_bh bh", "kNm"),
+    _f("plat_fx", "Platform Fx incl. -Hx, -R_rb_x, -R_fb_x", "kN"),
+    _f("plat_fz", "Platform Fz incl. -Hz, -R_rb_z, -R_fb_z", "kN"),
+    _f(
+        "plat_m",
+        "Platform M incl. the reactions at platform_heel/_rear/_front",
+        "kNm",
+        note="x (-Fz) - z (-Fx) per node",
+    ),
+    _f("r_g_x", "Ground reaction Fx = -platform Fx", "kN", note="reaction platform_base Fx"),
+    _f("r_g_z", "Ground reaction Fz = -platform Fz", "kN", note="reaction platform_base Fz"),
+    _f("m_g", "Ground moment My = -platform M", "kNm", note="reaction platform_base My"),
+)
+
+
+def _leg_axis_fields(leg: str, base: str, top: str) -> tuple[Field, ...]:
+    name = leg.capitalize()
+    return (
+        _f(f"{leg}_len_m", f"{name} leg length {base} -> {top}", "m"),
+        _f(f"{leg}_ux", f"{name} leg axis ux", note="0 if length <= 1e-12"),
+        _f(f"{leg}_uz", f"{name} leg axis uz", note="0 if length <= 1e-12"),
+        _f(f"{leg}_axis_ok", f"{name} leg axis defined", "1/0", "flag"),
+    )
+
+
+LEG_AXIS_FIELDS = _leg_axis_fields("rear", "rear_base", "rear_top") + _leg_axis_fields(
+    "front", "front_base", "front_top"
+)
+
+#: Status rows under each matrix block.
+SYSTEM_STATUS_FIELDS = (
+    _f("det", "det A (MDETERM)"),
+    _f("norm_product", "Product of the row norms of A"),
+    _f("rel_det", "|det A| / product of row norms", note="1 = orthogonal rows, 0 = singular"),
+    _f("singular", "Singular", "1/0", "flag", note="rel_det <= 1e-12 or MINVERSE fails"),
+)
+#: Relative determinant at or below which a system counts as singular.
+SINGULAR_REL_TOL = 1e-12
+
+#: ``_run_statics`` output keys, in its order: the system unknowns and the platform resultant.
+STATICS_UNKNOWNS: tuple[str, ...] = (
+    "t_bh",
+    "h_x",
+    "h_z",
+    "r_rb_x",
+    "r_rb_z",
+    "r_fb_x",
+    "r_fb_z",
+    "r_top_x",
+    "r_top_z",
+    "r_g_x",
+    "r_g_z",
+    "m_g",
+)
+
+
+@dataclass(frozen=True)
+class MatrixSystem:
+    """A linear system ``A x = b`` laid out as a visible block.
+
+    Rows: title, header, one row per equation, then ``SYSTEM_STATUS_FIELDS`` (label in A,
+    value in B). Columns: A the equation, then one column per unknown (A), the right-hand
+    side b, the unknown's name, the raw MMULT(MINVERSE) result, the solution used (0 if
+    singular) and the row norm of A.
+    """
+
+    name: str
+    title: str
+    sheet: str
+    unknowns: tuple[Field, ...]
+    equations: tuple[str, ...]
+    title_row: int
+
+    def __post_init__(self) -> None:
+        if len(self.unknowns) != len(self.equations):
+            raise ValueError(f"{self.name}: as many equations as unknowns are needed")
+
+    @property
+    def n(self) -> int:
+        return len(self.unknowns)
+
+    @property
+    def header_row(self) -> int:
+        return self.title_row + 1
+
+    @property
+    def first_row(self) -> int:
+        return self.title_row + 2
+
+    @property
+    def last_row(self) -> int:
+        return self.first_row + self.n - 1
+
+    @property
+    def end_row(self) -> int:
+        return self.last_row + len(SYSTEM_STATUS_FIELDS)
+
+    def _col(self, offset: int) -> str:
+        """Column letter ``offset`` columns right of B."""
+        return str(get_column_letter(2 + offset))
+
+    def matrix_column(self, j: int) -> str:
+        """Column of unknown ``j`` (1-based) in A."""
+        return self._col(j - 1)
+
+    @property
+    def rhs_column(self) -> str:
+        return self._col(self.n)
+
+    @property
+    def name_column(self) -> str:
+        return self._col(self.n + 1)
+
+    @property
+    def raw_column(self) -> str:
+        return self._col(self.n + 2)
+
+    @property
+    def x_column(self) -> str:
+        return self._col(self.n + 3)
+
+    @property
+    def norm_column(self) -> str:
+        return self._col(self.n + 4)
+
+    def _span(self, col_a: str, col_b: str) -> str:
+        return f"${col_a}${self.first_row}:${col_b}${self.last_row}"
+
+    @property
+    def a_range(self) -> str:
+        """Local (same-sheet) range of A."""
+        return self._span(self.matrix_column(1), self.matrix_column(self.n))
+
+    @property
+    def b_range(self) -> str:
+        return self._span(self.rhs_column, self.rhs_column)
+
+    @property
+    def raw_range(self) -> str:
+        return self._span(self.raw_column, self.raw_column)
+
+    def row_of(self, key: str) -> int:
+        for index, f in enumerate(self.unknowns):
+            if f.key == key:
+                return self.first_row + index
+        raise KeyError(f"system {self.name!r} has no unknown {key!r}")
+
+    def a_addr(self, i: int, j: int) -> str:
+        """Equation ``i``, unknown ``j`` (1-based)."""
+        return f"{self.sheet}!${self.matrix_column(j)}${self.first_row + i - 1}"
+
+    def b_addr(self, i: int) -> str:
+        return f"{self.sheet}!${self.rhs_column}${self.first_row + i - 1}"
+
+    def raw_addr(self, key: str) -> str:
+        return f"{self.sheet}!${self.raw_column}${self.row_of(key)}"
+
+    def x_addr(self, key: str) -> str:
+        """The solution used for unknown ``key`` (0 when the system is singular)."""
+        return f"{self.sheet}!${self.x_column}${self.row_of(key)}"
+
+    def norm_addr(self, i: int) -> str:
+        return f"{self.sheet}!${self.norm_column}${self.first_row + i - 1}"
+
+    def status_row(self, key: str) -> int:
+        for index, f in enumerate(SYSTEM_STATUS_FIELDS, start=1):
+            if f.key == key:
+                return self.last_row + index
+        raise KeyError(f"no status field {key!r}")
+
+    def status_addr(self, key: str) -> str:
+        return f"{self.sheet}!$B${self.status_row(key)}"
+
+
+#: Statics sheet sections, top to bottom: ("block", name, title, fields) or
+#: ("system", name, title, unknowns, equations).
+_STATICS_SECTIONS: tuple[tuple, ...] = (
+    ("block", "statics_status", "Status", STATICS_STATUS_FIELDS),
+    ("block", "structure_nodes", "Structure node positions", STATICS_NODE_FIELDS),
+    ("system", "boom_system", "Boom: [Hx, Hz, T_bh]", BOOM_UNKNOWNS, BOOM_EQUATIONS),
+    ("block", "leg_loads", "Leg loads with the solved T_bh", LEG_LOAD_FIELDS),
+    (
+        "system",
+        "leg_system",
+        "Leg frame: [R_rb_x, R_rb_z, R_fb_x, R_fb_z, R_top_x, R_top_z]",
+        LEG_UNKNOWNS,
+        LEG_EQUATIONS,
+    ),
+    ("block", "platform", "Platform resultant at the ground (platform_base)", PLATFORM_FIELDS),
+    ("block", "leg_axes", "Leg axes (for leg_axial / leg_normal)", LEG_AXIS_FIELDS),
+)
+
+# -- Results sheet -------------------------------------------------------------------
+
+RESULTS_NOTES: tuple[str, ...] = (
+    "What the Scene results table shows (core/analysis_services.py compute_result_rows), "
+    "for the operating state on Inputs. Units: kN, kNm.",
+    "Rope tensions: the solve rope's hoist reads T_bh (Statics); fixed ropes read their Loads "
+    "tension (scene hoist: hook load / parts; idle hoists: hook mass x (|g| + az') / parts).",
+    "Reactions (calculation/solver/crane_solver.py _reactions_from_raw): heel_point = (Hx, Hz), "
+    "rear_hinge = R_rb, front_hinge = R_fb, upper_hinge = R_top, platform_base = (r_g_x, "
+    "r_g_z, m_g). Support reactions: weight gives positive Fz. Pinned supports carry no "
+    "moment.",
+    "resultant = sqrt(Fx^2 + Fz^2); leg_axial = Fx ux + Fz uz and leg_normal = -Fx uz + Fz ux "
+    "along base -> top (core/demand_extraction.py, calculation/engine.py "
+    "resolve_connection_component_linear_response).",
+    "When Statics has no solution (no solve rope, or a singular matrix) every value cell "
+    "shows the reason instead of a number, as the app shows no results.",
+)
+
+RESULTS_STATUS_FIELDS = (
+    _f("ok", "Results valid", "1/0", "flag", note="Statics ok"),
+    _f("reason", "Short reason (shown in the value cells)", kind="text"),
+    _f("message", "Status", kind="text"),
+)
+
+TENSION_RESULT_FIELDS = (
+    _f("active", "Active", "1/0", "flag", note="from Inputs"),
+    _f("hoist_id", "Hoist", kind="text", note="result key tension.<hoist>"),
+    _f("rope_id", "Rope id", kind="text"),
+    _f("role", "Rope role", kind="text", note="'' if the rope is missing"),
+    _f("tension_kN", "Rope tension T", "kN"),
+)
+
+REACTION_RESULT_FIELDS = (
+    _f("key", "Result key", kind="text", note="reaction.<entity>.<component>"),
+    _f("entity", "Support", kind="text"),
+    _f("component", "Component", kind="text"),
+    _f("value", "Value", note="kN or kNm, see unit"),
+    _f("unit", "Unit", kind="text"),
+    _f("source", "From", kind="text"),
+)
+
+#: In-plane reaction rows (entity, component, unit, source text), in the order of the
+#: app's default design-limit catalog. Task 7 appends the out-of-plane rows.
+RESULT_ROWS: tuple[tuple[str, str, str, str], ...] = (
+    ("heel_point", "fx", "kN", "Statics Hx"),
+    ("heel_point", "fz", "kN", "Statics Hz"),
+    ("heel_point", "resultant", "kN", "sqrt(Fx^2 + Fz^2)"),
+    ("front_hinge", "fx", "kN", "Statics R_fb_x"),
+    ("front_hinge", "fz", "kN", "Statics R_fb_z"),
+    ("front_hinge", "resultant", "kN", "sqrt(Fx^2 + Fz^2)"),
+    ("front_hinge", "leg_axial", "kN", "Fx ux + Fz uz, front_base -> front_top"),
+    ("front_hinge", "leg_normal", "kN", "-Fx uz + Fz ux"),
+    ("rear_hinge", "fx", "kN", "Statics R_rb_x"),
+    ("rear_hinge", "fz", "kN", "Statics R_rb_z"),
+    ("rear_hinge", "resultant", "kN", "sqrt(Fx^2 + Fz^2)"),
+    ("rear_hinge", "leg_axial", "kN", "Fx ux + Fz uz, rear_base -> rear_top"),
+    ("rear_hinge", "leg_normal", "kN", "-Fx uz + Fz ux"),
+    ("upper_hinge", "fx", "kN", "Statics R_top_x"),
+    ("upper_hinge", "fz", "kN", "Statics R_top_z"),
+    ("upper_hinge", "resultant", "kN", "sqrt(Fx^2 + Fz^2)"),
+    ("platform_base", "fx", "kN", "Statics r_g_x"),
+    ("platform_base", "fz", "kN", "Statics r_g_z"),
+    ("platform_base", "my", "kNm", "Statics m_g (in-plane base moment)"),
+)
+
 # -- checks ----------------------------------------------------------------------------
 
 #: Check key -> description, in Checks-sheet order. Every check cell is a live count;
@@ -732,6 +1096,10 @@ CHECK_DESCRIPTIONS: dict[str, str] = {
     "wind_direction": "1 if the scene wind direction is not +X, -X, +Y or -Y",
     "fixed_nodes_missing": "Fixed structure node ids with no active node row",
     "hanging_chain": "Hanging nodes whose parent is itself hanging (only one level is resolved)",
+    "singular_matrix": (
+        "Singular Statics systems (boom 3x3, leg frame 6x6); the boom one is singular "
+        "without a solve rope"
+    ),
 }
 
 CHECKS_TITLE_ROW = 1
@@ -769,6 +1137,9 @@ _GAP = 2  # blank rows between sections
 GEOMETRY_FIRST_ROW = 3 + len(GEOMETRY_NOTES) + _GAP
 #: Loads sheet: row 1 title, then the notes, then the scene block and the tables.
 LOADS_FIRST_ROW = 3 + len(LOADS_NOTES) + _GAP
+#: Statics and Results sheets: row 1 title, then the notes, then the sections.
+STATICS_FIRST_ROW = 3 + len(STATICS_NOTES) + _GAP
+RESULTS_FIRST_ROW = 3 + len(RESULTS_NOTES) + _GAP
 
 
 @dataclass(frozen=True, eq=False)
@@ -785,6 +1156,13 @@ class Layout:
     #: Loads-sheet block (``load_scene``) and tables (``_LOADS_TABLE_DEFS``).
     loads_blocks: dict[str, Block] = field(init=False)
     loads_tables: dict[str, Table] = field(init=False)
+    #: Statics-sheet blocks and matrix systems (``_STATICS_SECTIONS``).
+    statics_blocks: dict[str, Block] = field(init=False)
+    statics_systems: dict[str, MatrixSystem] = field(init=False)
+    #: Results-sheet block (``results_status``) and tables (``tensions``: row i = Inputs
+    #: hoists row i; ``reactions``: one row per ``RESULT_ROWS`` entry).
+    results_blocks: dict[str, Block] = field(init=False)
+    results_tables: dict[str, Table] = field(init=False)
 
     def __post_init__(self) -> None:
         row = INPUTS_FIRST_ROW
@@ -841,6 +1219,42 @@ class Layout:
         object.__setattr__(self, "loads_blocks", loads_blocks)
         object.__setattr__(self, "loads_tables", loads_tables)
 
+        row = STATICS_FIRST_ROW
+        statics_blocks: dict[str, Block] = {}
+        systems: dict[str, MatrixSystem] = {}
+        for section in _STATICS_SECTIONS:
+            if section[0] == "block":
+                _kind, name, title, fields = section
+                statics_blocks[name] = Block(name, title, STATICS, fields, row)
+                row = statics_blocks[name].end_row + _GAP
+            else:
+                _kind, name, title, unknowns, equations = section
+                systems[name] = MatrixSystem(name, title, STATICS, unknowns, equations, row)
+                row = systems[name].end_row + _GAP
+        object.__setattr__(self, "statics_blocks", statics_blocks)
+        object.__setattr__(self, "statics_systems", systems)
+
+        results_blocks = {
+            "results_status": Block(
+                "results_status", "Status", RESULTS, RESULTS_STATUS_FIELDS, RESULTS_FIRST_ROW
+            )
+        }
+        row = results_blocks["results_status"].end_row + _GAP
+        results_tables: dict[str, Table] = {}
+        for name, title, fields, capacity in (
+            (
+                "tensions",
+                "Rope tensions per hoist (row i = Inputs hoists row i)",
+                TENSION_RESULT_FIELDS,
+                tables["hoists"].capacity,
+            ),
+            ("reactions", "Support reactions", REACTION_RESULT_FIELDS, len(RESULT_ROWS)),
+        ):
+            results_tables[name] = Table(name, title, RESULTS, fields, capacity, row)
+            row = results_tables[name].end_row + _GAP
+        object.__setattr__(self, "results_blocks", results_blocks)
+        object.__setattr__(self, "results_tables", results_tables)
+
     # -- inputs ---------------------------------------------------------------------
 
     def addr(self, table: str, key: str, row: int) -> str:
@@ -890,6 +1304,49 @@ class Layout:
         ``fx``/``fz``/``m`` known loads, ``bh_fx``/``bh_fz``/``bh_m`` solve-rope coefficients,
         ``<category>_fx``/``_fz``/``_m`` per ``LOAD_CATEGORIES``)."""
         return self.loads_addr("body_totals", key, BODIES.index(body) + 1)
+
+    # -- statics --------------------------------------------------------------------
+
+    def statics_cell(self, block: str, key: str) -> str:
+        """Statics-sheet address of a single-value cell (``statics_status``,
+        ``structure_nodes``, ``leg_loads``, ``platform``, ``leg_axes``)."""
+        return self.statics_blocks[block].addr(key)
+
+    def statics_flag(self, system: str) -> str:
+        """The ``singular`` flag (1/0) of ``boom_system`` or ``leg_system``."""
+        return self.statics_systems[system].status_addr("singular")
+
+    def statics_value(self, key: str) -> str:
+        """Address of ``_run_statics`` output ``key`` (``STATICS_UNKNOWNS``): the solution
+        used of a system unknown, or the platform resultant."""
+        for system in self.statics_systems.values():
+            if key in {f.key for f in system.unknowns}:
+                return system.x_addr(key)
+        return self.statics_cell("platform", key)
+
+    # -- results --------------------------------------------------------------------
+
+    def results_cell(self, block: str, key: str) -> str:
+        """Results-sheet address of a single-value cell (``results_status``)."""
+        return self.results_blocks[block].addr(key)
+
+    def results_addr(self, table: str, key: str, row: int) -> str:
+        """Results-sheet address of ``key`` in data row ``row`` (``tensions``,
+        ``reactions``)."""
+        return self.results_tables[table].addr(key, row)
+
+    @property
+    def result_rows(self) -> tuple[tuple[str, str], ...]:
+        """(entity, component) of each reaction row, in sheet order."""
+        return tuple((entity, comp) for entity, comp, _unit, _src in RESULT_ROWS)
+
+    def result_cell(self, entity: str, component: str) -> str:
+        """Value cell of result ``reaction.<entity>.<component>``."""
+        try:
+            index = self.result_rows.index((entity, component))
+        except ValueError:
+            raise KeyError(f"no result row {entity}.{component}") from None
+        return self.results_addr("reactions", "value", index + 1)
 
     # -- checks ---------------------------------------------------------------------
 

@@ -761,3 +761,248 @@ def test_hanging_chain_check(tmp_path: Path) -> None:
     child = dict(parent, id="chained_hook", below_node_id=parent["id"])
     model["nodes"].append(child)
     assert _Book(_build(tmp_path, model))(LAYOUT.check("hanging_chain")) == 1
+
+
+# -- workbook: statics solve and in-plane results ------------------------------------
+
+#: Golden reaction components the workbook must reproduce in-plane. The heel point's
+#: boom_axial/normal (name-based axis node) and the out-of-plane rows are not in-plane.
+INPLANE_REQUIRED = {
+    ("heel_point", "fx"),
+    ("heel_point", "fz"),
+    ("rear_hinge", "fx"),
+    ("rear_hinge", "fz"),
+    ("front_hinge", "fx"),
+    ("front_hinge", "fz"),
+    ("upper_hinge", "fx"),
+    ("upper_hinge", "fz"),
+    ("platform_base", "fx"),
+    ("platform_base", "fz"),
+    ("platform_base", "my"),
+}
+
+
+def _workbook_results(book: "_Book", lay: layout.Layout, model: dict[str, Any]) -> dict[str, Any]:
+    """The Results sheet as ``app_results`` keys (``tension.<hoist>``, ``reaction.*``)."""
+    out: dict[str, Any] = {}
+    for i, hoist in enumerate(model["hoists"], start=1):
+        assert book(lay.results_addr("tensions", "hoist_id", i)) == hoist["id"]
+        out[f"tension.{hoist['id']}"] = book(lay.results_addr("tensions", "tension_kN", i))
+    for entity, component in lay.result_rows:
+        out[f"reaction.{entity}.{component}"] = book(lay.result_cell(entity, component))
+    return out
+
+
+def _app_inplane(
+    case: SceneCase, mutate: Callable[[dict[str, Any]], None] | None = None
+) -> dict[str, float] | None:
+    """The app's rope tensions and reaction components for a (mutated) 22689 document,
+    straight from ``CraneCalculator.compute_analysis_point`` (``None`` if it finds none)."""
+    from crane_statics.calculation.engine import CraneCalculator
+    from crane_statics.core.demand_extraction import extract_connection_component_response
+    from crane_statics.data.models import CraneDocument
+
+    doc_dict = load_document(YAML_PATH).model_dump()
+    if mutate is not None:
+        mutate(doc_dict)
+    doc = CraneDocument.model_validate(doc_dict)
+    kwargs = dataclasses.asdict(case)
+    hoist_id = kwargs.pop("hoist_id")
+    angle, hook = kwargs.pop("boom_angle_deg"), kwargs.pop("hook_load_kN")
+    pt = CraneCalculator(doc).compute_analysis_point(angle, hook, hoist_id, **kwargs)
+    if pt is None:
+        return None
+    solve = {r["id"] for r in doc_dict["ropes"] if r.get("tension_mode") == "solve"}
+    out: dict[str, float] = {}
+    for hoist in doc_dict["hoists"]:
+        channel = "boom_hoist" if hoist["rope_id"] in solve else hoist["rope_id"]
+        base = pt.baseline_rope_tensions.get(channel, 0.0)
+        sens = pt.sensitivity_rope_tensions.get(channel, 0.0)
+        out[f"tension.{hoist['id']}"] = base + sens * hook
+    for entity, component in layout.DEFAULT_LAYOUT.result_rows:
+        comp = {"fx": "Fx", "fz": "Fz", "my": "My"}.get(component, component)
+        value = extract_connection_component_response(pt, hook, entity, comp)
+        assert value is not None, (entity, component)
+        out[f"reaction.{entity}.{component}"] = value
+    return out
+
+
+def _solver_statics(
+    case: SceneCase, mutate: Callable[[dict[str, Any]], None] | None = None
+) -> dict[str, float]:
+    """``crane_solver._run_statics`` at ``case``, with the inputs ``_solver_loads`` uses."""
+    doc = load_document(YAML_PATH).model_dump()
+    if mutate is not None:
+        mutate(doc)
+    positions = active_hook_positions(
+        doc,
+        case.hoist_id,
+        KinematicsAdapter(doc).compute_all_node_positions(case.boom_angle_deg),
+        case.tackle_length_m,
+    )
+    motion = crane_frame_motion(
+        abs(float(doc["environment"]["gravity_m_s2"])),
+        VesselInputs(
+            accel_x_m_s2=case.accel_x_m_s2,
+            accel_y_m_s2=case.accel_y_m_s2,
+            accel_z_m_s2=case.accel_z_m_s2,
+            roll_deg=case.vessel_roll_deg,
+            pitch_deg=case.vessel_pitch_deg,
+            slew_deg=case.crane_slewing_angle_deg,
+            roll_accel_rad_s2=case.roll_accel_rad_s2,
+            pitch_accel_rad_s2=case.pitch_accel_rad_s2,
+        ),
+    )
+    rope_mass = {
+        nid: entry.mass_t
+        for nid, entry in rope_mass_at_nodes(
+            doc, positions, effective_mult=falls_override_effective_mult(doc, {})
+        ).items()
+    }
+    wind_x, _wind_y = split_wind_speed_components(case.wind_speed_m_s, case.wind_direction)
+    raw: dict[str, float] = crane_solver._run_statics(
+        doc,
+        {nid: (float(p["x"]), float(p["z"])) for nid, p in positions.items()},
+        {n["id"]: n.get("body", "") for n in doc["nodes"]},
+        case.hoist_id,
+        case.hook_load_kN,
+        wind_x,
+        motion.accel_x_m_s2,
+        motion.accel_z_m_s2,
+        motion.pitch_accel_rad_s2,
+        offlead_lateral_force_kN=math.sin(math.radians(case.offlead_deg)) * case.hook_load_kN,
+        solver_ctx=crane_solver.build_solver_static_context(doc),
+        rope_mass_t_by_node=rope_mass,
+        boom_angle_deg=case.boom_angle_deg,
+    )
+    return raw
+
+
+def _assert_statics_match_solver(
+    book: "_Book", lay: layout.Layout, raw: dict[str, float], tag: Any
+) -> None:
+    assert set(raw) == set(layout.STATICS_UNKNOWNS), tag
+    for key, want in raw.items():
+        got = book(lay.statics_value(key))
+        assert math.isclose(got, want, rel_tol=1e-9, abs_tol=1e-6), (tag, key, got, want)
+
+
+@pytest.mark.parametrize("name", ["base", "inplane_wind_accel", "idle_hoist"])
+def test_inplane_results_match_golden(tmp_path: Path, name: str) -> None:
+    path = _build(tmp_path, case=name)
+    _assert_no_errors(path, layout.RESULTS)
+    _assert_no_errors(path, layout.STATICS)
+    book = _Book(path)
+    got = _workbook_results(book, LAYOUT, _model())
+    golden = _golden()["cases"][name]["app_results"]
+    assert INPLANE_REQUIRED <= set(LAYOUT.result_rows)
+    assert {k for k in golden if k.startswith("tension.")} == {
+        k for k in got if k.startswith("tension.")
+    }
+    for key, value in got.items():
+        assert key in golden, key
+        assert math.isclose(value, golden[key], abs_tol=LOAD_TOL), (name, key, value, golden[key])
+    assert book(LAYOUT.statics_cell("statics_status", "ok")) == 1
+    assert book(LAYOUT.results_cell("results_status", "message")) == "OK"
+    _assert_statics_match_solver(book, LAYOUT, _solver_statics(CASES[name]), name)
+
+
+def _collapse_rear_leg(model: dict[str, Any]) -> None:
+    """Move the rear hinge onto the upper hinge: the rear leg has no length."""
+    points = model["structure"]["points"]
+    points["rear_hinge"]["x_m"] = points["upper_hinge"]["x_m"]
+    points["rear_hinge"]["z_m"] = points["upper_hinge"]["z_m"]
+
+
+def _collapse_rear_leg_doc(doc: dict[str, Any]) -> None:
+    nodes = {n["id"]: n for n in doc["nodes"]}
+    for node_id in ("rear_base", "platform_rear"):
+        nodes[node_id]["x_m"] = nodes["rear_top"]["x_m"]
+        nodes[node_id]["z_m"] = nodes["rear_top"]["z_m"]
+
+
+def _assert_results_show_message(path: Path, lay: layout.Layout, words: str) -> "_Book":
+    _assert_no_errors(path, layout.RESULTS)
+    book = _Book(path)
+    assert book(lay.statics_cell("statics_status", "ok")) == 0
+    message = book(lay.results_cell("results_status", "message"))
+    assert isinstance(message, str) and words in message.lower(), message
+    for entity, component in lay.result_rows:
+        assert isinstance(book(lay.result_cell(entity, component)), str), (entity, component)
+    for i in range(1, len(_model()["hoists"]) + 1):
+        assert isinstance(book(lay.results_addr("tensions", "tension_kN", i)), str), i
+    return book
+
+
+def test_singular_matrix_sets_flag_not_errors(tmp_path: Path) -> None:
+    # The app: np.linalg.solve raises, _run_statics returns {} and there is no point.
+    assert _solver_statics(CASES["base"], _collapse_rear_leg_doc) == {}
+    assert _app_inplane(CASES["base"], _collapse_rear_leg_doc) is None
+    model = _model()
+    _collapse_rear_leg(model)
+    path = tmp_path / "singular.xlsx"
+    build_workbook(model, CASES["base"], path, TIGHT)
+    book = _assert_results_show_message(path, TIGHT, "singular")
+    assert book(TIGHT.statics_flag("leg_system")) == 1
+    assert book(TIGHT.statics_flag("boom_system")) == 0
+    assert book(TIGHT.check("singular_matrix")) == 1
+    assert book(TIGHT.total_issues_addr) == 1
+
+
+def test_no_solve_rope_shows_message(tmp_path: Path) -> None:
+    def mutate(doc: dict[str, Any]) -> None:
+        for rope in doc["ropes"]:
+            rope["tension_mode"] = "fixed"
+
+    assert _app_inplane(CASES["base"], mutate) is None
+    model = _model()
+    mutate(model)
+    path = tmp_path / "no_solve.xlsx"
+    build_workbook(model, CASES["base"], path, TIGHT)
+    book = _assert_results_show_message(path, TIGHT, "solve rope")
+    assert book(TIGHT.check("no_solve_rope")) == 1
+    assert book(TIGHT.statics_flag("boom_system")) == 1
+
+
+def test_spare_rows_do_not_change_results(tmp_path: Path) -> None:
+    big = layout.Layout(
+        layout.Capacities(mass_points=55, wind_areas=45, nodes=95, segments=70, ropes=11, hoists=12)
+    )
+    model = _model()
+    got = {}
+    for tag, lay in (("tight", TIGHT), ("big", big)):
+        path = tmp_path / f"{tag}.xlsx"
+        build_workbook(model, CASES["inplane_wind_accel"], path, lay)
+        _assert_no_errors(path, layout.RESULTS)
+        book = _Book(path)
+        got[tag] = _workbook_results(book, lay, model)
+        got[tag].update({k: book(lay.statics_value(k)) for k in layout.STATICS_UNKNOWNS})
+        assert book(lay.total_issues_addr) == 0
+    assert set(got["tight"]) == set(got["big"])
+    for key, value in got["tight"].items():
+        assert math.isclose(value, got["big"][key], rel_tol=0.0, abs_tol=1e-9), key
+
+
+def test_wind_zero_and_idle_hoist_zero_tension(tmp_path: Path) -> None:
+    # Scene hoist with zero hook load, no wind, and an idle hoist (SH) whose rope has no
+    # segment: the app reports MH = 0 and SH = its block weight over one part (not 0).
+    case = dataclasses.replace(CASES["base"], hook_load_kN=0.0, wind_speed_m_s=0.0)
+
+    def mutate(doc: dict[str, Any]) -> None:
+        next(r for r in doc["ropes"] if r["id"] == "SH__rope")["segments"] = []
+
+    want = _app_inplane(case, mutate)
+    assert want is not None
+    model = _model()
+    mutate(model)
+    path = tmp_path / "zero.xlsx"
+    build_workbook(model, case, path, TIGHT)
+    _assert_no_errors(path, layout.RESULTS)
+    book = _Book(path)
+    got = _workbook_results(book, TIGHT, model)
+    assert got["tension.MH"] == 0 and want["tension.MH"] == 0
+    assert want["tension.SH"] > 1.0
+    assert set(got) == set(want)
+    for key, value in want.items():
+        assert math.isclose(got[key], value, abs_tol=LOAD_TOL), (key, got[key], value)
+    _assert_statics_match_solver(book, TIGHT, _solver_statics(case, mutate), "zero")

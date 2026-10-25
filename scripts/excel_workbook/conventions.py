@@ -167,6 +167,25 @@ CONVENTIONS_TEXT: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
         ),
     ),
     (
+        "Statics",
+        (
+            (
+                "Unknowns are the forces the supports exert on the body solved for: (Hx, Hz) "
+                "of the heel on the boom, R_rb and R_fb of the leg bases on the legs, R_top of "
+                "the top joint on the front leg (the rear leg gets -R_top). Moment equations "
+                "are about the origin (M = x Fz - z Fx). The platform resultant is (r_g_x, "
+                "r_g_z, m_g) = -(platform loads - the boom and leg reactions).",
+                "calculation/solver/crane_solver.py _run_statics, _reactions_from_raw",
+            ),
+            (
+                "A system counts as singular when |det A| <= 1e-12 x the product of its row "
+                "norms or MINVERSE fails (the app: np.linalg.solve raising, exactly singular "
+                "only). Results then show the reason instead of numbers.",
+                "calculation/solver/crane_solver.py _run_statics",
+            ),
+        ),
+    ),
+    (
         "Tables",
         (
             (
