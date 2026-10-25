@@ -10,9 +10,11 @@ Sources:
   ``_run_statics`` outputs as Fx/Fz/My per support), ``core/demand_extraction.py``
   ``extract_connection_component_response`` (resultant) and ``calculation/engine.py``
   ``resolve_connection_component_linear_response`` (leg_axial / leg_normal).
+* out-of-plane rows (heel_left/right, platform base Fy, Mx and the radial / bearing rows) --
+  ``build_oop.oop_component_formula`` (OutOfPlane sheet).
 
-When Statics has no solution every value cell shows the short reason (text), never an
-error value; spare hoist rows read 0 and "".
+When Statics has no solution or the boom width is not > 0, every value cell shows the short
+reason (text), never an error value; spare hoist rows read 0 and "".
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from collections.abc import Callable
 from openpyxl.worksheet.worksheet import Worksheet
 
 from . import styles
+from .build_oop import oop_component_formula
 from .layout import RESULT_ROWS, RESULTS_NOTES, Block, Layout, Table, split
 
 
@@ -32,19 +35,22 @@ def _local(address: str) -> str:
 def _status_formulas(lay: Layout) -> dict[str, str]:
     st = lambda key: lay.statics_cell("statics_status", key)  # noqa: E731
     me = lambda key: lay.results_cell("results_status", key)  # noqa: E731
+    width_ok = lay.oop.cell("oop_scene", "width_ok")
     return {
-        "ok": f"={st('ok')}",
+        "ok": f"=IF(AND({st('ok')}=1,{width_ok}=1),1,0)",
         "reason": (
             f'=IF({me("ok")}=1,"",IF({st("solve_ropes")}=0,"no solve rope",'
             f'IF(OR({st("boom_singular")}=1,{st("leg_singular")}=1),"singular matrix",'
-            f'"no solution")))'
+            f'IF({width_ok}<>1,"boom width must be > 0","no solution"))))'
         ),
         "message": (
             f'=IF({me("ok")}=1,"OK",IF({st("solve_ropes")}=0,"No solve rope: no active rope '
             f"has role solve (Inputs ropes), so the boom matrix is singular and the app shows "
             f'no results",IF(OR({st("boom_singular")}=1,{st("leg_singular")}=1),"Singular '
             f"matrix on Statics (boom 3x3 or leg frame 6x6): the app finds no solution and "
-            f'shows no results","No solution")))'
+            f'shows no results",IF({width_ok}<>1,"Boom width (Inputs structure) must be > 0: '
+            f"the app rejects it and its out-of-plane split divides by it, so it shows no "
+            f'results","No solution"))))'
         ),
     }
 
@@ -71,6 +77,9 @@ def _tension_row(lay: Layout, i: int) -> dict[str, str]:
 
 def _component_formula(lay: Layout, entity: str, component: str) -> str:
     """The number behind ``reaction.<entity>.<component>`` (no leading ``=``)."""
+    out_of_plane = oop_component_formula(lay, entity, component)
+    if out_of_plane is not None:
+        return out_of_plane
     v = lay.statics_value
     raw = {
         "heel_point": ("h_x", "h_z"),

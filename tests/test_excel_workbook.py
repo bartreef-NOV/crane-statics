@@ -385,6 +385,7 @@ def test_workbook_sheets_in_order(tmp_path: Path) -> None:
         "Geometry",
         "Loads",
         "Statics",
+        "OutOfPlane",
         "Results",
         "Checks",
     )
@@ -796,8 +797,9 @@ def _workbook_results(book: "_Book", lay: layout.Layout, model: dict[str, Any]) 
 def _app_inplane(
     case: SceneCase, mutate: Callable[[dict[str, Any]], None] | None = None
 ) -> dict[str, float] | None:
-    """The app's rope tensions and reaction components for a (mutated) 22689 document,
-    straight from ``CraneCalculator.compute_analysis_point`` (``None`` if it finds none)."""
+    """The app's rope tensions and reaction components (in-plane and out-of-plane) for a
+    (mutated) 22689 document, straight from ``CraneCalculator.compute_analysis_point``
+    (``None`` if it finds none), read as the Scene results table reads them."""
     from crane_statics.calculation.engine import CraneCalculator
     from crane_statics.core.demand_extraction import extract_connection_component_response
     from crane_statics.data.models import CraneDocument
@@ -806,6 +808,7 @@ def _app_inplane(
     if mutate is not None:
         mutate(doc_dict)
     doc = CraneDocument.model_validate(doc_dict)
+    diameter = doc.support_widths.slewing_bearing_diameter_m
     kwargs = dataclasses.asdict(case)
     hoist_id = kwargs.pop("hoist_id")
     angle, hook = kwargs.pop("boom_angle_deg"), kwargs.pop("hook_load_kN")
@@ -820,9 +823,15 @@ def _app_inplane(
         sens = pt.sensitivity_rope_tensions.get(channel, 0.0)
         out[f"tension.{hoist['id']}"] = base + sens * hook
     for entity, component in layout.DEFAULT_LAYOUT.result_rows:
-        comp = {"fx": "Fx", "fz": "Fz", "my": "My"}.get(component, component)
-        value = extract_connection_component_response(pt, hook, entity, comp)
+        comp = {"fx": "Fx", "fy": "Fy", "fz": "Fz", "mx": "Mx", "my": "My"}.get(
+            component, component
+        )
+        value = extract_connection_component_response(
+            pt, hook, entity, comp, support_widths_diameter_m=diameter
+        )
         assert value is not None, (entity, component)
+        if component == "min_bearing_line_load":
+            value = max(0.0, value)  # the results row shows uplift only
         out[f"reaction.{entity}.{component}"] = value
     return out
 
@@ -905,6 +914,8 @@ def test_inplane_results_match_golden(tmp_path: Path, name: str) -> None:
     assert book(LAYOUT.statics_cell("statics_status", "ok")) == 1
     assert book(LAYOUT.results_cell("results_status", "message")) == "OK"
     _assert_statics_match_solver(book, LAYOUT, _solver_statics(CASES[name]), name)
+    _assert_book_clean(book, layout.OUT_OF_PLANE, layout.CHECKS)
+    _assert_oop_matches_engine(book, LAYOUT, _model(), CASES[name], name)
 
 
 def _collapse_rear_leg(model: dict[str, Any]) -> None:
@@ -964,7 +975,8 @@ def test_no_solve_rope_shows_message(tmp_path: Path) -> None:
     assert book(TIGHT.statics_flag("boom_system")) == 1
 
 
-def test_spare_rows_do_not_change_results(tmp_path: Path) -> None:
+@pytest.mark.parametrize("name", ["inplane_wind_accel", "outofplane_wind_roll_sidelead"])
+def test_spare_rows_do_not_change_results(tmp_path: Path, name: str) -> None:
     big = layout.Layout(
         layout.Capacities(mass_points=55, wind_areas=45, nodes=95, segments=70, ropes=11, hoists=12)
     )
@@ -972,11 +984,16 @@ def test_spare_rows_do_not_change_results(tmp_path: Path) -> None:
     got = {}
     for tag, lay in (("tight", TIGHT), ("big", big)):
         path = tmp_path / f"{tag}.xlsx"
-        build_workbook(model, CASES["inplane_wind_accel"], path, lay)
-        _assert_no_errors(path, layout.RESULTS)
+        build_workbook(model, CASES[name], path, lay)
         book = _Book(path)
+        _assert_book_clean(book, layout.OUT_OF_PLANE, layout.RESULTS, layout.CHECKS)
         got[tag] = _workbook_results(book, lay, model)
         got[tag].update({k: book(lay.statics_value(k)) for k in layout.STATICS_UNKNOWNS})
+        for group in lay.oop.groups:
+            for comp in ("mx", "mz"):
+                got[tag][f"{group}.{comp}"] = book(lay.oop.moment(group, comp))
+        for key in ("fy_kN", "mx_kNm"):
+            got[tag][key] = book(lay.oop.cell("platform", key))
         assert book(lay.total_issues_addr) == 0
     assert set(got["tight"]) == set(got["big"])
     for key, value in got["tight"].items():
@@ -1006,3 +1023,256 @@ def test_wind_zero_and_idle_hoist_zero_tension(tmp_path: Path) -> None:
     for key, value in want.items():
         assert math.isclose(got[key], value, abs_tol=LOAD_TOL), (key, got[key], value)
     _assert_statics_match_solver(book, TIGHT, _solver_statics(case, mutate), "zero")
+
+
+# -- workbook: out-of-plane pass -------------------------------------------------------
+
+#: Golden out-of-plane components the workbook must reproduce. heel_left/heel_right
+#: boom_axial/boom_normal need the name-based heel axis node and are omitted, as for the
+#: heel point.
+OOP_REQUIRED = {
+    ("heel_left", "fx"),
+    ("heel_left", "fz"),
+    ("heel_left", "resultant"),
+    ("heel_right", "fx"),
+    ("heel_right", "fz"),
+    ("heel_right", "resultant"),
+    ("platform_base", "fy"),
+    ("platform_base", "mx"),
+    ("platform_base", "fradial"),
+    ("platform_base", "mradial"),
+    ("platform_base", "max_bearing_line_load"),
+    ("platform_base", "min_bearing_line_load"),
+}
+#: Support group of the engine's out-of-plane pass -> its (left, right) split entities.
+OOP_SIDES = {
+    "heel": ("heel_left", "heel_right"),
+    "front_leg": ("front_leg_left", "front_leg_right"),
+    "rear_leg": ("rear_leg_left", "rear_leg_right"),
+}
+
+
+def _assert_book_clean(book: "_Book", *sheets: str) -> None:
+    for sheet in sheets:
+        values = book.values[sheet]
+        errors = {c: v for c, v in values.items() if isinstance(v, str) and v.startswith("#")}
+        assert not errors, (sheet, list(errors.items())[:10])
+
+
+def _case_motion(case: SceneCase) -> Any:
+    return crane_frame_motion(
+        abs(float(_model()["environment"]["gravity_m_s2"])),
+        VesselInputs(
+            accel_x_m_s2=case.accel_x_m_s2,
+            accel_y_m_s2=case.accel_y_m_s2,
+            accel_z_m_s2=case.accel_z_m_s2,
+            roll_deg=case.vessel_roll_deg,
+            pitch_deg=case.vessel_pitch_deg,
+            slew_deg=case.crane_slewing_angle_deg,
+            roll_accel_rad_s2=case.roll_accel_rad_s2,
+            pitch_accel_rad_s2=case.pitch_accel_rad_s2,
+        ),
+    )
+
+
+def _engine_oop(case: SceneCase) -> dict[str, Any]:
+    """The engine's out-of-plane pass at ``case``, called directly.
+
+    ``CraneCalculator.compute_analysis_point`` runs it (and leaves its point geometry, with
+    the lumped hook and rope masses, in ``_oop_geometry``); ``_out_of_plane_variants`` is then
+    evaluated once with the actual hook load and side force ``sin(sidelead) x hook load``.
+    The group moments are recovered from the split: ``M = (left - right) x width / 2``.
+    """
+    from crane_statics.calculation.engine import CraneCalculator
+
+    doc = load_document(YAML_PATH)
+    calc = CraneCalculator(doc)
+    kwargs = dataclasses.asdict(case)
+    hoist_id = kwargs.pop("hoist_id")
+    angle, hook = kwargs.pop("boom_angle_deg"), kwargs.pop("hook_load_kN")
+    pt = calc.compute_analysis_point(angle, hook, hoist_id, **kwargs)
+    assert pt is not None and calc._oop_geometry is not None
+    (_angle, lumped, _rho), geometry = calc._oop_geometry
+    motion = _case_motion(case)
+    _wind_x, wind_y = split_wind_speed_components(case.wind_speed_m_s, case.wind_direction)
+    side_kN = math.sin(math.radians(case.sidelead_deg)) * hook
+    ((split, platform_mx, platform_fy),) = calc._out_of_plane_variants(
+        pt,
+        hoist_id,
+        angle,
+        [(hook, side_kN)],
+        wind_y,
+        motion.accel_y_m_s2,
+        motion.roll_accel_rad_s2,
+        accel_x_m_s2=motion.accel_x_m_s2,
+        accel_z_m_s2=motion.accel_z_m_s2,
+        pitch_accel_rad_s2=motion.pitch_accel_rad_s2,
+        lumped_point_masses=lumped,
+    )
+    width = float(doc.support_widths.boom_width_m)
+    moments: dict[str, dict[str, float]] = {
+        group: {
+            "mx": (split[left]["Fz"] - split[right]["Fz"]) * width / 2.0,
+            "mz": (split[left]["Fx"] - split[right]["Fx"]) * width / 2.0,
+        }
+        for group, (left, right) in OOP_SIDES.items()
+    }
+    moments["platform_base"] = {"mx": platform_mx}
+    assert doc.environment.vessel_motion is not None
+    ref_z = float(doc.environment.vessel_motion.reference_z_m)
+    # _out_of_plane_variants' fy_m and fy_w, on the engine's own point geometry.
+    fy = -geometry.mass_t * (
+        motion.accel_y_m_s2 - motion.roll_accel_rad_s2 * (geometry.mass_z - ref_z)
+    )
+    n_doc = sum(len(body.mass_points) for body in doc.bodies)
+    sign = 0.0 if abs(wind_y) < 1e-12 else math.copysign(1.0, wind_y)
+    return {
+        "split": split,
+        "moments": moments,
+        "platform_fy": platform_fy,
+        "mass_fy": fy[:n_doc],
+        "mass_y": geometry.mass_y[:n_doc],
+        "lumped_fy": float(fy[n_doc:].sum()),
+        "wind_fy": sign * geometry.wind_coef * abs(wind_y) ** 2,
+        "side_kN": side_kN,
+    }
+
+
+def _assert_oop_matches_engine(
+    book: "_Book", lay: layout.Layout, model: dict[str, Any], case: SceneCase, tag: Any
+) -> None:
+    want = _engine_oop(case)
+    oop = lay.oop
+
+    def close(got: Any, value: float, what: Any) -> None:
+        assert math.isclose(got, value, rel_tol=1e-9, abs_tol=1e-6), (tag, what, got, value)
+
+    assert len(want["mass_fy"]) == sum(len(b["mass_points"]) for b in model["bodies"])
+    for i, value in enumerate(want["mass_fy"], start=1):
+        close(book(oop.addr("oop_masses", "fy_kN", i)), value, ("mass fy", i))
+        close(book(oop.addr("oop_masses", "y_m", i)), want["mass_y"][i - 1], ("mass y", i))
+    for i, value in enumerate(want["wind_fy"], start=1):
+        close(book(oop.addr("oop_winds", "fy_kN", i)), value, ("wind fy", i))
+    lumped = sum(
+        book(oop.addr("oop_lumped", "fy_kN", i))
+        for i in range(1, oop.tables["oop_lumped"].capacity + 1)
+    )
+    close(lumped, want["lumped_fy"], "lumped fy")
+    close(book(oop.cell("sidelead", "fy_kN")), want["side_kN"], "side force")
+    for group, comps in want["moments"].items():
+        for comp, value in comps.items():
+            close(book(oop.moment(group, comp)), value, (group, comp))
+    for entity, comps in want["split"].items():
+        for comp, value in comps.items():
+            close(book(oop.split_value(entity, comp.lower())), value, (entity, comp))
+    close(book(oop.cell("platform", "fy_kN")), want["platform_fy"], "platform fy")
+    close(book(oop.cell("platform", "mx_kNm")), want["moments"]["platform_base"]["mx"], "mx")
+
+
+def test_outofplane_results_match_golden(tmp_path: Path) -> None:
+    name = "outofplane_wind_roll_sidelead"
+    path = _build(tmp_path, case=name)
+    book = _Book(path)
+    _assert_book_clean(book, layout.STATICS, layout.OUT_OF_PLANE, layout.RESULTS, layout.CHECKS)
+    got = _workbook_results(book, LAYOUT, _model())
+    golden = _golden()["cases"][name]["app_results"]
+    assert INPLANE_REQUIRED | OOP_REQUIRED <= set(LAYOUT.result_rows)
+    for key, value in got.items():
+        assert key in golden, key
+        assert math.isclose(value, golden[key], abs_tol=LOAD_TOL), (name, key, value, golden[key])
+    # The case loads the left/right split and the platform out of plane.
+    assert abs(got["reaction.heel_left.fz"] - got["reaction.heel_right.fz"]) > 1000.0
+    assert abs(got["reaction.heel_left.fx"] - got["reaction.heel_right.fx"]) > 1000.0
+    assert got["reaction.platform_base.fy"] > 100.0
+    assert book(LAYOUT.results_cell("results_status", "message")) == "OK"
+    assert book(LAYOUT.total_issues_addr) == 0
+    _assert_statics_match_solver(book, LAYOUT, _solver_statics(CASES[name]), name)
+    _assert_oop_matches_engine(book, LAYOUT, _model(), CASES[name], name)
+
+
+def test_zero_boom_width_is_flagged(tmp_path: Path) -> None:
+    from crane_statics.calculation.engine import CraneCalculator
+
+    case = CASES["outofplane_wind_roll_sidelead"]
+    # The app rejects a document with boom width 0; past validation the engine's split
+    # raises and compute_analysis_point gives no point (no results at all).
+    doc = load_document(YAML_PATH)
+    doc.support_widths.boom_width_m = 0.0
+    kwargs = dataclasses.asdict(case)
+    hoist_id = kwargs.pop("hoist_id")
+    angle, hook = kwargs.pop("boom_angle_deg"), kwargs.pop("hook_load_kN")
+    assert CraneCalculator(doc).compute_analysis_point(angle, hook, hoist_id, **kwargs) is None
+
+    model = _model()
+    model["structure"]["boom_width_m"] = 0.0
+    path = tmp_path / "zero_width.xlsx"
+    build_workbook(model, case, path, TIGHT)
+    book = _Book(path)
+    _assert_book_clean(book, layout.OUT_OF_PLANE, layout.RESULTS, layout.CHECKS)
+    assert book(TIGHT.check("zero_boom_width")) == 1
+    assert book(TIGHT.total_issues_addr) == 1
+    assert book(TIGHT.statics_cell("statics_status", "ok")) == 1
+    message = book(TIGHT.results_cell("results_status", "message"))
+    assert isinstance(message, str) and "boom width" in message.lower(), message
+    for entity, component in TIGHT.result_rows:
+        assert isinstance(book(TIGHT.result_cell(entity, component)), str), (entity, component)
+    for i in range(1, len(model["hoists"]) + 1):
+        assert isinstance(book(TIGHT.results_addr("tensions", "tension_kN", i)), str), i
+
+
+@pytest.mark.parametrize("direction", ["+Y", "-Y"])
+def test_wind_y_direction_signs(tmp_path: Path, direction: str) -> None:
+    # Y wind alone: no motion, no sidelead; the platform Fy is the wind force.
+    case = dataclasses.replace(CASES["base"], wind_speed_m_s=15.1, wind_direction=direction)
+    path = _build_case(tmp_path, case)
+    book = _Book(path)
+    _assert_book_clean(book, layout.OUT_OF_PLANE, layout.RESULTS, layout.CHECKS)
+    sign = 1.0 if direction == "+Y" else -1.0
+    assert book(TIGHT.oop.cell("oop_scene", "wind_y_sign")) == sign
+    for body in layout.BODIES:
+        assert book(TIGHT.body_total(body, "wind_fx")) == 0
+    want = _app_inplane(case)
+    assert want is not None
+    got = _workbook_results(book, TIGHT, _model())
+    assert set(got) == set(want)
+    for key, value in want.items():
+        assert math.isclose(got[key], value, abs_tol=LOAD_TOL), (direction, key, got[key], value)
+    assert got["reaction.platform_base.fy"] * sign > 10.0
+    assert got["reaction.platform_base.mx"] * sign < -100.0
+    wind = sum(
+        book(TIGHT.oop.addr("oop_winds", "fy_kN", i))
+        for i in range(1, TIGHT.oop.tables["oop_winds"].capacity + 1)
+    )
+    assert math.isclose(wind, got["reaction.platform_base.fy"], abs_tol=1e-9)
+    _assert_oop_matches_engine(book, TIGHT, _model(), case, direction)
+
+
+def test_blank_bearing_diameter_hides_bearing_rows(tmp_path: Path) -> None:
+    from crane_statics.calculation.engine import CraneCalculator
+    from crane_statics.core.demand_extraction import extract_connection_component_response
+
+    case = CASES["outofplane_wind_roll_sidelead"]
+    kwargs = dataclasses.asdict(case)
+    hoist_id = kwargs.pop("hoist_id")
+    angle, hook = kwargs.pop("boom_angle_deg"), kwargs.pop("hook_load_kN")
+    calc = CraneCalculator(load_document(YAML_PATH))
+    pt = calc.compute_analysis_point(angle, hook, hoist_id, **kwargs)
+    bearing = ("max_bearing_line_load", "min_bearing_line_load")
+    for comp in bearing:
+        # The app drops the row when the document has no diameter.
+        assert extract_connection_component_response(pt, hook, "platform_base", comp, None) is None
+
+    model = _model()
+    model["structure"]["slewing_bearing_diameter_m"] = None
+    path = tmp_path / "no_diameter.xlsx"
+    build_workbook(model, case, path, TIGHT)
+    book = _Book(path)
+    _assert_book_clean(book, layout.OUT_OF_PLANE, layout.RESULTS, layout.CHECKS)
+    assert book(TIGHT.total_issues_addr) == 0
+    for comp in bearing:
+        value = book(TIGHT.result_cell("platform_base", comp))
+        assert isinstance(value, str) and "diameter" in value, value
+    golden = _golden()["cases"]["outofplane_wind_roll_sidelead"]["app_results"]
+    for comp in ("fradial", "mradial", "fy", "mx"):
+        got = book(TIGHT.result_cell("platform_base", comp))
+        assert math.isclose(got, golden[f"reaction.platform_base.{comp}"], abs_tol=LOAD_TOL)

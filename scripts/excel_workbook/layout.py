@@ -102,14 +102,24 @@ The notes, the ``results_status`` block (``ok``, ``reason``, ``message``), the
     lay.results_addr("tensions", "tension_kN", 2)
     lay.result_cell("platform_base", "my")     # value of reaction.platform_base.my
     lay.result_rows                            # ((entity, component), ...)
+
+OutOfPlane sheet
+----------------
+Defined in ``layout_oop`` and reached through ``lay.oop`` (an ``OopLayout`` built for this
+layout's capacities): ``lay.oop.cell(...)``, ``lay.oop.moment("heel", "mx")``,
+``lay.oop.split_value("heel_left", "fz")``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from functools import cached_property
+from typing import TYPE_CHECKING, Literal
 
 from openpyxl.utils import get_column_letter
+
+if TYPE_CHECKING:
+    from .layout_oop import OopLayout
 
 # -- sheets --------------------------------------------------------------------------
 
@@ -118,10 +128,11 @@ INPUTS = "Inputs"
 GEOMETRY = "Geometry"
 LOADS = "Loads"
 STATICS = "Statics"
+OUT_OF_PLANE = "OutOfPlane"
 RESULTS = "Results"
 CHECKS = "Checks"
 #: Workbook sheet order.
-SHEETS = (CONVENTIONS, INPUTS, GEOMETRY, LOADS, STATICS, RESULTS, CHECKS)
+SHEETS = (CONVENTIONS, INPUTS, GEOMETRY, LOADS, STATICS, OUT_OF_PLANE, RESULTS, CHECKS)
 
 # -- capacities (22689: 9 mass points, 8 wind areas, 29 nodes, 16 segments, 4 ropes,
 # 4 hoists) --------------------------------------------------------------------------
@@ -1024,12 +1035,18 @@ RESULTS_NOTES: tuple[str, ...] = (
     "resultant = sqrt(Fx^2 + Fz^2); leg_axial = Fx ux + Fz uz and leg_normal = -Fx uz + Fz ux "
     "along base -> top (core/demand_extraction.py, calculation/engine.py "
     "resolve_connection_component_linear_response).",
-    "When Statics has no solution (no solve rope, or a singular matrix) every value cell "
-    "shows the reason instead of a number, as the app shows no results.",
+    "When Statics has no solution (no solve rope, or a singular matrix) or the boom width is "
+    "not > 0, every value cell shows the reason instead of a number, as the app shows no "
+    "results.",
+    "Out-of-plane rows (OutOfPlane sheet, calculation/engine.py _out_of_plane_variants): "
+    "heel_left/heel_right = 0.5 heel_point +/- M_heel / boom width (the app's split), platform "
+    "base Fy/Mx with the sign of the applied loads; fradial = sqrt(Fx^2 + Fy^2), mradial = "
+    "sqrt(Mx^2 + My^2), bearing line loads Fz/(pi D) +/- 4 mradial/(pi D^2) (min shows uplift "
+    "only, core/demand_extraction.py); n/a without a bearing diameter (the app hides them).",
 )
 
 RESULTS_STATUS_FIELDS = (
-    _f("ok", "Results valid", "1/0", "flag", note="Statics ok"),
+    _f("ok", "Results valid", "1/0", "flag", note="Statics ok and boom width > 0"),
     _f("reason", "Short reason (shown in the value cells)", kind="text"),
     _f("message", "Status", kind="text"),
 )
@@ -1073,6 +1090,24 @@ RESULT_ROWS: tuple[tuple[str, str, str, str], ...] = (
     ("platform_base", "fx", "kN", "Statics r_g_x"),
     ("platform_base", "fz", "kN", "Statics r_g_z"),
     ("platform_base", "my", "kNm", "Statics m_g (in-plane base moment)"),
+    # Out-of-plane rows (OutOfPlane sheet, build_oop.oop_component_formula).
+    ("heel_left", "fx", "kN", "OutOfPlane split: 0.5 Hx + Mz_heel / width"),
+    ("heel_left", "fz", "kN", "OutOfPlane split: 0.5 Hz + Mx_heel / width"),
+    ("heel_left", "resultant", "kN", "sqrt(Fx^2 + Fz^2)"),
+    ("heel_right", "fx", "kN", "OutOfPlane split: 0.5 Hx - Mz_heel / width"),
+    ("heel_right", "fz", "kN", "OutOfPlane split: 0.5 Hz - Mx_heel / width"),
+    ("heel_right", "resultant", "kN", "sqrt(Fx^2 + Fz^2)"),
+    ("platform_base", "fy", "kN", "OutOfPlane: sum of applied Fy (load sign)"),
+    ("platform_base", "mx", "kNm", "OutOfPlane: applied Mx about platform_heel (load sign)"),
+    ("platform_base", "fradial", "kN", "sqrt(Fx^2 + Fy^2)"),
+    ("platform_base", "mradial", "kNm", "sqrt(Mx^2 + My^2)"),
+    ("platform_base", "max_bearing_line_load", "kN/m", "Fz/(pi D) + 4 mradial/(pi D^2)"),
+    (
+        "platform_base",
+        "min_bearing_line_load",
+        "kN/m",
+        "max(0, 4 mradial/(pi D^2) - Fz/(pi D)): uplift",
+    ),
 )
 
 # -- checks ----------------------------------------------------------------------------
@@ -1099,6 +1134,10 @@ CHECK_DESCRIPTIONS: dict[str, str] = {
     "singular_matrix": (
         "Singular Statics systems (boom 3x3, leg frame 6x6); the boom one is singular "
         "without a solve rope"
+    ),
+    "zero_boom_width": (
+        "1 if the boom width is not > 0 (the app rejects it; the out-of-plane split divides by "
+        "it, so Results shows a message)"
     ),
 }
 
@@ -1347,6 +1386,15 @@ class Layout:
         except ValueError:
             raise KeyError(f"no result row {entity}.{component}") from None
         return self.results_addr("reactions", "value", index + 1)
+
+    # -- out of plane ---------------------------------------------------------------
+
+    @cached_property
+    def oop(self) -> OopLayout:
+        """OutOfPlane-sheet addresses (``layout_oop``) for these capacities."""
+        from .layout_oop import OopLayout  # layout_oop builds on this module
+
+        return OopLayout.build(self)
 
     # -- checks ---------------------------------------------------------------------
 

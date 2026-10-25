@@ -97,8 +97,9 @@ CONVENTIONS_TEXT: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
             ),
             (
                 "Force = sign x 0.5 rho Cd A V^2 / 1000 (kN). X wind uses 'Area for X wind', Y "
-                "wind uses 'Area for Y wind'. Areas of body 'boom' are scaled by |sin theta| in "
-                "both directions.",
+                "wind uses 'Area for Y wind'. X wind: areas of body 'boom' are scaled by |sin "
+                "theta|; Y wind: boom-local areas are (the in-plane solver and the out-of-plane "
+                "pass test this differently; identical when boom areas are boom-local).",
                 "calculation/solver/crane_solver.py _wind_fx; calculation/engine.py",
             ),
         ),
@@ -109,7 +110,8 @@ CONVENTIONS_TEXT: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
             (
                 "Hook load (kN) acts at the hook node in -z. Offlead adds sin(offlead) x hook "
                 "load in +x at the node the hook hangs from (its parent node; the hook itself "
-                "if it has none); sidelead adds sin(sidelead) x hook load in +y.",
+                "if it has none); sidelead adds sin(sidelead) x hook load in +y at the scene "
+                "hoist's support node (its hook node if the support is missing).",
                 "calculation/solver/crane_solver.py _accumulate_loads; core/drawn_loads.py "
                 "hook_load; calculation/engine.py; core/lead_channels.py",
             ),
@@ -164,6 +166,24 @@ CONVENTIONS_TEXT: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
                 "scripts/excel_workbook/reference.py; calculation/engine.py",
             ),
             ("Pinned connections (heel, hinges) carry no moment.", ""),
+        ),
+    ),
+    (
+        "Out-of-plane pass",
+        (
+            (
+                "Y loads are not part of the in-plane solve. Moments of the applied loads are "
+                "taken about the support-group origins boom_heel (heel), front_base, rear_base "
+                "and platform_heel (platform base): Mx = y Fz - (z - oz) Fy, Mz = (x - ox) Fy "
+                "- y Fx. Rope self-weight and idle hook blocks sit at y = 0; wind and the side "
+                "force at y = 0.",
+                "calculation/engine.py _out_of_plane_variants",
+            ),
+            (
+                "The side force acts at the support node's kinematic position (before the "
+                "tackle moves the hook).",
+                "calculation/engine.py _out_of_plane_geometry",
+            ),
         ),
     ),
     (
