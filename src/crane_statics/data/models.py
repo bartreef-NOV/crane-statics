@@ -1070,7 +1070,15 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
                 "hook_mass_t": float(hook["mass_t"]),
                 "hook_daf": float(hook["daf"]),
                 "offlead_deg": float(hook["offlead_deg_limit"]),
-                "sidelead_deg": float(hook.get("sidelead_deg_limit", hook["offlead_deg_limit"])),
+                "sidelead_deg": float(
+                    hook[
+                        (
+                            "sidelead_deg_limit"
+                            if "sidelead_deg_limit" in hook
+                            else "offlead_deg_limit"
+                        )
+                    ]
+                ),
                 "outreach_min_m": float(envl["outreach_min_m"]),
                 "outreach_max_m": float(envl["outreach_max_m"]),
                 "contractual_points": cps,

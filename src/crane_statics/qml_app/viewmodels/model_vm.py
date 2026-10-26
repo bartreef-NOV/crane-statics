@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+
+from crane_statics.qml_app.qt_compat import pyqtProperty
 
 from crane_statics.core.document_edit import (
     DocumentEditError,
@@ -506,7 +508,7 @@ class ModelViewModel(QObject):
             lambda editor: editor.add_node(build_node(body_id, **_node_kwargs(fields)))
         )
 
-    @pyqtSlot(int, "QVariantMap", result=bool)
+    @pyqtSlot(int, "QVariantMap", result="bool")
     def updateNode(self, row: int, fields: dict) -> bool:
         current = self._nodes_model.record_at(row)
         if current is None:
@@ -554,7 +556,7 @@ class ModelViewModel(QObject):
             )
         )
 
-    @pyqtSlot(int, "QVariantMap", result=bool)
+    @pyqtSlot(int, "QVariantMap", result="bool")
     def updateMassPoint(self, row: int, fields: dict) -> bool:
         body_id = self._selected_body_id
         return self._apply_edit(
@@ -595,7 +597,7 @@ class ModelViewModel(QObject):
             )
         )
 
-    @pyqtSlot(int, "QVariantMap", result=bool)
+    @pyqtSlot(int, "QVariantMap", result="bool")
     def updateWindArea(self, row: int, fields: dict) -> bool:
         body_id = self._selected_body_id
         return self._apply_edit(
@@ -650,7 +652,7 @@ class ModelViewModel(QObject):
             lambda editor: editor.add_hoist(build_payload_hoist(**_hoist_kwargs(fields)))
         )
 
-    @pyqtSlot(int, "QVariantMap", result=bool)
+    @pyqtSlot(int, "QVariantMap", result="bool")
     def updateHoist(self, row: int, fields: dict) -> bool:
         current = self._hoists_model.record_at(row)
         if current is None:
@@ -675,7 +677,7 @@ class ModelViewModel(QObject):
             )
         )
 
-    @pyqtSlot(int, str, "QVariant", result=bool)
+    @pyqtSlot(int, str, "QVariant", result="bool")
     def setHoistField(self, row: int, field: str, value: Any) -> bool:
         """Replace one field of the hoist in ``row``; the hoist form commits through this."""
         return self._commit_hoist_cell(row, field, value)
@@ -710,7 +712,7 @@ class ModelViewModel(QObject):
             )
         )
 
-    @pyqtSlot(int, "QVariantMap", result=bool)
+    @pyqtSlot(int, "QVariantMap", result="bool")
     def updateRopeSegment(self, row: int, fields: dict) -> bool:
         hoist_id = self._model.selected_editor_hoist_id
         return self._apply_edit(
@@ -745,7 +747,7 @@ class ModelViewModel(QObject):
             )
         )
 
-    @pyqtSlot(int, "QVariantMap", result=bool)
+    @pyqtSlot(int, "QVariantMap", result="bool")
     def updateContractualPoint(self, row: int, fields: dict) -> bool:
         hoist_id = self._model.selected_editor_hoist_id
         mode = self._contractual_mode

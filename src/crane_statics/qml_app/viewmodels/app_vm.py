@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QUrl, pyqtSignal, pyqtSlot
+
+from crane_statics.qml_app.qt_compat import pyqtProperty
 
 from crane_statics.core.io import (
     DocumentIOError,
@@ -105,7 +107,7 @@ class AppViewModel(QObject):
     def openPath(self, path_str: str) -> None:
         self.open(QUrl.fromLocalFile(str(Path(path_str).resolve())))
 
-    @pyqtSlot(result=bool)
+    @pyqtSlot(result="bool")
     def save(self) -> bool:
         if self._model.document is None:
             self.notification.emit("No document is open.", "warning")
@@ -114,7 +116,7 @@ class AppViewModel(QObject):
             return False
         return self._write(self._model.document_path)
 
-    @pyqtSlot(QUrl, result=bool)
+    @pyqtSlot(QUrl, result="bool")
     def saveAs(self, url: QUrl) -> bool:
         if self._model.document is None:
             self.notification.emit("No document is open.", "warning")

@@ -9,10 +9,11 @@ from PyQt6.QtCore import (
     QAbstractTableModel,
     QModelIndex,
     Qt,
-    pyqtProperty,
     pyqtSignal,
     pyqtSlot,
 )
+
+from crane_statics.qml_app.qt_compat import pyqtProperty
 
 
 @dataclass(frozen=True)
@@ -163,12 +164,12 @@ class RecordTableModel(QAbstractTableModel):
         # repaints the cell; there is nothing to write into the row held here.
         return bool(self._commit(index.row(), str(column.field), value))
 
-    @pyqtSlot(int, int, "QVariant", result=bool)
+    @pyqtSlot(int, int, "QVariant", result="bool")
     def commitCell(self, row: int, column: int, value: Any) -> bool:
         """Apply one edited cell, addressed the way a QML delegate knows it."""
         return self.setData(self.index(int(row), int(column)), value, _EDIT_ROLE)
 
-    @pyqtSlot(int, int, result=bool)
+    @pyqtSlot(int, int, result="bool")
     def isCellEditable(self, row: int, column: int) -> bool:
         """Whether a cell accepts editing, asked before an editor is opened.
 

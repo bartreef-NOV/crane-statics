@@ -8,7 +8,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, pyqtBoundSignal, pyqtSignal, pyqtSlot
 
 from crane_statics.core.analysis_presenter import AnalysisPresenter
 from crane_statics.core.analysis_services import (
@@ -22,6 +22,7 @@ from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scen
 from crane_statics.core.session_model import SceneState
 from crane_statics.qml_app.adapters.scene_adapter import SceneStateAdapter
 from crane_statics.qml_app.scene.scene_drag import DragEdit, DragLimits, SceneDrag
+from crane_statics.qml_app.qt_compat import pyqtProperty
 from crane_statics.qml_app.session import SessionState
 
 from ..models.list_models import DictListModel
@@ -80,8 +81,8 @@ class SceneViewModel(QObject):
         self._hoist_state = HoistStateService(self._model)
         self._calculator = AnalysisCalculator(self._model, self._kinematics, self._hoist_state)
         self._presenter = AnalysisPresenter(self._model, self._calculator, self._hoist_state)
-        self._canvas: Optional[QObject] = None
-        self._canvases: list[QObject] = []
+        self._canvas: Optional[Any] = None
+        self._canvases: list[Any] = []
 
         self._outreach = 0.0
         self._hook_load_t = 0.0
@@ -124,7 +125,7 @@ class SceneViewModel(QObject):
     # ------------------------------------------------------------------
 
     @pyqtSlot(QObject)
-    def bindCanvas(self, canvas: QObject) -> None:
+    def bindCanvas(self, canvas: Any) -> None:
         if canvas in self._canvases:
             return
         self._canvases.append(canvas)
@@ -212,7 +213,7 @@ class SceneViewModel(QObject):
         """Start a drag operation (angle, outreach, or tackle)."""
         self._drag = SceneDrag.begin(kind, scene_y, self.tackle)
 
-    @pyqtSlot(float, float, result=str)
+    @pyqtSlot(float, float, result="QString")
     def sceneDragTargetAt(self, scene_x: float, scene_y: float) -> str:
         """Determine which drag target (if any) is under the pointer."""
         return SceneDrag.target_at(
@@ -664,7 +665,7 @@ class SceneViewModel(QObject):
         state = self._model.get_active_hoist_state()
         return 0.0 if state is None else float(getattr(state.scene_state, name))
 
-    def _set_scene_field(self, name: str, value: Any, notify: pyqtSignal) -> None:
+    def _set_scene_field(self, name: str, value: Any, notify: pyqtBoundSignal) -> None:
         state = self._model.get_active_hoist_state()
         if state is None:
             return

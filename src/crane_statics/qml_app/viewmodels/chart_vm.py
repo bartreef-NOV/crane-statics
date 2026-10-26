@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
 from PyQt6 import sip
-from PyQt6.QtCore import QObject, QThread, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QThread, QTimer, QUrl, pyqtSignal, pyqtSlot
+
+from crane_statics.qml_app.qt_compat import pyqtProperty
 
 from crane_statics.presentation.formatters import (
     ConnectionFormatter,
@@ -574,7 +576,7 @@ class ChartViewModel(QObject):
             return {}
         return {"outreach_m": float(points[row].outreach_m), "load_t": float(points[row].load_t)}
 
-    @pyqtSlot(QUrl, result=str)
+    @pyqtSlot(QUrl, result="QString")
     def toLocalPath(self, url: QUrl) -> str:
         return str(url.toLocalFile() if url.isLocalFile() else url.toString())
 
@@ -1217,7 +1219,7 @@ class ChartViewModel(QObject):
         # A limit that is unlimited or does not respond to the hook load has no series.
         return key if any(s["id"] == series_id for s in self._limit_series) else None
 
-    @pyqtSlot(str, result=bool)
+    @pyqtSlot(str, result="bool")
     def governingCaseAvailable(self, series_id: str) -> bool:
         return self._governing_case_chart(series_id) is not None
 
@@ -1293,7 +1295,7 @@ class ChartViewModel(QObject):
     # Export
     # ------------------------------------------------------------------
 
-    @pyqtSlot(QUrl, result=bool)
+    @pyqtSlot(QUrl, result="bool")
     def exportCsv(self, url: QUrl) -> bool:
         if self._partial:
             self._set_status("Export unavailable while the chart is still computing")

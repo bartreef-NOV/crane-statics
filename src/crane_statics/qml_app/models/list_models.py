@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Optional, Sequence
 
-from PyQt6.QtCore import QAbstractListModel, QModelIndex, Qt, pyqtProperty, pyqtSignal
+from PyQt6.QtCore import QAbstractListModel, QModelIndex, Qt, pyqtSignal
+
+from crane_statics.qml_app.qt_compat import pyqtProperty
 
 
 class DictListModel(QAbstractListModel):
