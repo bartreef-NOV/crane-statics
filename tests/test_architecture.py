@@ -114,8 +114,9 @@ def test_scene_renderer_implements_canvas_contract():
         ), f"CraneSceneRenderer.{prop_name} must be a @property, not a method"
 
     # Verify the Protocol interface itself exists and has correct signatures
-    assert hasattr(
-        SceneCanvasContract, "__protocol_attrs__"
+    # ``_is_protocol`` exists on every supported Python; ``__protocol_attrs__`` is 3.12+.
+    assert getattr(
+        SceneCanvasContract, "_is_protocol", False
     ), "SceneCanvasContract must be a typing.Protocol"
 
 
