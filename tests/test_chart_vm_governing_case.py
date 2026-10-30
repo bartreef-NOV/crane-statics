@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import dataclasses
 import threading
-import time
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -18,6 +17,7 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels import chart_vm as chart_vm_module
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
+from tests.qt_helpers import wait_until
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 STEP = 10.0
@@ -39,16 +39,6 @@ class MockCanvas(QObject):
 
     def setSceneViewModel(self, scene_vm: Any) -> None:
         pass
-
-
-def wait_until(predicate, timeout: float = 60.0) -> None:
-    """Pump the Qt event loop until ``predicate()`` holds; worker signals arrive this way."""
-    deadline = time.monotonic() + timeout
-    while not predicate():
-        if time.monotonic() > deadline:
-            raise AssertionError("condition not met in time")
-        QCoreApplication.processEvents()
-        time.sleep(0.005)
 
 
 def _count(signal: Any) -> list[int]:

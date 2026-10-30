@@ -2,12 +2,11 @@
 
 import gc
 import threading
-import time
 from pathlib import Path
 
 import pytest
 from PyQt6 import sip
-from PyQt6.QtCore import QCoreApplication, QObject, QThread
+from PyQt6.QtCore import QObject, QThread
 
 from crane_statics.core.chart_cache import ChartJob, ChartKey, plan_chart_jobs
 from crane_statics.core.io import load_document
@@ -15,26 +14,10 @@ from crane_statics.core.sweep import SweepCancelled, run_mode_sweep
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels import chart_vm as chart_vm_module
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
+from tests.qt_helpers import pump_events, wait_until
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 STEP = 10.0
-
-
-def wait_until(predicate, timeout=30.0) -> None:
-    """Pump the Qt event loop until ``predicate()`` holds; worker signals arrive this way."""
-    deadline = time.monotonic() + timeout
-    while not predicate():
-        if time.monotonic() > deadline:
-            raise AssertionError("condition not met in time")
-        QCoreApplication.processEvents()
-        time.sleep(0.005)
-
-
-def pump_events(seconds: float) -> None:
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        QCoreApplication.processEvents()
-        time.sleep(0.005)
 
 
 def _idle(vm: ChartViewModel) -> bool:
@@ -174,7 +157,7 @@ def _visible(vm: ChartViewModel) -> ChartJob:
 
 
 def _planned(vm: ChartViewModel) -> list[ChartJob]:
-    return plan_chart_jobs(_visible(vm), vm.hoistIds, vm._model.is_splitable_hoist)
+    return list(plan_chart_jobs(_visible(vm), vm.hoistIds, vm._model.is_splitable_hoist))
 
 
 def _expected_curve(vm: ChartViewModel, job: ChartJob) -> list[list[float]]:
@@ -199,7 +182,7 @@ def _record_puts(vm: ChartViewModel) -> list[ChartKey]:
         puts.append(key)
         original(key, payload)
 
-    vm._cache.put = recording  # type: ignore[method-assign]
+    vm._cache.put = recording
     return puts
 
 

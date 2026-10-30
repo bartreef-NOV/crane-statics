@@ -1,10 +1,9 @@
 """QML front end: every view loads warning-free and the model tables populate."""
 
-import time
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import QCoreApplication, QMetaObject, QObject, QUrl
+from PyQt6.QtCore import QMetaObject, QObject, QUrl
 from PyQt6.QtTest import QTest
 from PyQt6.QtQml import (
     QJSValue,
@@ -18,6 +17,7 @@ from PyQt6.QtQuick import QQuickItem
 
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.app import QML_DIR
+from tests.qt_helpers import wait_until
 from crane_statics.qml_app.viewmodels.app_vm import AppViewModel
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
@@ -655,16 +655,6 @@ ApplicationWindow {{
     assert warnings == []
 
 
-def _wait_until(predicate, timeout: float = 60.0) -> None:
-    """Pump the Qt event loop until ``predicate()`` holds; worker signals arrive this way."""
-    deadline = time.monotonic() + timeout
-    while not predicate():
-        if time.monotonic() > deadline:
-            raise AssertionError("condition not met in time")
-        QCoreApplication.processEvents()
-        time.sleep(0.005)
-
-
 def _drawn_main(qml_engine):
     """Main.qml on the example with a finished Load Chart for the selected hoist."""
     if not EXAMPLE.exists():
@@ -753,7 +743,7 @@ def test_chart_menu_shows_the_governing_case_in_the_scene(qml_engine):
     _evaluate_in(workspace, f"openChartMenu(Qt.point({px}, {py}))")
     assert item.property("enabled") is True
     QMetaObject.invokeMethod(item, "triggered")
-    _wait_until(lambda: scene_vm.governingCaseLabel != "")
+    wait_until(lambda: scene_vm.governingCaseLabel != "")
     QTest.qWait(50)
 
     assert tabs.property("currentIndex") == 0

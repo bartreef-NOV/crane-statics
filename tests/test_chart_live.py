@@ -17,9 +17,8 @@ from tests.test_chart_background import (
     SweepFake,
     _planned,
     _visible,
-    pump_events,
-    wait_until,
 )
+from tests.qt_helpers import pump_events, wait_until
 
 
 class LiveSweeps(SweepFake):
