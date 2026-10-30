@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import Optional
 
 from ..data.authored_models import hoist_node_prefix
+from ..data.normalize import derive_payload_hoist_rope_geometry
 from ..data.models import (
     Body,
     ContractualPoint,
     CraneDocument,
-    derive_payload_hoist_rope_geometry,
     Hoist,
     MassPoint,
     Node,

@@ -17,7 +17,7 @@ Python remains the oracle. Each layer is accepted only when it matches Python ou
 - Reuse `schemas/crane-statics-v10.schema.json` as the shared contract; C++ validates documents against it.
 
 ### Phase 1 - data + io (`data/`, `core/io.py`)
-- Port `data/authored_models.py` and `data/models.py` to C++ structs with explicit validation and normalization (pydantic has no C++ equivalent). Keep the v10 major-version gate from `core/io.py`.
+- Port `data/authored_models.py`, `data/models.py`, `data/normalize/` and `data/authored_form.py` to C++ structs with explicit validation and normalization (pydantic has no C++ equivalent). Keep the v10 major-version gate from `core/io.py`.
 - YAML via yaml-cpp, JSON via nlohmann/json. Watch the YAML 1.1 int ambiguity fixed in commit 3f140f1.
 - Gate: all example YAMLs load and re-serialize; schema validation passes; invalid-document cases from `tests/` behave the same.
 
@@ -41,7 +41,7 @@ Python remains the oracle. Each layer is accepted only when it matches Python ou
 
 ## Critical files (Python sources to port)
 - `src/crane_statics/calculation/solver/crane_solver.py`, `calculation/engine.py`
-- `src/crane_statics/data/models.py`, `data/authored_models.py`, `core/io.py`
+- `src/crane_statics/data/models.py`, `data/normalize/`, `data/authored_form.py`, `data/authored_models.py`, `core/io.py`
 - `src/crane_statics/core/{drawn_loads,scene_build,scene_frame,session_model,document_edit}.py`
 - `src/crane_statics/qml_app/{app,session}.py`, `qml_app/viewmodels/*`, `qml_app/models/*`
 

@@ -23,7 +23,7 @@ You do not edit code. You report findings.
 | `src/crane_statics/schemas/generate_schema.py` | Derives the published schema from `AuthoredDocument.model_json_schema()`. `--check` mode verifies the checked-in file without writing. |
 | `src/crane_statics/schemas/crane-statics-v<major>.schema.json` | The checked-in generated artifact — must equal `generate_schema.py`'s current output byte-for-byte. There is no separate `docs/` copy anymore. |
 | `src/crane_statics/core/io.py` | `_validate_authored_schema` parses the document's major version and validates via `AuthoredDocument.model_validate(...)`, not jsonschema. |
-| `src/crane_statics/data/models.py` → `_normalize_authored_document` | Also calls `AuthoredDocument.model_validate(...)` directly (so `normalize_document()` is self-validating even when called without going through `io.py`), then converts the validated shape into the runtime `CraneDocument` model. |
+| `src/crane_statics/data/normalize/authored.py` → `_normalize_authored_document` | Also calls `AuthoredDocument.model_validate(...)` directly (so `normalize_document()` is self-validating even when called without going through `io.py`), then converts the validated shape into the runtime `CraneDocument` model. |
 | `examples/crane_input_22689.yaml` | The fixture the acceptance tests and `test_qml_shell.py` load. |
 
 ## Checks
@@ -44,7 +44,7 @@ command without `--check` and commit the result, never to hand-edit the
 `AuthoredDocument`'s `model_validator`s (e.g. `AuthoredPayloadHoist`'s
 split-mode and `drum_dead_turns`/`drum_diameter_m` checks) are the only
 place cross-field rules should live. Flag it if `_normalize_authored_document`
-(`src/crane_statics/data/models.py`) or `core/document_edit.py` re-implements
+(`src/crane_statics/data/normalize/`) or `core/document_edit.py` re-implements
 a check that duplicates one already enforced by `authored_models.py` — that's
 exactly the drift this architecture exists to prevent. A single-field bound
 (`gt=0`, `ge=1`, etc.) belongs on the `Authored*` model's `Field(...)`, not as
