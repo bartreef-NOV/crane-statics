@@ -23,40 +23,17 @@ from .solver.crane_solver import (
     inertia_force,
     rotate_boom_local_point,
 )
-from .capacity import solve_capacity_limit_kN, solve_radial_capacity_kN
-from .dynamic_factor import DynamicFactorLike, as_dynamic_factor
+from .allowable import allowable_hook_load
+from .demand_formulas import (  # noqa: F401  (re-exported: used by core and scripts)
+    compute_platform_base_fradial_kN,
+    compute_platform_base_max_bearing_line_load_kN_per_m,
+    compute_platform_base_min_bearing_line_load_kN_per_m,
+    compute_platform_base_mradial_kNm,
+    resolve_connection_component_linear_response,
+)
+from .results import AllowableCapacity, AnalysisPoint
+from .dynamic_factor import DynamicFactorLike
 from .vessel_frame import CraneFrameMotion, VesselInputs, crane_frame_motion
-
-
-@dataclass
-class AnalysisPoint:
-    """A single boom angle + outreach analysis point with full response."""
-
-    boom_angle_deg: float
-    outreach_m: float
-
-    # Baseline (dead load + environment, zero hook load)
-    baseline_rope_tensions: dict[str, float]  # rope_id -> kN
-    baseline_reactions: dict[str, dict[str, float]]  # connection_id -> {component: value}
-
-    # Sensitivity to hook force (per kN of hook load)
-    sensitivity_rope_tensions: dict[str, float]  # rope_id -> kN/kN
-    sensitivity_reactions: dict[str, dict[str, float]]  # connection_id -> {component: value/kN}
-
-    # Independent force responses per lateral kN.
-    offlead_lateral_unit_rope_tensions: Optional[dict[str, float]] = None
-    offlead_lateral_unit_reactions: Optional[dict[str, dict[str, float]]] = None
-    sidelead_lateral_unit_reactions: Optional[dict[str, dict[str, float]]] = None
-
-    # Local axis information (for boom and leg components)
-    connection_local_axes: Optional[dict[str, dict[str, float] | tuple[float, float]]] = (
-        None  # connection_id -> {ux, uz}
-    )
-
-    # Governing signs for environmental loads
-    governing_signs: dict[str, int] | None = None  # wind, accel_x, accel_z, pitch -> {-1, 0, 1}
-    governing_wind_direction: Optional[str] = None
-
 
 _WIND_DIRECTIONS = {"+X", "-X", "+Y", "-Y"}
 
@@ -154,143 +131,6 @@ def candidate_wind_directions(wind_speed_m_s: Optional[float]) -> tuple[str, ...
     if wind_speed_m_s is None or abs(float(wind_speed_m_s)) <= WIND_SPEED_THRESHOLD:
         return ("+X",)
     return ("+X", "-X", "+Y", "-Y")
-
-
-def resolve_connection_component_linear_response(
-    point: AnalysisPoint,
-    connection_id: str,
-    component: str,
-) -> Optional[tuple[float, float]]:
-    """Resolve baseline/sensitivity for linear connection components.
-
-    Returns (baseline, sensitivity) for components representable as
-    baseline + sensitivity * hook_load_kN. Returns None when the
-    component is unsupported or required local-axis data is unavailable.
-    """
-    base_map = point.baseline_reactions.get(connection_id, {})
-    sens_map = point.sensitivity_reactions.get(connection_id, {})
-
-    if component in {"Fx", "Fy", "Fz", "M", "Mx", "My"}:
-        return float(base_map.get(component, 0.0)), float(sens_map.get(component, 0.0))
-
-    axis_kind = None
-    if component == "boom_axial":
-        axis_kind = "axial"
-    elif component == "boom_normal":
-        axis_kind = "normal"
-    elif component == "leg_axial":
-        axis_kind = "axial"
-    elif component == "leg_normal":
-        axis_kind = "normal"
-    else:
-        return None
-
-    axis_map = point.connection_local_axes or {}
-    axis = axis_map.get(connection_id)
-    if not axis:
-        return None
-
-    if isinstance(axis, dict):
-        ux = float(axis.get("ux", 0.0))
-        uz = float(axis.get("uz", 0.0))
-    elif isinstance(axis, (tuple, list)) and len(axis) >= 2:
-        ux = float(axis[0])
-        uz = float(axis[1])
-    else:
-        return None
-
-    if abs(ux) + abs(uz) <= 1e-12:
-        return None
-
-    fx0 = float(base_map.get("Fx", 0.0))
-    fz0 = float(base_map.get("Fz", 0.0))
-    sfx = float(sens_map.get("Fx", 0.0))
-    sfz = float(sens_map.get("Fz", 0.0))
-
-    if axis_kind == "axial":
-        return fx0 * ux + fz0 * uz, sfx * ux + sfz * uz
-    # Right-handed in-plane normal from axial (ux, uz).
-    return fx0 * (-uz) + fz0 * ux, sfx * (-uz) + sfz * ux
-
-
-def compute_platform_base_max_bearing_line_load_kN_per_m(
-    *,
-    fz_kN: float,
-    mx_kNm: float,
-    my_kNm: float,
-    slewing_bearing_diameter_m: float,
-) -> float:
-    """Compute bearing line load demand from vertical force and resultant moment."""
-    diameter = float(slewing_bearing_diameter_m)
-    if diameter <= 0.0:
-        raise ValueError("slewing_bearing_diameter_m must be > 0")
-    m_res = math.hypot(float(mx_kNm), float(my_kNm))
-    return float(fz_kN) / (math.pi * diameter) + 4.0 * m_res / (math.pi * diameter * diameter)
-
-
-def compute_platform_base_min_bearing_line_load_kN_per_m(
-    *,
-    fz_kN: float,
-    mx_kNm: float,
-    my_kNm: float,
-    slewing_bearing_diameter_m: float,
-) -> float:
-    """Compute the minimum (signed) bearing line load; negative means uplift."""
-    diameter = float(slewing_bearing_diameter_m)
-    if diameter <= 0.0:
-        raise ValueError("slewing_bearing_diameter_m must be > 0")
-    m_res = math.hypot(float(mx_kNm), float(my_kNm))
-    return float(fz_kN) / (math.pi * diameter) - 4.0 * m_res / (math.pi * diameter * diameter)
-
-
-def compute_platform_base_fradial_kN(
-    *,
-    fx_kN: float,
-    fy_kN: float,
-) -> float:
-    """Compute platform-base radial force magnitude from Fx/Fy."""
-    return math.hypot(float(fx_kN), float(fy_kN))
-
-
-def compute_platform_base_mradial_kNm(
-    *,
-    mx_kNm: float,
-    my_kNm: float,
-) -> float:
-    """Compute platform-base radial moment magnitude from Mx/My."""
-    return math.hypot(float(mx_kNm), float(my_kNm))
-
-
-@dataclass
-class AllowableCapacity:
-    """Result of allowable hook load calculation with two distinct metrics.
-
-    CRITICAL: These fields measure capacity in TWO INCOMPATIBLE DOMAINS:
-    - max_allowable_load_kN: Hook-force domain (kN). This is the force applied at the hook,
-      including all DAF and hook-mass effects. Used internally for equilibrium checks.
-    - max_allowable_load_t: Payload domain (tonnes). This is the net payload mass that can
-      be lifted after subtracting hook mass. Used for Load Chart Y-axis and contractual checks.
-
-    METRIC CONVERSION (hook_force → payload), see ``dynamic_factor.DynamicFactor``; for a
-    constant factor:
-        max_allowable_load_t = (max_allowable_load_kN / hook_daf / gravity) - hook_mass_t
-
-    USAGE RULES:
-    - Chart curves, contractual points, and payload displays MUST use max_allowable_load_t
-    - Scene visualization of auto-load display uses hook_load_kN (stored separately in state)
-    - Status messages showing hook-force capacity should be labeled with "kN", payload with "t"
-
-    Example: 100 kN rope limit, 5 t hook, 1.0 DAF, 9.81 m/s² gravity:
-        max_allowable_load_kN = 100.0 kN
-        max_allowable_load_t = (100/1.0/9.81) - 5 ≈ 5.2 t
-    """
-
-    max_allowable_load_kN: float  # Hook-force domain (includes DAF & hook mass effects)
-    max_allowable_load_t: float  # Payload domain (net mass after subtracting hook mass)
-
-    governing_limit_id: Optional[str] = None
-    governing_wind_direction: Optional[str] = None
-    margin_kN: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -887,154 +727,19 @@ class CraneCalculator:
         hook_daf: DynamicFactorLike = 1.0,
         hook_mass_t: float = 0.0,
     ) -> AllowableCapacity:
-        """Invert Q(H) = Q0 + s*H <= Q_max  →  H_max = (Q_max - Q0) / s.
-        Returns the most restrictive limit.
+        """The most restrictive design limit's hook-force and payload capacity.
 
-        design_limits keys may be either entity_id ('boom_hoist') or
-        limit_id ('boom_hoist_T'/'rear_hinge_Fx'); the function resolves
-        the entity by stripping the component suffix when needed.
+        design_limits keys may be either entity_id ('boom_hoist') or limit_id
+        ('boom_hoist_T'/'rear_hinge_Fx'); see :func:`allowable.allowable_hook_load`.
         """
-        gravity = abs(self.doc.environment.gravity_m_s2)
-
-        h_max_kN = float("inf")
-        governing_limit_id = None
-
-        for limit_key, components in design_limits.items():
-            for component, limit_kN in components.items():
-                if not limit_kN:
-                    continue
-
-                entity_id, rope_channel = self.resolve_limit_target(limit_key, component)
-
-                if entity_id in point.sensitivity_reactions:
-                    if component == "min_bearing_line_load" and entity_id == "platform_base":
-                        base_map = point.baseline_reactions.get(entity_id, {})
-                        sens_map = point.sensitivity_reactions.get(entity_id, {})
-                        diameter = float(
-                            getattr(self.doc.support_widths, "slewing_bearing_diameter_m", 1.0)
-                        )
-                        # Uplift -q_min(H) must stay within the (positive) limit.
-                        h_candidate = solve_capacity_limit_kN(
-                            float(limit_kN),
-                            lambda hook_kN: -compute_platform_base_min_bearing_line_load_kN_per_m(
-                                fz_kN=float(base_map.get("Fz", 0.0))
-                                + float(sens_map.get("Fz", 0.0)) * hook_kN,
-                                mx_kNm=float(base_map.get("Mx", 0.0))
-                                + float(sens_map.get("Mx", 0.0)) * hook_kN,
-                                my_kNm=float(base_map.get("My", base_map.get("M", 0.0)))
-                                + float(sens_map.get("My", sens_map.get("M", 0.0))) * hook_kN,
-                                slewing_bearing_diameter_m=diameter,
-                            ),
-                            tolerance=self.TOLERANCE,
-                        )
-                        if 0.0 <= h_candidate < h_max_kN:
-                            h_max_kN = h_candidate
-                            governing_limit_id = limit_key
-                        continue
-                    if component == "resultant":
-                        base_map = point.baseline_reactions.get(entity_id, {})
-                        sens_map = point.sensitivity_reactions.get(entity_id, {})
-                        h_candidate = solve_radial_capacity_kN(
-                            float(limit_kN),
-                            float(base_map.get("Fx", 0.0)),
-                            float(base_map.get("Fz", 0.0)),
-                            float(sens_map.get("Fx", 0.0)),
-                            float(sens_map.get("Fz", 0.0)),
-                        )
-                        if 0.0 <= h_candidate < h_max_kN:
-                            h_max_kN = h_candidate
-                            governing_limit_id = limit_key
-                        continue
-                    if component == "fradial" and entity_id == "platform_base":
-                        base_map = point.baseline_reactions.get(entity_id, {})
-                        sens_map = point.sensitivity_reactions.get(entity_id, {})
-                        h_candidate = solve_radial_capacity_kN(
-                            float(limit_kN),
-                            float(base_map.get("Fx", 0.0)),
-                            float(base_map.get("Fy", 0.0)),
-                            float(sens_map.get("Fx", 0.0)),
-                            float(sens_map.get("Fy", 0.0)),
-                        )
-                        if 0.0 <= h_candidate < h_max_kN:
-                            h_max_kN = h_candidate
-                            governing_limit_id = limit_key
-                        continue
-                    if component == "mradial" and entity_id == "platform_base":
-                        base_map = point.baseline_reactions.get(entity_id, {})
-                        sens_map = point.sensitivity_reactions.get(entity_id, {})
-                        h_candidate = solve_radial_capacity_kN(
-                            float(limit_kN),
-                            float(base_map.get("Mx", 0.0)),
-                            float(base_map.get("My", base_map.get("M", 0.0))),
-                            float(sens_map.get("Mx", 0.0)),
-                            float(sens_map.get("My", sens_map.get("M", 0.0))),
-                        )
-                        if 0.0 <= h_candidate < h_max_kN:
-                            h_max_kN = h_candidate
-                            governing_limit_id = limit_key
-                        continue
-                    if component == "max_bearing_line_load" and entity_id == "platform_base":
-                        base_map = point.baseline_reactions.get(entity_id, {})
-                        sens_map = point.sensitivity_reactions.get(entity_id, {})
-                        diameter = float(
-                            getattr(self.doc.support_widths, "slewing_bearing_diameter_m", 1.0)
-                        )
-                        h_candidate = solve_capacity_limit_kN(
-                            float(limit_kN),
-                            lambda hook_kN: compute_platform_base_max_bearing_line_load_kN_per_m(
-                                fz_kN=float(base_map.get("Fz", 0.0))
-                                + float(sens_map.get("Fz", 0.0)) * hook_kN,
-                                mx_kNm=float(base_map.get("Mx", 0.0))
-                                + float(sens_map.get("Mx", 0.0)) * hook_kN,
-                                my_kNm=float(base_map.get("My", base_map.get("M", 0.0)))
-                                + float(sens_map.get("My", sens_map.get("M", 0.0))) * hook_kN,
-                                slewing_bearing_diameter_m=diameter,
-                            ),
-                            tolerance=self.TOLERANCE,
-                        )
-                        if 0.0 <= h_candidate < h_max_kN:
-                            h_max_kN = h_candidate
-                            governing_limit_id = limit_key
-                        continue
-                    linear = resolve_connection_component_linear_response(
-                        point, entity_id, component
-                    )
-                    if linear is None:
-                        continue
-                    baseline, sens = linear
-                elif rope_channel in point.sensitivity_rope_tensions:
-                    sens = point.sensitivity_rope_tensions.get(rope_channel, 0.0)
-                    baseline = point.baseline_rope_tensions.get(rope_channel, 0.0)
-                else:
-                    continue
-
-                if baseline > limit_kN:
-                    h_candidate = 0.0  # already exceeded with no hook load
-                elif abs(sens) > self.TOLERANCE:
-                    h_candidate = (limit_kN - baseline) / sens
-                else:
-                    continue
-                if 0.0 <= h_candidate < h_max_kN:
-                    h_max_kN = h_candidate
-                    governing_limit_id = limit_key
-
-        # No limit yields a candidate: the hook load is unlimited (inf), not 1000 kN.
-
-        # Convert hook force to payload with the dynamic factor (removes the factor, converts
-        # force to mass and subtracts the hook mass).
-        h_max_kN = max(0.0, h_max_kN)
-        h_net_payload_t = as_dynamic_factor(hook_daf).payload_t(h_max_kN, hook_mass_t, gravity)
-        h_net_payload_t = max(0.0, h_net_payload_t)
-        # Metric domain semantics:
-        #   h_max_kN = hook-force domain (includes DAF & hook mass effects)
-        #   h_net_payload_t = payload domain (net mass after subtracting hook mass)
-
-        return AllowableCapacity(
-            max_allowable_load_kN=h_max_kN,
-            max_allowable_load_t=h_net_payload_t,
-            governing_limit_id=governing_limit_id,
-            governing_wind_direction=point.governing_wind_direction,
-            margin_kN=max(0.0, h_max_kN),
+        return allowable_hook_load(
+            self.doc,
+            point,
+            design_limits,
+            resolve_limit_target=self.resolve_limit_target,
+            tolerance=self.TOLERANCE,
+            hook_daf=hook_daf,
+            hook_mass_t=hook_mass_t,
         )
 
     def compute_omnidirectional_allowable_load(
