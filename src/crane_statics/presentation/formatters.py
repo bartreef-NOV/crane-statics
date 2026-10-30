@@ -308,12 +308,6 @@ class HoistFormatter:
         return HoistFormatter.display_name(rope_id, doc)
 
     @staticmethod
-    def mode_label(mode: str) -> str:
-        """Display label for chart/hook mode."""
-        normalized = str(mode or "").lower()
-        return "Split" if normalized == "split" else "Normal"
-
-    @staticmethod
     def table_columns(
         is_boom_hoist: Optional[Callable[[Any], bool]] = None,
     ) -> list[Column]:
@@ -419,44 +413,6 @@ class HoistFormatter:
                 editable=payload_only,
             ),
         ]
-
-
-# ============================================================================
-# ENVIRONMENT FORMATTING
-# ============================================================================
-
-
-class EnvironmentFormatter:
-    """Formats environment and vessel motion properties."""
-
-    _PROPERTY_LABELS = {
-        "gravity_m_s2": "Gravity (m/s²)",
-        "max_wind_speed_m_s": "Max Wind Speed (m/s)",
-        "air_density_kg_m3": "Air Density (kg/m³)",
-        "roll_deg": "Roll angle (°)",
-        "pitch_deg": "Pitch angle (°)",
-        "accel_x_m_s2": "Surge (m/s²)",
-        "accel_y_m_s2": "Sway (m/s²)",
-        "accel_z_m_s2": "Heave (m/s²)",
-        "roll_angular_accel_rad_s2": "Roll (rad/s²)",
-        "pitch_angular_accel_rad_s2": "Pitch (rad/s²)",
-        "reference_x_m": "Reference X (m)",
-        "reference_z_m": "Reference Z (m)",
-        "boom_width_m": "Boom Width (m)",
-        "slewing_bearing_diameter_m": "Slewing Bearing Diameter (m)",
-    }
-
-    @staticmethod
-    def property_label(key: str) -> str:
-        """Human-readable property label."""
-        return EnvironmentFormatter._PROPERTY_LABELS.get(str(key or ""), str(key or ""))
-
-    @staticmethod
-    def property_value_display(key: str, value: float) -> str:
-        """Formatted property value for display."""
-        if value is None:
-            return ""
-        return f"{float(value):.3f}"
 
 
 # ============================================================================

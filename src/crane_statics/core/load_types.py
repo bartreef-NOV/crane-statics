@@ -59,12 +59,6 @@ class BodyLoads:
             for vector in vectors
         )
 
-    def sum_fx_kN(self) -> float:
-        return sum(vector.fx_kN for vector in self.vectors())
-
-    def sum_fz_kN(self) -> float:
-        return sum(vector.fz_kN for vector in self.vectors())
-
 
 @dataclass(frozen=True)
 class LoadConditions:

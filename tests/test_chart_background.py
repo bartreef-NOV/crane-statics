@@ -182,7 +182,7 @@ def _record_puts(vm: ChartViewModel) -> list[ChartKey]:
         puts.append(key)
         original(key, payload)
 
-    vm._cache.put = recording
+    vm._cache.put = recording  # type: ignore[method-assign,unused-ignore]
     return puts
 
 

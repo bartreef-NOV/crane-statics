@@ -8,7 +8,6 @@ from .formatters import (
     RopeFormatter,
     ConnectionFormatter,
     HoistFormatter,
-    EnvironmentFormatter,
     ResultRowFormatter,
 )
 
@@ -16,6 +15,5 @@ __all__ = [
     "RopeFormatter",
     "ConnectionFormatter",
     "HoistFormatter",
-    "EnvironmentFormatter",
     "ResultRowFormatter",
 ]
