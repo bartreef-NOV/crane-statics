@@ -11,7 +11,6 @@ Item {
     required property string utilization
     required property real utilizationValue
     required property bool isGroupHeader
-    required property bool nested
     required property bool clickable
     required property string tooltip
     required property int index
@@ -28,33 +27,28 @@ Item {
     readonly property color textColor: sysPalette.text
 
     signal demandClicked()
+    // A group header was clicked; the table folds or unfolds that group.
+    signal groupToggled()
 
     implicitHeight: 24
     height: 24
 
     Rectangle {
         anchors.fill: parent
-        color: delegateRoot.index % 2 === 0
-            ? delegateRoot.surfaceColor : delegateRoot.alternateSurfaceColor
+        color: delegateRoot.isGroupHeader
+            ? delegateRoot.barTrackColor
+            : (delegateRoot.index % 2 === 0
+                ? delegateRoot.surfaceColor : delegateRoot.alternateSurfaceColor)
         border.color: delegateRoot.barTrackColor
         border.width: 1
-        visible: !delegateRoot.isGroupHeader
     }
 
-    Label {
-        visible: delegateRoot.isGroupHeader
-        anchors.fill: parent
-        anchors.leftMargin: 6 + (delegateRoot.nested ? 8 : 0)
-        text: delegateRoot.name
-        color: delegateRoot.textColor
-        font.bold: true
-        font.italic: delegateRoot.nested
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+    TapHandler {
+        enabled: delegateRoot.isGroupHeader
+        onTapped: delegateRoot.groupToggled()
     }
 
     Row {
-        visible: !delegateRoot.isGroupHeader
         anchors.fill: parent
         spacing: 0
 
@@ -64,6 +58,7 @@ Item {
             leftPadding: 6
             text: delegateRoot.name
             color: delegateRoot.textColor
+            font.bold: delegateRoot.isGroupHeader
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
 
@@ -136,11 +131,15 @@ Item {
             readonly property bool hasLimit: delegateRoot.limit !== "-"
 
             ToolTip.visible: utilHover.hovered && hasLimit
-            ToolTip.text: qsTr("Limit: %1 %2").arg(delegateRoot.limit).arg(delegateRoot.unit)
+            ToolTip.text: delegateRoot.isGroupHeader
+                ? qsTr("Worst utilization in this group")
+                : qsTr("Limit: %1 %2").arg(delegateRoot.limit).arg(delegateRoot.unit)
             HoverHandler { id: utilHover }
 
+            // A header with no limit set in its group has no utilization to show.
             Rectangle {
                 id: barTrack
+                visible: !delegateRoot.isGroupHeader || delegateRoot.utilization !== "-"
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
                 anchors.right: parent.right
@@ -148,6 +147,7 @@ Item {
                 anchors.rightMargin: 6
                 height: 18
                 radius: 3
+                color: delegateRoot.surfaceColor
                 border.width: 1
                 border.color: delegateRoot.barTrackColor
 
@@ -169,5 +169,3 @@ Item {
         }
     }
 }
-
-

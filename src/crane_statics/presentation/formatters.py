@@ -506,7 +506,7 @@ class ResultRowFormatter:
                         "utilization": "",
                         "utilizationValue": 0.0,
                         "isGroupHeader": True,
-                        "nested": row.name.startswith("  "),
+                        "groupId": "",
                         "clickable": False,
                         "tooltip": "",
                     }
@@ -525,11 +525,84 @@ class ResultRowFormatter:
                         0.0 if util is None else max(0.0, min(100.0, float(util)))
                     ),
                     "isGroupHeader": False,
-                    "nested": False,
+                    "groupId": "",
                     "clickable": ResultRowFormatter.is_clickable(row),
                     "tooltip": ConnectionFormatter.formula_tooltip(str(row.component or "")),
                 }
             )
+        return out
+
+    GROUP_OPEN = "▾ "
+    GROUP_CLOSED = "▸ "
+
+    @staticmethod
+    def grouped_result_rows(
+        rope_rows: list[ResultRow],
+        connection_rows: list[ResultRow],
+        collapsed: set[str],
+        needle: str = "",
+    ) -> list[tuple[dict[str, Any], Optional[ResultRow]]]:
+        """One list for the results table: a header per component, then its rows.
+
+        Ropes come first as one group, then a group per connection in the order given.
+        Each pair holds the displayed dict and the result row behind it (None for a
+        header). A header shows the worst utilization in its group, so a collapsed group
+        still shows its status. ``collapsed`` holds the group ids folded away; a filter
+        opens every group it matches and, in a group whose name does not match, keeps
+        only the matching rows.
+        """
+        groups: dict[str, tuple[str, list[ResultRow]]] = {}
+        if rope_rows:
+            groups["ropes"] = ("Ropes", list(rope_rows))
+        for row in connection_rows:
+            _, members = groups.setdefault(
+                f"connection:{row.entity_id}",
+                (ConnectionFormatter.display_name(str(row.entity_id or "")), []),
+            )
+            members.append(row)
+
+        def row_name(row: ResultRow) -> str:
+            if row.kind == "connection":
+                return ConnectionFormatter.component_display_name(str(row.component or ""))
+            return row.name
+
+        needle = needle.strip().casefold()
+        out: list[tuple[dict[str, Any], Optional[ResultRow]]] = []
+        for group_id, (group_name, members) in groups.items():
+            if needle and needle not in group_name.casefold():
+                members = [m for m in members if needle in f"{group_name} {row_name(m)}".casefold()]
+            if not members:
+                continue
+            utils = [
+                m.utilization_pct for m in members if m.limit_kN and m.utilization_pct is not None
+            ]
+            worst = max(utils) if utils else None
+            expanded = bool(needle) or group_id not in collapsed
+            arrow = ResultRowFormatter.GROUP_OPEN if expanded else ResultRowFormatter.GROUP_CLOSED
+            out.append(
+                (
+                    {
+                        "name": arrow + group_name,
+                        "unit": "",
+                        "demand": "",
+                        "limit": "-",
+                        "utilization": "-" if worst is None else f"{worst:.0f}%",
+                        "utilizationValue": 0.0 if worst is None else max(0.0, min(100.0, worst)),
+                        "isGroupHeader": True,
+                        "groupId": group_id,
+                        "clickable": False,
+                        "tooltip": "",
+                    },
+                    None,
+                )
+            )
+            if not expanded:
+                continue
+            for member in members:
+                item = ResultRowFormatter.result_rows_to_dicts([member])[0]
+                item["name"] = row_name(member)
+                item["groupId"] = group_id
+                out.append((item, member))
         return out
 
     @staticmethod

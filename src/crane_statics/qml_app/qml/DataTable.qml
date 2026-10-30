@@ -27,6 +27,8 @@ Item {
     property bool rowsEditable: true
     // Extra toolbar items, placed before the add and delete buttons.
     property alias toolbarExtras: extras.data
+    // The column that grows to fill the table's width; -1 leaves every column at its content width.
+    property int stretchColumn: -1
     property int currentRow: -1
     property int currentColumn: 0
     // Node ids offered by the cells that hold a node reference.
@@ -39,6 +41,8 @@ Item {
 
     signal addRequested()
     signal deleteRequested(int row)
+    // A group header row was activated; the owner collapses or expands that group.
+    signal groupToggleRequested(int row)
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Up) {
@@ -54,7 +58,7 @@ Item {
             root.currentColumn = Math.min(table.columns - 1, root.currentColumn + 1)
             event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.startEdit(root.currentRow, root.currentColumn)
+            root.activateCell(root.currentRow, root.currentColumn)
             event.accepted = true
         } else if (event.key === Qt.Key_Delete) {
             if (root.editable && root.rowsEditable && root.hasSelection)
@@ -81,6 +85,19 @@ Item {
         if (!root.canEdit(row, column))
             return
         table.edit(table.index(row, column))
+    }
+
+    // Enter and double-click: a group header toggles; other cells open their editor, and
+    // check boxes flip in place rather than opening one.
+    function activateCell(row, column) {
+        const action = root.model && typeof root.model.cellAction === "function"
+            ? root.model.cellAction(row, column) : "edit"
+        if (action === "group")
+            root.groupToggleRequested(row)
+        else if (action === "check")
+            root.model.toggleCheck(row, column)
+        else
+            root.startEdit(row, column)
     }
 
     function commitCell(row, column, value) {
@@ -193,7 +210,23 @@ Item {
                     boundsBehavior: Flickable.StopAtBounds
                     editTriggers: TableView.DoubleTapped
 
+                    // Every column takes its content width; with a stretch column, that
+                    // one also takes whatever width the others leave over.
+                    columnWidthProvider: function (column) {
+                        const natural = table.implicitColumnWidth(column)
+                        if (column !== root.stretchColumn)
+                            return natural
+                        let others = 0
+                        for (let c = 0; c < table.columns; ++c) {
+                            if (c !== column)
+                                others += Math.max(80, table.implicitColumnWidth(c))
+                        }
+                        return Math.max(natural, table.width - others)
+                    }
+
                     onRowsChanged: if (root.currentRow >= rows) root.currentRow = -1
+                    onWidthChanged: if (root.stretchColumn >= 0) forceLayout()
+                    Component.onCompleted: if (root.stretchColumn >= 0) Qt.callLater(forceLayout)
 
                     ScrollBar.vertical: ScrollBar {}
                     ScrollBar.horizontal: ScrollBar {}
@@ -209,6 +242,9 @@ Item {
                         required property int row
                         required property int column
                         required property bool editing
+                        required property bool checkable
+                        required property int checkState
+                        required property bool groupRow
 
                         readonly property bool selected: row === root.currentRow
                         readonly property bool current: selected && column === root.currentColumn
@@ -218,11 +254,13 @@ Item {
                         implicitHeight: root.tableRowHeight
                         color: cell.selected
                             ? root.selectedColor
-                            : (cell.hovered
-                                ? sysPalette.alternateBase
-                                : (cell.row % 2 === 0
-                                    ? root.surfaceColor
-                                    : sysPalette.alternateBase))
+                            : (cell.groupRow
+                                ? sysPalette.midlight
+                                : (cell.hovered
+                                    ? sysPalette.alternateBase
+                                    : (cell.row % 2 === 0
+                                        ? root.surfaceColor
+                                        : sysPalette.alternateBase)))
 
                         border.color: cell.current && root.activeFocus
                             ? sysPalette.highlight
@@ -237,9 +275,26 @@ Item {
                             text: cell.display
                             color: cell.selected ? root.selectedTextColor : root.textColor
                             elide: Text.ElideRight
+                            font.bold: cell.groupRow
                             verticalAlignment: Text.AlignVCenter
                             horizontalAlignment: cell.numeric ? Text.AlignRight : Text.AlignLeft
-                            visible: !cell.editing
+                            visible: !cell.editing && !cell.checkable
+                        }
+
+                        // Edits go through the model, which refreshes the state shown here.
+                        CheckBox {
+                            anchors.centerIn: parent
+                            visible: cell.checkable
+                            enabled: cell.editable && root.editable
+                            tristate: true
+                            checkState: cell.checkState
+                            nextCheckState: () => cell.checkState === Qt.Checked
+                                ? Qt.Unchecked : Qt.Checked
+                            onClicked: {
+                                root.currentRow = cell.row
+                                root.currentColumn = cell.column
+                                root.model.toggleCheck(cell.row, cell.column)
+                            }
                         }
 
                         TapHandler {
@@ -247,11 +302,15 @@ Item {
                                 root.currentRow = cell.row
                                 root.currentColumn = cell.column
                                 root.forceActiveFocus()
+                                // A group header folds on one click, like a tree row.
+                                if (cell.groupRow && cell.column === 0)
+                                    root.groupToggleRequested(cell.row)
                             }
                             onDoubleTapped: {
                                 root.currentRow = cell.row
                                 root.currentColumn = cell.column
-                                root.startEdit(cell.row, cell.column)
+                                if (!cell.groupRow)
+                                    root.activateCell(cell.row, cell.column)
                             }
                         }
 

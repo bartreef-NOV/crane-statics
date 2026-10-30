@@ -131,17 +131,12 @@ Item {
             ResultsTable {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                title: qsTr("Hoists")
-                model: sceneVm.ropeRowsModel
-                onDemandClicked: row => sceneVm.openLoadOverview("rope", row)
-            }
-
-            ResultsTable {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                title: qsTr("Connections")
-                model: sceneVm.connectionRowsModel
-                onDemandClicked: row => sceneVm.openLoadOverview("connection", row)
+                title: qsTr("Results")
+                model: sceneVm.resultRowsModel
+                filterable: true
+                onDemandClicked: row => sceneVm.openLoadOverview(row)
+                onGroupToggled: row => sceneVm.toggleResultGroup(row)
+                onFilterEdited: text => sceneVm.setResultFilter(text)
             }
         }
     }

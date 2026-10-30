@@ -29,9 +29,9 @@ from ..models.list_models import DictListModel
 from ..models.report_rows import (
     REPORT_ROLES,
     RESULT_ROLES,
+    grouped_result_rows,
     report_to_rows,
     result_row_payload,
-    result_rows_to_dicts,
 )
 
 _LOG = logging.getLogger(__name__)
@@ -99,11 +99,15 @@ class SceneViewModel(QObject):
         self._applying = False
         self._last_unavailable_text: Optional[str] = None
 
-        self._rope_rows_model = DictListModel(RESULT_ROLES, self)
-        self._connection_rows_model = DictListModel(RESULT_ROLES, self)
+        self._result_rows_model = DictListModel(RESULT_ROLES, self)
         self._report_model = DictListModel(REPORT_ROLES, self)
-        self._rope_payloads: list[Optional[dict]] = []
-        self._connection_payloads: list[Optional[dict]] = []
+        # The rows behind the table, kept so folding or filtering rebuilds it without a
+        # re-solve; the payloads line up with the displayed rows (None for a header).
+        self._rope_result_rows: list = []
+        self._connection_result_rows: list = []
+        self._result_payloads: list[Optional[dict]] = []
+        self._collapsed_result_groups: set[str] = set()
+        self._result_filter = ""
 
         self._session.document_changed.connect(self._on_document_changed)
         self._session.content_changed.connect(self._on_content_changed)
@@ -889,20 +893,32 @@ class SceneViewModel(QObject):
     # ------------------------------------------------------------------
 
     @pyqtProperty(QObject, constant=True)
-    def ropeRowsModel(self) -> QObject:
-        return self._rope_rows_model
-
-    @pyqtProperty(QObject, constant=True)
-    def connectionRowsModel(self) -> QObject:
-        return self._connection_rows_model
+    def resultRowsModel(self) -> QObject:
+        return self._result_rows_model
 
     @pyqtProperty(QObject, constant=True)
     def reportModel(self) -> QObject:
         return self._report_model
 
-    @pyqtSlot(str, int)
-    def openLoadOverview(self, section: str, row: int) -> None:
-        payloads = self._rope_payloads if section == "rope" else self._connection_payloads
+    @pyqtSlot(int)
+    def toggleResultGroup(self, row: int) -> None:
+        """Collapse or expand the group whose header is at ``row``."""
+        item = self._result_rows_model.row_at(row)
+        if item is None or not item["isGroupHeader"]:
+            return
+        self._collapsed_result_groups ^= {item["groupId"]}
+        self._publish_result_rows()
+
+    @pyqtSlot(str)
+    def setResultFilter(self, text: str) -> None:
+        if text == self._result_filter:
+            return
+        self._result_filter = text
+        self._publish_result_rows()
+
+    @pyqtSlot(int)
+    def openLoadOverview(self, row: int) -> None:
+        payloads = self._result_payloads
         payload = payloads[row] if 0 <= row < len(payloads) else None
         if payload is None:
             return
@@ -1017,11 +1033,18 @@ class SceneViewModel(QObject):
                 self.statusMessage.emit(reason)
 
     def _set_result_rows(self, rope_rows, connection_rows) -> None:
-        self._rope_rows_model.set_rows(result_rows_to_dicts(rope_rows))
-        self._connection_rows_model.set_rows(result_rows_to_dicts(connection_rows))
-        self._rope_payloads = [
-            result_row_payload(row) if not row.is_group_header else None for row in rope_rows
-        ]
-        self._connection_payloads = [
-            result_row_payload(row) if not row.is_group_header else None for row in connection_rows
+        self._rope_result_rows = list(rope_rows)
+        self._connection_result_rows = list(connection_rows)
+        self._publish_result_rows()
+
+    def _publish_result_rows(self) -> None:
+        shown = grouped_result_rows(
+            self._rope_result_rows,
+            self._connection_result_rows,
+            self._collapsed_result_groups,
+            self._result_filter,
+        )
+        self._result_rows_model.set_rows([item for item, _ in shown])
+        self._result_payloads = [
+            None if row is None else result_row_payload(row) for _, row in shown
         ]

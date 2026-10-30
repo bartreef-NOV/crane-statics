@@ -9,6 +9,7 @@ from crane_statics.core.limit_auto_set import compute_required_rope_capacity_kN
 from crane_statics.qml_app.session import SessionState
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mode_sweep
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
+from tests.test_chart_background import limit_rows
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 # Coarse grid: these tests check wiring and caching, not curve resolution.
@@ -40,11 +41,90 @@ def rendered_chart_vm():
 
 class TestDesignLimits:
     def test_limits_models_populate_from_session(self, chart_vm):
-        assert chart_vm.ropeLimitsModel.count > 0
-        assert chart_vm.connectionLimitsModel.count > 0
+        assert limit_rows(chart_vm, "rope")
+        assert limit_rows(chart_vm, "connection")
+
+    @staticmethod
+    def _records(vm):
+        return [vm.limitsModel.record_at(i) for i in range(vm.limitsModel.count)]
+
+    def test_limits_are_grouped_by_component_ropes_first(self, chart_vm):
+        records = self._records(chart_vm)
+        headers = [r for r in records if r["isGroup"]]
+
+        assert records[0]["isGroup"] and records[0]["groupName"] == "Ropes"
+        assert len({r["groupId"] for r in headers}) == len(headers) > 1
+        # Every limit sits under the header of its own group.
+        current = None
+        for r in records:
+            current = r if r["isGroup"] else current
+            assert r["groupId"] == current["groupId"]
+        # Rows carry the quantity only; the component is the header.
+        assert any(r["name"] == "Fx" for r in records if not r["isGroup"])
+
+    def test_collapsing_a_group_hides_its_rows_only(self, chart_vm):
+        full = chart_vm.limitsModel.count
+        group = self._records(chart_vm)[0]
+        members = len(group["limitIds"])
+
+        chart_vm.toggleLimitGroup(0)
+        assert chart_vm.limitsModel.count == full - members
+        assert chart_vm.limitsModel.record_at(0)["name"].startswith("▸")
+
+        chart_vm.toggleLimitGroup(0)
+        assert chart_vm.limitsModel.count == full
+
+    def test_filter_keeps_matching_groups_and_limits(self, chart_vm):
+        chart_vm.toggleLimitGroup(0)  # a filter opens collapsed groups it matches
+        chart_vm.setLimitFilter("rear hinge")
+        records = self._records(chart_vm)
+        assert records and {r["groupName"] for r in records} == {"Rear Hinge"}
+        assert any(not r["isGroup"] for r in records)
+
+        chart_vm.setLimitFilter("fx")
+        rows = [r for r in self._records(chart_vm) if not r["isGroup"]]
+        assert rows and all(r["name"] == "Fx" for r in rows)
+
+        chart_vm.setLimitFilter("")
+        assert limit_rows(chart_vm, "connection")
+
+    def test_group_checkbox_switches_every_limit_and_shows_mixed_state(self, chart_vm):
+        model = chart_vm.limitsModel
+        header = model.record_at(0)
+        assert model.cellAction(0, 0) == "group"
+        assert model.cellAction(0, 3) == "check"
+        assert len(header["limitIds"]) > 1
+        for limit_id in header["limitIds"]:
+            chart_vm.setLimitEnabled(limit_id, False)
+        assert model.record_at(0)["checkState"] == 0
+
+        chart_vm.setLimitEnabled(header["limitIds"][0], True)
+        assert model.record_at(0)["checkState"] == 1
+
+        model.toggleCheck(0, 3)
+        assert model.record_at(0)["checkState"] == 2
+        assert all(chart_vm._model.design_limits_by_id[i].enabled for i in header["limitIds"])
+
+        model.toggleCheck(0, 3)
+        assert model.record_at(0)["checkState"] == 0
+        assert chart_vm.stale is True
+
+    def test_group_header_has_no_editable_max(self, chart_vm):
+        assert chart_vm.limitsModel.isCellEditable(0, 2) is False
+        assert chart_vm.limitsModel.isCellEditable(1, 2) is True
+
+    def test_auto_on_a_group_header_sets_its_limits(self, chart_vm):
+        header = chart_vm.limitsModel.record_at(0)
+        chart_vm.autoSetLimitRow(0)
+
+        limits = [chart_vm._model.design_limits_by_id[i] for i in header["limitIds"]]
+        if not any(dl.enabled for dl in limits):
+            assert "Could not" in chart_vm.statusText
+        else:
+            assert "Auto-set" in chart_vm.statusText
 
     def test_setting_max_writes_through_and_marks_stale(self, chart_vm):
-        row = chart_vm.ropeLimitsModel.record_at(0)
+        row = limit_rows(chart_vm, "rope")[0]
         chart_vm.setLimitMax(row["limitId"], "1234.5")
 
         dl = chart_vm._model.design_limits_by_id[row["limitId"]]
@@ -53,24 +133,24 @@ class TestDesignLimits:
         assert chart_vm._model.dirty is True
 
     def test_blank_max_clears_the_limit(self, chart_vm):
-        row = chart_vm.ropeLimitsModel.record_at(0)
+        row = limit_rows(chart_vm, "rope")[0]
         chart_vm.setLimitMax(row["limitId"], "500")
         chart_vm.setLimitMax(row["limitId"], "")
 
         assert chart_vm._model.design_limits_by_id[row["limitId"]].max_kN is None
 
     def test_non_numeric_max_is_ignored(self, chart_vm):
-        row = chart_vm.ropeLimitsModel.record_at(0)
+        row = limit_rows(chart_vm, "rope")[0]
         chart_vm.setLimitMax(row["limitId"], "800")
         chart_vm.setLimitMax(row["limitId"], "abc")
 
         assert chart_vm._model.design_limits_by_id[row["limitId"]].max_kN == pytest.approx(800.0)
 
     def test_toggling_enabled_updates_the_model_row(self, chart_vm):
-        row = chart_vm.ropeLimitsModel.record_at(0)
+        row = limit_rows(chart_vm, "rope")[0]
         chart_vm.setLimitEnabled(row["limitId"], True)
 
-        assert chart_vm.ropeLimitsModel.record_at(0)["limitEnabled"] is True
+        assert limit_rows(chart_vm, "rope")[0]["checkState"] == 2
 
     def test_uplift_limit_is_listed_and_auto_sets_like_the_max_limit(self, chart_vm):
         limit_id = "platform_base_min_bearing_line_load"
@@ -88,7 +168,7 @@ class TestDesignLimits:
             assert limit_id in chart_vm._enabled_limits()
 
     def test_auto_set_fills_and_enables_a_rope_limit(self, chart_vm):
-        rope_row = chart_vm.ropeLimitsModel.record_at(0)
+        rope_row = limit_rows(chart_vm, "rope")[0]
         chart_vm.autoSetLimit(rope_row["limitId"])
 
         dl = chart_vm._model.design_limits_by_id[rope_row["limitId"]]
@@ -99,7 +179,7 @@ class TestDesignLimits:
             assert "Auto-set" in chart_vm.statusText
 
     def test_enabled_limits_payload_matches_session(self, chart_vm):
-        row = chart_vm.ropeLimitsModel.record_at(0)
+        row = limit_rows(chart_vm, "rope")[0]
         chart_vm.setLimitMax(row["limitId"], "999")
         chart_vm.setLimitEnabled(row["limitId"], True)
 
@@ -229,8 +309,7 @@ class TestSweepRendering:
         assert row["status"] in {"pass", "fail", "pending"}
 
     def test_limit_series_appear_when_limits_are_enabled(self, chart_vm):
-        for index in range(chart_vm.ropeLimitsModel.count):
-            row = chart_vm.ropeLimitsModel.record_at(index)
+        for row in limit_rows(chart_vm, "rope"):
             chart_vm.autoSetLimit(row["limitId"])
         chart_vm.drawBlocking()
 
@@ -354,7 +433,7 @@ class TestChartCaching:
         assert chart_vm.stale is False
 
     def test_a_limit_edit_misses_and_restoring_it_hits(self, chart_vm, sweep_calls):
-        limit_id = chart_vm.ropeLimitsModel.record_at(0)["limitId"]
+        limit_id = limit_rows(chart_vm, "rope")[0]["limitId"]
         chart_vm.setLimitEnabled(limit_id, True)
         chart_vm.setLimitMax(limit_id, "900")
         chart_vm.drawBlocking()

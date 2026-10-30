@@ -36,40 +36,34 @@ Item {
             spacing: root.layoutSpacing
 
             DataTable {
-                id: ropeLimits
+                id: designLimits
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                title: qsTr("Rope Limits")
-                model: chartVm.ropeLimitsModel
+                title: qsTr("Design Limits")
+                model: chartVm.limitsModel
                 editable: true
                 rowsEditable: false
+                stretchColumn: 0
                 emptyText: qsTr("No design limits")
+                onGroupToggleRequested: row => chartVm.toggleLimitGroup(row)
 
-                toolbarExtras: Button {
-                    text: qsTr("Auto")
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Set the selected limit from the contractual points")
-                    enabled: ropeLimits.hasSelection
-                    onClicked: chartVm.autoSetLimitRow("rope", ropeLimits.currentRow)
-                }
-            }
+                toolbarExtras: RowLayout {
+                    spacing: root.layoutSpacing
 
-            DataTable {
-                id: connectionLimits
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                title: qsTr("Connection Limits")
-                model: chartVm.connectionLimitsModel
-                editable: true
-                rowsEditable: false
-                emptyText: qsTr("No design limits")
+                    TextField {
+                        Layout.preferredWidth: 120
+                        placeholderText: qsTr("Filter")
+                        selectByMouse: true
+                        onTextChanged: chartVm.setLimitFilter(text)
+                    }
 
-                toolbarExtras: Button {
-                    text: qsTr("Auto")
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Set the selected limit from the contractual points")
-                    enabled: connectionLimits.hasSelection
-                    onClicked: chartVm.autoSetLimitRow("connection", connectionLimits.currentRow)
+                    Button {
+                        text: qsTr("Auto")
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Set the selected limit, or every limit in the selected group, from the contractual points")
+                        enabled: designLimits.hasSelection
+                        onClicked: chartVm.autoSetLimitRow(designLimits.currentRow)
+                    }
                 }
             }
         }

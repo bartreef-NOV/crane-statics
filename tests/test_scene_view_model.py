@@ -1,5 +1,6 @@
 """Scene view model behaviour and QML canvas integration."""
 
+import dataclasses
 import math
 import re
 from pathlib import Path
@@ -74,8 +75,9 @@ class TestSceneViewModelState:
     def test_document_load_populates_hoists_and_results(self, scene_vm):
         assert scene_vm.hoistIds
         assert scene_vm.selectedHoistId == scene_vm.hoistIds[0]
-        assert scene_vm.ropeRowsModel.count > 0
-        assert scene_vm.connectionRowsModel.count > 0
+        names = _result_rows(scene_vm)
+        assert [r["name"] for r in names if r["isGroupHeader"]][0].endswith("Ropes")
+        assert any(r["groupId"].startswith("connection:") for r in names)
 
     def test_startup_hook_load_includes_active_hoist_mass(self, scene_vm):
         state = scene_vm._model.get_active_hoist_state()
@@ -593,18 +595,78 @@ class TestReportsAndOverview:
         clickable = next(
             (
                 i
-                for i in range(scene_vm.ropeRowsModel.count)
-                if scene_vm.ropeRowsModel.row_at(i)["clickable"]
+                for i, row in enumerate(_result_rows(scene_vm))
+                if row["clickable"] and row["groupId"] == "ropes"
             ),
             None,
         )
         if clickable is None:
             pytest.skip("No clickable rope row in example")
 
-        scene_vm.openLoadOverview("rope", clickable)
+        scene_vm.openLoadOverview(clickable)
 
         assert overviews
         assert len(overviews[-1]["terms"]) == 8
+
+
+def _result_rows(vm: SceneViewModel) -> list[dict]:
+    model = vm.resultRowsModel
+    return [model.row_at(i) for i in range(model.count)]
+
+
+class TestResultGroups:
+    def test_one_header_per_component_with_quantity_only_rows(self, scene_vm):
+        rows = _result_rows(scene_vm)
+        headers = [r for r in rows if r["isGroupHeader"]]
+
+        assert rows[0]["isGroupHeader"] and rows[0]["groupId"] == "ropes"
+        assert len({h["groupId"] for h in headers}) == len(headers) > 1
+        assert any(r["name"] == "Fx" for r in rows if not r["isGroupHeader"])
+        assert not any("/" in r["name"] for r in rows)
+
+    def test_collapsing_hides_rows_and_keeps_the_header_status(self, scene_vm):
+        full = scene_vm.resultRowsModel.count
+        members = sum(1 for r in _result_rows(scene_vm) if r["groupId"] == "ropes") - 1
+
+        scene_vm.toggleResultGroup(0)
+        assert scene_vm.resultRowsModel.count == full - members
+        assert scene_vm.resultRowsModel.row_at(0)["name"].startswith("▸")
+
+        scene_vm.toggleResultGroup(0)
+        assert scene_vm.resultRowsModel.count == full
+
+    def test_header_shows_worst_utilization_of_its_rows(self, scene_vm):
+        rope = next(r for r in scene_vm._rope_result_rows)
+        scene_vm._set_result_rows(
+            [
+                dataclasses.replace(rope, limit_kN=100.0, utilization_pct=40.0),
+                dataclasses.replace(rope, limit_kN=100.0, utilization_pct=70.0),
+            ],
+            [],
+        )
+
+        header = scene_vm.resultRowsModel.row_at(0)
+        assert header["utilization"] == "70%" and header["utilizationValue"] == 70.0
+
+    def test_filter_matches_component_or_quantity(self, scene_vm):
+        scene_vm.setResultFilter("rear hinge")
+        rows = _result_rows(scene_vm)
+        assert rows and {r["groupId"] for r in rows} == {"connection:rear_hinge"}
+
+        scene_vm.setResultFilter("fx")
+        rows = [r for r in _result_rows(scene_vm) if not r["isGroupHeader"]]
+        assert rows and all(r["name"] == "Fx" for r in rows)
+
+        scene_vm.setResultFilter("")
+        assert scene_vm.resultRowsModel.count > len(rows)
+
+    def test_headers_have_no_overview(self, scene_vm):
+        overviews: list[dict] = []
+        scene_vm.loadOverviewReady.connect(overviews.append)
+
+        scene_vm.openLoadOverview(0)
+
+        assert not overviews
 
 
 def _is_splitable(vm: SceneViewModel, hoist_id: str) -> bool:

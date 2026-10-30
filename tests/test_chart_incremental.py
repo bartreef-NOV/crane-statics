@@ -12,7 +12,13 @@ from crane_statics.core.sweep import build_absolute_outreach_grid, run_mode_swee
 from crane_statics.core.sweep_cache import ComputeCache
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
-from tests.test_chart_background import _planned, _visible, pump_events, wait_idle
+from tests.test_chart_background import (
+    _planned,
+    _visible,
+    limit_rows,
+    pump_events,
+    wait_idle,
+)
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 STEP = 10.0
@@ -62,9 +68,9 @@ def vm(probes, envelopes):
 def _enable_limits(vm: ChartViewModel) -> tuple[str, str]:
     """Auto-set one rope and one connection limit; returns their ids."""
     chosen = []
-    for model in (vm.ropeLimitsModel, vm.connectionLimitsModel):
-        for index in range(model.count):
-            limit_id = model.record_at(index)["limitId"]
+    for kind in ("rope", "connection"):
+        for row in limit_rows(vm, kind):
+            limit_id = row["limitId"]
             vm.autoSetLimit(limit_id)
             if vm._model.design_limits_by_id[limit_id].enabled:
                 chosen.append(limit_id)

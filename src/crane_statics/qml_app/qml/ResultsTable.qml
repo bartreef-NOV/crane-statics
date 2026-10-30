@@ -28,7 +28,12 @@ Item {
     readonly property var columnWidths: columnFractions.map(f => f * root.width)
     readonly property real minColumnFraction: 0.1
 
+    // Shows a filter box beside the title; filterEdited carries what was typed.
+    property bool filterable: false
+
     signal demandClicked(int row)
+    signal groupToggled(int row)
+    signal filterEdited(string text)
 
     function resizeColumn(column, deltaPx) {
         if (root.width <= 0 || column < 0 || column >= columnFractions.length - 1)
@@ -47,9 +52,23 @@ Item {
         anchors.fill: parent
         spacing: root.layoutSpacing
 
-        Label {
-            text: root.title
-            font.bold: true
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: root.layoutSpacing
+
+            Label {
+                Layout.fillWidth: true
+                text: root.title
+                font.bold: true
+            }
+
+            TextField {
+                Layout.preferredWidth: 120
+                visible: root.filterable
+                placeholderText: qsTr("Filter")
+                selectByMouse: true
+                onTextChanged: root.filterEdited(text)
+            }
         }
 
         Rectangle {
@@ -128,6 +147,7 @@ Item {
                         width: rowsList.width
                         columnWidths: root.columnWidths
                         onDemandClicked: root.demandClicked(index)
+                        onGroupToggled: root.groupToggled(index)
                     }
                 }
             }

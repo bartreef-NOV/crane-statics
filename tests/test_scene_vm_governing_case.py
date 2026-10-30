@@ -119,7 +119,7 @@ def test_apply_sets_fields_and_label(vm: SceneViewModel) -> None:
     assert vm.outreach == pytest.approx(kin.compute_outreach(55.0, "MH"))
     assert vm._hoist_state.payload_t_to_hook_force_kN(vm.hookLoadTonnes) == pytest.approx(4321.0)
     assert vm._analysis_point is not None
-    assert vm.ropeRowsModel.count > 0
+    assert vm.resultRowsModel.count > 0
     # A programmatic apply is not a user edit: the document stays clean.
     assert not vm._model.dirty
 

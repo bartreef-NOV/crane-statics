@@ -32,6 +32,9 @@ class Column:
     field: Optional[str] = None
     editor: str = ""
     editable: Optional[Callable[[Any], bool]] = None
+    # Shown as a check box in the cell instead of text. ``get`` then returns a Qt check
+    # state (0 unchecked, 1 partly, 2 checked), so a group row can show a mixed state.
+    checkbox: bool = False
 
     def format(self, record: Any) -> str:
         value = self.get(record)
@@ -70,6 +73,9 @@ _NUMERIC_ROLE = Qt.ItemDataRole.UserRole + 1
 _EDITABLE_ROLE = Qt.ItemDataRole.UserRole + 2
 _EDITOR_ROLE = Qt.ItemDataRole.UserRole + 3
 _EDIT_ROLE = Qt.ItemDataRole.UserRole + 4
+_CHECKBOX_ROLE = Qt.ItemDataRole.UserRole + 5
+_CHECK_STATE_ROLE = Qt.ItemDataRole.UserRole + 6
+_GROUP_ROLE = Qt.ItemDataRole.UserRole + 7
 
 
 class RecordTableModel(QAbstractTableModel):
@@ -87,11 +93,14 @@ class RecordTableModel(QAbstractTableModel):
         columns: Sequence[Column],
         parent=None,
         commit: Optional[Callable[[int, str, Any], bool]] = None,
+        is_group: Optional[Callable[[Any], bool]] = None,
     ):
         super().__init__(parent)
         self._columns = list(columns)
         self._records: list[Any] = []
         self._commit = commit
+        # Marks the records that head a group of rows, which the view draws as headers.
+        self._is_group = is_group
 
     def set_records(self, records: Sequence[Any]) -> None:
         new_records = list(records)
@@ -137,6 +146,12 @@ class RecordTableModel(QAbstractTableModel):
             return column.editor or ("number" if column.decimals is not None else "text")
         if role == _EDIT_ROLE:
             return column.edit_value(record)
+        if role == _CHECKBOX_ROLE:
+            return column.checkbox
+        if role == _CHECK_STATE_ROLE:
+            return int(column.get(record)) if column.checkbox else 0
+        if role == _GROUP_ROLE:
+            return bool(self._is_group and self._is_group(record))
         return None
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
@@ -181,6 +196,30 @@ class RecordTableModel(QAbstractTableModel):
             return False
         return bool(self.flags(index) & Qt.ItemFlag.ItemIsEditable)
 
+    @pyqtSlot(int, int, result="QString")
+    def cellAction(self, row: int, column: int) -> str:
+        """What activating a cell does: ``"group"`` (a header's first cell toggles its
+        group), ``"check"`` (an editable check box flips) or ``"edit"``."""
+        record = self.record_at(int(row))
+        if record is None or not 0 <= int(column) < len(self._columns):
+            return "edit"
+        if self._is_group and self._is_group(record) and int(column) == 0:
+            return "group"
+        col = self._columns[int(column)]
+        if col.checkbox and self._can_edit(col, record):
+            return "check"
+        return "edit"
+
+    @pyqtSlot(int, int)
+    def toggleCheck(self, row: int, column: int) -> None:
+        """Flip a check box cell: anything but fully checked becomes checked."""
+        record = self.record_at(int(row))
+        if record is None:
+            return
+        col = self._columns[int(column)]
+        if col.checkbox and self._can_edit(col, record):
+            self.commitCell(row, column, int(col.get(record)) != 2)
+
     def _can_edit(self, column: Column, record: Any) -> bool:
         return self._commit is not None and column.is_editable(record)
 
@@ -191,4 +230,7 @@ class RecordTableModel(QAbstractTableModel):
             _EDITABLE_ROLE: b"editable",
             _EDITOR_ROLE: b"editorKind",
             _EDIT_ROLE: b"edit",
+            _CHECKBOX_ROLE: b"checkable",
+            _CHECK_STATE_ROLE: b"checkState",
+            _GROUP_ROLE: b"groupRow",
         }

@@ -28,6 +28,7 @@ from crane_statics.core.chart_cache import (
 )
 from crane_statics.core.document_edit import DocumentEditor, build_contractual_point
 from crane_statics.core.governing_case import governing_case
+from crane_statics.core.session_model import DesignLimit
 from crane_statics.core.limit_auto_set import (
     ConnectionAutoSetResult,
     RopeAutoSetResult,
@@ -56,9 +57,21 @@ _LOG = logging.getLogger(__name__)
 LIMIT_COLUMNS = [
     Column("Limit", lambda r: r["name"]),
     Column("Unit", lambda r: r["unit"]),
-    Column("Max", lambda r: r["maxValue"], decimals=1, field="maxValue", editor="number"),
-    Column("On", lambda r: r["limitEnabled"], field="limitEnabled", editor="bool"),
+    Column(
+        "Max",
+        lambda r: r["maxValue"],
+        decimals=1,
+        field="maxValue",
+        editor="number",
+        editable=lambda r: not r["isGroup"],
+    ),
+    Column("On", lambda r: r["checkState"], field="limitEnabled", editor="bool", checkbox=True),
 ]
+_ROPES_GROUP_ID = "ropes"
+_ROPES_GROUP_NAME = "Ropes"
+_GROUP_OPEN = "▾ "
+_GROUP_CLOSED = "▸ "
+_UNCHECKED, _PARTLY_CHECKED, _CHECKED = 0, 1, 2
 CONTRACTUAL_COLUMNS = [
     Column(
         "Outreach (m)", lambda r: r["outreach"], decimals=1, field="outreach_m", editor="number"
@@ -313,12 +326,11 @@ class ChartViewModel(QObject):
         self._chart_update_pending = False
         self._limit_series_dirty = False
 
-        self._rope_limits_model = RecordTableModel(
-            LIMIT_COLUMNS, self, commit=self._commit_limit_edit("rope")
+        self._limits_model = RecordTableModel(
+            LIMIT_COLUMNS, self, commit=self._commit_limit_edit, is_group=lambda r: r["isGroup"]
         )
-        self._connection_limits_model = RecordTableModel(
-            LIMIT_COLUMNS, self, commit=self._commit_limit_edit("connection")
-        )
+        self._collapsed_limit_groups: set[str] = set()
+        self._limit_filter = ""
         self._contractual_model = RecordTableModel(
             CONTRACTUAL_COLUMNS, self, commit=self._commit_contractual_edit
         )
@@ -412,55 +424,125 @@ class ChartViewModel(QObject):
     # ------------------------------------------------------------------
 
     @pyqtProperty(QObject, constant=True)
-    def ropeLimitsModel(self) -> QObject:
-        return self._rope_limits_model
+    def limitsModel(self) -> QObject:
+        return self._limits_model
 
-    @pyqtProperty(QObject, constant=True)
-    def connectionLimitsModel(self) -> QObject:
-        return self._connection_limits_model
+    def _limit_groups(self) -> list[tuple[str, str, list[tuple[DesignLimit, str, str]]]]:
+        """Every limit as (group id, group name, [(limit, row name, unit)]), ropes first.
 
-    def _limit_rows(self, kind: str) -> list[dict[str, Any]]:
+        Connection groups follow the canonical entity order, so the table reads the way
+        the crane is built; entities the formatter does not know come last.
+        """
         doc = self._model.document
-        rows: list[dict[str, Any]] = []
+        ropes: list[tuple[DesignLimit, str, str]] = []
+        by_entity: dict[str, list[tuple[DesignLimit, str, str]]] = {}
         for dl in self._model.design_limits:
-            if dl.kind != kind:
-                continue
-            if kind == "rope":
+            if dl.kind == "rope":
                 name = HoistFormatter.display_name_for_limit_id(dl.id, doc)
-                unit = RopeFormatter.component_unit(dl.component)
+                ropes.append((dl, name, RopeFormatter.component_unit(dl.component)))
             else:
-                name = ConnectionFormatter.format_label(dl.entity_id, dl.component)
+                name = ConnectionFormatter.component_display_name(dl.component)
                 unit = ConnectionFormatter.component_unit(dl.component)
+                by_entity.setdefault(dl.entity_id, []).append((dl, name, unit))
+
+        ordered: list[str] = []
+        for top in ConnectionFormatter.top_level_entities(list(by_entity)):
+            ordered.append(top)
+            ordered.extend(ConnectionFormatter.child_entities(top, list(by_entity)))
+        ordered.extend(entity for entity in by_entity if entity not in ordered)
+
+        groups = [(_ROPES_GROUP_ID, _ROPES_GROUP_NAME, ropes)] if ropes else []
+        groups.extend(
+            (f"connection:{entity}", ConnectionFormatter.display_name(entity), by_entity[entity])
+            for entity in ordered
+        )
+        return groups
+
+    def _limit_rows(self) -> list[dict[str, Any]]:
+        """The table's records: a header row per group, then its limits unless collapsed.
+
+        A filter shows only the matching groups, open, and within a group whose name does
+        not match, only the matching limits.
+        """
+        needle = self._limit_filter.strip().casefold()
+        rows: list[dict[str, Any]] = []
+        for group_id, group_name, members in self._limit_groups():
+            if needle and needle not in group_name.casefold():
+                members = [m for m in members if needle in f"{group_name} {m[1]}".casefold()]
+            if not members:
+                continue
+            enabled = sum(1 for dl, _, _ in members if dl.enabled)
+            if enabled == 0:
+                state = _UNCHECKED
+            elif enabled == len(members):
+                state = _CHECKED
+            else:
+                state = _PARTLY_CHECKED
+            expanded = bool(needle) or group_id not in self._collapsed_limit_groups
             rows.append(
                 {
-                    "limitId": dl.id,
-                    "name": name,
-                    "unit": unit,
-                    "maxValue": "" if dl.max_kN is None else f"{float(dl.max_kN):.1f}",
-                    "limitEnabled": bool(dl.enabled),
+                    "isGroup": True,
+                    "groupId": group_id,
+                    "groupName": group_name,
+                    "limitId": "",
+                    "limitIds": [dl.id for dl, _, _ in members],
+                    "name": (_GROUP_OPEN if expanded else _GROUP_CLOSED) + group_name,
+                    "unit": "",
+                    "maxValue": "",
+                    "checkState": state,
                     "tooltip": "",
                 }
             )
+            if not expanded:
+                continue
+            for dl, name, unit in members:
+                rows.append(
+                    {
+                        "isGroup": False,
+                        "groupId": group_id,
+                        "groupName": group_name,
+                        "limitId": dl.id,
+                        "limitIds": [dl.id],
+                        "name": name,
+                        "unit": unit,
+                        "maxValue": "" if dl.max_kN is None else f"{float(dl.max_kN):.1f}",
+                        "checkState": _CHECKED if dl.enabled else _UNCHECKED,
+                        "tooltip": "",
+                    }
+                )
         return rows
 
     def _refresh_limits_models(self) -> None:
-        self._rope_limits_model.set_records(self._limit_rows("rope"))
-        self._connection_limits_model.set_records(self._limit_rows("connection"))
+        self._limits_model.set_records(self._limit_rows())
         self.limitsChanged.emit()
 
-    def _commit_limit_edit(self, kind: str):
-        def commit(row: int, field: str, value: Any) -> bool:
-            model = self._rope_limits_model if kind == "rope" else self._connection_limits_model
-            record = model.record_at(row)
-            if record is None:
-                return False
-            if field == "limitEnabled":
-                self.setLimitEnabled(record["limitId"], bool(value))
-            else:
-                self.setLimitMax(record["limitId"], str(value))
-            return True
+    @pyqtSlot(str)
+    def setLimitFilter(self, text: str) -> None:
+        if text == self._limit_filter:
+            return
+        self._limit_filter = text
+        self._refresh_limits_models()
 
-        return commit
+    @pyqtSlot(int)
+    def toggleLimitGroup(self, row: int) -> None:
+        """Collapse or expand the group whose header is at ``row``."""
+        record = self._limits_model.record_at(row)
+        if record is None or not record["isGroup"]:
+            return
+        self._collapsed_limit_groups ^= {record["groupId"]}
+        self._refresh_limits_models()
+
+    def _commit_limit_edit(self, row: int, field: str, value: Any) -> bool:
+        record = self._limits_model.record_at(row)
+        if record is None:
+            return False
+        if field == "limitEnabled":
+            self._set_limits_enabled(record["limitIds"], bool(value))
+        elif not record["isGroup"]:
+            self.setLimitMax(record["limitId"], str(value))
+        else:
+            return False
+        return True
 
     def _commit_contractual_edit(self, row: int, field: str, value: Any) -> bool:
         points = self._contractual_points()
@@ -496,21 +578,24 @@ class ChartViewModel(QObject):
 
     @pyqtSlot(str, bool)
     def setLimitEnabled(self, limit_id: str, enabled: bool) -> None:
-        dl = self._limit_by_id(limit_id)
-        if dl is None:
+        self._set_limits_enabled([limit_id], enabled)
+
+    def _set_limits_enabled(self, limit_ids: list[str], enabled: bool) -> None:
+        limits = [dl for dl in map(self._limit_by_id, limit_ids) if dl is not None]
+        if not limits:
             return
-        dl.enabled = bool(enabled)
+        for dl in limits:
+            dl.enabled = bool(enabled)
         self._model.mark_content_changed()
         self._refresh_limits_models()
         self._set_stale(True)
 
-    @pyqtSlot(str)
-    def autoSetLimit(self, limit_id: str) -> None:
+    def _auto_set(self, limit_id: str) -> tuple[bool, str]:
+        """Set one limit from the contractual points; returns (changed, status message)."""
         doc = self._model.document
         dl = self._limit_by_id(limit_id)
         if doc is None or dl is None:
-            self._set_status("Could not compute: no document loaded")
-            return
+            return False, "Could not compute: no document loaded"
 
         auto: RopeAutoSetResult | ConnectionAutoSetResult
         if dl.kind == "rope":
@@ -522,27 +607,40 @@ class ChartViewModel(QObject):
             unit = ConnectionFormatter.component_unit(dl.component)
 
         if auto.required_kN is None:
-            self._set_status(f"Could not compute: {auto.message}")
-            return
+            return False, f"Could not compute: {auto.message}"
 
         if dl.component == "min_bearing_line_load" and auto.required_kN <= 0.0:
-            self._set_status(f"No uplift in any contractual case: {dl.id} left unchanged")
-            return
+            return False, f"No uplift in any contractual case: {dl.id} left unchanged"
 
         dl.max_kN = float(auto.required_kN) * dl.required_factor
         dl.enabled = True
-        self._model.mark_content_changed()
-        self._set_status(f"Auto-set {dl.id} to {dl.max_kN:.1f} {unit}")
-        self._refresh_limits_models()
-        self._set_stale(True)
+        return True, f"Auto-set {dl.id} to {dl.max_kN:.1f} {unit}"
 
-    @pyqtSlot(str, int)
-    def autoSetLimitRow(self, kind: str, row: int) -> None:
-        """Auto-set the limit shown at ``row`` of the rope or connection limits table."""
-        model = self._rope_limits_model if kind == "rope" else self._connection_limits_model
-        record = model.record_at(row)
+    def _auto_set_limits(self, limit_ids: list[str], label: str) -> None:
+        results = [self._auto_set(limit_id) for limit_id in limit_ids]
+        changed = sum(1 for ok, _ in results if ok)
+        if len(results) == 1:
+            message = results[0][1]
+        elif changed:
+            message = f"Auto-set {changed} of {len(results)} limits in {label}"
+        else:
+            message = f"Could not auto-set any limit in {label}: {results[0][1]}"
+        self._set_status(message)
+        if changed:
+            self._model.mark_content_changed()
+            self._refresh_limits_models()
+            self._set_stale(True)
+
+    @pyqtSlot(str)
+    def autoSetLimit(self, limit_id: str) -> None:
+        self._auto_set_limits([limit_id], limit_id)
+
+    @pyqtSlot(int)
+    def autoSetLimitRow(self, row: int) -> None:
+        """Auto-set the limit at ``row`` of the table, or every limit of the group it heads."""
+        record = self._limits_model.record_at(row)
         if record is not None:
-            self.autoSetLimit(record["limitId"])
+            self._auto_set_limits(record["limitIds"], record["groupName"])
 
     def _enabled_limits(self) -> dict:
         return {

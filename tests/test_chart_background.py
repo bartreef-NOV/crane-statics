@@ -133,6 +133,19 @@ class SweepFake:
         )
 
 
+def limit_rows(vm, kind=None):
+    """The limits of the Design Limits table (``kind`` "rope" or "connection"), without
+    its group header rows."""
+    model = vm.limitsModel
+    rows = [model.record_at(i) for i in range(model.count)]
+    return [
+        r
+        for r in rows
+        if not r["isGroup"]
+        and (kind is None or vm._model.design_limits_by_id[r["limitId"]].kind == kind)
+    ]
+
+
 @pytest.fixture
 def sweeps(monkeypatch):
     fake = SweepFake()
@@ -273,7 +286,7 @@ def test_edit_during_background_discards_old_fingerprint_results(vm, sweeps):
     old_fingerprint = vm._wanted_key().fingerprint
     puts = _record_puts(vm)
 
-    row = vm.ropeLimitsModel.record_at(0)
+    row = limit_rows(vm, "rope")[0]
     current = vm._model.design_limits_by_id[row["limitId"]].max_kN or 1000.0
     vm.setLimitEnabled(row["limitId"], True)
     vm.setLimitMax(row["limitId"], f"{0.5 * current:.1f}")

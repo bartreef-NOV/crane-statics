@@ -18,7 +18,7 @@ RESULT_ROLES = [
     "utilization",
     "utilizationValue",
     "isGroupHeader",
-    "nested",
+    "groupId",
     "clickable",
     "tooltip",
 ]
@@ -44,3 +44,13 @@ def result_rows_to_dicts(rows: list[ResultRow]) -> list[dict[str, Any]]:
 def report_to_rows(report: dict) -> list[dict[str, Any]]:
     """Flatten an equilibrium / load-summary report into displayable rows."""
     return ResultRowFormatter.report_rows_to_dicts(report)
+
+
+def grouped_result_rows(
+    rope_rows: list[ResultRow],
+    connection_rows: list[ResultRow],
+    collapsed: set[str],
+    needle: str = "",
+) -> list[tuple[dict[str, Any], ResultRow | None]]:
+    """The results table's rows: a header per component, then its rows unless collapsed."""
+    return ResultRowFormatter.grouped_result_rows(rope_rows, connection_rows, collapsed, needle)
