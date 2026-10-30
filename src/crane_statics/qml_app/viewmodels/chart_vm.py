@@ -28,7 +28,6 @@ from crane_statics.core.chart_cache import (
 )
 from crane_statics.core.document_edit import DocumentEditor, build_contractual_point
 from crane_statics.core.governing_case import governing_case
-from crane_statics.core.session_model import DesignLimit
 from crane_statics.core.limit_auto_set import (
     ConnectionAutoSetResult,
     RopeAutoSetResult,
@@ -47,6 +46,7 @@ from crane_statics.core.sweep_cache import (
     limit_signature,
 )
 
+from ..models.limit_rows import limit_groups, limit_rows
 from ..models.table_models import Column, RecordTableModel
 
 if TYPE_CHECKING:
@@ -67,11 +67,6 @@ LIMIT_COLUMNS = [
     ),
     Column("On", lambda r: r["checkState"], field="limitEnabled", editor="bool", checkbox=True),
 ]
-_ROPES_GROUP_ID = "ropes"
-_ROPES_GROUP_NAME = "Ropes"
-_GROUP_OPEN = "▾ "
-_GROUP_CLOSED = "▸ "
-_UNCHECKED, _PARTLY_CHECKED, _CHECKED = 0, 1, 2
 CONTRACTUAL_COLUMNS = [
     Column(
         "Outreach (m)", lambda r: r["outreach"], decimals=1, field="outreach_m", editor="number"
@@ -427,93 +422,14 @@ class ChartViewModel(QObject):
     def limitsModel(self) -> QObject:
         return self._limits_model
 
-    def _limit_groups(self) -> list[tuple[str, str, list[tuple[DesignLimit, str, str]]]]:
-        """Every limit as (group id, group name, [(limit, row name, unit)]), ropes first.
-
-        Connection groups follow the canonical entity order, so the table reads the way
-        the crane is built; entities the formatter does not know come last.
-        """
-        doc = self._model.document
-        ropes: list[tuple[DesignLimit, str, str]] = []
-        by_entity: dict[str, list[tuple[DesignLimit, str, str]]] = {}
-        for dl in self._model.design_limits:
-            if dl.kind == "rope":
-                name = HoistFormatter.display_name_for_limit_id(dl.id, doc)
-                ropes.append((dl, name, RopeFormatter.component_unit(dl.component)))
-            else:
-                name = ConnectionFormatter.component_display_name(dl.component)
-                unit = ConnectionFormatter.component_unit(dl.component)
-                by_entity.setdefault(dl.entity_id, []).append((dl, name, unit))
-
-        ordered: list[str] = []
-        for top in ConnectionFormatter.top_level_entities(list(by_entity)):
-            ordered.append(top)
-            ordered.extend(ConnectionFormatter.child_entities(top, list(by_entity)))
-        ordered.extend(entity for entity in by_entity if entity not in ordered)
-
-        groups = [(_ROPES_GROUP_ID, _ROPES_GROUP_NAME, ropes)] if ropes else []
-        groups.extend(
-            (f"connection:{entity}", ConnectionFormatter.display_name(entity), by_entity[entity])
-            for entity in ordered
-        )
-        return groups
-
-    def _limit_rows(self) -> list[dict[str, Any]]:
-        """The table's records: a header row per group, then its limits unless collapsed.
-
-        A filter shows only the matching groups, open, and within a group whose name does
-        not match, only the matching limits.
-        """
-        needle = self._limit_filter.strip().casefold()
-        rows: list[dict[str, Any]] = []
-        for group_id, group_name, members in self._limit_groups():
-            if needle and needle not in group_name.casefold():
-                members = [m for m in members if needle in f"{group_name} {m[1]}".casefold()]
-            if not members:
-                continue
-            enabled = sum(1 for dl, _, _ in members if dl.enabled)
-            if enabled == 0:
-                state = _UNCHECKED
-            elif enabled == len(members):
-                state = _CHECKED
-            else:
-                state = _PARTLY_CHECKED
-            expanded = bool(needle) or group_id not in self._collapsed_limit_groups
-            rows.append(
-                {
-                    "isGroup": True,
-                    "groupId": group_id,
-                    "groupName": group_name,
-                    "limitId": "",
-                    "limitIds": [dl.id for dl, _, _ in members],
-                    "name": (_GROUP_OPEN if expanded else _GROUP_CLOSED) + group_name,
-                    "unit": "",
-                    "maxValue": "",
-                    "checkState": state,
-                    "tooltip": "",
-                }
-            )
-            if not expanded:
-                continue
-            for dl, name, unit in members:
-                rows.append(
-                    {
-                        "isGroup": False,
-                        "groupId": group_id,
-                        "groupName": group_name,
-                        "limitId": dl.id,
-                        "limitIds": [dl.id],
-                        "name": name,
-                        "unit": unit,
-                        "maxValue": "" if dl.max_kN is None else f"{float(dl.max_kN):.1f}",
-                        "checkState": _CHECKED if dl.enabled else _UNCHECKED,
-                        "tooltip": "",
-                    }
-                )
-        return rows
-
     def _refresh_limits_models(self) -> None:
-        self._limits_model.set_records(self._limit_rows())
+        self._limits_model.set_records(
+            limit_rows(
+                limit_groups(self._model.document, self._model.design_limits),
+                self._limit_filter,
+                self._collapsed_limit_groups,
+            )
+        )
         self.limitsChanged.emit()
 
     @pyqtSlot(str)
