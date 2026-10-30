@@ -304,6 +304,25 @@ class TestSceneViewModelState:
         assert state.scene_state.hook_load_kN == pytest.approx(before)
         assert messages and "no design limit applies" in messages[-1]
 
+    def test_auto_load_follows_a_limit_change(self, scene_vm):
+        """Editing a limit while Auto is on re-sizes the load, so no row exceeds 100 %."""
+        model = scene_vm._model
+        limits = [d for d in model.design_limits if d.max_kN is not None][:3]
+        for limit in model.design_limits:
+            limit.enabled = limit in limits
+        scene_vm.setHookLoadAuto(True)
+        state = model.get_active_hoist_state()
+        before = state.scene_state.hook_load_kN
+
+        for limit in limits:
+            limit.max_kN = limit.max_kN / 2
+        model.mark_content_changed()
+
+        rows = [*scene_vm._rope_result_rows, *scene_vm._connection_result_rows]
+        utilisations = [r.utilization_pct for r in rows if r.utilization_pct is not None]
+        assert state.scene_state.hook_load_kN < before
+        assert max(utilisations) <= 100.0 + 0.5
+
     def test_hook_load_converts_to_kn(self, scene_vm):
         scene_vm.setHookLoadTonnes(10.0)
         state = scene_vm._model.get_active_hoist_state()

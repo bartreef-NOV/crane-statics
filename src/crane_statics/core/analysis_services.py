@@ -515,6 +515,7 @@ class AnalysisCalculator:
             vessel_roll_deg=sc.vessel_roll_deg,
             vessel_pitch_deg=sc.vessel_pitch_deg,
             crane_slewing_angle_deg=sc.crane_slewing_angle_deg,
+            tackle_length_m=sc.tackle_length_m,
         )
 
     def resolve_row_demand(

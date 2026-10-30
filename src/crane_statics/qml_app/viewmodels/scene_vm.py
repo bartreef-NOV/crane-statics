@@ -1003,7 +1003,12 @@ class SceneViewModel(QObject):
         self.geometryChanged.emit()
         self.loadChanged.emit()
         self.environmentChanged.emit()
-        self._after_state_changed()
+        if state is not None and state.scene_state.hook_load_auto:
+            # Limits, ropes or the document changed: the Auto load must follow, or the
+            # rows would be judged against limits the stale load was not sized for.
+            self.recomputeAutoLoad()
+        else:
+            self._after_state_changed()
 
     def _after_state_changed(self) -> None:
         """Re-solve the current state, then publish the scene frame it draws as."""

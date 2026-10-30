@@ -1060,6 +1060,7 @@ class CraneCalculator:
         vessel_roll_deg: Optional[float] = None,
         vessel_pitch_deg: Optional[float] = None,
         crane_slewing_angle_deg: Optional[float] = None,
+        tackle_length_m: Optional[float] = None,
     ) -> Optional[AllowableCapacity]:
         wind_ref = (
             self.doc.environment.max_wind_speed_m_s
@@ -1085,6 +1086,7 @@ class CraneCalculator:
                 vessel_roll_deg=vessel_roll_deg,
                 vessel_pitch_deg=vessel_pitch_deg,
                 crane_slewing_angle_deg=crane_slewing_angle_deg,
+                tackle_length_m=tackle_length_m,
             )
             if point is None:
                 continue
