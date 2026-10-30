@@ -10,10 +10,27 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Tuple, Any, cast
 
 import numpy as np
+
+from .response_compose import (  # noqa: F401 -- re-exported for callers and tests
+    DirectionalResponseBasis,
+    _add_scaled_raw,
+    _build_rope_channel_map,
+    _build_rope_response_maps,
+    _reactions_from_raw,
+    _subtract_raw,
+    compose_unit_basis_point,
+)
+from .rope_metadata import (  # noqa: F401 -- re-exported for callers and tests
+    _active_rope_metadata,
+    _inactive_rope_mass_per_part,
+    effective_parts,
+    hook_mass_t,
+)
+from .static_context import build_solver_static_context  # noqa: F401
 
 if TYPE_CHECKING:
     from .kinematics import KinematicsAdapter
@@ -23,146 +40,6 @@ if TYPE_CHECKING:
 # ─────────────────────────────────────────────────────────────────────────────
 
 VECTOR_MAGNITUDE_TOLERANCE = 1e-12  # Threshold for zero magnitude (unitless direction)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Response types
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class DirectionalResponseBasis:
-    boom_angle_deg: float
-    outreach_m: float
-    dead_raw: Dict[str, float]
-    wind_speed_ref_m_s: float
-    wind_raw: Dict[str, float]
-    accel_x_ref_m_s2: float
-    accel_x_raw: Dict[str, float]
-    accel_z_ref_m_s2: float
-    accel_z_raw: Dict[str, float]
-    pitch_ref_rad_s2: float
-    pitch_raw: Dict[str, float]
-    hook_sensitivity_raw: Dict[str, float]
-    offlead_lateral_sensitivity_raw: Dict[str, float]
-    default_offlead_deg: float
-    rope_ids: Tuple[str, ...]
-    active_hoist_id: str
-    active_rope_id: str
-    active_rope_parts: int
-    inactive_rope_baselines: Dict[str, float]
-    pitch_sign: float
-    connection_local_axes: Dict[str, Dict[str, float]] = field(default_factory=dict)
-    # Idle hook mass per fall (t) by rope: the reported idle tension is
-    # mass_per_part * (g + accel_z), the same vertical load the solve applies.
-    inactive_rope_mass_per_part_t: Dict[str, float] = field(default_factory=dict)
-    # Hook block and rope self-weight masses lumped at nodes, as (mass_t, x, z): the
-    # out-of-plane pass applies them exactly as the X-Z solve does.
-    lumped_point_masses: Tuple[Tuple[float, float, float], ...] = ()
-
-
-# ---------------------------------------------------------------------------
-# Static context builder  (precomputed once per document)
-# ---------------------------------------------------------------------------
-
-
-def build_solver_static_context(doc_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Build metadata reused across many statics solves.
-
-    Accepts a CraneDocument.model_dump() compatible dict.
-    Field names use the rewrite convention: x_m, z_m, local_x_m, local_z_m,
-    area_w_m2, area_v_m2, cd, from_node_id, to_node_id.
-    """
-    body_ids = [str(b["id"]) for b in doc_dict.get("bodies", []) if b.get("id")]
-    body_index = {bid: i for i, bid in enumerate(body_ids)}
-    hoists = [h for h in doc_dict.get("hoists", []) if h.get("id")]
-    hoist_by_id = {str(h["id"]): h for h in hoists}
-    rope_to_hoist = {str(h["rope_id"]): h for h in hoists if h.get("rope_id")}
-    hook_node_ids = [str(h["load_node_id"]) for h in hoists if h.get("load_node_id")]
-
-    ropes_meta: List[Dict[str, Any]] = []
-    parts_count_map: Dict[Tuple[str, str], int] = {}
-    for rope in doc_dict.get("ropes", []):
-        rope_id = str(rope.get("id", ""))
-        # Segments use from_node_id / to_node_id in the rewrite
-        segs = [
-            (str(s["from_node_id"]), str(s["to_node_id"]), float(s.get("mult", 1)))
-            for s in rope.get("segments", [])
-            if s.get("from_node_id") and s.get("to_node_id")
-        ]
-        n_parts_by_hook: Dict[str, int] = {}
-        for hook_id in hook_node_ids:
-            sf = sum(m for f, t, m in segs if f == hook_id)
-            st = sum(m for f, t, m in segs if t == hook_id)
-            n = max(1, int(sf + st))
-            n_parts_by_hook[hook_id] = n
-            parts_count_map[(rope_id, hook_id)] = n
-        ropes_meta.append(
-            {
-                "id": rope_id,
-                "is_solve": rope.get("tension_mode") == "solve",
-                "segments": segs,
-                "n_parts_by_hook": n_parts_by_hook,
-            }
-        )
-
-    mass_entries_global: List[Tuple[int, float, float, float]] = []
-    mass_entries_local: List[Tuple[int, float, float, float]] = []
-    wind_entries_global: List[Tuple[int, float, float, float, float, float]] = []
-    wind_entries_local: List[Tuple[int, float, float, float, float, float]] = []
-
-    for body in doc_dict.get("bodies", []):
-        bid = str(body.get("id", ""))
-        if bid not in body_index:
-            continue
-        bidx = body_index[bid]
-
-        for mp in body.get("mass_points", []):
-            mass_t = float(mp.get("mass_t", 0.0))
-            if mp.get("local_x_m") is not None:
-                # boom-local coordinates
-                mass_entries_local.append(
-                    (bidx, mass_t, float(mp["local_x_m"]), float(mp.get("local_z_m") or 0.0))
-                )
-            else:
-                # global coordinates
-                mass_entries_global.append(
-                    (bidx, mass_t, float(mp.get("x_m", 0.0)), float(mp.get("z_m", 0.0)))
-                )
-
-        for wa in body.get("wind_areas", []):
-            area_w = float(wa.get("area_w_m2", 0.0))
-            area_v = float(wa.get("area_v_m2", 0.0))
-            cd = float(wa.get("cd", 1.2))
-            if wa.get("local_x_m") is not None:
-                wind_entries_local.append(
-                    (
-                        bidx,
-                        area_w,
-                        area_v,
-                        cd,
-                        float(wa["local_x_m"]),
-                        float(wa.get("local_z_m") or 0.0),
-                    )
-                )
-            else:
-                wind_entries_global.append(
-                    (bidx, area_w, area_v, cd, float(wa.get("x_m", 0.0)), float(wa.get("z_m", 0.0)))
-                )
-
-    return {
-        "body_ids": body_ids,
-        "body_index": body_index,
-        "hoists": hoists,
-        "hoist_by_id": hoist_by_id,
-        "rope_to_hoist": rope_to_hoist,
-        "ropes_meta": ropes_meta,
-        "parts_count_map": parts_count_map,
-        "mass_entries_global": mass_entries_global,
-        "mass_entries_local": mass_entries_local,
-        "wind_entries_global": wind_entries_global,
-        "wind_entries_local": wind_entries_local,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -263,125 +140,10 @@ def inertia_force(
     return -mass_t * ax_pt, -mass_t * (gravity + az_pt)
 
 
-# ---------------------------------------------------------------------------
-# Active rope metadata
-# ---------------------------------------------------------------------------
-
-
-def _active_rope_metadata(
-    doc_dict: Dict[str, Any],
-    hoist_id: str,
-    solver_ctx: Dict[str, Any],
-    hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
-) -> Tuple[Tuple[str, ...], str, int]:
-    rope_ids = tuple(str(r["id"]) for r in doc_dict.get("ropes", []) if r.get("id"))
-    hoist = solver_ctx["hoist_by_id"].get(hoist_id)
-    if hoist is None:
-        return rope_ids, "", 1
-    active_rope_id = str(hoist.get("rope_id", ""))
-    load_node_id = str(hoist.get("load_node_id", ""))
-    n = solver_ctx["parts_count_map"].get((active_rope_id, load_node_id), 1)
-    override = (hoist_runtime_overrides or {}).get(hoist_id, {})
-    override_falls = override.get("falls")
-    if override_falls is not None:
-        try:
-            n = max(1, int(override_falls))
-        except (TypeError, ValueError):
-            pass
-    return rope_ids, active_rope_id, max(1, n)
-
-
-def _inactive_rope_mass_per_part(
-    active_hoist_id: str,
-    solver_ctx: Dict[str, Any],
-    hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
-) -> Dict[str, float]:
-    """Idle hook mass per fall (t) by rope; the idle tension is this times (g + accel_z)."""
-    baseline_by_rope: Dict[str, float] = {}
-    for hoist in solver_ctx.get("hoists", []):
-        hoist_runtime_id = str(hoist.get("id", "") or "")
-        rope_id = str(hoist.get("rope_id", "") or "")
-        if not rope_id or rope_id == "boom_hoist" or hoist_runtime_id == active_hoist_id:
-            continue
-        override = (hoist_runtime_overrides or {}).get(hoist_runtime_id, {})
-        hook_mass_t = float(override.get("hook_mass_t", hoist.get("hook_mass_t", 0.0)) or 0.0)
-        load_node_id = str(hoist.get("load_node_id", "") or "")
-        parts = solver_ctx.get("parts_count_map", {}).get((rope_id, load_node_id), 1)
-        override_falls = override.get("falls")
-        if override_falls is not None:
-            try:
-                parts = max(1, int(override_falls))
-            except (TypeError, ValueError):
-                pass
-        baseline_by_rope[rope_id] = hook_mass_t / max(1, int(parts))
-    return baseline_by_rope
-
-
-def _build_rope_response_maps(
-    rope_ids: Tuple[str, ...],
-    active_rope_id: str,
-    active_rope_parts: int,
-    boom_baseline_kN: float,
-    boom_sensitivity_per_kN: float,
-    inactive_rope_baselines: Dict[str, float],
-) -> Tuple[Dict[str, float], Dict[str, float]]:
-    ids = list(rope_ids)
-    for rid in ("boom_hoist", active_rope_id):
-        if rid and rid not in ids:
-            ids.append(rid)
-    baseline = {rid: 0.0 for rid in ids}
-    sensitivity = {rid: 0.0 for rid in ids}
-    baseline["boom_hoist"] = float(boom_baseline_kN)
-    sensitivity["boom_hoist"] = float(boom_sensitivity_per_kN)
-    for rope_id, baseline_kN in inactive_rope_baselines.items():
-        if rope_id not in baseline:
-            baseline[rope_id] = 0.0
-            sensitivity[rope_id] = 0.0
-        baseline[rope_id] = float(baseline_kN)
-    if active_rope_id:
-        sensitivity[active_rope_id] = 1.0 / max(1, active_rope_parts)
-    return baseline, sensitivity
-
-
-def _build_rope_channel_map(rope_ids: Tuple[str, ...], bh_val: float) -> Dict[str, float]:
-    ids = list(rope_ids)
-    if "boom_hoist" not in ids:
-        ids.append("boom_hoist")
-    ch = {rid: 0.0 for rid in ids}
-    ch["boom_hoist"] = float(bh_val)
-    return ch
-
-
-def _subtract_raw(a: Dict[str, float], b: Dict[str, float]) -> Dict[str, float]:
-    return {k: float(a.get(k, 0.0)) - float(b.get(k, 0.0)) for k in set(a) | set(b)}
-
-
-def _add_scaled_raw(base: Dict[str, float], delta: Dict[str, float], s: float) -> Dict[str, float]:
-    return {
-        k: float(base.get(k, 0.0)) + s * float(delta.get(k, 0.0)) for k in set(base) | set(delta)
-    }
-
-
 def _normalize_channel_raw(raw: Dict[str, float], ref: float) -> Dict[str, float]:
     if abs(ref) <= VECTOR_MAGNITUDE_TOLERANCE:
         return {k: 0.0 for k in raw}
     return {k: float(v) / ref for k, v in raw.items()}
-
-
-def _reactions_from_raw(raw: Dict[str, float], s: float = 1.0) -> Dict[str, Dict[str, float]]:
-    return {
-        "heel_point": {"Fx": raw.get("h_x", 0.0) * s, "Fz": raw.get("h_z", 0.0) * s},
-        "rear_hinge": {"Fx": raw.get("r_rb_x", 0.0) * s, "Fz": raw.get("r_rb_z", 0.0) * s},
-        "front_hinge": {"Fx": raw.get("r_fb_x", 0.0) * s, "Fz": raw.get("r_fb_z", 0.0) * s},
-        "upper_hinge": {"Fx": raw.get("r_top_x", 0.0) * s, "Fz": raw.get("r_top_z", 0.0) * s},
-        "platform_base": {
-            "Fx": raw.get("r_g_x", 0.0) * s,
-            "Fz": raw.get("r_g_z", 0.0) * s,
-            "M": raw.get("m_g", 0.0) * s,
-            "My": raw.get("m_g", 0.0) * s,
-            "Mx": raw.get("m_g_x", 0.0) * s,
-        },
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -421,9 +183,7 @@ def lumped_point_masses(
         if hbody < 0:
             continue
         idle_override = overrides.get(str(hoist_item.get("id", "") or ""), {})
-        idle_mass_t = float(
-            idle_override.get("hook_mass_t", hoist_item.get("hook_mass_t", 0.0)) or 0.0
-        )
+        idle_mass_t = hook_mass_t(hoist_item, idle_override)
         if idle_mass_t > 0:
             hx, hz = node_pos[node_id]
             out.append((hbody, idle_mass_t, float(hx), float(hz)))
@@ -503,15 +263,13 @@ def _accumulate_loads(
 
     # This basis composes X-axis wind effects only; Y-axis wind is handled by
     # the explicit directional scene-analysis path in engine.py.
-    for bidx, area_w, area_v, cd, wcx, wcz in ctx["wind_entries_global"]:
-        _ = area_v
+    for bidx, area_w, _area_v, cd, _wcx, wcz in ctx["wind_entries_global"]:
         fx = _wind_fx(area_w, cd, body_ids[bidx] == "boom")
         ld_fx[bidx] += fx
         ld_m[bidx] += -wcz * fx
 
-    for bidx, area_w, area_v, cd, lx, lz in ctx["wind_entries_local"]:
-        _ = area_v
-        wcx, wcz = rotate_boom_local_point(lx, lz, node_pos, boom_angle_deg)
+    for bidx, area_w, _area_v, cd, lx, lz in ctx["wind_entries_local"]:
+        _wcx, wcz = rotate_boom_local_point(lx, lz, node_pos, boom_angle_deg)
         fx = _wind_fx(area_w, cd, body_ids[bidx] == "boom")
         ld_fx[bidx] += fx
         ld_m[bidx] += -wcz * fx
@@ -524,7 +282,6 @@ def _accumulate_loads(
     active_override = overrides.get(hoist_id, {})
 
     active_rope_id = str(hoist_data.get("rope_id", ""))
-    gravity_abs = gravity
     node_body_cache: Dict[str, int] = {}
     rope_to_hoist: Dict[str, Any] = ctx.get("rope_to_hoist", {})
 
@@ -566,33 +323,24 @@ def _accumulate_loads(
             # Known tension rope: compute tension and distribute through all segments.
             if rope_id == active_rope_id:
                 load_node_id = str(hoist_data.get("load_node_id", ""))
-                n_parts = rope["n_parts_by_hook"].get(load_node_id, 1)
-                override_falls = active_override.get("falls")
-                if override_falls is not None:
-                    try:
-                        n_parts = max(1, int(override_falls))
-                    except (TypeError, ValueError):
-                        pass
-                tension_kN = hook_load_kN / max(1, n_parts)
+                n_parts = effective_parts(
+                    rope["n_parts_by_hook"].get(load_node_id, 1), active_override
+                )
+                tension_kN = hook_load_kN / n_parts
             elif rope_id in rope_to_hoist:
                 idle_hoist = rope_to_hoist[rope_id]
                 idle_id = str(idle_hoist.get("id", "") or "")
                 idle_override = overrides.get(idle_id, {})
-                idle_hook_mass_t = float(
-                    idle_override.get("hook_mass_t", idle_hoist.get("hook_mass_t", 0.0)) or 0.0
-                )
                 idle_hook_node = str(idle_hoist.get("load_node_id", ""))
-                n_parts_idle = rope["n_parts_by_hook"].get(idle_hook_node, 1)
-                override_falls_idle = idle_override.get("falls")
-                if override_falls_idle is not None:
-                    try:
-                        n_parts_idle = max(1, int(override_falls_idle))
-                    except (TypeError, ValueError):
-                        pass
+                n_parts_idle = effective_parts(
+                    rope["n_parts_by_hook"].get(idle_hook_node, 1), idle_override
+                )
                 # Idle-hoist rope tension uses only the vertical heave component
                 # m*(g + accel_z)/n (accel_z is the crane-frame value); it does not
                 # include the pitch-lever term at the hook node.
-                tension_kN = idle_hook_mass_t * (gravity_abs + accel_z_m_s2) / max(1, n_parts_idle)
+                tension_kN = (
+                    hook_mass_t(idle_hoist, idle_override) * (gravity + accel_z_m_s2) / n_parts_idle
+                )
             else:
                 tension_kN = 0.0
 
@@ -1228,64 +976,3 @@ def _basis_from_invariants(
         inactive_rope_mass_per_part_t=inactive_rope_mass_per_part_t,
         lumped_point_masses=lumped,
     )
-
-
-def compose_unit_basis_point(
-    basis: DirectionalResponseBasis,
-    wind_sign: float = 0.0,
-    accel_x_sign: float = 0.0,
-    accel_z_sign: float = 0.0,
-    pitch_sign: float = 0.0,
-    offlead_deg: float | None = None,
-) -> Dict:
-    """Compose a response point from a pre-computed directional basis."""
-    raw = dict(basis.dead_raw)
-    raw = _add_scaled_raw(raw, basis.wind_raw, wind_sign * basis.wind_speed_ref_m_s)
-    raw = _add_scaled_raw(raw, basis.accel_x_raw, accel_x_sign * basis.accel_x_ref_m_s2)
-    raw = _add_scaled_raw(raw, basis.accel_z_raw, accel_z_sign * basis.accel_z_ref_m_s2)
-    raw = _add_scaled_raw(raw, basis.pitch_raw, pitch_sign * basis.pitch_ref_rad_s2)
-
-    active_offlead_deg = basis.default_offlead_deg if offlead_deg is None else float(offlead_deg)
-    offlead_scale = math.sin(math.radians(active_offlead_deg))
-    sensitivity_raw = _add_scaled_raw(
-        basis.hook_sensitivity_raw,
-        basis.offlead_lateral_sensitivity_raw,
-        offlead_scale,
-    )
-
-    # Idle ropes carry the vertical hook load, m/parts * (g + accel_z), as in the solve.
-    accel_z_signed = accel_z_sign * basis.accel_z_ref_m_s2
-    inactive_ropes = {
-        rope_id: float(baseline_kN)
-        + accel_z_signed * float(basis.inactive_rope_mass_per_part_t.get(rope_id, 0.0))
-        for rope_id, baseline_kN in basis.inactive_rope_baselines.items()
-    }
-    baseline_ropes, sensitivity_ropes = _build_rope_response_maps(
-        basis.rope_ids,
-        basis.active_rope_id,
-        basis.active_rope_parts,
-        raw["t_bh"],
-        sensitivity_raw["t_bh"],
-        inactive_ropes,
-    )
-    return {
-        "boom_angle_deg": basis.boom_angle_deg,
-        "outreach_m": basis.outreach_m,
-        "baseline_rope_tensions": baseline_ropes,
-        "baseline_reactions": _reactions_from_raw(raw),
-        "sensitivity_rope_tensions": sensitivity_ropes,
-        "sensitivity_reactions": _reactions_from_raw(sensitivity_raw),
-        "offlead_lateral_unit_rope_tensions": _build_rope_channel_map(
-            basis.rope_ids, basis.offlead_lateral_sensitivity_raw.get("t_bh", 0.0)
-        ),
-        "offlead_lateral_unit_reactions": _reactions_from_raw(
-            basis.offlead_lateral_sensitivity_raw
-        ),
-        "governing_signs": {
-            "wind_speed": wind_sign,
-            "accel_x": accel_x_sign,
-            "accel_z": accel_z_sign,
-            "pitch": pitch_sign,
-        },
-        "connection_local_axes": dict(basis.connection_local_axes),
-    }
