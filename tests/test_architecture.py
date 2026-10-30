@@ -149,8 +149,11 @@ def test_drawn_load_model_is_qt_free_and_in_plane():
     """The load model is pure and documents its X/Z scope on LoadConditions."""
     from crane_statics.core import drawn_loads
 
-    source = Path(drawn_loads.__file__).read_text(encoding="utf-8")
-    assert "PyQt6" not in source and "QColor" not in source
+    from crane_statics.core import hoist_loads, load_types
+
+    for module in (drawn_loads, hoist_loads, load_types):
+        source = Path(module.__file__).read_text(encoding="utf-8")
+        assert "PyQt6" not in source and "QColor" not in source, module.__name__
 
     # Out-of-plane inputs must not be silently accepted: they belong to the
     # left/right support split, not to X/Z equilibrium.

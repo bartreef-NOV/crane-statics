@@ -23,7 +23,6 @@ if TYPE_CHECKING:
 # ─────────────────────────────────────────────────────────────────────────────
 
 VECTOR_MAGNITUDE_TOLERANCE = 1e-12  # Threshold for zero magnitude (unitless direction)
-LOAD_ACCUMULATION_TOLERANCE = 1e-9  # Tolerance for load/force comparisons during accumulation
 
 
 # ─────────────────────────────────────────────────────────────────────────────

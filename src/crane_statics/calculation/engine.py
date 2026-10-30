@@ -94,8 +94,6 @@ def get_calculator(document: CraneDocument) -> "CraneCalculator":
 # ─────────────────────────────────────────────────────────────────────────────
 
 NUMERIC_TOLERANCE = 1e-6  # General-purpose tolerance for statics/comparisons
-VECTOR_MAGNITUDE_TOLERANCE = 1e-12  # Threshold for zero magnitude (unitless direction)
-QUADRATIC_SOLVER_TOLERANCE = 1e-9  # Tolerance for quadratic equation solving
 WIND_SPEED_THRESHOLD = 1e-12  # Threshold for non-zero wind speed
 
 # Component suffixes stripped from limit ids ('rear_hinge_Fx' -> 'rear_hinge').
@@ -293,7 +291,6 @@ class AllowableCapacity:
     governing_limit_id: Optional[str] = None
     governing_wind_direction: Optional[str] = None
     margin_kN: Optional[float] = None
-    margin_t: Optional[float] = None
 
 
 @dataclass(frozen=True)

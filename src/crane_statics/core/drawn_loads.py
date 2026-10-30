@@ -22,6 +22,17 @@ from typing import Any, Iterator, Mapping, Optional, Sequence
 from ..calculation.rope_mass import RopeNodeMass, rope_mass_at_nodes
 from ..presentation.formatters import node_display_name
 
+# active_hoist_dict and rope_tension_channel are re-exported for the scene, presenter and scripts.
+from .hoist_loads import (  # noqa: F401
+    active_hoist_dict,  # noqa: F401  (re-exported: used by scene, presenter and scripts)
+    effective_segment_mult,
+    mass_point_label,
+    resolve_rope_tension_kN,
+    rope_tension_channel,  # noqa: F401  (re-exported, named in the workbook reference)
+    split_support_mass_t,
+)
+from .load_types import BodyLoads, LoadConditions, LoadMoment, LoadVector
+
 # Unified reaction semantics: a reaction's participating bodies and the node it
 # is anchored at, per body. Keeps sign and anchor from drifting apart.
 REACTION_SPECS: dict[str, dict[str, Any]] = {
@@ -98,91 +109,6 @@ CATEGORY_ORDER = (
 
 
 @dataclass(frozen=True)
-class LoadVector:
-    """A force applied at a world point, in kN."""
-
-    world_x: float
-    world_z: float
-    fx_kN: float
-    fz_kN: float
-    category: str
-    label: str
-    detail: str = ""
-
-    @property
-    def magnitude_kN(self) -> float:
-        return math.hypot(self.fx_kN, self.fz_kN)
-
-
-@dataclass(frozen=True)
-class LoadMoment:
-    """A moment applied at a world point, in kNm."""
-
-    world_x: float
-    world_z: float
-    moment_kNm: float
-    entity_id: str
-    label: str
-    detail: str = ""
-
-
-@dataclass(frozen=True)
-class BodyLoads:
-    """Named load categories plus reaction moments for one free-body selection."""
-
-    categories: tuple[tuple[str, tuple[LoadVector, ...]], ...] = ()
-    moments: tuple[LoadMoment, ...] = ()
-
-    def category(self, name: str) -> tuple[LoadVector, ...]:
-        for category_name, vectors in self.categories:
-            if category_name == name:
-                return vectors
-        return ()
-
-    def vectors(self, *names: str) -> tuple[LoadVector, ...]:
-        """All vectors, or only those in the named categories, in report order."""
-        wanted = set(names) if names else None
-        return tuple(
-            vector
-            for name, vectors in self.categories
-            if wanted is None or name in wanted
-            for vector in vectors
-        )
-
-    def sum_fx_kN(self) -> float:
-        return sum(vector.fx_kN for vector in self.vectors())
-
-    def sum_fz_kN(self) -> float:
-        return sum(vector.fz_kN for vector in self.vectors())
-
-
-@dataclass(frozen=True)
-class LoadConditions:
-    """In-plane environmental and hoist state a load set is evaluated at.
-
-    Out-of-plane inputs (lateral/roll acceleration, sidelead, Y-wind) are
-    absent by design -- see the module docstring.
-
-    ``gravity_x/z_m_s2`` are the crane-frame gravity components (vessel tilt and slew
-    resolved); ``None`` means the nominal ``(0, -g)`` of the document environment.
-    ``accel_x/z_m_s2`` and ``pitch_accel_rad_s2`` are the vessel's own accelerations
-    rotated into the crane frame -- gravity is not folded into them.
-    """
-
-    boom_angle_deg: float = 0.0
-    hook_load_kN: float = 0.0
-    wind_speed_m_s: float = 0.0
-    wind_direction: str = "+X"
-    accel_x_m_s2: float = 0.0
-    accel_z_m_s2: float = 0.0
-    pitch_accel_rad_s2: float = 0.0
-    offlead_deg: float = 0.0
-    split_mode_active: bool = False
-    gravity_x_m_s2: Optional[float] = None
-    gravity_z_m_s2: Optional[float] = None
-
-
-@dataclass(frozen=True)
 class FreeBodyFilter:
     """Which body's loads to include. ``selected_body=None`` means the whole crane."""
 
@@ -244,114 +170,6 @@ def node_body_map(document_dict: Mapping[str, Any]) -> dict[str, str]:
         for node in document_dict.get("nodes", [])
         if node.get("id")
     }
-
-
-def _positive_int(value: Any) -> Optional[int]:
-    try:
-        parsed = int(value)
-    except Exception:
-        return None
-    return parsed if parsed > 0 else None
-
-
-def _nonnegative_float(value: Any) -> Optional[float]:
-    try:
-        parsed = float(value)
-    except Exception:
-        return None
-    return parsed if parsed >= 0.0 else None
-
-
-def effective_segment_mult(
-    hoist: Mapping[str, Any],
-    segment: Mapping[str, Any],
-    authored_mult: int,
-    rope_id: str,
-    *,
-    split_mode_active: bool,
-) -> int:
-    """Falls carried by one rope segment, honouring the hoist's split-block mode.
-
-    Only the segment the active hoist manages (support node <-> load node) is
-    overridden; every other segment keeps its authored multiplier.
-    """
-    hoist_rope_id = str(hoist.get("rope_id", "")).strip()
-    if not hoist_rope_id or str(rope_id).strip() != hoist_rope_id:
-        return authored_mult
-
-    support_node_id = str(hoist.get("support_node_id", "")).strip()
-    load_node_id = str(hoist.get("load_node_id", "")).strip()
-    if not support_node_id or not load_node_id:
-        return authored_mult
-
-    from_node = str(segment.get("from_node_id", "")).strip()
-    to_node = str(segment.get("to_node_id", "")).strip()
-    is_managed_hook_segment = (from_node == support_node_id and to_node == load_node_id) or (
-        from_node == load_node_id and to_node == support_node_id
-    )
-    if not is_managed_hook_segment:
-        return authored_mult
-
-    falls = _positive_int(hoist.get("falls"))
-    split_falls = _positive_int(hoist.get("split_falls"))
-    if split_mode_active and split_falls is not None:
-        return split_falls
-    if falls is not None:
-        return falls
-    return authored_mult
-
-
-def split_support_mass_t(hoist: Mapping[str, Any], *, split_mode_active: bool) -> Optional[float]:
-    """Mass left at the support node when a splitable block is split, in tonnes."""
-    if not split_mode_active:
-        return None
-    if not bool(hoist.get("splitable_block", False)):
-        return None
-    hook_mass_t = _nonnegative_float(hoist.get("hook_mass_t"))
-    split_hook_mass_t = _nonnegative_float(hoist.get("split_hook_mass_t"))
-    if hook_mass_t is None or split_hook_mass_t is None:
-        return None
-    support_mass_t = max(0.0, hook_mass_t - split_hook_mass_t)
-    if support_mass_t <= 1e-9:
-        return None
-    return support_mass_t
-
-
-def active_hoist_dict(document_dict: Mapping[str, Any], hoist_id: str) -> dict[str, Any]:
-    """The authored hoist a load set is built for, or ``{}`` when unresolved."""
-    return next(
-        (h for h in document_dict.get("hoists", []) if h.get("id") == hoist_id),
-        {},
-    )
-
-
-def rope_tension_channel(rope: Mapping[str, Any], rope_id: str) -> str:
-    """Which analysis-point channel carries this rope's tension."""
-    mode = str(rope.get("tension_mode", "") or "").strip().lower()
-    return "boom_hoist" if mode == "solve" else rope_id
-
-
-def resolve_rope_tension_kN(
-    rope: Mapping[str, Any],
-    rope_id: str,
-    *,
-    analysis_point: Any,
-    hook_load_kN: float,
-) -> Optional[float]:
-    """Rope tension at the given hook load, linearised about the analysis point."""
-    if analysis_point is None:
-        return None
-    baseline = getattr(analysis_point, "baseline_rope_tensions", {}) or {}
-    sensitivity = getattr(analysis_point, "sensitivity_rope_tensions", {}) or {}
-    channel = rope_tension_channel(rope, rope_id)
-    base = float(baseline.get(channel, baseline.get(rope_id, 0.0)))
-    sens = float(sensitivity.get(channel, sensitivity.get(rope_id, 0.0)))
-    return base + sens * float(hook_load_kN)
-
-
-def mass_point_label(mass_point: Mapping[str, Any]) -> str:
-    mass_point_id = str(mass_point.get("id", "")).strip()
-    return mass_point_id if mass_point_id else "Unnamed mass point"
 
 
 class _LoadBuilder:
@@ -1032,17 +850,18 @@ class _LoadBuilder:
         return loaded
 
     def build(self) -> BodyLoads:
+        builders = {
+            GRAVITY: self.gravity,
+            ROPE_WEIGHT: self.rope_weight,
+            IDLE_HOOK_MASS: self.idle_hook_mass,
+            HOOK_LOAD: self.hook_load,
+            WIND: self.wind,
+            INERTIA: self.inertia,
+            ROPE_INTERFACE: self.rope_interface,
+            REACTIONS: self.reactions,
+        }
         return BodyLoads(
-            categories=(
-                (GRAVITY, self.gravity()),
-                (ROPE_WEIGHT, self.rope_weight()),
-                (IDLE_HOOK_MASS, self.idle_hook_mass()),
-                (HOOK_LOAD, self.hook_load()),
-                (WIND, self.wind()),
-                (INERTIA, self.inertia()),
-                (ROPE_INTERFACE, self.rope_interface()),
-                (REACTIONS, self.reactions()),
-            ),
+            categories=tuple((category, builders[category]()) for category in CATEGORY_ORDER),
             moments=self.reaction_moments(),
         )
 
