@@ -127,6 +127,28 @@ def test_chart_pending_markers_are_a_neutral_palette_grey(qml_engine):
     assert warnings == []
 
 
+def test_chart_pinned_point_follows_the_data_through_zoom(qml_engine):
+    engine, _app_vm, _model_vm, warnings = qml_engine
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "QuickChartPlot.qml")))
+    plot = component.create()
+    assert plot is not None, component.errorString()
+
+    pin = "{ outreach: 10, load: 5, x: 0, y: 0 }"
+    wide = "{ xMin: 0, xMax: 20, yMin: 0, yMax: 10 }"
+    zoomed = "{ xMin: 0, xMax: 10, yMin: 0, yMax: 5 }"
+    args = "0, 0, 100, 100"
+    before = _evaluate_in(plot, f"projectPoint({pin}, {wide}, {args})")
+    after = _evaluate_in(plot, f"projectPoint({pin}, {zoomed}, {args})")
+    # Zooming moves the pin's screen position with its data point; the data stays put.
+    assert (before["x"], before["y"]) == (50, 50)
+    assert (after["x"], after["y"]) == (100, 0)
+    assert (after["outreach"], after["load"]) == (10, 5)
+    # A pin zoomed out of view is not drawn.
+    away = "{ xMin: 12, xMax: 20, yMin: 0, yMax: 10 }"
+    assert _evaluate_in(plot, f"projectPoint({pin}, {away}, {args})") is None
+    assert warnings == []
+
+
 def test_chart_legend_handles_long_labels_and_toggles_visibility(qml_engine):
     engine, _app_vm, _model_vm, warnings = qml_engine
     component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "ChartLegend.qml")))

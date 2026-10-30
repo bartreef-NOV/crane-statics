@@ -243,6 +243,18 @@ Item {
         return best
     }
 
+    // A pinned or hovered point re-projected onto the current view, so it follows the data
+    // through zoom and pan. Null when the point has left the plot area.
+    function projectPoint(point, ranges, left, top, plotWidth, plotHeight) {
+        if (!point)
+            return null
+        const x = mapX(point.outreach, ranges, left, plotWidth)
+        const y = mapY(point.load, ranges, top, plotHeight)
+        if (x < left || x > left + plotWidth || y < top || y > top + plotHeight)
+            return null
+        return Object.assign({}, point, { x: x, y: y })
+    }
+
     function clearPinnedPoint() {
         pinnedPoint = null
         canvas.requestPaint()
@@ -349,7 +361,8 @@ Item {
             }
             context.restore()
 
-            const inspected = root.pinnedPoint || root.hoveredPoint
+            const inspected = root.projectPoint(root.pinnedPoint || root.hoveredPoint,
+                                                ranges, left, top, plotWidth, plotHeight)
             if (inspected) {
                 context.strokeStyle = pal.placeholderText
                 context.lineWidth = 1
