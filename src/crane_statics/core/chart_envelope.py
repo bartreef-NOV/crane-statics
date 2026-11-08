@@ -82,6 +82,7 @@ def build_probes(
     overrides: Optional[dict[str, dict[str, Any]]],
     *,
     vessel: Optional[VesselMotion] = None,
+    amplified_rope_hoist_id: Optional[str] = None,
 ) -> Optional[ProbeSet]:
     """Solve the zero, unit-motion and wind probes on a level vessel at slew 0.
 
@@ -94,6 +95,8 @@ def build_probes(
     in every sign case and slew of those limits is not solved (the zero probe stands in);
     such a probe would only ever be superposed with a zero weight. The returned set records
     which probes were solved, so it must only be used with those limits.
+    ``amplified_rope_hoist_id`` is passed to every solve (``compute_analysis_point``): a
+    rules run counts that hoist's hook-segment rope in the hook force, not the dead load.
     """
     needed = [True] * len(_PROBE_KWARGS)
     if vessel is not None:
@@ -117,6 +120,7 @@ def build_probes(
             crane_slewing_angle_deg=0.0,
             vessel_roll_deg=0.0,
             vessel_pitch_deg=0.0,
+            amplified_rope_hoist_id=amplified_rope_hoist_id,
             **kwargs,
         )
 

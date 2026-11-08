@@ -15,7 +15,7 @@ from ..calculation.engine import CraneCalculator, get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
 from .analysis_cases import analysis_mode_by_name
 from .demand_extraction import extract_connection_component_response
-from .lift_factor import LiftFactors
+from .lift_factor import LiftFactors, amplified_rope_hoist_id
 from .load_condition import scene_load_condition
 from ..presentation.formatters import ConnectionFormatter, HoistFormatter, RopeFormatter
 from .drawn_loads import LoadConditions
@@ -119,7 +119,8 @@ class HoistStateService:
 
         Legacy: the authored ``hook_daf`` (1.0 without a hoist). On a rules document, the
         profile's factor under the Scene's condition (``scene_load_condition``) at the
-        hoist's current boom angle and hook mode, as the chart computes it there.
+        hoist's current boom angle, hook position (tackle length) and hook mode, as the
+        chart computes it there; it counts the rope hanging at that hook (``extra_mass_t``).
         """
         doc = self._session.document
         if hoist is None or doc is None or doc.rules is None:
@@ -135,7 +136,21 @@ class HoistStateService:
         split = bool(state is not None and state.split_mode_active)
         mode = analysis_mode_by_name(hoist, "split" if split else "normal")
         angle = float(state.scene_state.boom_angle_deg) if state is not None else 0.0
-        return self._lift.setup(scene_load_condition(doc), hoist.id, mode, angle).factor
+        tackle_m = float(state.scene_state.tackle_length_m) if state is not None else None
+        return self._lift.setup(
+            scene_load_condition(doc), hoist.id, mode, angle, tackle_length_m=tackle_m
+        ).factor
+
+    def amplified_rope_hoist_id(self, hoist_id: str) -> Optional[str]:
+        """The hoist whose hook rope the Scene's solves count in the hook force, if any.
+
+        On a rules document the Scene factor (``dynamic_factor``) carries the suspended
+        rope, so the solves leave it out of the dead load; legacy: None.
+        """
+        doc = self._session.document
+        if doc is None:
+            return None
+        return amplified_rope_hoist_id(scene_load_condition(doc), hoist_id)
 
     def contractual_points_for_hoist_mode(self, hoist: Optional[Hoist]) -> list:
         """Get contractual load points for hoist's current mode."""
@@ -302,6 +317,7 @@ class AnalysisCalculator:
             vessel_roll_deg=sc.vessel_roll_deg,
             vessel_pitch_deg=sc.vessel_pitch_deg,
             crane_slewing_angle_deg=sc.crane_slewing_angle_deg,
+            amplified_rope_hoist_id=self._hoist.amplified_rope_hoist_id(hoist_id),
         )
         self._unavailable_reason = None if point is not None else calc.unavailable_reason
         return point
@@ -549,6 +565,7 @@ class AnalysisCalculator:
             vessel_pitch_deg=sc.vessel_pitch_deg,
             crane_slewing_angle_deg=sc.crane_slewing_angle_deg,
             tackle_length_m=sc.tackle_length_m,
+            amplified_rope_hoist_id=self._hoist.amplified_rope_hoist_id(hoist_id),
         )
 
     def resolve_row_demand(

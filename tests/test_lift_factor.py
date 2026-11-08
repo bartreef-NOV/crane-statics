@@ -23,7 +23,7 @@ from crane_statics.data.models import ConditionSpec, CraneDocument, VesselMotion
 from crane_statics.rules import RulesValidationError, validate_rules_document
 from crane_statics.rules.stiffness import payload_hoist_stiffness_terms
 from tests import rules_reference as ref
-from tests.rules_docs import GT283, legacy_equivalent, rules_doc
+from tests.rules_docs import GT283, legacy_equivalent, rules_doc, without_suspended_rope
 
 HOIST = "MH"
 HOOK_T = 50.0  # GT283 MH hook block
@@ -151,7 +151,9 @@ def _oracle_payload_t(hook_force_kN: float, k_kN_m: float, a_v_g: float) -> floa
 
 
 def test_abs_offboard_sweep_capacity_matches_the_oracle() -> None:
-    doc = _abs_doc()
+    # Without payload-rope mass the daf-1 legacy chart has the rules run's dead load, so its
+    # limiting hook force is the rules one exactly (the rope: tests/test_rules_suspended.py).
+    doc = without_suspended_rope(_abs_doc())
     assert abs(doc.environment.gravity_m_s2) == G
     swept = _curve(doc)
     # The limiting hook force does not depend on the factor: read it from a daf-1 chart.
@@ -180,7 +182,8 @@ def test_abs_offboard_factor_varies_with_outreach() -> None:
 
 
 def test_manual_daf_gives_the_legacy_capacity_and_both_records() -> None:
-    doc = _abs_doc(daf=1.25)
+    # Without payload-rope mass; the amplified suspended rope: tests/test_rules_suspended.py.
+    doc = without_suspended_rope(_abs_doc(daf=1.25))
     swept = _curve(doc)
     legacy = _curve(legacy_equivalent(doc, 0.0, MOTION))
     assert swept.keys() == legacy.keys()
@@ -275,11 +278,17 @@ def test_scene_conversions_use_the_scene_condition_factor() -> None:
     session.set_document(doc)
     session.select_payload_hoist(HOIST)
     service = HoistStateService(session)
-    angle = float(session.hoist_states[HOIST].scene_state.boom_angle_deg)
+    scene = session.hoist_states[HOIST].scene_state
+    scene.tackle_length_m = 40.0  # the suspended rope hangs at the Scene's hook
+    angle = float(scene.boom_angle_deg)
     mode = analysis_mode_by_name(next(h for h in doc.hoists if h.id == HOIST), "normal")
     expected = factor_for_point(
-        doc, scene_load_condition(doc), HOIST, mode, _point(doc, angle), angle
+        doc, scene_load_condition(doc), HOIST, mode, _point(doc, angle), angle, tackle_length_m=40.0
     ).factor
+    at_sheave = factor_for_point(
+        doc, scene_load_condition(doc), HOIST, mode, _point(doc, angle), angle, tackle_length_m=0.0
+    ).factor
+    assert expected != at_sheave  # the 40 m of falls (7.3 t) are in the live load
     assert service.payload_t_to_hook_force_kN(300.0, HOIST) == pytest.approx(
         expected.hook_force_kN(300.0, HOOK_T, G), rel=1e-12
     )

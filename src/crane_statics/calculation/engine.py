@@ -556,6 +556,7 @@ class CraneCalculator:
         vessel_pitch_deg: Optional[float] = None,
         crane_slewing_angle_deg: Optional[float] = None,
         wind_angle_deg: Optional[float] = None,
+        amplified_rope_hoist_id: Optional[str] = None,
     ) -> Optional[AnalysisPoint]:
         """Full linear response at one boom angle.
 
@@ -571,6 +572,11 @@ class CraneCalculator:
         It moves rope weight between the falls and the winch, so an interactive
         caller passes what the scene draws; leaving it ``None`` evaluates the
         designed operating position (see ``rope_mass.active_hook_positions``).
+
+        ``amplified_rope_hoist_id`` names a hoist whose hook-segment rope (support node to
+        hook) the caller counts in the hook load instead of as dead load: that segment's
+        mass is left out of the dead node masses (``rope_mass.hook_segment_mass_t`` is what
+        is left out). None, the default, keeps every rope as dead load.
 
         When it returns ``None`` for a known cause, ``unavailable_reason`` says why.
         """
@@ -635,6 +641,7 @@ class CraneCalculator:
                 solver_ctx=self._solver_ctx,
                 hoist_runtime_overrides=hoist_runtime_overrides,
                 tackle_length_m=tackle_length_m,
+                amplified_rope_hoist_id=amplified_rope_hoist_id,
             )
             if basis is None:
                 self.unavailable_reason = self._solver_ctx.get(UNAVAILABLE_REASON_KEY)
@@ -763,7 +770,13 @@ class CraneCalculator:
         vessel_pitch_deg: Optional[float] = None,
         crane_slewing_angle_deg: Optional[float] = None,
         tackle_length_m: Optional[float] = None,
+        amplified_rope_hoist_id: Optional[str] = None,
     ) -> Optional[AllowableCapacity]:
+        """The lowest ``compute_allowable_load`` over the candidate wind directions.
+
+        ``amplified_rope_hoist_id`` as for ``compute_analysis_point``; ``hook_daf`` must
+        then count that rope in the hook force.
+        """
         wind_ref = (
             self.doc.environment.max_wind_speed_m_s
             if wind_speed_m_s is None
@@ -789,6 +802,7 @@ class CraneCalculator:
                 vessel_pitch_deg=vessel_pitch_deg,
                 crane_slewing_angle_deg=crane_slewing_angle_deg,
                 tackle_length_m=tackle_length_m,
+                amplified_rope_hoist_id=amplified_rope_hoist_id,
             )
             if point is None:
                 continue

@@ -136,6 +136,69 @@ def falls_override_effective_mult(
     return effective_mult
 
 
+def is_hook_segment(hoist: Mapping[str, Any], segment: Mapping[str, Any]) -> bool:
+    """Whether ``segment`` is the rope ``hoist``'s hook hangs on.
+
+    That is the run between the hoist's support node and its load node (the hook), all
+    its falls: the rope a lifted load carries with it, and the segment whose mult a split
+    block replaces (``falls_override_effective_mult``). A hoist without a support node
+    (the boom hoist) has no hook segment.
+    """
+    support_id = str(hoist.get("support_node_id") or "")
+    load_node_id = str(hoist.get("load_node_id") or "")
+    if not (support_id and load_node_id):
+        return False
+    return {str(segment.get("from_node_id", "")), str(segment.get("to_node_id", ""))} == {
+        support_id,
+        load_node_id,
+    }
+
+
+def _segment_mult(
+    effective_mult: Optional[EffectiveMultFn], rope_id: str, seg: dict[str, Any]
+) -> int:
+    authored_mult = max(1, int(seg.get("mult", 1)))
+    if effective_mult is None:
+        return authored_mult
+    return max(1, int(effective_mult(rope_id, seg, authored_mult)))
+
+
+def hook_segment_mass_t(
+    doc_dict: dict[str, Any],
+    hoist_id: str,
+    positions: Mapping[str, Mapping[str, float]],
+    effective_mult: Optional[EffectiveMultFn] = None,
+) -> float:
+    """Mass of ``hoist_id``'s hook-segment rope at ``positions``, in tonnes.
+
+    Linear mass x segment length x (effective) mult, over the segments of
+    :func:`is_hook_segment`: exactly what ``rope_mass_at_nodes(...,
+    exclude_hoist_segment=hoist_id)`` leaves out of the nodes. 0 for an unknown hoist,
+    a hoist without a hook or rope mass, or unresolved positions.
+    """
+    hoist = _find_hoist(doc_dict, hoist_id)
+    if hoist is None:
+        return 0.0
+    linear_mass_kg_m = float(hoist.get("linear_mass_kg_m", 0.0) or 0.0)
+    if linear_mass_kg_m <= _MASS_TOLERANCE_KG_M:
+        return 0.0
+    rope = _find_rope(doc_dict, str(hoist.get("rope_id", "")))
+    if rope is None:
+        return 0.0
+    rope_id = str(rope.get("id", ""))
+    total_t = 0.0
+    for seg in rope.get("segments", []):
+        if not is_hook_segment(hoist, seg):
+            continue
+        length = _segment_length_m(
+            positions, str(seg.get("from_node_id", "")), str(seg.get("to_node_id", ""))
+        )
+        if length is None:
+            continue
+        total_t += length * _segment_mult(effective_mult, rope_id, seg) * linear_mass_kg_m / 1000.0
+    return total_t
+
+
 @dataclass(frozen=True)
 class RopeNodeMass:
     """Rope self-weight lumped at one node, in tonnes."""
@@ -154,6 +217,8 @@ def rope_mass_at_nodes(
     doc_dict: dict[str, Any],
     positions: Mapping[str, Mapping[str, float]],
     effective_mult: Optional[EffectiveMultFn] = None,
+    *,
+    exclude_hoist_segment: Optional[str] = None,
 ) -> dict[str, RopeNodeMass]:
     """Every hoist rope's self-weight, lumped at the nodes that carry it.
 
@@ -166,6 +231,11 @@ def rope_mass_at_nodes(
 
     A hoist with no winch node loses its spooled share: there is no node to hang
     it from, and inventing one would be a guess.
+
+    ``exclude_hoist_segment`` names a hoist whose hook segment (:func:`is_hook_segment`)
+    is carried elsewhere -- in the hook load -- so it is lumped at no node. It still
+    counts as reeved (the drum does not gain it): the left-out mass is exactly
+    :func:`hook_segment_mass_t`, and nodes plus that mass is the unchanged total.
     """
     reeved: dict[str, float] = {}
     spooled: dict[str, float] = {}
@@ -187,6 +257,7 @@ def rope_mass_at_nodes(
             continue
         rope_id = str(rope.get("id", ""))
 
+        excluded = exclude_hoist_segment is not None and hoist_id == exclude_hoist_segment
         reeved_length_m = 0.0
         for seg in rope.get("segments", []):
             from_id = str(seg.get("from_node_id", ""))
@@ -194,14 +265,10 @@ def rope_mass_at_nodes(
             length = _segment_length_m(positions, from_id, to_id)
             if length is None:
                 continue
-            authored_mult = max(1, int(seg.get("mult", 1)))
-            mult = (
-                authored_mult
-                if effective_mult is None
-                else max(1, int(effective_mult(rope_id, seg, authored_mult)))
-            )
-            segment_length_m = length * mult
+            segment_length_m = length * _segment_mult(effective_mult, rope_id, seg)
             reeved_length_m += segment_length_m
+            if excluded and is_hook_segment(hoist, seg):
+                continue
             half_t = segment_length_m * linear_mass_kg_m / 2000.0
             _credit(reeved, from_id, half_t, hoist_id)
             _credit(reeved, to_id, half_t, hoist_id)

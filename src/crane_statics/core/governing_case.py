@@ -26,7 +26,7 @@ from .chart_envelope import (
     lead_points,
 )
 from .demand_extraction import limit_responds_to_hook_load
-from .lift_factor import LiftFactors
+from .lift_factor import LiftFactors, amplified_rope_hoist_id
 from .load_condition import LoadCondition, condition_cases, condition_document
 
 # ``VesselInputs`` field -> ``SceneState`` field.
@@ -111,7 +111,13 @@ def governing_case(
             lift = LiftFactors(doc, calc)
         vessel = condition.vessel_motion
         probes = build_probes(
-            calc, hoist_id, angle, condition.wind_speed_m_s, mode.runtime_overrides, vessel=vessel
+            calc,
+            hoist_id,
+            angle,
+            condition.wind_speed_m_s,
+            mode.runtime_overrides,
+            vessel=vessel,
+            amplified_rope_hoist_id=amplified_rope_hoist_id(condition, hoist_id),
         )
         if probes is None:
             return None  # run_mode_sweep has no point where a case does not solve

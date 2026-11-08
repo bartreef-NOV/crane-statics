@@ -263,6 +263,7 @@ class AnalysisPresenter:
             vessel_roll_deg=vessel_roll_deg,
             vessel_pitch_deg=vessel_pitch_deg,
             crane_slewing_angle_deg=crane_slewing_angle_deg,
+            amplified_rope_hoist_id=self._hoist_state.amplified_rope_hoist_id(hoist_id),
         )
         if point is None:
             return None

@@ -679,6 +679,7 @@ def _angle_invariants(
     ctx: Dict[str, Any],
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None,
     tackle_length_m: float | None,
+    amplified_rope_hoist_id: str | None = None,
 ) -> _AngleInvariants | None:
     # ``rope_mass`` reaches back into this package for kinematics, so importing it
     # at module level would close the cycle.
@@ -711,6 +712,7 @@ def _angle_invariants(
             doc_dict,
             node_positions_dicts,
             effective_mult=falls_override_effective_mult(doc_dict, falls_by_hoist_id),
+            exclude_hoist_segment=amplified_rope_hoist_id,
         ).items()
     }
 
@@ -795,7 +797,15 @@ def build_directional_response_basis(
     solver_ctx: Dict[str, Any] | None = None,
     hoist_runtime_overrides: Dict[str, Dict[str, Any]] | None = None,
     tackle_length_m: float | None = None,
+    amplified_rope_hoist_id: str | None = None,
 ) -> DirectionalResponseBasis | None:
+    """The response basis at one boom angle (see ``DirectionalResponseBasis``).
+
+    ``amplified_rope_hoist_id`` names a hoist whose hook-segment rope the caller counts in
+    the hook load: it is left out of the dead node masses
+    (``rope_mass.rope_mass_at_nodes(..., exclude_hoist_segment=...)``). None keeps every
+    rope as dead load.
+    """
     ctx = solver_ctx or build_solver_static_context(doc_dict)
     hoist_data = next((h for h in doc_dict.get("hoists", []) if h["id"] == hoist_id), None)
     if hoist_data is None:
@@ -818,6 +828,7 @@ def build_directional_response_basis(
         boom_angle_deg,
         tackle_length_m,
         json.dumps(hoist_runtime_overrides, sort_keys=True, default=repr),
+        amplified_rope_hoist_id,
     )
     last: _InvariantsEntry | None = ctx.get("_angle_invariants")
     if last is None or last[0] != cache_key:
@@ -832,6 +843,7 @@ def build_directional_response_basis(
                 ctx,
                 hoist_runtime_overrides,
                 tackle_length_m,
+                amplified_rope_hoist_id,
             ),
             {},
         )

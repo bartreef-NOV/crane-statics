@@ -20,7 +20,7 @@ from .analysis_cases import (
     DirectionalAnalysisCase,
 )
 from .lead_channels import compose_lead_channel_point
-from .lift_factor import LiftFactors
+from .lift_factor import LiftFactors, amplified_rope_hoist_id
 from .load_condition import LoadCondition, condition_document, load_conditions
 from .demand_extraction import extract_rope_tension_demand, extract_connection_component_demand
 
@@ -179,6 +179,7 @@ def _evaluate_condition(
                     lift.setup(condition, hoist.id, mode, float(angle)).factor,
                     gravity,
                 )
+                amplified = amplified_rope_hoist_id(condition, hoist.id)
                 points_by_wind: dict[str, Any] = {}
                 if use_lead_channel_composition:
                     for case in iter_wind_lead_directional_cases(hoist, wind_speed):
@@ -193,6 +194,7 @@ def _evaluate_condition(
                             offlead_deg=0.0,
                             sidelead_deg=0.0,
                             hoist_runtime_overrides=mode.runtime_overrides,
+                            amplified_rope_hoist_id=amplified,
                         )
 
                 for case in iter_wind_lead_directional_cases(hoist, wind_speed):
@@ -206,6 +208,7 @@ def _evaluate_condition(
                             offlead_deg=case.offlead_deg,
                             sidelead_deg=case.sidelead_deg,
                             hoist_runtime_overrides=mode.runtime_overrides,
+                            amplified_rope_hoist_id=amplified,
                         )
                     else:
                         pt = points_by_wind.get(case.wind_direction)

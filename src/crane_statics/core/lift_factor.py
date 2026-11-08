@@ -15,7 +15,11 @@ from typing import Any, Hashable, Optional, cast
 
 from ..calculation.dynamic_factor import ConstantDynamicFactor
 from ..calculation.engine import AnalysisPoint, CraneCalculator
-from ..calculation.rope_mass import hook_support_node_id
+from ..calculation.rope_mass import (
+    active_hook_positions,
+    falls_override_effective_mult,
+    hook_support_node_id,
+)
 from ..calculation.solver.kinematics import KinematicsAdapter
 from ..data.models import CraneDocument, Hoist
 from ..rules import RulesValidationError, profile_for
@@ -24,12 +28,10 @@ from ..rules.stiffness import (
     payload_hoist_stiffness_terms,
     worst_case_tackle_length_m,
 )
+from ..rules.suspended import suspended_rope_mass_t
 from ..rules.types import FoundationFactors, LateralSpec, LiftSetup
 from .analysis_cases import HoistAnalysisMode
 from .load_condition import LoadCondition
-
-#: The suspended rope joins the live load in a later step; until then it is not counted.
-SUSPENDED_ROPE_MASS_T = 0.0
 
 # A legacy document has no live-load lateral, no foundation factor and no retaining factor.
 _NEUTRAL_LATERAL = LateralSpec(
@@ -71,6 +73,28 @@ def legacy_lift_setup(hoist: Hoist) -> LiftSetup:
 def needs_stiffness(condition: LoadCondition) -> bool:
     """Whether the condition's factor depends on the hook stiffness (offboard lifts only)."""
     return condition.spec is not None and condition.spec.lift == "offboard"
+
+
+def amplified_rope_hoist_id(condition: LoadCondition, hoist_id: str) -> Optional[str]:
+    """The hoist whose hook-segment rope the solver leaves out of the dead load, if any.
+
+    A rules condition counts the suspended rope in the amplified live load (the factor's
+    ``extra_mass_t``), so every solve of it passes this as
+    ``compute_analysis_point(..., amplified_rope_hoist_id=...)``: the active payload hoist.
+    A legacy condition keeps all rope as dead load (None).
+    """
+    return None if condition.spec is None else hoist_id
+
+
+def _falls_by_hoist_id(mode: HoistAnalysisMode) -> dict[str, int]:
+    """The runtime falls of ``mode`` per hoist, read as ``crane_solver._angle_invariants``."""
+    falls: dict[str, int] = {}
+    for hoist_id, override in mode.runtime_overrides.items():
+        try:
+            falls[str(hoist_id)] = int(override["falls"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return falls
 
 
 def chart_max_load_t(mode: HoistAnalysisMode) -> float:
@@ -144,6 +168,7 @@ def _profile_setup(
     hoist_id: str,
     mode: HoistAnalysisMode,
     stiffness_kN_m: float,
+    rope_mass_t: float,
 ) -> LiftSetup:
     assert doc.rules is not None and condition.spec is not None
     setup = profile_for(doc.rules).lift_setup(
@@ -152,7 +177,7 @@ def _profile_setup(
         hoist_id,
         mode,
         stiffness_kN_m,
-        SUSPENDED_ROPE_MASS_T,
+        rope_mass_t,
         chart_max_load_t(mode),
         case=condition.case,
     )
@@ -180,6 +205,8 @@ def factor_for_point(
     mode: HoistAnalysisMode,
     point: Optional[AnalysisPoint],
     boom_angle_deg: float,
+    *,
+    tackle_length_m: Optional[float] = None,
 ) -> LiftSetup:
     """The lift setup of ``hoist_id`` in ``mode`` at ``boom_angle_deg`` under ``condition``.
 
@@ -188,10 +215,15 @@ def factor_for_point(
     its profile's ``lift_setup`` with the condition case (DNV Case II has its own
     incline). For an offboard lift the vertical hook stiffness comes from ``point``
     (see ``stiffness_point``; required then, unused otherwise) with the hook at
-    ``stiffness_tackle_length_m``. The suspended rope is not counted yet (0 t).
-    The same computation as ``LiftFactors.setup``, uncached.
+    ``stiffness_tackle_length_m``. The suspended rope (``rules.suspended``) is counted
+    in the amplified live load with the hook ``tackle_length_m`` below its sheave (None:
+    the sweep's design position) and the mode's falls
+    (``LiftFactors.suspended_rope_mass_t``). The same computation as
+    ``LiftFactors.setup``, uncached.
     """
-    return LiftFactors(doc, None).setup(condition, hoist_id, mode, boom_angle_deg, point=point)
+    return LiftFactors(doc, None).setup(
+        condition, hoist_id, mode, boom_angle_deg, point=point, tackle_length_m=tackle_length_m
+    )
 
 
 def _angle_key(angle: float) -> float:
@@ -216,8 +248,9 @@ class _Lru(OrderedDict[Hashable, Any]):
 class LiftFactors:
     """``factor_for_point`` for one analysis run, each value computed once.
 
-    The setup is cached per (condition case, hoist, mode, boom angle); a factor that does
-    not depend on the stiffness (legacy, onboard) is cached without the angle. The
+    The setup is cached per (condition case, hoist, mode, boom angle, tackle length); a
+    legacy factor is cached without the angle (a rules factor carries the suspended rope,
+    whose length follows the angle and the hook position). The
     stiffness point (one solve) and the stiffness itself are cached per hoist and angle
     (and tackle length), so the cases and conditions of a run share them. ``calc`` is any
     calculator of ``doc`` (the stiffness point does not read the environment); None when
@@ -277,6 +310,27 @@ class LiftFactors:
             )
         return float(self._stiffness[key])
 
+    def suspended_rope_mass_t(
+        self,
+        hoist_id: str,
+        mode: HoistAnalysisMode,
+        angle: float,
+        tackle_length_m: Optional[float] = None,
+    ) -> float:
+        """The hook-segment rope of ``hoist_id`` at ``angle`` in ``mode``, in tonnes.
+
+        The hook hangs where the solver puts it (``rope_mass.active_hook_positions`` with
+        ``tackle_length_m``; None: the design position a sweep evaluates) and the hook
+        segment reeves the mode's falls (a split block's), so this is exactly the mass a
+        solve with ``amplified_rope_hoist_id`` leaves out of the dead load.
+        """
+        doc_dict, kin = self._kinematics()
+        positions = active_hook_positions(
+            doc_dict, hoist_id, kin.compute_all_node_positions(float(angle)), tackle_length_m
+        )
+        effective_mult = falls_override_effective_mult(doc_dict, _falls_by_hoist_id(mode))
+        return suspended_rope_mass_t(doc_dict, hoist_id, positions, effective_mult)
+
     def setup(
         self,
         condition: LoadCondition,
@@ -286,12 +340,15 @@ class LiftFactors:
         zero_probe: Optional[AnalysisPoint] = None,
         *,
         point: Optional[AnalysisPoint] = None,
+        tackle_length_m: Optional[float] = None,
     ) -> LiftSetup:
         """``factor_for_point(doc, condition, hoist_id, mode, <stiffness point>, angle)``.
 
         ``point`` is the stiffness point at ``angle`` when the caller has it. ``zero_probe``
         (``chart_envelope.ProbeSet.zero`` at ``angle``) saves its solve: in a mode without
-        runtime overrides it is that same solve.
+        runtime overrides it is that same solve. ``tackle_length_m`` is the hook's payout
+        below its sheave, as passed to the solve (None: the sweep's design position); it
+        sets the suspended rope of a rules factor (``suspended_rope_mass_t``).
         """
         per_angle = needs_stiffness(condition)
         if per_angle:
@@ -301,13 +358,19 @@ class LiftFactors:
             point_key = (hoist_id, _angle_key(angle))
             if seed is not None and point_key not in self._points:
                 self._points.put(point_key, seed)
-        key = (condition.name, hoist_id, mode.name, _angle_key(angle) if per_angle else None)
+        key: Hashable
+        if condition.spec is None:
+            key = (condition.name, hoist_id, mode.name, None)
+        else:
+            tackle_key = None if tackle_length_m is None else round(float(tackle_length_m), 10)
+            key = (condition.name, hoist_id, mode.name, _angle_key(angle), tackle_key)
         setup = cast(Optional[LiftSetup], self._setups.get(key))
         if setup is None:
             if condition.spec is None:
                 setup = legacy_lift_setup(_hoist(self._doc, hoist_id))
             else:
                 stiffness = self._stiffness_kN_m(condition, hoist_id, angle) if per_angle else 0.0
-                setup = _profile_setup(self._doc, condition, hoist_id, mode, stiffness)
+                rope_t = self.suspended_rope_mass_t(hoist_id, mode, angle, tackle_length_m)
+                setup = _profile_setup(self._doc, condition, hoist_id, mode, stiffness, rope_t)
             self._setups.put(key, setup)
         return setup

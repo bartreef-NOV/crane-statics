@@ -13,7 +13,7 @@ from ..data.models import CraneDocument, VesselMotion
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .chart_envelope import ProbeSet, build_probes, envelope_capacity, lead_points
 from .demand_extraction import limit_responds_to_hook_load
-from .lift_factor import LiftFactors
+from .lift_factor import LiftFactors, amplified_rope_hoist_id
 from .load_condition import LoadCondition, condition_cases, condition_document
 from ..rules import RulesValidationError
 from .sweep_cache import ComputeScope, LimitResult, limit_signature
@@ -268,6 +268,7 @@ def run_mode_sweep(
                 case.wind_speed_m_s,
                 mode.runtime_overrides,
                 vessel=case.vessel,
+                amplified_rope_hoist_id=amplified_rope_hoist_id(case.condition, hoist_id),
             )
 
         probes = build() if case.scope is None else case.scope.probes(angle, build)
