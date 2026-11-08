@@ -40,6 +40,7 @@ from crane_statics.core.sweep import run_mode_sweep
 from crane_statics.calculation import CraneCalculator
 from crane_statics.calculation.solver.kinematics import KinematicsAdapter
 from crane_statics.data.models import ConditionSpec, ContractualPoint, CraneDocument, VesselMotion
+from crane_statics.rules import RulesValidationError, validate_rules_document
 from tests import rules_reference as ref
 from tests.rules_docs import legacy_equivalent, without_live_lateral, without_suspended_rope
 
@@ -342,6 +343,43 @@ def test_abs_heavy_lift_vaf(no_lateral: None) -> None:
         oracle_capacity_t(force, lambda _ll: vaf, hook_mass_t(doc))
     )
     assert records_at(payload)[0]["dynamic_factor"].value == approx(vaf)
+
+
+def test_abs_heavy_lift_rejects_a_v_above_0_07_g_at_the_boom_tip() -> None:
+    """2-2/11.3: a_z 0.6 m/s^2 (0.061 g) passes validation, but with a pitch angular
+    acceleration of 0.02 rad/s^2 the boom-tip a_v exceeds 0.07 g; the sweep fails."""
+    doc = load_document(ABS_EXAMPLE)
+    assert doc.rules is not None
+    motion = VesselMotion(accel_z_m_s2=0.6, pitch_angular_accel_rad_s2=0.02)
+    cond = ConditionSpec(name="mild", wind_speed_m_s=10.0, vessel_motion=motion)
+    doc = doc.model_copy(
+        update={
+            "rules": doc.rules.model_copy(update={"crane_class": "heavy_lift"}),
+            "conditions": {"mild": cond},
+        }
+    )
+    validate_rules_document(doc)  # the linear accelerations are within 0.07 g
+    with pytest.raises(RulesValidationError, match=r"a_v .* g at the boom tip .* 0\.07 g"):
+        run_mode_sweep(doc, HOOK, "normal", {MH_ROPE_LIMIT: {"T": 600.0}}, 5.0, {})
+
+
+@pytest.mark.parametrize("example", [ABS_EXAMPLE, DNV_EXAMPLE], ids=lambda p: p.stem)
+def test_payload_hoist_without_hook_mass_or_load_chart_sweeps(example: Path) -> None:
+    """A payload hoist with no hook mass, no load chart and (here) no suspended rope mass
+    has a representative live load of 0 kN, as at a hook hoisted to its sheave: the sweep
+    runs and warns instead of failing."""
+    doc = without_suspended_rope(load_document(example))
+    hoists = [
+        h.model_copy(update={"hook_mass_t": 0.0, "contractual_points": []}) if h.id == "AH" else h
+        for h in doc.hoists
+    ]
+    doc = doc.model_copy(update={"hoists": hoists})
+    name = next(n for n, c in doc.conditions.items() if c.lift == "onboard")
+    limits = {"AH_rope_T": {"T": 1.0e4}}
+    payload = run_mode_sweep(doc, "AH", "normal", limits, 10.0, {}, condition_name=name)
+    assert payload is not None and payload["provenance"]
+    warnings = {w for _x, _records, ws, _case in payload["provenance"] for w in ws}
+    assert any("0 kN" in w and "no representative dynamic factor" in w for w in warnings)
 
 
 # --- DNV dynamic factor (psi) and cases -------------------------------------------------

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+import inspect
 import math
 from pathlib import Path
 
@@ -48,11 +50,15 @@ def _offboard(h_sig=2.0, v_in=0.8, v_t=0.6, **kw):
     return _cond("offboard", significant_wave_height_m=h_sig, v_in_m_s=v_in, v_t_m_s=v_t, **kw)
 
 
-def _setup(doc, cond, chart_max_load_t=50.0):
+def _setup(doc, cond, chart_max_load_t=50.0, support_x_m=0.0, hook_t=None, rope_t=ROPE_T):
     hoist_id = payload_hoist_ids(doc)[0]
     hoist = next(h for h in doc.hoists if h.id == hoist_id)
     mode = iter_hoist_analysis_modes(hoist)[0]
-    return AbsProfile().lift_setup(doc, cond, hoist_id, mode, K, ROPE_T, chart_max_load_t)
+    if hook_t is not None:
+        mode = dataclasses.replace(mode, hook_mass_t=hook_t)
+    return AbsProfile().lift_setup(
+        doc, cond, hoist_id, mode, K, rope_t, chart_max_load_t, support_x_m=support_x_m
+    )
 
 
 def _factor_at(factor, ll_kN, hook_t=2.0):
@@ -83,6 +89,55 @@ def test_heavy_lift_factor_matches_oracle():
     expected = ref.abs_heavy_lift_vaf(0.05)
     assert expected == pytest.approx(1.15)
     assert _factor_at(setup.factor, LL_KN) == pytest.approx(expected, rel=1e-12)
+
+
+def _heavy_tip_cond(accel_z=0.6, pitch_alpha=0.02):
+    motion = VesselMotion(accel_z_m_s2=accel_z, pitch_angular_accel_rad_s2=pitch_alpha)
+    return ConditionSpec(name="c", wind_speed_m_s=12.0, vessel_motion=motion)
+
+
+def test_heavy_lift_rejects_a_v_above_0_07_g_at_the_boom_tip():
+    # a_z alone is 0.061 g (validation passes); the pitch term at a 16 m tip adds 0.033 g.
+    cond = _heavy_tip_cond()
+    a_v = (0.6 + 0.02 * 16.0) / G
+    assert 0.6 / G < 0.07 < a_v
+    pattern = r"conditions\.c\.vessel_motion.*0\.07 g"
+    with pytest.raises(RulesValidationError, match=pattern) as err:
+        _setup(_doc("heavy_lift"), cond, support_x_m=16.0)
+    message = str(err.value)
+    assert f"{a_v:.4g} g" in message and "16 m" in message and "heavy_lift" in message
+
+
+def test_heavy_lift_accepts_a_v_up_to_0_07_g_at_the_boom_tip():
+    # 0.6 + 0.02 * 4.3 = 0.686 m/s^2 = 0.0699 g: within the limit.
+    setup = _setup(_doc("heavy_lift"), _heavy_tip_cond(), support_x_m=4.3)
+    a_v = (0.6 + 0.02 * 4.3) / G
+    assert a_v < 0.07
+    assert _factor_at(setup.factor, LL_KN) == pytest.approx(1.1 + a_v, rel=1e-12)
+
+
+def test_offshore_is_not_limited_to_0_07_g():
+    setup = _setup(_doc(), _heavy_tip_cond(), support_x_m=16.0)
+    assert isinstance(setup.factor, AbsOnboardFactor)
+
+
+def test_support_x_m_is_keyword_required():
+    param = inspect.signature(AbsProfile.lift_setup).parameters["support_x_m"]
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY
+    assert param.default is inspect.Parameter.empty
+
+
+@pytest.mark.parametrize("lift", ["onboard", "offboard"])
+def test_zero_representative_live_load_does_not_raise(lift):
+    # No hook mass, no load chart, no suspended rope: the representative LL is 0 kN.
+    cond = _cond() if lift == "onboard" else _offboard()
+    setup = _setup(_doc(), cond, chart_max_load_t=0.0, hook_t=0.0, rope_t=0.0)
+    assert not any(r.quantity == "dynamic_factor" and r.source == "computed" for r in setup.records)
+    assert any("representative live load is 0 kN" in w for w in setup.warnings)
+    for record in setup.records:
+        assert math.isfinite(record.value)
+    # The factor itself is evaluated per point and is unchanged.
+    assert setup.factor.hook_force_kN(LL_KN / G, 0.0, G) / LL_KN > 1.1
 
 
 def test_offboard_factor_matches_oracle():

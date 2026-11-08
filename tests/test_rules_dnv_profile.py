@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+import inspect
 import math
 from pathlib import Path
 
@@ -62,10 +64,13 @@ def _hoist_mode(doc):
     return hoist_id, iter_hoist_analysis_modes(hoist)[0]
 
 
-def _setup(doc, cond, chart_max_load_t=50.0, profile=None, **kw):
+def _setup(doc, cond, chart_max_load_t=50.0, profile=None, hook_t=None, rope_t=ROPE_T, **kw):
     hoist_id, mode = _hoist_mode(doc)
+    if hook_t is not None:
+        mode = dataclasses.replace(mode, hook_mass_t=hook_t)
     profile = profile or DnvProfile()
-    return profile.lift_setup(doc, cond, hoist_id, mode, K, ROPE_T, chart_max_load_t, **kw)
+    kw.setdefault("support_x_m", 0.0)
+    return profile.lift_setup(doc, cond, hoist_id, mode, K, rope_t, chart_max_load_t, **kw)
 
 
 def _chart_t_for_w(doc, w_kN):
@@ -108,6 +113,72 @@ def test_cases_have_zero_accelerations(index):
     assert motion.accel_z_m_s2 == 0.0
     assert motion.pitch_angular_accel_rad_s2 == 0.0
     assert motion.roll_angular_accel_rad_s2 == 0.0
+
+
+ACCEL_WARNING = (
+    "conditions.c.vessel_motion: vessel accelerations are not applied under DNV: "
+    "ship-motion inertia is Case III, out of scope"
+)
+
+
+@pytest.mark.parametrize("lift", ["onboard", "offboard"])
+def test_nonzero_vessel_accelerations_warn_they_are_not_applied(lift):
+    cond = _cond() if lift == "onboard" else _offboard()
+    for case in DnvProfile().cases(_doc(), cond):
+        setup = _setup(_doc(), cond, case=case)
+        assert setup.warnings.count(ACCEL_WARNING) == 1
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "accel_x_m_s2",
+        "accel_y_m_s2",
+        "accel_z_m_s2",
+        "pitch_angular_accel_rad_s2",
+        "roll_angular_accel_rad_s2",
+    ],
+)
+def test_any_single_nonzero_acceleration_warns(field):
+    motion = VesselMotion(roll_deg=3.0, **{field: 0.1})
+    cond = ConditionSpec(name="c", wind_speed_m_s=12.0, vessel_motion=motion)
+    assert ACCEL_WARNING in _setup(_doc(), cond).warnings
+
+
+def test_zero_accelerations_do_not_warn():
+    motion = VesselMotion(roll_deg=3.0, pitch_deg=-2.0, reference_x_m=4.0)
+    cond = ConditionSpec(name="c", wind_speed_m_s=12.0, vessel_motion=motion)
+    assert not any("accelerations" in w for w in _setup(_doc(), cond).warnings)
+
+
+def test_support_x_m_is_keyword_required():
+    param = inspect.signature(DnvProfile.lift_setup).parameters["support_x_m"]
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY
+    assert param.default is inspect.Parameter.empty
+
+
+@pytest.mark.parametrize("lift", ["onboard", "offboard"])
+def test_zero_working_load_does_not_raise(lift):
+    # No hook mass, no load chart, no suspended rope: the curve's maximum W is 0 kN.
+    cond = _cond() if lift == "onboard" else _offboard()
+    setup = _setup(_doc(cabin=True), cond, chart_max_load_t=0.0, hook_t=0.0, rope_t=0.0)
+    assert not any(r.quantity == "dynamic_factor" and r.source == "computed" for r in setup.records)
+    assert any("maximum working load is 0 kN" in w for w in setup.warnings)
+    for record in setup.records:
+        assert math.isfinite(record.value)
+    floor = next(r for r in setup.records if r.quantity == "psi_floor")
+    assert floor.value == 1.3
+    assert setup.factor.hook_force_kN(1000.0 / G, 0.0, G) / 1000.0 >= 1.3
+
+
+def test_clause_strings_carry_printed_pages():
+    case_i, case_ii = DnvProfile().cases(_doc(), _cond())
+    clauses_i = {r.quantity: r.clause for r in _setup(_doc(), _cond(), case=case_i).records}
+    clauses_ii = {r.quantity: r.clause for r in _setup(_doc(), _cond(), case=case_ii).records}
+    assert clauses_i["list_trim_incline"] == "DNV-ST-0378 4.1.2.3, Table 4-1, p.54"
+    assert clauses_ii["list_trim_incline"] == "DNV-ST-0378 4.2.3.2, p.58"
+    assert clauses_i["load_wind_area"] == "DNV-ST-0378 4.2.3.3, p.58"
+    assert clauses_ii["load_wind_force"] == "DNV-ST-0378 4.2.3.3, p.58"
 
 
 # --- dynamic factor ----------------------------------------------------------------------
@@ -183,7 +254,7 @@ def test_hoisting_speed_at_or_above_v_h_has_no_warning():
 
 
 def test_zero_load_wind_area_has_no_default_area_warning():
-    assert _setup(_doc(), _cond()).warnings == ()
+    assert _setup(_doc(), _cond()).warnings == (ACCEL_WARNING,)
 
 
 def test_manual_daf_overrides_and_keeps_computed_record():

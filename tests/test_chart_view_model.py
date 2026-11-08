@@ -462,6 +462,23 @@ class TestClauseTrailExport:
         assert capacity and {r[4] for r in capacity} <= {"Case I", "Case II"}
         assert all(r[4] for r in capacity)
 
+    def test_dnv_vessel_accelerations_are_warned_in_csv_and_details(self, tmp_path):
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        session = SessionState()
+        vm = ChartViewModel(session)
+        vm.setOutreachStep(20.0)
+        # gale()'s motion carries accel_x 0.8 m/s^2, which DNV does not apply.
+        doc = without_suspended_rope(rules_doc("DNV", gale()))
+        session.model.set_document(doc)
+        vm.drawBlocking()
+        warning = "vessel accelerations are not applied under DNV"
+        _target, rows = self._export(vm, tmp_path)
+        capacity = [r for r in rows[1:] if r[0] == "capacity"]
+        assert capacity and all(warning in r[11] for r in capacity)
+        vm.setDetailOutreach(vm.curvePoints[0][0])
+        assert any(warning in w for w in vm.provenanceWarnings)
+
     def test_rules_export_marks_a_manual_daf_as_override(self, tmp_path):
         from tests.rules_docs import gale, rules_doc, without_suspended_rope
 

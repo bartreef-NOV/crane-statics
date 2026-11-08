@@ -291,7 +291,9 @@ def test_abs_default_load_area_is_applied_at_the_chart_maximum_live_load() -> No
     hoist = next(h for h in doc.hoists if h.id == HOIST)
     mode = analysis_mode_by_name(hoist, "normal")
     rope_t, chart_t = 4.0, 300.0
-    setup = AbsProfile().lift_setup(doc, doc.conditions["c"], HOIST, mode, 0.0, rope_t, chart_t)
+    setup = AbsProfile().lift_setup(
+        doc, doc.conditions["c"], HOIST, mode, 0.0, rope_t, chart_t, support_x_m=0.0
+    )
     ll_kN = (chart_t + mode.hook_mass_t + rope_t) * G
     area = ref.abs_live_load_wind_area(ll_kN)
     assert setup.lateral.wind_area_m2 == pytest.approx(area, rel=1e-12)
@@ -311,7 +313,7 @@ def test_abs_entered_load_area_is_used_as_entered() -> None:
     doc = rules_doc("ABS", cond)
     hoist = next(h for h in doc.hoists if h.id == HOIST)
     mode = analysis_mode_by_name(hoist, "normal")
-    setup = AbsProfile().lift_setup(doc, cond, HOIST, mode, 0.0, 4.0, 300.0)
+    setup = AbsProfile().lift_setup(doc, cond, HOIST, mode, 0.0, 4.0, 300.0, support_x_m=0.0)
     assert setup.lateral.wind_area_m2 == 12.0
     assert setup.lateral.wind_force_per_speed_sq * 10.3**2 == pytest.approx(
         ref.abs_wind_pressure(10.3, 1.2) * 12.0, rel=1e-12

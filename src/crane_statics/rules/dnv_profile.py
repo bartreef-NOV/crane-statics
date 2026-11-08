@@ -48,9 +48,10 @@ _CL_PSI = "DNV-ST-0378 4.1.3.2, p.54"
 _CL_FLOOR = "DNV-ST-0378 8.2.2.1, p.90"
 _CL_V_H = "DNV-ST-0378 8.2.2.2, p.91"
 _CL_SF1 = "DNV-ST-0378 8.2.2.4, p.91"
-_CL_CASE_I = "DNV-ST-0378 4.2.2.1"
-_CL_CASE_II = "DNV-ST-0378 4.2.3.2"
-_CL_LOAD_WIND = "DNV-ST-0378 4.2.3.3"
+#: Case I (4.2.2.1, p.57) heel/trim: the still-water minimum angles of 4.1.2.3.
+_CL_INCLINE_CASE_I = "DNV-ST-0378 4.1.2.3, Table 4-1, p.54"
+_CL_CASE_II = "DNV-ST-0378 4.2.3.2, p.58"
+_CL_LOAD_WIND = "DNV-ST-0378 4.2.3.3, p.58"
 
 _CASE_I = "Case I"
 _CASE_II = "Case II"
@@ -112,7 +113,7 @@ class DnvProfile:
         chart_max_load_t: float,
         *,
         case: Optional[CaseSpec] = None,
-        support_x_m: float = 0.0,
+        support_x_m: float,
     ) -> LiftSetup:
         """Dynamic factor, lateral and foundation settings for one hoist and mode.
 
@@ -121,8 +122,10 @@ class DnvProfile:
         floor; psi itself is evaluated at the point's own working load. The safe working
         load for SF1 is ``chart_max_load_t`` alone (accessories excluded, 4.1.2.1).
         ``case`` sets the heel/trim of the lateral spec; it defaults to Case I.
-        ``support_x_m`` (shared signature with the ABS profile) is unused: both DNV cases
-        have no vessel accelerations.
+        ``support_x_m`` (shared signature with the ABS profile, keyword-required there) is
+        unused: both DNV cases have no vessel accelerations; nonzero condition
+        accelerations are reported in the warnings. A maximum working load of 0 (no hook
+        mass, no load chart) leaves out the computed dynamic-factor record, with a warning.
         """
         rules = _rules(doc)
         hoist = _hoist(doc, hoist_id)
@@ -131,13 +134,14 @@ class DnvProfile:
             case = self.cases(doc, cond)[0]
         motion = case.vessel_motion
         w_kN = (chart_max_load_t + mode.hook_mass_t + suspended_rope_mass_t) * gravity
-        if w_kN <= 0.0:
-            raise RulesValidationError(
-                f"hoists.{hoist_id}: maximum working load {w_kN:g} kN must be positive"
-            )
 
         records: list[ProvenanceRecord] = []
         warnings: list[str] = []
+        if _has_acceleration(cond.vessel_motion):
+            warnings.append(
+                f"conditions.{cond.name}.vessel_motion: vessel accelerations are not applied "
+                "under DNV: ship-motion inertia is Case III, out of scope"
+            )
         floor = dnv_psi_floor(w_kN)
         records.append(
             ProvenanceRecord(
@@ -168,13 +172,25 @@ class DnvProfile:
             formula = "psi = max(1 + v_r*sqrt(C/(W*g)), psi_min)"
             inputs = {"psi_min": floor, "K_kN_m": stiffness_kN_m, "v_r_m_s": v_r}
 
-        computed = _value_at(factor, w_kN, mode.hook_mass_t, suspended_rope_mass_t, gravity)
-        rec_inputs = {**inputs, "W_kN": w_kN, "suspended_rope_mass_t": suspended_rope_mass_t}
-        records.append(
-            ProvenanceRecord(
-                "dynamic_factor", computed, "-", clause, formula, rec_inputs, "computed"
+        if w_kN > 0.0:
+            computed = _value_at(factor, w_kN, mode.hook_mass_t, suspended_rope_mass_t, gravity)
+            rec_inputs = {
+                **inputs,
+                "W_kN": w_kN,
+                "suspended_rope_mass_t": suspended_rope_mass_t,
+            }
+            records.append(
+                ProvenanceRecord(
+                    "dynamic_factor", computed, "-", clause, formula, rec_inputs, "computed"
+                )
             )
-        )
+        else:
+            # No hook mass and no load chart: psi is still evaluated at each point's own W.
+            warnings.append(
+                f"hoists.{hoist_id} ({mode.name}): the maximum working load is 0 kN (no hook "
+                "mass and no load chart), so no representative dynamic factor is stated; "
+                "each point uses its own working load"
+            )
         if hoist.hook_daf != _DEFAULT_DAF:
             # The daf replaces the factor value, not the load: the suspended rope stays in W.
             factor = LinearFactor(float(hoist.hook_daf), suspended_rope_mass_t)
@@ -208,7 +224,7 @@ class DnvProfile:
                 "list_trim_incline",
                 lateral.incline_deg,
                 "deg",
-                _CL_CASE_II if case.name == _CASE_II else _CL_CASE_I,
+                _CL_CASE_II if case.name == _CASE_II else _CL_INCLINE_CASE_I,
                 "theta = sqrt(heel^2 + trim^2); Case II heel/trim = 1.5 x Case I",
                 {"heel_deg": motion.roll_deg, "trim_deg": motion.pitch_deg},
                 "computed",
@@ -279,6 +295,20 @@ def _rules(doc: CraneDocument) -> RulesSpec:
     if rules is None or rules.standard != "DNV":
         raise RulesValidationError("rules.standard: the DNV profile needs standard DNV")
     return rules
+
+
+def _has_acceleration(motion: VesselMotion) -> bool:
+    """Whether ``motion`` has any nonzero linear or angular acceleration."""
+    return any(
+        getattr(motion, field) != 0.0
+        for field in (
+            "accel_x_m_s2",
+            "accel_y_m_s2",
+            "accel_z_m_s2",
+            "pitch_angular_accel_rad_s2",
+            "roll_angular_accel_rad_s2",
+        )
+    )
 
 
 def _static_motion(motion: VesselMotion, roll_deg: float, pitch_deg: float) -> VesselMotion:

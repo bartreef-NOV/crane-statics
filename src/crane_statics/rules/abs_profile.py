@@ -3,8 +3,10 @@
 Builds, for one condition, hoist and analysis mode, the dynamic factor (VAF), the
 lateral live-load settings, the pedestal factor and the retaining-component factor,
 each with a provenance record. Document consistency (crane class, heavy-lift 0.07 g
-limit, offboard inputs) is checked by ``validation.validate_rules_document``; this
-module only guards what it needs to build the factors.
+limit on the linear accelerations, offboard inputs) is checked by
+``validation.validate_rules_document``; this module only guards what it needs to build
+the factors, and the heavy-lift 0.07 g limit on a_v at the boom tip, which depends on
+the point.
 
 Clause strings carry the printed page number of the ABS document.
 """
@@ -20,7 +22,7 @@ from .factors import AbsOnboardFactor, LinearFactor, MaxFactor
 from .factors import RelativeVelocityFactor
 from .foundation import abs_pedestal_factor
 from .types import CaseSpec, FoundationFactors, LateralSpec, LiftSetup, ProvenanceRecord
-from .validation import GRAVITY_M_S2, RulesValidationError
+from .validation import GRAVITY_M_S2, HEAVY_LIFT_MAX_ACCEL_G, RulesValidationError
 
 if TYPE_CHECKING:  # core imports rules at run time; keep this edge type-only.
     from ..core.analysis_cases import HoistAnalysisMode
@@ -33,6 +35,8 @@ RETAINING_LIVE_FACTOR = 3.75
 HEAVY_LIFT_BASE_VAF = 1.1
 #: ``Hoist.hook_daf`` default; any other value is a manual override.
 _DEFAULT_DAF = 1.0
+#: Relative tolerance of the 0.07 g heavy-lift check, as in ``validation``.
+_REL_TOL = 1e-9
 
 _CL_ONBOARD = "ABS 2-2/9.3.1, p.53"
 _CL_OFFBOARD = "ABS 2-2/9.3.2, p.53"
@@ -79,7 +83,7 @@ class AbsProfile:
         chart_max_load_t: float,
         *,
         case: Optional[CaseSpec] = None,
-        support_x_m: float = 0.0,
+        support_x_m: float,
     ) -> LiftSetup:
         """Dynamic factor, lateral and foundation settings for one hoist and mode.
 
@@ -94,7 +98,10 @@ class AbsProfile:
         at the point's boom angle. 5.17's a_v is the vertical acceleration there: the
         linear ``|a_z|`` plus the angular accelerations times a bound on their lever arm
         over every slew, ``(|alpha_pitch| + |alpha_roll|) * (|x_ref| + |x_tip|)`` (spec
-        section 9.7 item 10).
+        section 9.7 item 10). It is required: a default of 0 would drop the lever arm.
+        A heavy-lift crane whose a_v there exceeds 0.07 g is rejected (2-2/11.3: the
+        offshore requirements apply instead). A representative LL of 0 (no hook mass, no
+        load chart) leaves out the computed dynamic-factor record, with a warning.
         """
         crane_class = _crane_class(doc)
         hoist = _hoist(doc, hoist_id)
@@ -108,15 +115,12 @@ class AbsProfile:
         angular = abs(motion.pitch_angular_accel_rad_s2) + abs(motion.roll_angular_accel_rad_s2)
         a_v_g = (abs(motion.accel_z_m_s2) + angular * lever_m) / GRAVITY_M_S2
         ll_kN = (chart_max_load_t + mode.hook_mass_t + suspended_rope_mass_t) * gravity
-        if ll_kN <= 0.0:
-            raise RulesValidationError(
-                f"hoists.{hoist_id}: representative live load {ll_kN:g} kN must be positive"
-            )
 
         records: list[ProvenanceRecord] = []
         warnings: list[str] = []
         factor: DynamicFactor
         if crane_class == "heavy_lift":
+            _check_heavy_lift_a_v(cond, a_v_g, support_x_m, lever_m)
             factor = LinearFactor(HEAVY_LIFT_BASE_VAF + a_v_g, suspended_rope_mass_t)
             clause, formula = _CL_HEAVY, "VAF = 1.1 + a_v"
             inputs = {"a_v_g": a_v_g, "a_v_lever_m": lever_m}
@@ -145,13 +149,26 @@ class AbsProfile:
             }
             min_side_clause = _CL_ONBOARD
 
-        computed = _value_at(factor, ll_kN, mode.hook_mass_t, suspended_rope_mass_t, gravity)
-        rec_inputs = {**inputs, "LL_kN": ll_kN, "suspended_rope_mass_t": suspended_rope_mass_t}
-        records.append(
-            ProvenanceRecord(
-                "dynamic_factor", computed, "-", clause, formula, rec_inputs, "computed"
+        if ll_kN > 0.0:
+            computed = _value_at(factor, ll_kN, mode.hook_mass_t, suspended_rope_mass_t, gravity)
+            rec_inputs = {
+                **inputs,
+                "LL_kN": ll_kN,
+                "suspended_rope_mass_t": suspended_rope_mass_t,
+            }
+            records.append(
+                ProvenanceRecord(
+                    "dynamic_factor", computed, "-", clause, formula, rec_inputs, "computed"
+                )
             )
-        )
+        else:
+            # No hook mass and no load chart: the factor is still evaluated at each
+            # point's own LL; there is no representative value to state.
+            warnings.append(
+                f"hoists.{hoist_id} ({mode.name}): the representative live load is 0 kN "
+                "(no hook mass and no load chart), so no representative dynamic factor is "
+                "stated; each point uses its own live load"
+            )
         if hoist.hook_daf != _DEFAULT_DAF:
             # The daf replaces the factor value, not the load: the suspended rope stays in LL.
             factor = LinearFactor(float(hoist.hook_daf), suspended_rope_mass_t)
@@ -274,6 +291,22 @@ class AbsProfile:
             retaining_live_factor=RETAINING_LIVE_FACTOR,
             records=tuple(records),
             warnings=tuple(warnings),
+        )
+
+
+def _check_heavy_lift_a_v(
+    cond: ConditionSpec, a_v_g: float, support_x_m: float, lever_m: float
+) -> None:
+    """ABS 2-2/11.3: heavy-lift cranes are limited to 0.07 g, here a_v at the boom tip.
+
+    ``validation.validate_rules_document`` checks the linear accelerations; the angular
+    terms depend on the boom tip, so the tip value is checked per point here.
+    """
+    if a_v_g > HEAVY_LIFT_MAX_ACCEL_G * (1.0 + _REL_TOL):
+        raise RulesValidationError(
+            f"conditions.{cond.name}.vessel_motion: a_v {a_v_g:.4g} g at the boom tip "
+            f"(x {float(support_x_m):g} m, lever arm {lever_m:g} m) exceeds "
+            f"{HEAVY_LIFT_MAX_ACCEL_G:g} g for heavy_lift; see the offshore crane requirements"
         )
 
 
