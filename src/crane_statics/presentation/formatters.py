@@ -471,6 +471,11 @@ class ResultRowFormatter:
                 continue
 
             util = row.utilization_pct if row.limit_kN is not None else None
+            tooltip = ConnectionFormatter.formula_tooltip(str(row.component or ""))
+            if row.kind == "factored":
+                # Not selectable (no Scene entity of its own): the tooltip says what it is.
+                note = ResultRowFormatter.FACTORED_TOOLTIP
+                tooltip = f"{note}\n{tooltip}" if tooltip else note
             out.append(
                 {
                     "name": row.name,
@@ -484,10 +489,15 @@ class ResultRowFormatter:
                     "isGroupHeader": False,
                     "groupId": "",
                     "clickable": ResultRowFormatter.is_clickable(row),
-                    "tooltip": ConnectionFormatter.formula_tooltip(str(row.component or "")),
+                    "tooltip": tooltip,
                 }
             )
         return out
+
+    FACTORED_TOOLTIP = (
+        "Factored demand: the platform-base reactions with the standard's foundation "
+        "load factors applied, checked against this limit"
+    )
 
     GROUP_OPEN = "▾ "
     GROUP_CLOSED = "▸ "
@@ -722,3 +732,68 @@ class ComponentTableFormatter:
             Column("Outreach (m)", lambda c: c.outreach_m, decimals=3, field="outreach_m"),
             Column("Load (t)", lambda c: c.load_t, decimals=3, field="load_t"),
         ]
+
+
+class ProvenanceFormatter:
+    """The calculation-details panel of a rules chart: one curve point's clause trail."""
+
+    # Standing statements of the rules analysis, shown whatever point is inspected.
+    STIFFNESS_NOTE = (
+        "Hook stiffness is rope-only (active hoist and boom hoist EA/L); boom and pedestal "
+        "flexibility are ignored. This is a documented deviation from the standard, which "
+        "asks for every element from the hook to the pedestal (conservative: a stiffer hook "
+        "gives a higher dynamic factor)."
+    )
+    DNV_SH_NOTE = (
+        "Horizontal operational loads SH (DNV-ST-0378 4.1.4) are omitted: Case I is "
+        "SG + psi*SL and Case II adds SW."
+    )
+
+    @staticmethod
+    def quantity_label(quantity: str) -> str:
+        """``dynamic_factor`` -> ``Dynamic factor``."""
+        text = str(quantity).replace("_", " ").strip()
+        return text[:1].upper() + text[1:]
+
+    @staticmethod
+    def detail_rows(records: Iterable[Any], warnings: Iterable[str], case: str) -> list[dict]:
+        """One display dict per provenance record of a curve point.
+
+        Keys: quantity, value, unit, clause, formula, source, warnings (the point's,
+        joined by `` | ``), case, inputs (``name=value; ...``) and isOverride.
+        """
+        joined = " | ".join(str(w) for w in warnings)
+        rows = []
+        for r in records:
+            unit = "" if str(r.unit) in ("", "-") else str(r.unit)
+            rows.append(
+                {
+                    "quantity": ProvenanceFormatter.quantity_label(r.quantity),
+                    "value": f"{float(r.value):.4g}",
+                    "unit": unit,
+                    "clause": str(r.clause),
+                    "formula": str(r.formula),
+                    "source": str(r.source),
+                    "warnings": joined,
+                    "case": str(case),
+                    "inputs": "; ".join(f"{k}={float(v):.4g}" for k, v in r.inputs.items()),
+                    "isOverride": r.source == "override",
+                }
+            )
+        return rows
+
+    @staticmethod
+    def heading(condition: str, case: str, outreach_m: float) -> str:
+        """``gale / In-service at 24.0 m``: what the listed trail belongs to."""
+        name = f"{condition} / {case}" if case else condition
+        return f"{name} at {float(outreach_m):.1f} m"
+
+    @staticmethod
+    def standing_notes(standard: Optional[str]) -> list[str]:
+        """The statements every rules chart carries (none without a standard)."""
+        if standard is None:
+            return []
+        notes = [ProvenanceFormatter.STIFFNESS_NOTE]
+        if standard == "DNV":
+            notes.append(ProvenanceFormatter.DNV_SH_NOTE)
+        return notes

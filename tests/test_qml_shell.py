@@ -844,3 +844,55 @@ def test_chart_menu_edits_contractual_points_at_the_cursor(qml_engine):
     QMetaObject.invokeMethod(delete, "triggered")
     assert len(chart_vm.markers) == before - 1
     assert not warnings
+
+
+def test_condition_selector_and_details_are_hidden_for_a_legacy_document(qml_engine):
+    _engine, root, _chart_vm, warnings = _drawn_main(qml_engine)
+    selector = root.findChild(QObject, "conditionSelector")
+    details = root.findChild(QObject, "calculationDetails")
+    assert selector is not None and details is not None
+    assert selector.property("visible") is False
+    assert details.property("visible") is False
+    assert warnings == []
+
+
+def test_condition_selector_switches_the_chart_and_details_list_the_trail(qml_engine, tmp_path):
+    from crane_statics.core.io import save_document
+    from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+    engine, app_vm, _model_vm, warnings = qml_engine
+    path = tmp_path / "rules.yaml"
+    doc = without_suspended_rope(rules_doc("ABS", gale(wind=30.0), gale("calm", wind=5.0)))
+    save_document(doc, path)
+    chart_vm = engine.rootContext().contextProperty("chartVm")
+    chart_vm._outreach_step = 20.0
+    app_vm.openPath(str(path))
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
+    root = engine.rootObjects()[-1]
+    chart_vm._cancel_all()
+    chart_vm.drawBlocking()
+    chart_vm._refresh_timer.stop()
+    tabs = root.findChild(QObject, "workspaceTabs")
+    tabs.setProperty("currentIndex", 1)
+    QTest.qWait(50)
+
+    selector = root.findChild(QObject, "conditionSelector")
+    details = root.findChild(QObject, "calculationDetails")
+    assert selector.property("visible") is True
+    assert details.property("visible") is True
+    assert selector.property("count") == 2
+    assert selector.property("currentText") == "gale"
+
+    chart_vm.setDetailOutreach(chart_vm.curvePoints[0][0])
+    QTest.qWait(20)
+    rows = root.findChild(QObject, "provenanceRepeater")
+    assert rows is not None and rows.property("count") == len(chart_vm.provenanceRows) > 0
+    notes = root.findChild(QObject, "calculationNotesLabel")
+    assert "rope-only" in notes.property("text")
+
+    _evaluate_in(selector, "activated(1)")
+    assert chart_vm.currentCondition == "calm"
+    assert selector.property("currentText") == "calm"
+    chart_vm._cancel_all()
+    chart_vm._refresh_timer.stop()
+    assert warnings == []

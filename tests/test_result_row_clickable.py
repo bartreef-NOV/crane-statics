@@ -30,3 +30,20 @@ def test_row_without_entity_is_not_clickable():
 
 def test_row_of_other_kind_is_not_clickable():
     assert not ResultRowFormatter.is_clickable(_row(kind="other"))
+
+
+def test_factored_row_is_not_clickable_and_says_what_it_is():
+    row = _row(
+        name="Platform Base (ABS PF) / Fz",
+        kind="factored",
+        entity_id="platform_base",
+        component="Fz",
+        limit_kN=100.0,
+        utilization_pct=50.0,
+    )
+    item = ResultRowFormatter.result_rows_to_dicts([row])[0]
+    assert item["clickable"] is False
+    assert item["tooltip"].startswith("Factored demand")
+    assert item["utilization"] == "50%"
+    plain = ResultRowFormatter.result_rows_to_dicts([_row(kind="connection", component="Fz")])[0]
+    assert "Factored" not in plain["tooltip"]

@@ -16,6 +16,7 @@ from crane_statics.qml_app.qt_compat import pyqtProperty
 from crane_statics.presentation.formatters import (
     ConnectionFormatter,
     HoistFormatter,
+    ProvenanceFormatter,
     RopeFormatter,
 )
 from crane_statics.core.chart_cache import (
@@ -28,6 +29,7 @@ from crane_statics.core.chart_cache import (
 )
 from crane_statics.core.document_edit import DocumentEditor, build_contractual_point
 from crane_statics.core.governing_case import governing_case
+from crane_statics.core.load_condition import condition_names
 from crane_statics.core.limit_auto_set import (
     ConnectionAutoSetResult,
     RopeAutoSetResult,
@@ -330,6 +332,10 @@ class ChartViewModel(QObject):
     resetViewRequested = pyqtSignal()
     # A governing case was applied to the Scene: QML switches to the Scene tab.
     showSceneRequested = pyqtSignal()
+    # The rules document's condition names, or the selected one, changed.
+    conditionChanged = pyqtSignal()
+    # The calculation details (clause trail of the inspected point) changed.
+    provenanceChanged = pyqtSignal()
 
     def __init__(self, session: SessionState, parent=None):
         super().__init__(parent)
@@ -365,6 +371,17 @@ class ChartViewModel(QObject):
         # The clause trail of the rendered capacity curve and its condition (rules only).
         self._provenance: list[tuple[float, tuple, tuple, str]] = []
         self._condition_name = ""
+        # Rules documents: the condition names and the selected one, whose chart is drawn.
+        # Legacy: [] and None (the document's only condition).
+        self._condition_names: list[str] = []
+        self._condition: Optional[str] = None
+        # The calculation-details panel: the inspected outreach (None: no point) and the
+        # display rows, heading, warnings and standing notes derived from it.
+        self._detail_outreach: Optional[float] = None
+        self._provenance_rows: list[dict[str, Any]] = []
+        self._provenance_heading = ""
+        self._provenance_warnings: list[str] = []
+        self._calculation_notes: list[str] = []
         self._limit_series: list[dict[str, Any]] = []
         self._markers: list[dict[str, Any]] = []
         # Streamed batches coalesce into one chartUpdated per event-loop turn.
@@ -388,6 +405,7 @@ class ChartViewModel(QObject):
         self._session.document_changed.connect(self._on_document_changed)
         self._session.content_changed.connect(self._on_content_changed)
         self._session.hoist_selected.connect(lambda _hoist_id: self.reload())
+        self._refresh_conditions()
 
     # ------------------------------------------------------------------
     # Selection and mode
@@ -427,6 +445,46 @@ class ChartViewModel(QObject):
         self.chartModeChanged.emit()
         self._rebuild_contractual_model()
         self._show_or_prioritize()
+
+    @pyqtProperty(list, notify=conditionChanged)
+    def conditionNames(self) -> list:
+        """The rules document's condition names in document order; [] for legacy."""
+        return list(self._condition_names)
+
+    @pyqtProperty(str, notify=conditionChanged)
+    def currentCondition(self) -> str:
+        return self._condition or ""
+
+    @pyqtSlot(str)
+    def setCurrentCondition(self, name: str) -> None:
+        """Draw the chart of condition ``name``: its own cache entry, or a new sweep."""
+        if name not in self._condition_names or name == self._condition:
+            return
+        self._condition = name
+        self.conditionChanged.emit()
+        # Work for the previous condition is dropped: every job is re-planned for this one.
+        running = self._running
+        if running is not None and running.job.condition != name:
+            running.worker.requestInterruption()
+        self._queue.clear()
+        self._show_wanted()
+        self.draw()
+
+    def _refresh_conditions(self) -> None:
+        """Follow the document's conditions; a selection that no longer exists becomes
+        the first condition."""
+        doc = self._model.document
+        rules = None if doc is None else doc.rules
+        names = list(condition_names(doc)) if doc is not None and rules is not None else []
+        condition = self._condition if self._condition in names else (names[0] if names else None)
+        notes = ProvenanceFormatter.standing_notes(None if rules is None else str(rules.standard))
+        if names != self._condition_names or condition != self._condition:
+            self._condition_names = names
+            self._condition = condition
+            self.conditionChanged.emit()
+        if notes != self._calculation_notes:
+            self._calculation_notes = notes
+            self.provenanceChanged.emit()
 
     # ------------------------------------------------------------------
     # Status
@@ -734,7 +792,7 @@ class ChartViewModel(QObject):
     def _wanted_job(self) -> Optional[ChartJob]:
         if self._model.document is None or not self._model.selected_hoist_id:
             return None
-        return ChartJob(self._model.selected_hoist_id, self._current_chart_mode())
+        return ChartJob(self._model.selected_hoist_id, self._current_chart_mode(), self._condition)
 
     def _job_key(self, job: ChartJob) -> ChartKey:
         """A job's cache key under the current inputs; the fingerprint is kept per generation."""
@@ -1124,6 +1182,7 @@ class ChartViewModel(QObject):
         stream = running.stream if running is not None else _JobStream([])
         self._curve_points = [list(point) for point in stream.points]
         self._provenance = []
+        self._refresh_details()
         self._limit_series = stream.limit_series()
         if stream.verdicts is None:
             pending = [(cp, None, None) for cp in self._contractual_points()]
@@ -1139,6 +1198,7 @@ class ChartViewModel(QObject):
     def _clear_display(self) -> None:
         self._curve_points = []
         self._provenance = []
+        self._refresh_details()
         self._limit_series = []
         self._markers = []
         # Drop the allowables a streamed or rendered chart left in the table.
@@ -1193,6 +1253,7 @@ class ChartViewModel(QObject):
         self._curve_points = [[float(x), float(y)] for x, y in payload.get("curve_data", [])]
         self._provenance = list(payload.get("provenance", []))
         self._condition_name = str(payload.get("condition", ""))
+        self._refresh_details()
         # The payload is the wanted chart's, computed with the limits enabled now.
         positions = self._limit_positions()
         self._limit_series = [
@@ -1259,6 +1320,61 @@ class ChartViewModel(QObject):
             "yMin": max(0.0, min(ys) - y_pad),
             "yMax": max(ys) + y_pad,
         }
+
+    # ------------------------------------------------------------------
+    # Calculation details
+    # ------------------------------------------------------------------
+
+    @pyqtSlot(float)
+    def setDetailOutreach(self, outreach: float) -> None:
+        """Inspect the capacity point nearest ``outreach`` (negative: none)."""
+        value = None if outreach < 0 else float(outreach)
+        if value == self._detail_outreach:
+            return
+        self._detail_outreach = value
+        self._refresh_details()
+
+    def _refresh_details(self) -> None:
+        """Rebuild the details of the inspected point from the rendered clause trail."""
+        rows: list[dict[str, Any]] = []
+        heading = ""
+        warnings: list[str] = []
+        if self._detail_outreach is not None and self._provenance:
+            target = self._detail_outreach
+            x, records, point_warnings, case = min(
+                self._provenance, key=lambda entry: abs(float(entry[0]) - target)
+            )
+            rows = ProvenanceFormatter.detail_rows(records, point_warnings, case)
+            heading = ProvenanceFormatter.heading(self._condition_name, case, x)
+            warnings = [str(w) for w in point_warnings]
+        if (rows, heading, warnings) != (
+            self._provenance_rows,
+            self._provenance_heading,
+            self._provenance_warnings,
+        ):
+            self._provenance_rows = rows
+            self._provenance_heading = heading
+            self._provenance_warnings = warnings
+            self.provenanceChanged.emit()
+
+    @pyqtProperty("QVariantList", notify=provenanceChanged)
+    def provenanceRows(self) -> list:
+        """The inspected point's clause trail: one dict per record (quantity, value, unit,
+        clause, formula, source, warnings, case, inputs, isOverride)."""
+        return self._provenance_rows
+
+    @pyqtProperty(str, notify=provenanceChanged)
+    def provenanceHeading(self) -> str:
+        return self._provenance_heading
+
+    @pyqtProperty(list, notify=provenanceChanged)
+    def provenanceWarnings(self) -> list:
+        return list(self._provenance_warnings)
+
+    @pyqtProperty(list, notify=provenanceChanged)
+    def calculationNotes(self) -> list:
+        """Standing statements of a rules chart (rope-only stiffness; DNV: SH omitted)."""
+        return list(self._calculation_notes)
 
     # ------------------------------------------------------------------
     # Governing case
@@ -1428,11 +1544,15 @@ class ChartViewModel(QObject):
         # reference, so swap in a new one rather than clearing it under the worker.
         self._compute_cache = ComputeCache()
         self._compute_cache_fingerprint = None
+        self._detail_outreach = None
+        self._refresh_conditions()
         self.reload()
 
     def _on_content_changed(self) -> None:
         self._generation += 1
         self._cancel_all()
+        # A condition may have been renamed or removed in the Model workspace.
+        self._refresh_conditions()
         if self._partial:
             # The cancelled stream no longer matches the document: clear it now rather
             # than when the worker notices the cancel.

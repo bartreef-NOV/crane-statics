@@ -13,6 +13,12 @@ Item {
         8
     )
 
+    // The curve point the calculation details describe: the pinned one, else the hovered
+    // one. A contractual marker has no clause trail.
+    readonly property var inspectedPoint: plot.pinnedPoint || plot.hoveredPoint
+    onInspectedPointChanged: chartVm.setDetailOutreach(
+        inspectedPoint && typeof inspectedPoint.seriesId === "string" ? inspectedPoint.outreach : -1)
+
     // The menu acts on the chart point under the cursor (null when there is none).
     function openChartMenu(position) {
         chartMenu.targetPoint = plot.nearestPoint(position.x, position.y)
@@ -108,6 +114,25 @@ Item {
                     onClicked: chartVm.setChartMode("split")
                 }
 
+                // Rules documents only: the load condition the chart is drawn for.
+                Label {
+                    text: qsTr("Condition")
+                    visible: conditionSelector.visible
+                }
+
+                ComboBox {
+                    id: conditionSelector
+                    objectName: "conditionSelector"
+                    Layout.preferredWidth: 140
+                    visible: chartVm.conditionNames.length > 0
+                    model: chartVm.conditionNames
+                    currentIndex: Math.max(0, chartVm.conditionNames.indexOf(chartVm.currentCondition))
+                    onActivated: index => {
+                        if (index >= 0 && index < model.length)
+                            chartVm.setCurrentCondition(model[index])
+                    }
+                }
+
                 Item { Layout.fillWidth: true }
 
                 Label {
@@ -153,6 +178,99 @@ Item {
                     visibilityByKey: plot.visibilityByKey
                     onToggleRequested: key => plot.setSeriesVisible(key, !plot.seriesKeyVisible(key))
                 }
+            }
+
+            // Rules documents only: the clause trail of the pinned or hovered curve point.
+            GroupBox {
+                id: calculationDetails
+                objectName: "calculationDetails"
+                Layout.fillWidth: true
+                Layout.preferredHeight: 250
+                visible: chartVm.conditionNames.length > 0
+                title: chartVm.provenanceHeading === ""
+                       ? qsTr("Calculation details")
+                       : qsTr("Calculation details: %1").arg(chartVm.provenanceHeading)
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 4
+
+                    ScrollView {
+                        id: detailsScroll
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        // Fixed implicit size: the layout gives the panel its width, and the
+                        // content width follows it, so the GroupBox must not size from it.
+                        implicitWidth: 200
+                        implicitHeight: 120
+                        clip: true
+                        contentWidth: availableWidth
+
+                        ColumnLayout {
+                            width: detailsScroll.availableWidth
+                            spacing: 4
+
+                            Label {
+                                Layout.fillWidth: true
+                                visible: chartVm.provenanceRows.length === 0
+                                text: qsTr("Hover or click a point on the capacity curve to see how its factors were obtained.")
+                                color: detailsPalette.placeholderText
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Repeater {
+                                id: provenanceRepeater
+                                objectName: "provenanceRepeater"
+                                model: chartVm.provenanceRows
+
+                                delegate: Label {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    textFormat: Text.PlainText
+                                    font.bold: modelData.isOverride
+                                    text: qsTr("%1 = %2%3  [%4]  %5%6")
+                                          .arg(modelData.quantity)
+                                          .arg(modelData.value)
+                                          .arg(modelData.unit === "" ? "" : " " + modelData.unit)
+                                          .arg(modelData.clause)
+                                          .arg(modelData.formula)
+                                          .arg(modelData.isOverride ? qsTr("  (manual override)") : "")
+                                    ToolTip.visible: detailHover.hovered && modelData.inputs !== ""
+                                    ToolTip.text: modelData.inputs
+
+                                    HoverHandler { id: detailHover }
+                                }
+                            }
+                        }
+                    }
+
+                    // Warnings and standing statements stay in view below the scrolled trail.
+                    Repeater {
+                        model: chartVm.provenanceWarnings
+
+                        delegate: Label {
+                            required property string modelData
+                            Layout.fillWidth: true
+                            // Wraps to the panel width instead of sizing the panel from the text.
+                            Layout.preferredWidth: 100
+                            wrapMode: Text.WordWrap
+                            color: "#c62828"
+                            text: qsTr("⚠ %1").arg(modelData)
+                        }
+                    }
+
+                    Label {
+                        objectName: "calculationNotesLabel"
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 100
+                        wrapMode: Text.WordWrap
+                        color: detailsPalette.placeholderText
+                        text: chartVm.calculationNotes.join("\n")
+                    }
+                }
+
+                SystemPalette { id: detailsPalette }
             }
 
             RowLayout {

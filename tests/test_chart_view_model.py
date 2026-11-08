@@ -701,3 +701,126 @@ def _splitable(vm: ChartViewModel, hoist_id: str) -> bool:
     assert doc is not None
     hoist = next((h for h in doc.hoists if h.id == hoist_id), None)
     return bool(hoist is not None and getattr(hoist, "splitable_block", False))
+
+
+def _rules_chart_vm(doc) -> ChartViewModel:
+    session = SessionState()
+    vm = ChartViewModel(session)
+    vm.setOutreachStep(20.0)
+    session.model.set_document(doc)
+    return vm
+
+
+class TestConditionSelector:
+    def test_a_legacy_document_has_no_condition_to_select(self, chart_vm):
+        assert chart_vm.conditionNames == []
+        assert chart_vm.currentCondition == ""
+        assert chart_vm._wanted_job().condition is None
+        chart_vm.setCurrentCondition("default")  # ignored: nothing to select
+        assert chart_vm.currentCondition == ""
+
+    def test_switching_the_condition_draws_its_own_chart(self):
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        doc = without_suspended_rope(rules_doc("ABS", gale(wind=30.0), gale("calm", wind=5.0)))
+        vm = _rules_chart_vm(doc)
+        assert vm.conditionNames == ["gale", "calm"]
+        assert vm.currentCondition == "gale"
+        vm.drawBlocking()
+        gale_key = vm._wanted_key()
+        gale_points = [list(p) for p in vm.curvePoints]
+        assert gale_key.condition == "gale" and gale_points
+
+        emitted: list[int] = []
+        vm.conditionChanged.connect(lambda: emitted.append(1))
+        vm.setCurrentCondition("calm")
+        assert emitted and vm.currentCondition == "calm"
+        calm_key = vm._wanted_key()
+        assert calm_key.condition == "calm" and calm_key != gale_key
+        # The gale chart is not reused for calm: nothing is shown until it is computed.
+        assert vm._cache.get(calm_key) is None
+        assert vm.curvePoints == [] and vm.provenanceRows == []
+        assert all(job.condition == "calm" for job in vm._queue)
+        vm._cancel_all()
+        vm.drawBlocking()
+        assert vm.curvePoints and vm.curvePoints != gale_points
+        assert vm._cache.get(gale_key) is not None
+
+        # Back to gale: served from its own cache entry.
+        vm.setCurrentCondition("gale")
+        assert [list(p) for p in vm.curvePoints] == gale_points
+        vm.setCurrentCondition("nope")
+        assert vm.currentCondition == "gale"
+        vm.shutdown()
+
+    def test_a_removed_condition_falls_back_to_the_first(self):
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        doc = without_suspended_rope(rules_doc("ABS", gale(wind=30.0), gale("calm", wind=5.0)))
+        vm = _rules_chart_vm(doc)
+        vm.setCurrentCondition("calm")
+        vm._cancel_all()
+        doc.conditions.pop("calm")
+        vm._model.mark_content_changed()
+        assert vm.conditionNames == ["gale"]
+        assert vm.currentCondition == "gale"
+        vm.shutdown()
+
+
+class TestCalculationDetails:
+    @staticmethod
+    def _drawn(doc) -> ChartViewModel:
+        vm = _rules_chart_vm(doc)
+        vm.drawBlocking()
+        return vm
+
+    def test_the_inspected_point_lists_the_dynamic_factor_with_its_clause(self):
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        vm = self._drawn(without_suspended_rope(rules_doc("ABS", gale())))
+        assert vm.provenanceRows == []  # nothing inspected yet
+        x = vm.curvePoints[1][0]
+        vm.setDetailOutreach(x + 0.3)  # the nearest curve point
+        rows = vm.provenanceRows
+        keys = {"quantity", "value", "unit", "clause", "formula", "source", "warnings", "case"}
+        assert rows and all(keys <= set(r) for r in rows)
+        factor = [r for r in rows if r["quantity"] == "Dynamic factor"]
+        assert factor and all(r["clause"] for r in factor)
+        assert {r["case"] for r in rows} == {"In-service"}
+        assert "gale" in vm.provenanceHeading and f"{x:.1f} m" in vm.provenanceHeading
+        assert any("rope-only" in note for note in vm.calculationNotes)
+        assert not any("SH" in note for note in vm.calculationNotes)
+
+        vm.setDetailOutreach(-1.0)  # nothing inspected
+        assert vm.provenanceRows == []
+        vm.shutdown()
+
+    def test_a_manual_daf_shows_as_an_override_and_warnings_are_listed(self):
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        doc = without_suspended_rope(rules_doc("ABS", gale()))
+        hoists = [h.model_copy(update={"hook_daf": 1.7}) for h in doc.hoists]
+        vm = self._drawn(doc.model_copy(update={"hoists": hoists}))
+        x, records, _warnings, case = vm._provenance[0]
+        vm._provenance[0] = (x, records, ("hoisting speed below the minimum",), case)
+        vm.setDetailOutreach(x)
+        overrides = [r for r in vm.provenanceRows if r["source"] == "override"]
+        assert overrides and overrides[0]["quantity"] == "Dynamic factor"
+        assert vm.provenanceWarnings == ["hoisting speed below the minimum"]
+        assert all(r["warnings"] == "hoisting speed below the minimum" for r in vm.provenanceRows)
+        vm.shutdown()
+
+    def test_dnv_notes_state_that_sh_is_omitted(self):
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        vm = _rules_chart_vm(without_suspended_rope(rules_doc("DNV", gale())))
+        assert any("SH" in note for note in vm.calculationNotes)
+        assert any("rope-only" in note for note in vm.calculationNotes)
+        vm.shutdown()
+
+    def test_a_legacy_chart_has_no_details(self, chart_vm):
+        chart_vm.drawBlocking()
+        chart_vm.setDetailOutreach(chart_vm.curvePoints[0][0])
+        assert chart_vm.provenanceRows == []
+        assert chart_vm.calculationNotes == []
+        assert chart_vm.provenanceHeading == ""
