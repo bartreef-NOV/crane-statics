@@ -120,6 +120,8 @@ class SessionSnapshot:
     selected_hoist_id: Optional[str]
     selected_editor_hoist_id: Optional[str]
     extras: dict[str, Any]
+    #: ``(scene_condition_name, scene_case_name)``: the Scene state was taken under it.
+    scene_condition: tuple[Optional[str], Optional[str]] = (None, None)
 
 
 class SessionModel:
@@ -391,6 +393,7 @@ class SessionModel:
             selected_hoist_id=self.selected_hoist_id,
             selected_editor_hoist_id=self.selected_editor_hoist_id,
             extras={name: capture() for name, (capture, _restore) in self._history_extras.items()},
+            scene_condition=(self.scene_condition_name, self.scene_case_name),
         )
 
     def _reset_history(self) -> None:
@@ -451,6 +454,8 @@ class SessionModel:
                 self.selected_hoist_id = snapshot.selected_hoist_id
             if self.selected_editor_hoist_id not in self.editor_hoist_ids():
                 self.selected_editor_hoist_id = snapshot.selected_editor_hoist_id
+            # The Scene's wind and motion were seeded from this case: restore them together.
+            self.scene_condition_name, self.scene_case_name = snapshot.scene_condition
             for name, (_capture, restore) in self._history_extras.items():
                 if name in snapshot.extras:
                     restore(snapshot.extras[name])

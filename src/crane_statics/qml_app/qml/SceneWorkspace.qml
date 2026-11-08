@@ -42,6 +42,15 @@ Item {
             Layout.minimumHeight: 320
             spacing: root.layoutSpacing
 
+            // The condition and case the Scene runs under (rules documents only).
+            Label {
+                objectName: "sceneConditionLabel"
+                Layout.fillWidth: true
+                text: sceneVm.sceneConditionLabel
+                visible: text.length > 0
+                elide: Text.ElideRight
+            }
+
             // The governing case opened from the Load Chart, and the way back.
             RowLayout {
                 Layout.fillWidth: true

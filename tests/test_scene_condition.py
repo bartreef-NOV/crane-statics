@@ -227,3 +227,31 @@ def test_a_rules_document_does_not_offer_its_placeholder_environment() -> None:
     legacy = load_document(EXAMPLE)
     assert not environment_from_conditions(legacy)
     assert set_environment_value(legacy, "max_wind_speed_m_s", 99.0)
+
+
+def test_the_scene_condition_label_names_the_condition_and_case() -> None:
+    session, scene, chart = _vms(_dnv_doc())
+    assert scene.sceneConditionLabel == "Condition: gale / Case II"
+    chart.setCurrentCondition("calm")
+    chart._cancel_all()
+    assert scene.sceneConditionLabel == "Condition: calm / Case II"
+    # Undo puts the Scene back under the condition its state was taken under (following
+    # the chart is not an undo step, so the opening one), label included.
+    session.model.set_scene_condition("calm", "Case I", seed=True)
+    session.model.mark_content_changed(scope="scene")
+    assert session.model.undo()
+    assert scene.sceneConditionLabel == "Condition: gale / Case II"
+    state = session.model.get_active_hoist_state()
+    assert state is not None and state.scene_state.wind_speed_m_s == 30.0
+    assert session.model.redo()
+    assert scene.sceneConditionLabel == "Condition: calm / Case I"
+    chart.shutdown()
+
+
+def test_the_scene_condition_label_is_empty_for_a_legacy_document() -> None:
+    from tests.test_chart_view_model import EXAMPLE
+    from crane_statics.core.io import load_document
+
+    _session, scene, chart = _vms(load_document(EXAMPLE))
+    assert scene.sceneConditionLabel == ""
+    chart.shutdown()

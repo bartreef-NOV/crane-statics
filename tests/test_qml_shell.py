@@ -915,3 +915,20 @@ def test_environment_panel_hides_the_condition_settings_of_a_rules_document(qml_
     assert panel.findChild(QObject, "vesselMotionGroup").property("visible") is True
     assert panel.findChild(QObject, "conditionEnvironmentNote").property("visible") is False
     assert warnings == []
+
+
+def test_scene_condition_label_shows_on_a_rules_document_only(qml_engine):
+    engine, app_vm, _model_vm, warnings = qml_engine
+    app_vm.openPath(str(EXAMPLE))
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
+    root = engine.rootObjects()[-1]
+    label = root.findChild(QObject, "sceneConditionLabel")
+    assert label is not None
+    assert label.property("visible") is False
+
+    rules_example = EXAMPLE.parent / "crane_input_GT283_dnv.yaml"
+    app_vm.openPath(str(rules_example))
+    QTest.qWait(50)
+    assert label.property("text") == "Condition: onboard / Case II"
+    assert label.property("visible") is True
+    assert warnings == []

@@ -816,6 +816,14 @@ class ProvenanceFormatter:
         return f"{name} at {float(outreach_m):.1f} m"
 
     @staticmethod
+    def scene_condition_label(condition: Optional[str], case: Optional[str]) -> str:
+        """``Condition: gale / Case II``: what the Scene runs under (legacy: empty)."""
+        if not condition:
+            return ""
+        name = f"{condition} / {case}" if case else condition
+        return f"Condition: {name}"
+
+    @staticmethod
     def standing_notes(standard: Optional[str]) -> list[str]:
         """The statements every rules chart carries (none without a standard)."""
         if standard is None:

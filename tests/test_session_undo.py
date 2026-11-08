@@ -165,3 +165,28 @@ def test_loading_a_document_resets_history(session):
     assert not session.can_undo
     session.mark_content_changed()
     assert not session.can_undo
+
+
+def test_undo_redo_restores_the_scene_condition_with_its_scene_state():
+    from tests.rules_docs import gale, rules_doc
+
+    model = SessionModel()
+    model.set_document(rules_doc("DNV", gale(wind=30.0), gale("calm", wind=36.0)))
+    state = model.get_active_hoist_state()
+    assert state is not None and state.scene_state.wind_speed_m_s == 30.0
+
+    assert model.set_scene_condition("calm", "Case I", seed=True)
+    assert state.scene_state.wind_speed_m_s == 0.0  # Case I has no wind
+    model.mark_content_changed(scope="scene")
+
+    assert model.undo()
+    restored = model.get_active_hoist_state()
+    assert restored is not None and restored.scene_state.wind_speed_m_s == 30.0
+    assert (model.scene_condition_name, model.scene_case_name) == (None, None)
+    assert model.scene_condition().name == "gale/Case II"
+
+    assert model.redo()
+    redone = model.get_active_hoist_state()
+    assert redone is not None and redone.scene_state.wind_speed_m_s == 0.0
+    assert (model.scene_condition_name, model.scene_case_name) == ("calm", "Case I")
+    assert model.scene_condition().name == "calm/Case I"

@@ -21,6 +21,7 @@ from crane_statics.core.governing_case import GoverningCase
 from crane_statics.core.load_condition import scene_case
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
 from crane_statics.core.session_model import SceneState
+from crane_statics.presentation.formatters import ProvenanceFormatter
 from crane_statics.qml_app.adapters.scene_adapter import SceneStateAdapter
 from crane_statics.qml_app.scene.scene_drag import DragEdit, DragLimits, SceneDrag
 from crane_statics.qml_app.qt_compat import pyqtProperty
@@ -75,6 +76,7 @@ class SceneViewModel(QObject):
     reportReady = pyqtSignal(str, str)
     loadOverviewReady = pyqtSignal("QVariantMap")
     governingCaseChanged = pyqtSignal()
+    sceneConditionChanged = pyqtSignal()
 
     def __init__(self, session: SessionState, parent=None):
         super().__init__(parent)
@@ -100,6 +102,7 @@ class SceneViewModel(QObject):
         self._drag: Optional[SceneDrag] = None
         self._initialized_load_hoist_id: Optional[str] = None
         self._governing_label = ""
+        self._scene_condition_label = ""
         self._snapshot: Optional[_InputsSnapshot] = None
         self._applying = False
         self._last_unavailable_text: Optional[str] = None
@@ -830,6 +833,22 @@ class SceneViewModel(QObject):
     def canRestoreInputs(self) -> bool:
         return self._snapshot is not None
 
+    @pyqtProperty(str, notify=sceneConditionChanged)
+    def sceneConditionLabel(self) -> str:
+        """``Condition: gale / Case II``, what the Scene runs under; empty for legacy."""
+        return self._scene_condition_label
+
+    def _refresh_scene_condition_label(self) -> None:
+        doc = self._model.document
+        label = ""
+        if doc is not None and doc.rules is not None:
+            condition = self._model.scene_condition()
+            case = condition.case.name if condition.case is not None else None
+            label = ProvenanceFormatter.scene_condition_label(condition.condition_name, case)
+        if label != self._scene_condition_label:
+            self._scene_condition_label = label
+            self.sceneConditionChanged.emit()
+
     def apply_governing_case(self, case: GoverningCase, label: str) -> None:
         """Show ``case`` on the active hoist, keeping the inputs it replaces for Restore.
 
@@ -864,6 +883,7 @@ class SceneViewModel(QObject):
             # only under the factor of the case that governed.
             if case.condition_name is not None:
                 self._model.set_scene_condition(case.condition_name, case.case_name, seed=False)
+                self._refresh_scene_condition_label()
             self._hoist_state.set_case_lateral(case.hook_lateral)
             state.scene_state = dataclasses.replace(state.scene_state, **case.scene_fields)
             self._hook_load_t = self._hoist_state.hook_force_kN_to_payload_t(
@@ -893,9 +913,11 @@ class SceneViewModel(QObject):
         if self._model.scene_condition().name == target.name:
             # Already under that case (the document's first condition on opening it).
             self._model.set_scene_condition(condition_name, None, seed=False)
+            self._refresh_scene_condition_label()
             return
         self._end_governing_label()
         self._model.set_scene_condition(condition_name, None, seed=True)
+        self._refresh_scene_condition_label()
         self.environmentChanged.emit()
         self._refresh_rules_load()
 
@@ -908,6 +930,7 @@ class SceneViewModel(QObject):
             return
         self._model.restore_split_flags(snapshot.split_flags)
         self._model.set_scene_condition(*snapshot.scene_condition, seed=False)
+        self._refresh_scene_condition_label()
         self._hoist_state.set_case_lateral(None)
         state.scene_state = dataclasses.replace(snapshot.scene_state)
         state.selected_contractual_idx = snapshot.contractual_idx
@@ -1059,6 +1082,7 @@ class SceneViewModel(QObject):
             self._sync_outreach_from_angle(float(state.scene_state.boom_angle_deg))
 
         self._rebuild_contractual_rows()
+        self._refresh_scene_condition_label()
         self.hoistsChanged.emit()
         self.hookModeChanged.emit()
         self.angleBoundsChanged.emit()
