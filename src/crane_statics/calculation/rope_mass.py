@@ -367,6 +367,28 @@ def reeved_length_at_angle_m(
     return compute_reeved_length_m(doc_dict, hoist_id, positions)
 
 
+def reeved_length_at_tackle_m(
+    doc_dict: dict[str, Any],
+    hoist_id: str,
+    angle_deg: float,
+    tackle_length_m: Optional[float],
+) -> Optional[float]:
+    """Reeved length with the boom at ``angle_deg`` and this hoist's hook ``tackle_length_m``
+    below its sheave.
+
+    Every segment counts at its multiplier -- the winch run and every fall, the
+    dead-end fall included. ``tackle_length_m`` of ``None`` puts the hook at the
+    hoist's ``lowest_hook_height_m`` (see :func:`active_hook_positions`).
+    """
+    kin = KinematicsAdapter(doc_dict)
+    positions = kin.compute_all_node_positions(float(angle_deg))
+    return compute_reeved_length_m(
+        doc_dict,
+        hoist_id,
+        active_hook_positions(doc_dict, hoist_id, positions, tackle_length_m),
+    )
+
+
 def resolve_total_rope_length_m(doc_dict: dict[str, Any], hoist_id: str) -> Optional[float]:
     """The hoist's ``rope_length_m``: authored for the boom hoist, derived for payload hoists."""
     hoist = _find_hoist(doc_dict, hoist_id)
