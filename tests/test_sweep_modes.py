@@ -11,6 +11,7 @@ from crane_statics.core import load_document
 from crane_statics.core.governing_case import governing_case
 from crane_statics.core.limit_auto_set import compute_required_rope_capacity_kN
 from crane_statics.core.load_condition import DEFAULT_CONDITION_NAME, condition_cases
+from crane_statics.core.sweep_cache import ComputeCache, compute_fingerprint
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mode_sweep
 from crane_statics.data.models import CraneDocument, VesselMotion
 from tests.rules_docs import MOTION, gale, legacy_equivalent, rules_doc
@@ -186,3 +187,61 @@ def test_rules_auto_set_uses_every_condition_case() -> None:
     assert len(required) == 2
     assert rules.required_kN == max(required)
     assert per_condition[0].required_kN != per_condition[1].required_kN
+
+
+def test_rules_conditions_share_one_compute_cache_without_mixing_cases() -> None:
+    doc = rules_doc(
+        "DNV",
+        gale(wind=30.0),
+        gale("calm", wind=5.0, motion=MOTION.model_copy(update={"roll_deg": 1.0})),
+    )
+    cache = ComputeCache()
+    fingerprint = compute_fingerprint(doc)
+    payloads = {}
+    for name in ("gale", "calm"):
+        unscoped = run_mode_sweep(
+            doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name=name
+        )
+        # Both conditions use the same (fingerprint, hoist, mode) scope, as chart_vm does.
+        scope = cache.scope(fingerprint, HOIST, "normal")
+        scoped = run_mode_sweep(
+            doc,
+            HOIST,
+            "normal",
+            RULES_LIMITS,
+            RULES_STEP,
+            {},
+            compute_scope=scope,
+            condition_name=name,
+        )
+        assert unscoped is not None and unscoped["curve_data"]
+        assert scoped == unscoped
+        payloads[name] = scoped
+    assert payloads["gale"] != payloads["calm"]
+
+
+ANGULAR_MOTION = VesselMotion(
+    accel_z_m_s2=0.5,
+    roll_deg=3.0,
+    pitch_deg=1.5,
+    pitch_angular_accel_rad_s2=0.04,
+    roll_angular_accel_rad_s2=0.06,
+    reference_x_m=12.0,
+    reference_z_m=-6.0,
+)
+
+
+def test_rules_sweep_uses_the_condition_reference_point() -> None:
+    doc = rules_doc("ABS", gale(wind=15.0, motion=ANGULAR_MOTION))
+    swept = run_mode_sweep(doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {})
+    same = run_mode_sweep(
+        legacy_equivalent(doc, 15.0, ANGULAR_MOTION), HOIST, "normal", RULES_LIMITS, RULES_STEP, {}
+    )
+    origin = ANGULAR_MOTION.model_copy(update={"reference_x_m": 0.0, "reference_z_m": 0.0})
+    at_origin = run_mode_sweep(
+        legacy_equivalent(doc, 15.0, origin), HOIST, "normal", RULES_LIMITS, RULES_STEP, {}
+    )
+    assert swept is not None and same is not None and at_origin is not None
+    assert swept["curve_data"]
+    assert swept == same
+    assert swept["curve_data"] != at_origin["curve_data"]  # the reference point matters
