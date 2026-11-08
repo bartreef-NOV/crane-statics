@@ -178,3 +178,29 @@ def test_missing_boom_hoist_ea_raises():
     doc = doc.model_copy(update={"ropes": ropes})
     with pytest.raises(RulesValidationError, match="BH"):
         payload_hoist_stiffness_terms(doc, _point(doc), "MH", 0.0)
+
+
+def test_point_for_another_hoist_rejected():
+    doc = _gt283()
+    ah_point = get_calculator(doc).compute_analysis_point(ANGLE_DEG, 0.0, "AH", offlead_deg=0.0)
+    assert ah_point is not None
+    with pytest.raises(RulesValidationError, match="not for this hoist"):
+        payload_hoist_stiffness_terms(doc, ah_point, "MH", 0.0)
+
+
+def test_no_tackle_length_uses_lowest_hook_height():
+    doc = _gt283()
+    active = payload_hoist_stiffness_terms(doc, _point(doc), "MH", None)[0]
+    assert active.reeved_length_m == pytest.approx(_hand_mh_length(_MH_S4[1] + 53.0), rel=1e-9)
+
+
+def test_no_tackle_length_without_lowest_hook_height_raises():
+    doc = _gt283()
+    point = _point(doc)
+    hoists = [
+        h.model_copy(update={"lowest_hook_height_m": None}) if h.id == "MH" else h
+        for h in doc.hoists
+    ]
+    doc = doc.model_copy(update={"hoists": hoists})
+    with pytest.raises(RulesValidationError, match="lowest_hook_height_m"):
+        payload_hoist_stiffness_terms(doc, point, "MH", None)

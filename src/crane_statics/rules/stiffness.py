@@ -14,8 +14,9 @@ standards, which ask for every element from the hook to the pedestal.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from ..calculation.results import AnalysisPoint
 from ..calculation.rope_mass import (
@@ -28,6 +29,8 @@ from .validation import RulesValidationError
 
 #: The solver's channel for the solve-mode (boom-hoist) rope tension.
 BOOM_HOIST_CHANNEL = "boom_hoist"
+#: The point's active-rope tension must be 1/falls to this relative tolerance.
+_TENSION_REL_TOL = 1e-6
 
 
 @dataclass(frozen=True)
@@ -74,16 +77,31 @@ def payload_hoist_stiffness_terms(
     ``tackle_length_m`` below the sheave (``None``: at ``lowest_hook_height_m``).
     The boom hoist carries ``point.sensitivity_rope_tensions["boom_hoist"]``.
     Compute ``point`` with ``offlead_deg=0`` so that sensitivity is the vertical
-    hook load's alone.
+    hook load's alone. Split blocks are ignored: falls are the authored hook
+    segment ``mult``, not ``split_falls``.
 
     Raises ``RulesValidationError`` when a rope's EA, the hook segment, the boom
-    hoist or its sensitivity is missing.
+    hoist or its sensitivity is missing, when ``point`` was computed for another
+    active hoist, or when ``tackle_length_m`` is ``None`` and the hoist has no
+    ``lowest_hook_height_m``.
     """
     doc_dict = doc.model_dump()
     hoist = _hoist(doc, hoist_id)
     if is_solve_hoist(doc, hoist_id):
         raise RulesValidationError(f"hoists.{hoist_id}: hook stiffness needs a payload hoist")
-    falls = _hook_falls(doc, hoist)
+    falls = _hook_falls(doc, doc_dict, hoist)
+    active_tension = point.sensitivity_rope_tensions.get(hoist.rope_id)
+    if active_tension is None or not math.isclose(
+        float(active_tension), 1.0 / falls, rel_tol=_TENSION_REL_TOL
+    ):
+        raise RulesValidationError(
+            f"hoists.{hoist_id}: analysis point is not for this hoist (rope {hoist.rope_id} "
+            f"tension {active_tension} kN/kN, expected 1/{falls})"
+        )
+    if tackle_length_m is None and hoist.lowest_hook_height_m is None:
+        raise RulesValidationError(
+            f"hoists.{hoist_id}.lowest_hook_height_m: required when no tackle length is given"
+        )
     active_length_m = reeved_length_at_tackle_m(
         doc_dict, hoist_id, point.boom_angle_deg, tackle_length_m
     )
@@ -134,9 +152,9 @@ def _ea_kN(doc: CraneDocument, hoist: Hoist) -> float:
     return float(ea)
 
 
-def _hook_falls(doc: CraneDocument, hoist: Hoist) -> int:
+def _hook_falls(doc: CraneDocument, doc_dict: dict[str, Any], hoist: Hoist) -> int:
     """Parts of the segment between the hook and the node it hangs from."""
-    support_id = hook_support_node_id(doc.model_dump(), hoist.id)
+    support_id = hook_support_node_id(doc_dict, hoist.id)
     endpoints = {support_id, hoist.load_node_id}
     rope = next((r for r in doc.ropes if r.id == hoist.rope_id), None)
     for seg in [] if rope is None else rope.segments:
