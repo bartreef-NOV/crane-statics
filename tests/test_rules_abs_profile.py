@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from crane_statics.calculation.dynamic_factor import ConstantDynamicFactor
 from crane_statics.core.analysis_cases import iter_hoist_analysis_modes
 from crane_statics.core.io import load_document
 from crane_statics.data.models import ConditionSpec, RulesSpec, VesselMotion, payload_hoist_ids
@@ -150,7 +149,9 @@ def test_lateral_spec():
 
 def test_manual_daf_overrides_and_keeps_computed_record():
     setup = _setup(_doc(daf=1.4), _cond())
-    assert setup.factor == ConstantDynamicFactor(1.4)
+    assert setup.factor == LinearFactor(1.4, ROPE_T)
+    # The suspended rope stays in LL: the effective factor on the whole LL is the daf.
+    assert _factor_at(setup.factor, LL_KN) == pytest.approx(1.4, rel=1e-12)
     dyn = [r for r in setup.records if r.quantity == "dynamic_factor"]
     sources = {r.source: r for r in dyn}
     assert set(sources) == {"computed", "override"}
@@ -159,6 +160,22 @@ def test_manual_daf_overrides_and_keeps_computed_record():
     hoist = next(h for h in doc.hoists if h.id == payload_hoist_ids(doc)[0])
     ll = (50.0 + hoist.hook_mass_t + ROPE_T) * G
     assert sources["computed"].value == pytest.approx(ref.abs_vaf_onboard(ll, 0.0), rel=1e-12)
+
+
+def test_heavy_lift_manual_daf_overrides_and_keeps_rope():
+    setup = _setup(_doc("heavy_lift", daf=1.25), _cond(accel_z=0.05 * G))
+    assert setup.factor == LinearFactor(1.25, ROPE_T)
+    assert _factor_at(setup.factor, LL_KN) == pytest.approx(1.25, rel=1e-12)
+    sources = {r.source: r for r in setup.records if r.quantity == "dynamic_factor"}
+    assert sources["override"].value == 1.25
+    assert sources["computed"].value == pytest.approx(ref.abs_heavy_lift_vaf(0.05), rel=1e-12)
+    assert "2-2/11.3" in sources["override"].clause
+
+
+def test_zero_load_wind_area_warns_default_area_not_applied():
+    assert any("5.19.3" in w for w in _setup(_doc(), _cond()).warnings)
+    cond = _cond().model_copy(update={"load_wind_area_m2": 10.0})
+    assert not any("5.19.3" in w for w in _setup(_doc(), cond).warnings)
 
 
 def test_default_daf_is_not_an_override():
@@ -193,8 +210,9 @@ def test_hoisting_speed_below_minimum_warns_and_keeps_speed():
     setup = _setup(_doc(speed=0.15), _offboard(h_sig=2.0))
     v_hmin = ref.abs_v_hmin(2.0)
     assert v_hmin > 0.15
-    assert len(setup.warnings) == 1
-    assert "0.15" in setup.warnings[0] and "v_hmin" in setup.warnings[0]
+    speed = [w for w in setup.warnings if "v_hmin" in w]
+    assert len(speed) == 1
+    assert "0.15" in speed[0]
     v_r = ref.abs_v_r(0.15, 0.8, 0.6)
     assert _factor_at(setup.factor, LL_KN) == pytest.approx(
         ref.abs_vaf_offboard(LL_KN, K, v_r, 0.0), rel=1e-12
@@ -203,7 +221,7 @@ def test_hoisting_speed_below_minimum_warns_and_keeps_speed():
 
 def test_hoisting_speed_at_minimum_has_no_warning():
     setup = _setup(_doc(speed=0.5), _offboard(h_sig=2.0))
-    assert setup.warnings == ()
+    assert not any("v_hmin" in w for w in setup.warnings)
 
 
 def test_cases_single_in_service():

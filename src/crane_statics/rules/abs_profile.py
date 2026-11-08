@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from ..calculation.dynamic_factor import DynamicFactor
 from ..data.models import ConditionSpec, CraneDocument, Hoist
-from .factors import AbsOnboardFactor, LinearFactor, MaxFactor, OverrideFactor
+from .factors import AbsOnboardFactor, LinearFactor, MaxFactor
 from .factors import RelativeVelocityFactor
 from .foundation import abs_pedestal_factor
 from .types import CaseSpec, FoundationFactors, LateralSpec, LiftSetup, ProvenanceRecord
@@ -121,7 +121,8 @@ class AbsProfile:
             )
         )
         if hoist.hook_daf != _DEFAULT_DAF:
-            factor = OverrideFactor(float(hoist.hook_daf))
+            # The daf replaces the factor value, not the load: the suspended rope stays in LL.
+            factor = LinearFactor(float(hoist.hook_daf), suspended_rope_mass_t)
             records.append(
                 ProvenanceRecord(
                     "dynamic_factor",
@@ -132,6 +133,11 @@ class AbsProfile:
                     {"hook_daf": float(hoist.hook_daf)},
                     "override",
                 )
+            )
+        if cond.load_wind_area_m2 == 0.0:
+            warnings.append(
+                f"conditions.{cond.name}.load_wind_area_m2: 0; the ABS 2-2/5.19.3 (p.50) "
+                "default projected load area 0.1215*LL^(2/3) m^2 is not applied"
             )
 
         lateral = LateralSpec(
