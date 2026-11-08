@@ -85,5 +85,7 @@ class LoadConditions:
     #: The hoist whose hook-segment rope rides in ``hook_load_kN`` (a rules document), so
     #: it is drawn as part of the hook load rather than as rope weight; None: legacy.
     amplified_rope_hoist_id: Optional[str] = None
+    #: That rope's mass in t, as the dynamic factor amplifies it (for the Hook label); 0: none.
+    suspended_rope_mass_t: float = 0.0
     gravity_x_m_s2: Optional[float] = None
     gravity_z_m_s2: Optional[float] = None

@@ -10,6 +10,7 @@ from crane_statics.rules import validate_rules_document
 from crane_statics.data.models import ConditionSpec, CraneDocument, VesselMotion
 from crane_statics.core import load_document
 from tests.rules_docs import GT283, rules_doc
+from tests.test_lift_factor import _abs_doc as _abs_offboard_doc
 from tests.test_scene_view_model import MockCanvas
 
 HOIST = "MH"
@@ -63,9 +64,80 @@ def test_rules_hook_force_follows_the_tackle_and_the_boom_angle() -> None:
     assert _stored_kN(vm) == pytest.approx(
         DAF * (300.0 + HOOK_T + 60.0 * FALLS_T_PER_M) * G, rel=1e-9
     )
-    vm.setAngle(vm.angle - 2.0)
-    assert _stored_kN(vm) == pytest.approx(_fresh_kN(vm), rel=1e-12)
     assert vm.hookLoadTonnes == 300.0
+
+
+# --- an offboard document: the factor itself changes with the boom angle ------------------
+
+
+def _offboard_vm(split: bool = False) -> SceneViewModel:
+    doc = _abs_offboard_doc()
+    if split:
+        hoists = [
+            (
+                h.model_copy(
+                    update={
+                        "splitable_block": True,
+                        "split_falls": 10,
+                        "split_hook_mass_t": 30.0,
+                        "split_contractual_points": h.contractual_points,
+                    }
+                )
+                if h.id == HOIST
+                else h
+            )
+            for h in doc.hoists
+        ]
+        doc = doc.model_copy(update={"hoists": hoists})
+    return _vm(doc)
+
+
+def test_offboard_hook_force_follows_the_boom_angle() -> None:
+    vm = _offboard_vm()
+    vm.setAngle(84.0)  # MH works near the top of the luffing range
+    vm.setHookLoadTonnes(1000.0)
+    vm.setTackle(30.0)
+    before = _stored_kN(vm)
+    vm.setAngle(81.0)
+    assert _stored_kN(vm) == pytest.approx(_fresh_kN(vm), rel=1e-12)
+    assert _stored_kN(vm) != pytest.approx(before, rel=1e-6)  # the factor moved with K
+    moved = _stored_kN(vm)
+    vm._on_canvas_angle_changed(82.5)  # the canvas drag path
+    assert _stored_kN(vm) == pytest.approx(_fresh_kN(vm), rel=1e-12)
+    assert _stored_kN(vm) != pytest.approx(moved, rel=1e-6)
+    assert vm.hookLoadTonnes == 1000.0
+
+
+def test_offboard_contractual_point_is_converted_at_its_own_angle() -> None:
+    vm = _offboard_vm()
+    labels = list(vm.contractualLabels)
+    assert len(labels) > 1
+    vm.selectContractual(0)
+    first_angle = vm.angle
+    vm.selectContractual(len(labels) - 1)
+    assert vm.angle != pytest.approx(first_angle)
+    assert _stored_kN(vm) == pytest.approx(_fresh_kN(vm), rel=1e-12)
+    # Converting before the boom moved (the old order) gives another force here.
+    state = vm._model.get_active_hoist_state()
+    assert state is not None
+    at_point = state.scene_state.boom_angle_deg
+    state.scene_state.boom_angle_deg = first_angle
+    stale_kN = vm._hoist_state.payload_t_to_hook_force_kN(vm.hookLoadTonnes)
+    state.scene_state.boom_angle_deg = at_point
+    assert stale_kN != pytest.approx(_stored_kN(vm), rel=1e-6)
+
+
+def test_offboard_hook_force_follows_the_hook_mode() -> None:
+    vm = _offboard_vm(split=True)
+    vm.setHookLoadTonnes(500.0)
+    vm.setTackle(30.0)
+    normal_kN = _stored_kN(vm)
+    vm.setHookMode("split")
+    assert vm.hookMode == "split"
+    assert _stored_kN(vm) == pytest.approx(_fresh_kN(vm), rel=1e-12)
+    assert _stored_kN(vm) != pytest.approx(normal_kN, rel=1e-6)  # 30 t hook, 10 falls
+    vm.setHookMode("normal")
+    assert _stored_kN(vm) == pytest.approx(normal_kN, rel=1e-12)
 
 
 def test_legacy_hook_force_is_not_re_derived_on_a_tackle_change() -> None:
@@ -105,6 +177,9 @@ def test_rules_scene_draws_the_suspended_rope_in_the_hook_load() -> None:
     vm.setTackle(40.0)
     inputs = vm._scene_inputs()
     assert inputs.conditions.amplified_rope_hoist_id == HOIST
+    # The labelled mass is the one the factor amplifies (LiftFactors at the Scene state).
+    assert inputs.conditions.suspended_rope_mass_t == pytest.approx(40.0 * FALLS_T_PER_M)
+    assert inputs.conditions.suspended_rope_mass_t == vm._hoist_state.suspended_rope_mass_t(HOIST)
     assert inputs.document_dict is not None
     from crane_statics.core import drawn_loads
 

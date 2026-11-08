@@ -781,10 +781,6 @@ class SceneViewModel(QObject):
         if state is None:
             return
         self._hook_load_t = float(cp.load_t)
-        state.scene_state.hook_load_kN = self._hoist_state.payload_t_to_hook_force_kN(
-            self._hook_load_t
-        )
-        self.loadChanged.emit()
 
         kin = self._kinematics.kinematics()
         hoist_id = self._model.selected_hoist_id
@@ -797,6 +793,11 @@ class SceneViewModel(QObject):
                 state.scene_state.boom_angle_deg = float(angle)
                 self._outreach = float(cp.outreach_m)
                 self.geometryChanged.emit()
+        # Converted at the point's own boom angle: a rules factor depends on it.
+        state.scene_state.hook_load_kN = self._hoist_state.payload_t_to_hook_force_kN(
+            self._hook_load_t
+        )
+        self.loadChanged.emit()
         self._after_state_changed()
 
     def _rebuild_contractual_rows(self) -> None:

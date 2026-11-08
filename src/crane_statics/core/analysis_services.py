@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from ..calculation.dynamic_factor import DynamicFactor, as_dynamic_factor
 from ..calculation.engine import CraneCalculator, get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
-from .analysis_cases import analysis_mode_by_name
+from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .demand_extraction import extract_connection_component_response
 from .lift_factor import LiftFactors, amplified_rope_hoist_id
 from .load_condition import scene_load_condition
@@ -125,6 +125,15 @@ class HoistStateService:
         doc = self._session.document
         if hoist is None or doc is None or doc.rules is None:
             return as_dynamic_factor(float(hoist.hook_daf) if hoist is not None else 1.0)
+        mode, angle, tackle_m = self._scene_hook_state(hoist)
+        return (
+            self._scene_lift(doc)
+            .setup(scene_load_condition(doc), hoist.id, mode, angle, tackle_length_m=tackle_m)
+            .factor
+        )
+
+    def _scene_lift(self, doc: CraneDocument) -> LiftFactors:
+        """The Scene's ``LiftFactors``, rebuilt whenever the document changes."""
         # Every input of the factor, the contractual (rated) loads included.
         key = (id(doc), hashlib.sha256(doc.model_dump_json().encode("utf-8")).hexdigest())
         if self._lift is None or self._lift_key != key:
@@ -132,14 +141,29 @@ class HoistStateService:
             calc = CraneCalculator(doc)
             self._lift = LiftFactors(doc, calc, max_entries=_SCENE_LIFT_ENTRIES)
             self._lift_key = key
+        return self._lift
+
+    def _scene_hook_state(self, hoist: Hoist) -> tuple[HoistAnalysisMode, float, Optional[float]]:
+        """(mode, boom angle, tackle length) of ``hoist`` in the Scene."""
         state = self._session.hoist_states.get(hoist.id)
         split = bool(state is not None and state.split_mode_active)
         mode = analysis_mode_by_name(hoist, "split" if split else "normal")
         angle = float(state.scene_state.boom_angle_deg) if state is not None else 0.0
         tackle_m = float(state.scene_state.tackle_length_m) if state is not None else None
-        return self._lift.setup(
-            scene_load_condition(doc), hoist.id, mode, angle, tackle_length_m=tackle_m
-        ).factor
+        return mode, angle, tackle_m
+
+    def suspended_rope_mass_t(self, hoist_id: str) -> float:
+        """The suspended rope the Scene factor of ``hoist_id`` amplifies, in t (legacy: 0).
+
+        The same mass ``dynamic_factor`` passes to the profile (``LiftFactors``), at the
+        Scene's boom angle, tackle length and hook mode.
+        """
+        doc = self._session.document
+        hoist = self._session.payload_hoist_by_id(hoist_id)
+        if doc is None or hoist is None or self.amplified_rope_hoist_id(hoist_id) is None:
+            return 0.0
+        mode, angle, tackle_m = self._scene_hook_state(hoist)
+        return self._scene_lift(doc).suspended_rope_mass_t(hoist.id, mode, angle, tackle_m)
 
     def hook_force_follows_scene_state(self) -> bool:
         """Whether a payload's hook force changes with the boom angle, hook position and mode.
@@ -373,6 +397,11 @@ class AnalysisCalculator:
                 None
                 if self._session.selected_hoist_id is None
                 else self._hoist.amplified_rope_hoist_id(self._session.selected_hoist_id)
+            ),
+            suspended_rope_mass_t=(
+                0.0
+                if self._session.selected_hoist_id is None
+                else self._hoist.suspended_rope_mass_t(self._session.selected_hoist_id)
             ),
             gravity_x_m_s2=motion.gravity_crane[0],
             gravity_z_m_s2=motion.gravity_crane[2],

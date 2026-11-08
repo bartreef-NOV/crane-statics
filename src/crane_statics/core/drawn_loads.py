@@ -19,7 +19,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Mapping, Optional, Sequence
 
-from ..calculation.rope_mass import RopeNodeMass, hook_segment_mass_t, rope_mass_at_nodes
+from ..calculation.rope_mass import RopeNodeMass, rope_mass_at_nodes
 from ..presentation.formatters import node_display_name
 
 # active_hoist_dict and rope_tension_channel are re-exported for the scene, presenter and scripts.
@@ -301,15 +301,6 @@ class _LoadBuilder:
             split_mode_active=self._c.split_mode_active,
         )
 
-    def suspended_rope_mass_t(self) -> float:
-        """The hook-segment rope carried in the hook load (rules documents), else 0 t."""
-        hoist_id = self._c.amplified_rope_hoist_id
-        if hoist_id is None:
-            return 0.0
-        return hook_segment_mass_t(
-            dict(self._doc), hoist_id, self._positions, effective_mult=self._effective_mult
-        )
-
     def rope_weight_node_masses(self) -> dict[str, RopeNodeMass]:
         """Rope self-weight lumped per node, filtered to the selected free body.
 
@@ -498,8 +489,9 @@ class _LoadBuilder:
 
         anchor = self._positions[anchor_id]
         label = f"Hook {hook_kN:.0f} kN"
-        rope_t = self.suspended_rope_mass_t()
-        if rope_t > 1e-9:
+        # The mass the dynamic factor amplified (``LoadConditions.suspended_rope_mass_t``).
+        rope_t = float(self._c.suspended_rope_mass_t)
+        if self._c.amplified_rope_hoist_id is not None and rope_t > 1e-9:
             # Rules: the falls below the sheave are amplified with the payload.
             label += f" (incl. suspended rope {rope_t:.1f} t)"
         vectors = [
