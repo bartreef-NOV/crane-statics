@@ -31,7 +31,7 @@ from pydantic import (
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
 AUTHORED_SCHEMA_MAJOR_VERSION = 11
-AUTHORED_SCHEMA_VERSION = "11.0.0"
+AUTHORED_SCHEMA_VERSION = "11.1.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -93,7 +93,7 @@ class AuthoredVesselMotion(BaseModel):
 
 class AuthoredEnvironment(BaseModel):
     """Environmental constants. Gravity and air density have defaults; the maximum
-    wind speed (constant over height) is required."""
+    wind speed (constant over height) is required unless the model has 'rules'."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -102,8 +102,39 @@ class AuthoredEnvironment(BaseModel):
         gt=0,
         description="Gravity magnitude in m/s²; the runtime uses it as negative Z gravity.",
     )
-    max_wind_speed_m_s: float = Field(gt=0, description="Positive maximum wind speed in m/s.")
+    max_wind_speed_m_s: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Positive maximum wind speed in m/s. Required without 'rules'; with "
+        "'rules' each condition carries its own wind speed and this must be omitted.",
+    )
     air_density_kg_m3: float = Field(default=DEFAULT_AIR_DENSITY_KG_M3, gt=0)
+
+
+class AuthoredRules(BaseModel):
+    """Classification-society rule set the crane is assessed against."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    standard: Literal["ABS", "DNV"]
+    crane_class: Optional[Literal["offshore", "heavy_lift"]] = None
+    cabin_above_slewing_bearing: bool = False
+
+
+class AuthoredCondition(BaseModel):
+    """One named in-service condition: lift type, wind, sea state and vessel motion."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lift: Literal["onboard", "offboard"] = "onboard"
+    wind_speed_m_s: float = Field(ge=0, description="Wind speed in m/s.")
+    vessel_motion: AuthoredVesselMotion = Field(default_factory=AuthoredVesselMotion)
+    significant_wave_height_m: Optional[float] = Field(default=None, ge=0)
+    v_in_m_s: Optional[float] = None
+    v_t_m_s: Optional[float] = None
+    load_wind_area_m2: float = Field(default=0.0, ge=0)
+    load_drag_coefficient: float = Field(default=1.0, gt=0)
+    hook_height_override_m: Optional[float] = None
 
 
 class AuthoredGlobalPosition2D(BaseModel):
@@ -361,7 +392,35 @@ class AuthoredLoadChartPoint(BaseModel):
     load_t: float = Field(ge=0, description="Permitted payload in tonnes.")
 
 
-class AuthoredBoomHoistRope(BaseModel):
+class AuthoredRopeStiffness(BaseModel):
+    """Optional axial stiffness: either ``ea_kN`` alone, or the elastic modulus and the
+    metallic area together (EA = modulus x area)."""
+
+    ea_kN: Optional[float] = Field(default=None, gt=0, description="Rope axial stiffness EA in kN.")
+    elastic_modulus_kN_mm2: Optional[float] = Field(
+        default=None, gt=0, description="Rope elastic modulus in kN/mm²."
+    )
+    metallic_area_mm2: Optional[float] = Field(
+        default=None, gt=0, description="Rope metallic cross-section area in mm²."
+    )
+
+    @model_validator(mode="after")
+    def _check_stiffness(self) -> "AuthoredRopeStiffness":
+        if self.ea_kN is not None and (
+            self.elastic_modulus_kN_mm2 is not None or self.metallic_area_mm2 is not None
+        ):
+            raise ValueError(
+                "ea_kN cannot be combined with elastic_modulus_kN_mm2 or metallic_area_mm2"
+            )
+        if (self.elastic_modulus_kN_mm2 is None) != (self.metallic_area_mm2 is None):
+            raise ValueError(
+                "elastic_modulus_kN_mm2 and metallic_area_mm2 must be given together "
+                "(or give ea_kN alone)"
+            )
+        return self
+
+
+class AuthoredBoomHoistRope(AuthoredRopeStiffness):
     model_config = ConfigDict(extra="forbid")
 
     linear_mass_kg_m: float = Field(default=0.0, ge=0)
@@ -387,7 +446,7 @@ class AuthoredBoomHoist(BaseModel):
         return self
 
 
-class AuthoredPayloadHoistRope(BaseModel):
+class AuthoredPayloadHoistRope(AuthoredRopeStiffness):
     model_config = ConfigDict(extra="forbid")
 
     linear_mass_kg_m: float = Field(default=0.0, ge=0)
@@ -446,6 +505,9 @@ class AuthoredPayloadHoist(BaseModel):
     daf: float = Field(ge=1, description="Hook dynamic amplification factor.")
     offlead_deg: float = Field(ge=0)
     sidelead_deg: float = Field(default=0.0, ge=0)
+    max_hoisting_speed_m_s: Optional[float] = Field(
+        default=None, gt=0, description="Maximum hoisting speed of the payload hoist in m/s."
+    )
     lowest_hook_height_m: Optional[float] = Field(
         default=None,
         description="Absolute global Z the hook must reach at this hoist's minimum outreach. "
@@ -515,7 +577,19 @@ class AuthoredModelDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     environment: AuthoredEnvironment
-    vessel_motion: AuthoredVesselMotion = Field(default_factory=AuthoredVesselMotion)
+    vessel_motion: AuthoredVesselMotion = Field(
+        default_factory=AuthoredVesselMotion,
+        description="Vessel motion limits. Must be omitted when 'rules' is present; each "
+        "condition then carries its own vessel_motion.",
+    )
+    rules: Optional[AuthoredRules] = Field(
+        default=None,
+        description="Classification rule set. Present if and only if 'conditions' is not empty.",
+    )
+    conditions: dict[IdName, AuthoredCondition] = Field(
+        default_factory=dict,
+        description="Named in-service conditions assessed under 'rules'.",
+    )
     structure: AuthoredStructure
     boom: AuthoredBoomBody = Field(
         default_factory=AuthoredBoomBody,
@@ -569,6 +643,27 @@ class AuthoredModelDefinition(BaseModel):
                     raise ValueError(f"{hoist_id}: {format_authored_validation_error(error)}")
             parsed[hoist_id] = hoist
         return parsed
+
+    @model_validator(mode="after")
+    def _check_rules_and_conditions(self) -> "AuthoredModelDefinition":
+        if self.rules is not None and not self.conditions:
+            raise ValueError("rules requires at least one entry in conditions")
+        if self.rules is None and self.conditions:
+            raise ValueError("conditions requires rules")
+        if self.rules is None:
+            if self.environment.max_wind_speed_m_s is None:
+                raise ValueError("environment.max_wind_speed_m_s is required without rules")
+            return self
+        if self.vessel_motion != AuthoredVesselMotion():
+            raise ValueError(
+                "vessel_motion must be omitted with rules; set vessel_motion per condition"
+            )
+        if self.environment.max_wind_speed_m_s is not None:
+            raise ValueError(
+                "environment.max_wind_speed_m_s must be omitted with rules; "
+                "set wind_speed_m_s per condition"
+            )
+        return self
 
     @model_validator(mode="after")
     def _check_hoist_prefixes_unique(self) -> "AuthoredModelDefinition":

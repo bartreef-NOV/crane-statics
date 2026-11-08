@@ -62,6 +62,48 @@
     "AuthoredBoomHoistRope": {
       "additionalProperties": false,
       "properties": {
+        "ea_kN": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rope axial stiffness EA in kN.",
+          "title": "Ea Kn"
+        },
+        "elastic_modulus_kN_mm2": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rope elastic modulus in kN/mm\u00b2.",
+          "title": "Elastic Modulus Kn Mm2"
+        },
+        "metallic_area_mm2": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rope metallic cross-section area in mm\u00b2.",
+          "title": "Metallic Area Mm2"
+        },
         "linear_mass_kg_m": {
           "default": 0.0,
           "minimum": 0,
@@ -149,9 +191,99 @@
       "title": "AuthoredBoomPosition3D",
       "type": "object"
     },
+    "AuthoredCondition": {
+      "additionalProperties": false,
+      "description": "One named in-service condition: lift type, wind, sea state and vessel motion.",
+      "properties": {
+        "lift": {
+          "default": "onboard",
+          "enum": [
+            "onboard",
+            "offboard"
+          ],
+          "title": "Lift",
+          "type": "string"
+        },
+        "wind_speed_m_s": {
+          "description": "Wind speed in m/s.",
+          "minimum": 0,
+          "title": "Wind Speed M S",
+          "type": "number"
+        },
+        "vessel_motion": {
+          "$ref": "#/$defs/AuthoredVesselMotion"
+        },
+        "significant_wave_height_m": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Significant Wave Height M"
+        },
+        "v_in_m_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "V In M S"
+        },
+        "v_t_m_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "V T M S"
+        },
+        "load_wind_area_m2": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Load Wind Area M2",
+          "type": "number"
+        },
+        "load_drag_coefficient": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Load Drag Coefficient",
+          "type": "number"
+        },
+        "hook_height_override_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hook Height Override M"
+        }
+      },
+      "required": [
+        "wind_speed_m_s"
+      ],
+      "title": "AuthoredCondition",
+      "type": "object"
+    },
     "AuthoredEnvironment": {
       "additionalProperties": false,
-      "description": "Environmental constants. Gravity and air density have defaults; the maximum\nwind speed (constant over height) is required.",
+      "description": "Environmental constants. Gravity and air density have defaults; the maximum\nwind speed (constant over height) is required unless the model has 'rules'.",
       "properties": {
         "gravity_m_s2": {
           "default": 9.81,
@@ -161,10 +293,18 @@
           "type": "number"
         },
         "max_wind_speed_m_s": {
-          "description": "Positive maximum wind speed in m/s.",
-          "exclusiveMinimum": 0,
-          "title": "Max Wind Speed M S",
-          "type": "number"
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Positive maximum wind speed in m/s. Required without 'rules'; with 'rules' each condition carries its own wind speed and this must be omitted.",
+          "title": "Max Wind Speed M S"
         },
         "air_density_kg_m3": {
           "default": 1.225,
@@ -173,9 +313,6 @@
           "type": "number"
         }
       },
-      "required": [
-        "max_wind_speed_m_s"
-      ],
       "title": "AuthoredEnvironment",
       "type": "object"
     },
@@ -438,7 +575,33 @@
           "$ref": "#/$defs/AuthoredEnvironment"
         },
         "vessel_motion": {
-          "$ref": "#/$defs/AuthoredVesselMotion"
+          "$ref": "#/$defs/AuthoredVesselMotion",
+          "description": "Vessel motion limits. Must be omitted when 'rules' is present; each condition then carries its own vessel_motion."
+        },
+        "rules": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuthoredRules"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Classification rule set. Present if and only if 'conditions' is not empty."
+        },
+        "conditions": {
+          "description": "Named in-service conditions assessed under 'rules'.",
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9_-]*$": {
+              "$ref": "#/$defs/AuthoredCondition"
+            }
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Conditions",
+          "type": "object"
         },
         "structure": {
           "$ref": "#/$defs/AuthoredStructure"
@@ -593,6 +756,20 @@
           "title": "Sidelead Deg",
           "type": "number"
         },
+        "max_hoisting_speed_m_s": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Maximum hoisting speed of the payload hoist in m/s.",
+          "title": "Max Hoisting Speed M S"
+        },
         "lowest_hook_height_m": {
           "anyOf": [
             {
@@ -640,6 +817,48 @@
     "AuthoredPayloadHoistRope": {
       "additionalProperties": false,
       "properties": {
+        "ea_kN": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rope axial stiffness EA in kN.",
+          "title": "Ea Kn"
+        },
+        "elastic_modulus_kN_mm2": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rope elastic modulus in kN/mm\u00b2.",
+          "title": "Elastic Modulus Kn Mm2"
+        },
+        "metallic_area_mm2": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rope metallic cross-section area in mm\u00b2.",
+          "title": "Metallic Area Mm2"
+        },
         "linear_mass_kg_m": {
           "default": 0.0,
           "minimum": 0,
@@ -781,6 +1000,46 @@
         "node"
       ],
       "title": "AuthoredReevingEntry",
+      "type": "object"
+    },
+    "AuthoredRules": {
+      "additionalProperties": false,
+      "description": "Classification-society rule set the crane is assessed against.",
+      "properties": {
+        "standard": {
+          "enum": [
+            "ABS",
+            "DNV"
+          ],
+          "title": "Standard",
+          "type": "string"
+        },
+        "crane_class": {
+          "anyOf": [
+            {
+              "enum": [
+                "offshore",
+                "heavy_lift"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Crane Class"
+        },
+        "cabin_above_slewing_bearing": {
+          "default": false,
+          "title": "Cabin Above Slewing Bearing",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "standard"
+      ],
+      "title": "AuthoredRules",
       "type": "object"
     },
     "AuthoredSchemaBlock": {
@@ -1116,7 +1375,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "11.0.0"
+        "version": "11.1.0"
       }
     }
   ],

@@ -190,6 +190,14 @@ def _resolve_support_node_id(hoist: dict[str, Any], hoist_key: str, hoist_path: 
     return matches[0]
 
 
+_ROPE_STIFFNESS_KEYS = ("ea_kN", "elastic_modulus_kN_mm2", "metallic_area_mm2")
+
+
+def _rope_stiffness(rope_src: dict[str, Any]) -> dict[str, float]:
+    """The authored rope stiffness keys that are set (empty for legacy documents)."""
+    return {key: float(rope_src[key]) for key in _ROPE_STIFFNESS_KEYS if rope_src.get(key)}
+
+
 def _normalize_payload_hoist(
     hoist_key: str,
     hoist: dict[str, Any],
@@ -246,6 +254,7 @@ def _normalize_payload_hoist(
         "tension_mode": "fixed",
         "segments": segs,
         "linear_mass_kg_m": float(rope_src["linear_mass_kg_m"]),
+        **_rope_stiffness(rope_src),
     }
 
     normal_curve = _normalize_contractual_curve_points(
@@ -291,6 +300,11 @@ def _normalize_payload_hoist(
         "contractual_curve": normal_curve,
         "split_contractual_points": split_curve,
         "linear_mass_kg_m": float(rope_src["linear_mass_kg_m"]),
+        **(
+            {"max_hoisting_speed_m_s": float(hoist["max_hoisting_speed_m_s"])}
+            if hoist.get("max_hoisting_speed_m_s") is not None
+            else {}
+        ),
         # Unauthored lowest hook height defaults to the crane-frame origin (z = 0).
         "lowest_hook_height_m": (
             float(hoist["lowest_hook_height_m"])
@@ -311,6 +325,7 @@ def _normalize_boom_hoist(
         "tension_mode": "solve",
         "segments": boom_segments,
         "linear_mass_kg_m": float(rope_src["linear_mass_kg_m"]),
+        **_rope_stiffness(rope_src),
     }
     hoist_norm = {
         "rope_id": runtime_rope_id,
@@ -496,7 +511,10 @@ def _runtime_ropes(ropes_norm: dict[str, Any], node_ids: set[str]) -> list[dict[
         if not isinstance(rope, dict):
             raise ValueError(f"rope {rope_id} must be an object")
         _require_object_keys(
-            rope, {"tension_mode", "segments"}, {"linear_mass_kg_m"}, f"rope[{rope_id}]"
+            rope,
+            {"tension_mode", "segments"},
+            {"linear_mass_kg_m", *_ROPE_STIFFNESS_KEYS},
+            f"rope[{rope_id}]",
         )
         segs = rope["segments"]
         if not isinstance(segs, list):
@@ -532,6 +550,7 @@ def _runtime_ropes(ropes_norm: dict[str, Any], node_ids: set[str]) -> list[dict[
                 "segments": segments,
                 "tension_mode": "solve" if tension_mode == "solve" else None,
                 "linear_mass_kg_m": float(rope.get("linear_mass_kg_m", 0.0)),
+                **_rope_stiffness(rope),
             }
         )
     return ropes
@@ -580,6 +599,7 @@ def _runtime_hoists(
                 "linear_mass_kg_m",
                 "lowest_hook_height_m",
                 "rope_length_m",
+                "max_hoisting_speed_m_s",
             },
             f"hoist[{hoist_id}]",
         )
@@ -652,6 +672,11 @@ def _runtime_hoists(
                     if hoist.get("rope_length_m") is not None
                     else None
                 ),
+                "max_hoisting_speed_m_s": (
+                    float(hoist["max_hoisting_speed_m_s"])
+                    if hoist.get("max_hoisting_speed_m_s") is not None
+                    else None
+                ),
             }
         )
     return hoists
@@ -662,7 +687,12 @@ def _runtime_environment(
 ) -> dict[str, Any]:
     return {
         "gravity_m_s2": -abs(float(environment_src.get("gravity_m_s2", DEFAULT_GRAVITY_M_S2))),
-        "max_wind_speed_m_s": abs(float(environment_src["max_wind_speed_m_s"])),
+        # With rules each condition carries its own wind speed; keep the runtime default.
+        **(
+            {"max_wind_speed_m_s": abs(float(environment_src["max_wind_speed_m_s"]))}
+            if environment_src.get("max_wind_speed_m_s") is not None
+            else {}
+        ),
         "air_density_kg_m3": float(
             environment_src.get("air_density_kg_m3", DEFAULT_AIR_DENSITY_KG_M3)
         ),
@@ -670,6 +700,20 @@ def _runtime_environment(
             key: float(vessel_motion_src.get(key, default))
             for key, default in DEFAULT_VESSEL_MOTION.items()
         },
+    }
+
+
+def _runtime_conditions(conditions_src: dict[str, Any]) -> dict[str, Any]:
+    return {
+        str(name): {
+            "name": str(name),
+            **{key: value for key, value in condition.items() if key != "vessel_motion"},
+            "vessel_motion": {
+                key: float(condition["vessel_motion"].get(key, default))
+                for key, default in DEFAULT_VESSEL_MOTION.items()
+            },
+        }
+        for name, condition in conditions_src.items()
     }
 
 
@@ -809,6 +853,8 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         "nodes": nodes,
         "ropes": ropes,
         "hoists": hoists,
+        "rules": md.get("rules"),
+        "conditions": _runtime_conditions(md.get("conditions") or {}),
     }
 
 

@@ -1232,7 +1232,7 @@ class TestAuthoredSchemaPolicy:
 
         saved = yaml.safe_load(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "11.0.0"
+        assert saved["schema"]["version"] == "11.1.0"
         assert "model_definition" in saved
         assert "ropes" not in saved["model_definition"]
         assert "nodes" not in saved["model_definition"]

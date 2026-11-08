@@ -89,6 +89,44 @@ def _authored_reeving(
     return reeving
 
 
+_ROPE_STIFFNESS_KEYS = ("ea_kN", "elastic_modulus_kN_mm2", "metallic_area_mm2")
+
+
+def _authored_rules(data: dict[str, Any]) -> dict[str, Any]:
+    """The rules and conditions blocks; empty for documents without rules."""
+    rules = data.get("rules")
+    if not rules:
+        return {}
+    rules_out: dict[str, Any] = {"standard": rules["standard"]}
+    if rules.get("crane_class") is not None:
+        rules_out["crane_class"] = rules["crane_class"]
+    if rules.get("cabin_above_slewing_bearing"):
+        rules_out["cabin_above_slewing_bearing"] = True
+    conditions_out: dict[str, Any] = {}
+    for name, cond in (data.get("conditions") or {}).items():
+        item: dict[str, Any] = {}
+        if cond.get("lift", "onboard") != "onboard":
+            item["lift"] = cond["lift"]
+        item["wind_speed_m_s"] = float(cond["wind_speed_m_s"])
+        motion = {
+            key: float((cond.get("vessel_motion") or {}).get(key, 0.0))
+            for key in DEFAULT_VESSEL_MOTION
+        }
+        if any(motion.values()):
+            item["vessel_motion"] = motion
+        for key in ("significant_wave_height_m", "v_in_m_s", "v_t_m_s"):
+            if cond.get(key) is not None:
+                item[key] = float(cond[key])
+        if cond.get("load_wind_area_m2"):
+            item["load_wind_area_m2"] = float(cond["load_wind_area_m2"])
+        if cond.get("load_drag_coefficient", 1.0) != 1.0:
+            item["load_drag_coefficient"] = float(cond["load_drag_coefficient"])
+        if cond.get("hook_height_override_m") is not None:
+            item["hook_height_override_m"] = float(cond["hook_height_override_m"])
+        conditions_out[str(name)] = item
+    return {"rules": rules_out, "conditions": conditions_out}
+
+
 def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
     """
     Convert a normalized runtime document back to authored form for saving.
@@ -157,6 +195,7 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
             "tension_mode": "solve" if rope.get("tension_mode") == "solve" else "fixed",
             "segments": segments,
             "linear_mass_kg_m": float(rope.get("linear_mass_kg_m", 0.0)),
+            **{key: float(rope[key]) for key in _ROPE_STIFFNESS_KEYS if rope.get(key)},
         }
 
     ropes_by_id = dict(authored_ropes)
@@ -270,6 +309,7 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
                 rope_out["linear_mass_kg_m"] = linear_mass
             if hoist.get("rope_length_m") is not None:
                 rope_out["length_m"] = float(hoist["rope_length_m"])
+            rope_out.update({key: rope[key] for key in _ROPE_STIFFNESS_KEYS if rope.get(key)})
             authored_boom_hoist = {
                 **({"rope": rope_out} if rope_out else {}),
                 "reeving": reeving,
@@ -307,6 +347,7 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         linear_mass = float(rope.get("linear_mass_kg_m", 0.0))
         if linear_mass > 0.0:
             rope_out["linear_mass_kg_m"] = linear_mass
+        rope_out.update({key: rope[key] for key in _ROPE_STIFFNESS_KEYS if rope.get(key)})
         # rope_length_m and hook_travel are derived from lowest_hook_height_m,
         # so they are deliberately not written back out.
         if rope_out:
@@ -326,6 +367,8 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         hoist_out["offlead_deg"] = hook_offlead
         if hook_sidelead:
             hoist_out["sidelead_deg"] = hook_sidelead
+        if hoist.get("max_hoisting_speed_m_s") is not None:
+            hoist_out["max_hoisting_speed_m_s"] = float(hoist["max_hoisting_speed_m_s"])
         hoist_out["lowest_hook_height_m"] = float(hoist.get("lowest_hook_height_m") or 0.0)
         hoist_out["load_chart"] = _chart(hoist.get("contractual_points", []))
         if bool(hoist.get("splitable_block", False)):
@@ -366,12 +409,19 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         "environment": {
             "gravity_m_s2": abs(float(env.get("gravity_m_s2", -DEFAULT_GRAVITY_M_S2))),
             "air_density_kg_m3": float(env.get("air_density_kg_m3", DEFAULT_AIR_DENSITY_KG_M3)),
-            "max_wind_speed_m_s": float(env.get("max_wind_speed_m_s", 20.0)),
         },
     }
-    vessel_motion_out = {key: float(vm.get(key, 0.0)) for key in DEFAULT_VESSEL_MOTION}
-    if any(vessel_motion_out.values()):
-        model_definition["vessel_motion"] = vessel_motion_out
+    rules_out = _authored_rules(data)
+    if rules_out:
+        # Each condition carries its own wind speed and vessel motion.
+        model_definition.update(rules_out)
+    else:
+        model_definition["environment"]["max_wind_speed_m_s"] = float(
+            env.get("max_wind_speed_m_s", 20.0)
+        )
+        vessel_motion_out = {key: float(vm.get(key, 0.0)) for key in DEFAULT_VESSEL_MOTION}
+        if any(vessel_motion_out.values()):
+            model_definition["vessel_motion"] = vessel_motion_out
     model_definition["structure"] = structure_out
     for body_id in CANONICAL_BODIES:
         section = {

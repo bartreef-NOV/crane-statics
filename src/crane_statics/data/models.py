@@ -5,7 +5,7 @@ according to the handoff data contract. Normalization lives in ``data.normalize`
 and the runtime-to-authored conversion in ``data.authored_form``.
 """
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .authored_models import DEFAULT_AIR_DENSITY_KG_M3, DEFAULT_GRAVITY_M_S2
@@ -175,6 +175,24 @@ class Rope(BaseModel):
         default=None, description="'solve' for boom-hoist solve mode"
     )
     linear_mass_kg_m: float = Field(default=0.0, ge=0.0, description="Rope linear mass in kg/m")
+    ea_kN: Optional[float] = Field(
+        default=None, gt=0.0, description="Axial stiffness EA in kN, as authored"
+    )
+    elastic_modulus_kN_mm2: Optional[float] = Field(
+        default=None, gt=0.0, description="Elastic modulus in kN/mm², as authored"
+    )
+    metallic_area_mm2: Optional[float] = Field(
+        default=None, gt=0.0, description="Metallic cross-section area in mm², as authored"
+    )
+
+    @property
+    def axial_stiffness_kN(self) -> Optional[float]:
+        """Axial stiffness EA in kN: ``ea_kN``, else modulus x area, else unknown."""
+        if self.ea_kN is not None:
+            return self.ea_kN
+        if self.elastic_modulus_kN_mm2 is not None and self.metallic_area_mm2 is not None:
+            return self.elastic_modulus_kN_mm2 * self.metallic_area_mm2
+        return None
 
 
 class ContractualPoint(BaseModel):
@@ -225,6 +243,9 @@ class Hoist(BaseModel):
         "z = 0 when unauthored",
     )
     contractual_points: list[ContractualPoint] = Field(default_factory=list)
+    max_hoisting_speed_m_s: Optional[float] = Field(
+        default=None, gt=0.0, description="Maximum hoisting speed in m/s"
+    )
     linear_mass_kg_m: float = Field(default=0.0, ge=0.0, description="Rope linear mass in kg/m")
     rope_length_m: Optional[float] = Field(
         default=None,
@@ -316,6 +337,29 @@ class SavedLimit(BaseModel):
     enabled: bool = True
 
 
+class RulesSpec(BaseModel):
+    """Classification rule set the crane is assessed against."""
+
+    standard: Literal["ABS", "DNV"]
+    crane_class: Optional[Literal["offshore", "heavy_lift"]] = None
+    cabin_above_slewing_bearing: bool = False
+
+
+class ConditionSpec(BaseModel):
+    """One named in-service condition under the document's rules."""
+
+    name: str
+    lift: Literal["onboard", "offboard"] = "onboard"
+    wind_speed_m_s: float = Field(ge=0.0)
+    vessel_motion: VesselMotion = Field(default_factory=VesselMotion)
+    significant_wave_height_m: Optional[float] = Field(default=None, ge=0.0)
+    v_in_m_s: Optional[float] = None
+    v_t_m_s: Optional[float] = None
+    load_wind_area_m2: float = Field(default=0.0, ge=0.0)
+    load_drag_coefficient: float = Field(default=1.0, gt=0.0)
+    hook_height_override_m: Optional[float] = None
+
+
 class CraneDocument(BaseModel):
     """Root crane model document."""
 
@@ -332,6 +376,12 @@ class CraneDocument(BaseModel):
         default_factory=dict,
         description="Design limits as authored: those differing from the default catalog. "
         "Read once when a session starts; the session's own limits are what is analysed",
+    )
+    rules: Optional[RulesSpec] = Field(
+        default=None, description="Rule set; present iff conditions is non-empty"
+    )
+    conditions: dict[str, ConditionSpec] = Field(
+        default_factory=dict, description="Named conditions assessed under rules, as authored"
     )
     connections: Optional[list[dict[str, Any]]] = Field(
         default=None, description="Runtime-generated only"
