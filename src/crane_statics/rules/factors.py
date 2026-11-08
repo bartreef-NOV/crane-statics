@@ -13,14 +13,11 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from ..calculation.dynamic_factor import ConstantDynamicFactor, DynamicFactor
+from ..calculation.dynamic_factor import DynamicFactor
 
 #: ABS 2-2/9.3.1 onboard VAF: ``1.373 - LL / 5220 + a_v`` (LL in kN).
 _ABS_INTERCEPT = 1.373
 _ABS_LL_SCALE_KN = 5220.0
-
-#: A fixed override is just the constant factor.
-OverrideFactor = ConstantDynamicFactor
 
 
 def _amplified_kN(payload_t: float, hook_mass_t: float, extra_mass_t: float, g: float) -> float:

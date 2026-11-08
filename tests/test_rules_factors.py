@@ -9,7 +9,6 @@ from crane_statics.rules.factors import (
     AbsOnboardFactor,
     LinearFactor,
     MaxFactor,
-    OverrideFactor,
     RelativeVelocityFactor,
 )
 from crane_statics.rules.types import ProvenanceRecord
@@ -29,7 +28,7 @@ def _all_factors():
         RelativeVelocityFactor(5000.0, 1.3, extra_mass_t=1.5),
         MaxFactor((LinearFactor(1.26), RelativeVelocityFactor(5000.0, 1.3))),
         MaxFactor((AbsOnboardFactor(0.1), RelativeVelocityFactor(2000.0, 0.8))),
-        OverrideFactor(1.2),
+        ConstantDynamicFactor(1.2),
     ]
 
 
@@ -103,13 +102,9 @@ def test_extra_mass_adds_extra_psi_g():
 
 @pytest.mark.parametrize("factor", _all_factors())
 def test_payload_clamped_when_force_below_hook_only(factor):
-    if isinstance(factor, OverrideFactor):
+    if isinstance(factor, ConstantDynamicFactor):
         pytest.skip("constant factor is intentionally unfloored")
     assert factor.payload_t(0.0, 5.0, G) == 0.0
-
-
-def test_override_is_constant_factor():
-    assert OverrideFactor is ConstantDynamicFactor
 
 
 def test_provenance_record():

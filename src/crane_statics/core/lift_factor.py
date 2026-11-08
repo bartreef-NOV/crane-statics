@@ -56,8 +56,6 @@ _NEUTRAL_LATERAL = LateralSpec(
 PLATFORM_BASE = "platform_base"
 #: Its retaining-component copy (ABS 2-2/5.13.5(c) 3.75 x live load).
 RETAINING_ENTITY = PLATFORM_BASE + RETAINING_SUFFIX
-#: Reported name of the retaining-component rows and limits.
-RETAINING_LABEL = "Retaining"
 
 
 def _hoist(doc: CraneDocument, hoist_id: str) -> Hoist:

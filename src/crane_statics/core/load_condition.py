@@ -99,22 +99,6 @@ def condition_cases(doc: CraneDocument, condition_name: Optional[str]) -> tuple[
     return _cases_of(doc, spec)
 
 
-def scene_load_condition(doc: CraneDocument) -> LoadCondition:
-    """The condition the Scene starts at: legacy default, else the first condition as authored.
-
-    On a rules document the authored values (not a profile case) are shown; ``case`` None.
-    """
-    if doc.rules is None or not doc.conditions:
-        return default_load_condition(doc)
-    spec = next(iter(doc.conditions.values()))
-    return LoadCondition(
-        name=spec.name,
-        wind_speed_m_s=float(spec.wind_speed_m_s),
-        vessel_motion=spec.vessel_motion,
-        spec=spec,
-    )
-
-
 def scene_case(
     doc: CraneDocument, condition_name: Optional[str], case_name: Optional[str] = None
 ) -> LoadCondition:

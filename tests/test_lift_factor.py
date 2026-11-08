@@ -16,7 +16,7 @@ from crane_statics.core.analysis_services import HoistStateService
 from crane_statics.core.governing_case import governing_case
 from crane_statics.core.lift_factor import LiftFactors, factor_for_point
 from crane_statics.core.limit_auto_set import _evaluate_contractual_points
-from crane_statics.core.load_condition import condition_cases, scene_load_condition
+from crane_statics.core.load_condition import condition_cases
 from crane_statics.core.session_model import SessionModel
 from crane_statics.core.sweep import run_mode_sweep
 from crane_statics.data.models import ConditionSpec, CraneDocument, VesselMotion
@@ -293,10 +293,10 @@ def test_scene_conversions_use_the_scene_condition_factor() -> None:
     angle = float(scene.boom_angle_deg)
     mode = analysis_mode_by_name(next(h for h in doc.hoists if h.id == HOIST), "normal")
     expected = factor_for_point(
-        doc, scene_load_condition(doc), HOIST, mode, _point(doc, angle), angle, tackle_length_m=40.0
+        doc, session.scene_condition(), HOIST, mode, _point(doc, angle), angle, tackle_length_m=40.0
     ).factor
     at_sheave = factor_for_point(
-        doc, scene_load_condition(doc), HOIST, mode, _point(doc, angle), angle, tackle_length_m=0.0
+        doc, session.scene_condition(), HOIST, mode, _point(doc, angle), angle, tackle_length_m=0.0
     ).factor
     assert expected != at_sheave  # the 40 m of falls (7.3 t) are in the live load
     assert service.payload_t_to_hook_force_kN(300.0, HOIST) == pytest.approx(

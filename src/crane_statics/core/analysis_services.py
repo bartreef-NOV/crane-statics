@@ -189,7 +189,7 @@ class HoistStateService:
         """The factor the Scene converts payload and hook force with, for ``hoist``.
 
         Legacy: the authored ``hook_daf`` (1.0 without a hoist). On a rules document, the
-        profile's factor under the Scene's condition (``scene_load_condition``) at the
+        profile's factor under the Scene's case (``SessionModel.scene_condition``) at the
         hoist's current boom angle, hook position (tackle length) and hook mode, as the
         chart computes it there; it counts the rope hanging at that hook (``extra_mass_t``).
         """

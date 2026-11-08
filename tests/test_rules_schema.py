@@ -215,3 +215,15 @@ def test_rules_error_surfaces_through_load(tmp_path):
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     with pytest.raises(DocumentIOError, match="conditions"):
         load_document(path)
+
+
+@pytest.mark.parametrize("example", RULES_EXAMPLES, ids=lambda p: p.stem)
+def test_rules_examples_are_as_save_document_writes_them(example, tmp_path):
+    """Each example is what saving it writes (line endings aside: git normalises them)."""
+    target = tmp_path / example.name
+    save_document(load_document(example), target)
+
+    def norm(data: bytes) -> bytes:
+        return data.replace(b"\r\n", b"\n")
+
+    assert norm(target.read_bytes()) == norm(example.read_bytes())
