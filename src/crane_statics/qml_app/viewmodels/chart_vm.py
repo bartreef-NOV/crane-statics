@@ -104,22 +104,47 @@ def _contractual_row(cp: Any, allowable: str, status: str) -> dict[str, str]:
 
 
 # The columns a rules chart's CSV adds to series, outreach_m, load_t.
-_TRAIL_COLUMNS = ("condition", "factor", "clause", "source", "warnings")
+_TRAIL_COLUMNS = (
+    "condition",
+    "case",
+    "factor",
+    "unit",
+    "inputs",
+    "formula",
+    "clause",
+    "source",
+    "warnings",
+)
 
 
 def _trail_rows(condition: str, trail: Optional[tuple]) -> list[list[str]]:
     """The clause-trail cells of one capacity row: one row per provenance record.
 
-    ``factor`` is ``quantity=value`` of the record, ``source`` its ``computed`` or
-    ``override`` (a manual ``hook_daf`` replacing the standard's factor). The point's
+    ``case`` is the governing case, ``factor`` is ``quantity=value`` of the record with its
+    ``unit``, ``inputs`` its inputs as ``name=value; name=value`` in the record's order,
+    ``source`` its ``computed`` or ``override`` (a manual ``hook_daf`` replacing the
+    standard's factor). The point's
     warnings, joined by `` | ``, repeat on each of its rows so any row filters alone. A
     point without a trail still gets one row, with the condition only.
     """
     if trail is None or not trail[0]:
-        return [[condition, "", "", "", ""]]
-    records, warnings = trail
+        return [[condition] + [""] * (len(_TRAIL_COLUMNS) - 1)]
+    records, warnings, case = trail
     joined = " | ".join(warnings)
-    return [[condition, f"{r.quantity}={r.value:.6g}", r.clause, r.source, joined] for r in records]
+    return [
+        [
+            condition,
+            case,
+            f"{r.quantity}={r.value:.6g}",
+            r.unit,
+            "; ".join(f"{k}={float(v):.6g}" for k, v in r.inputs.items()),
+            r.formula,
+            r.clause,
+            r.source,
+            joined,
+        ]
+        for r in records
+    ]
 
 
 class _SweepWorker(QThread):
@@ -338,7 +363,7 @@ class ChartViewModel(QObject):
 
         self._curve_points: list[list[float]] = []
         # The clause trail of the rendered capacity curve and its condition (rules only).
-        self._provenance: list[tuple[float, tuple, tuple]] = []
+        self._provenance: list[tuple[float, tuple, tuple, str]] = []
         self._condition_name = ""
         self._limit_series: list[dict[str, Any]] = []
         self._markers: list[dict[str, Any]] = []
@@ -1361,7 +1386,8 @@ class ChartViewModel(QObject):
                     ["series", "outreach_m", "load_t", *(_TRAIL_COLUMNS if trail else ())]
                 )
                 by_outreach = {
-                    round(float(x), 10): (rec, warn) for x, rec, warn in self._provenance
+                    round(float(x), 10): (rec, warn, case)
+                    for x, rec, warn, case in self._provenance
                 }
                 for x, y in self._curve_points:
                     head = ["capacity", f"{x:.4f}", f"{y:.4f}"]

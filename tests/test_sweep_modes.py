@@ -307,7 +307,8 @@ def test_rules_payload_carries_the_records_of_every_curve_point() -> None:
     assert payload["condition"] == "gale"
     prov = payload["provenance"]
     assert [p[0] for p in prov] == [x for x, _y in payload["curve_data"]]
-    for _outreach, records, warnings in prov:
+    for _outreach, records, warnings, case_name in prov:
+        assert case_name == "In-service"
         assert isinstance(records, tuple) and isinstance(warnings, tuple)
         factor = [r for r in records if r.quantity == "dynamic_factor"]
         # GT283 authors a non-default hook_daf, so the computed factor is followed by its override.
@@ -330,7 +331,7 @@ def test_rules_records_are_the_setup_the_capacity_was_computed_with() -> None:
         doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
     )
     assert payload is not None
-    outreach, records, warnings = payload["provenance"][len(payload["provenance"]) // 2]
+    outreach, records, warnings, _case = payload["provenance"][len(payload["provenance"]) // 2]
     (case,) = condition_cases(doc, "gale")
     hoist = next(h for h in doc.hoists if h.id == HOIST)
     mode = analysis_mode_by_name(hoist, "normal")
@@ -352,13 +353,47 @@ def test_rules_records_are_the_setup_the_capacity_was_computed_with() -> None:
     assert warnings == setup.warnings
 
 
-def test_dnv_provenance_is_the_governing_cases() -> None:
+def _case_setup(doc: CraneDocument, case, outreach: float):
+    """The LiftSetup of ``case`` at ``outreach``, built directly (not through the sweep)."""
+    from crane_statics.calculation.engine import CraneCalculator
+    from crane_statics.calculation.solver.kinematics import KinematicsAdapter
+    from crane_statics.core.analysis_cases import analysis_mode_by_name
+    from crane_statics.core.chart_envelope import build_probes
+    from crane_statics.core.lift_factor import LiftFactors, amplified_rope_hoist_id
+    from crane_statics.core.load_condition import condition_document
+
+    hoist = next(h for h in doc.hoists if h.id == HOIST)
+    mode = analysis_mode_by_name(hoist, "normal")
+    angle = KinematicsAdapter(doc.model_dump()).outreach_to_angle(outreach, HOIST)
+    assert angle is not None
+    calc = CraneCalculator(condition_document(doc, case))
+    probes = build_probes(
+        calc,
+        HOIST,
+        angle,
+        case.wind_speed_m_s,
+        mode.runtime_overrides,
+        vessel=case.vessel_motion,
+        amplified_rope_hoist_id=amplified_rope_hoist_id(case, HOIST),
+    )
+    assert probes is not None
+    return LiftFactors(doc, calc).setup(case, HOIST, mode, angle, probes.zero)
+
+
+def test_dnv_provenance_is_the_lowest_payload_cases_own_setup() -> None:
     doc = _rules_doc("DNV", gale(wind=30.0), gale("calm", wind=5.0))
     payload = run_mode_sweep(
         doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
     )
     assert payload is not None and payload["provenance"]
-    assert all(records for _x, records, _w in payload["provenance"])
+    case_i, case_ii = condition_cases(doc, "gale")
+    per_case = [_legacy_curve(doc, c.wind_speed_m_s, c.vessel_motion) for c in (case_i, case_ii)]
+    for outreach, records, warnings, case_name in payload["provenance"]:
+        loads = [curve[outreach] for curve in per_case]
+        governing = (case_i, case_ii)[loads.index(min(loads))]
+        assert governing.case is not None and case_name == governing.case.name
+        setup = _case_setup(doc, governing, outreach)
+        assert records == setup.records and warnings == setup.warnings
 
 
 def test_manual_daf_is_recorded_as_an_override() -> None:
@@ -369,7 +404,7 @@ def test_manual_daf_is_recorded_as_an_override() -> None:
         doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
     )
     assert payload is not None and payload["provenance"]
-    for _x, records, _w in payload["provenance"]:
+    for _x, records, _w, _c in payload["provenance"]:
         sources = [r.source for r in records if r.quantity == "dynamic_factor"]
         assert sources == ["computed", "override"]
 

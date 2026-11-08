@@ -28,8 +28,8 @@ class SweepCancelled(Exception):
     """Raised when a capacity sweep is asked to stop cooperatively."""
 
 
-# (records, warnings) of one lift setup: the clause trail of a chart point.
-_Trail = tuple[tuple[ProvenanceRecord, ...], tuple[str, ...]]
+# (records, warnings, case name) of one lift setup: the clause trail of a chart point.
+_Trail = tuple[tuple[ProvenanceRecord, ...], tuple[str, ...], str]
 
 
 class _SweepCase(NamedTuple):
@@ -185,9 +185,10 @@ def run_mode_sweep(
     solves and per-limit results, so a re-sweep only evaluates what changed; the payload
     is the same with or without it.
     The payload's ``provenance`` is, for a rules condition, one ``(outreach, records,
-    warnings)`` per ``curve_data`` point: the ``LiftSetup.records``/``warnings`` of the case
+    warnings, case)`` per ``curve_data`` point: the ``LiftSetup.records``/``warnings`` of the case
     that set that point's capacity (the one of lowest payload; the first on a tie), the very
-    setup its capacity was computed with. It is ``[]`` for a legacy document, whose factor
+    setup its capacity was computed with; ``case`` is that case's profile name (ABS
+    "In-service", DNV "Case I"/"Case II"). It is ``[]`` for a legacy document, whose factor
     is the authored constant. ``condition`` is the swept condition's name.
     ``on_contractual`` receives a copy of the contractual results once, right after stage 1
     (not when the mode has no contractual points). ``on_limit_points`` receives, with each
@@ -325,7 +326,12 @@ def run_mode_sweep(
             load_t = _capacity(
                 case, probes, enabled_limits, mode.hook_mass_t, factor, lateral, scales
             ).max_allowable_load_t
-        trails[case.condition.name] = (setup.records, setup.warnings)
+        case_spec = case.condition.case
+        trails[case.condition.name] = (
+            setup.records,
+            setup.warnings,
+            case_spec.name if case_spec is not None else case.condition.name,
+        )
         return load_t, results
 
     # Stage 2 revisits the contractual outreaches of stage 1; their solves are reused.

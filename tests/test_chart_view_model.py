@@ -403,19 +403,17 @@ class TestClauseTrailExport:
         vm.drawBlocking()
         return vm
 
-    def test_legacy_export_is_byte_identical_to_the_three_column_format(self, chart_vm, tmp_path):
+    def test_legacy_export_is_byte_identical_to_the_pre_change_export(self, chart_vm, tmp_path):
+        # Golden file: the export of this document at commit 6bf2331 (before the clause
+        # trail existed), not derived from the current code.
         chart_vm.drawBlocking()
         target, _rows = self._export(chart_vm, tmp_path)
-        expected = ["series,outreach_m,load_t"]
-        expected += [f"capacity,{x:.4f},{y:.4f}" for x, y in chart_vm.curvePoints]
-        for series in chart_vm.limitSeries:
-            expected += [f"{series['label']},{x:.4f},{y:.4f}" for x, y in series["points"]]
-        expected += [
-            f"contractual ({m['status']}),{m['outreach']:.4f},{m['load']:.4f}"
-            for m in chart_vm.markers
-        ]
-        text = "\r\n".join(expected) + "\r\n"
-        assert target.read_bytes() == text.encode("utf-8")
+        golden = Path(__file__).parent / "data" / "legacy_chart_export.csv"
+
+        def norm(data: bytes) -> bytes:
+            return data.replace(b"\r\n", b"\n")  # git may normalise line endings
+
+        assert norm(target.read_bytes()) == norm(golden.read_bytes())
 
     def test_rules_export_adds_the_clause_columns(self, tmp_path):
         vm = self._rules_vm()
@@ -425,23 +423,44 @@ class TestClauseTrailExport:
             "outreach_m",
             "load_t",
             "condition",
+            "case",
             "factor",
+            "unit",
+            "inputs",
+            "formula",
             "clause",
             "source",
             "warnings",
         ]
-        assert all(len(r) == 8 for r in rows)
+        assert all(len(r) == 12 for r in rows)
         capacity = [r for r in rows[1:] if r[0] == "capacity"]
         assert capacity
         assert {r[3] for r in capacity} == {"gale"}
-        assert {r[6] for r in capacity} <= {"computed", "override"}
-        assert all(r[5] for r in capacity)
-        factors = [r for r in capacity if r[4].startswith("dynamic_factor=")]
+        assert {r[4] for r in capacity} == {"In-service"}
+        assert {r[10] for r in capacity} <= {"computed", "override"}
+        assert all(r[9] and r[8] for r in capacity)  # clause and formula
+        factors = [r for r in capacity if r[5].startswith("dynamic_factor=")]
         # One computed factor row per curve point (GT283's authored daf adds an override row).
-        assert len([r for r in factors if r[6] == "computed"]) == len(vm.curvePoints)
+        computed = [r for r in factors if r[10] == "computed"]
+        assert len(computed) == len(vm.curvePoints)
+        assert all("=" in r[7] for r in computed)  # inputs rendered as name=value; ...
         # Limit and contractual rows carry no clause trail.
         others = [r for r in rows[1:] if r[0] != "capacity"]
-        assert all(r[3:] == ["", "", "", "", ""] for r in others)
+        assert all(r[3:] == [""] * 9 for r in others)
+
+    def test_dnv_export_shows_the_governing_case(self, tmp_path):
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        session = SessionState()
+        vm = ChartViewModel(session)
+        vm.setOutreachStep(20.0)
+        doc = without_suspended_rope(rules_doc("DNV", gale(wind=30.0), gale("calm", wind=5.0)))
+        session.model.set_document(doc)
+        vm.drawBlocking()
+        _target, rows = self._export(vm, tmp_path)
+        capacity = [r for r in rows[1:] if r[0] == "capacity"]
+        assert capacity and {r[4] for r in capacity} <= {"Case I", "Case II"}
+        assert all(r[4] for r in capacity)
 
     def test_rules_export_marks_a_manual_daf_as_override(self, tmp_path):
         from tests.rules_docs import gale, rules_doc, without_suspended_rope
@@ -454,7 +473,59 @@ class TestClauseTrailExport:
         session.model.set_document(doc.model_copy(update={"hoists": hoists}))
         vm.drawBlocking()
         _target, rows = self._export(vm, tmp_path)
-        assert "override" in {r[6] for r in rows[1:]}
+        assert "override" in {r[10] for r in rows[1:]}
+
+    def test_cached_chart_exports_its_own_trail_and_edits_change_the_key(
+        self, tmp_path, monkeypatch
+    ):
+        import crane_statics.qml_app.viewmodels.chart_vm as chart_vm_module
+
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        session = SessionState()
+        vm = ChartViewModel(session)
+        vm.setOutreachStep(20.0)
+        base = without_suspended_rope(rules_doc("ABS", gale()))
+        plain = base.model_copy(
+            update={"hoists": [h.model_copy(update={"hook_daf": 1.0}) for h in base.hoists]}
+        )
+        manual = base.model_copy(
+            update={"hoists": [h.model_copy(update={"hook_daf": 1.7}) for h in base.hoists]}
+        )
+
+        def sources() -> set:
+            _t, rows = self._export(vm, tmp_path)
+            return {r[10] for r in rows[1:] if r[0] == "capacity"}
+
+        session.model.set_document(plain)
+        vm.drawBlocking()
+        key_plain = vm._wanted_key()
+        assert sources() == {"computed"}
+        session.model.set_document(manual)
+        vm.drawBlocking()
+        key_manual = vm._wanted_key()
+        assert key_manual != key_plain and sources() == {"computed", "override"}
+
+        # A repeated draw is served from the cache and exports the same trail.
+        def no_sweep(*_a, **_k):
+            raise AssertionError("served from the cache")
+
+        monkeypatch.setattr(chart_vm_module, "run_mode_sweep", no_sweep)
+        assert vm._cache.get(key_manual) is not None
+        vm.drawBlocking()
+        assert sources() == {"computed", "override"}
+
+    def test_a_condition_is_part_of_the_chart_key(self):
+        from crane_statics.core.chart_cache import ChartCache, ChartKey
+
+        cache = ChartCache()
+        gale_key = ChartKey("MH", "normal", 20.0, "fp", "gale")
+        calm_key = ChartKey("MH", "normal", 20.0, "fp", "calm")
+        assert gale_key != calm_key
+        cache.put(gale_key, {"condition": "gale", "provenance": []})
+        cache.put(calm_key, {"condition": "calm", "provenance": []})
+        assert cache.get(gale_key)["condition"] == "gale"
+        assert cache.get(calm_key)["condition"] == "calm"
 
     def test_export_refuses_while_partial(self, chart_vm, tmp_path):
         from PyQt6.QtCore import QUrl
