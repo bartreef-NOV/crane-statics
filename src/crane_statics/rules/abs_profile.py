@@ -12,7 +12,7 @@ Clause strings carry the printed page number of the ABS document.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from ..calculation.dynamic_factor import DynamicFactor
 from ..data.models import ConditionSpec, CraneDocument, Hoist
@@ -67,18 +67,22 @@ class AbsProfile:
         stiffness_kN_m: float,
         suspended_rope_mass_t: float,
         chart_max_load_t: float,
+        *,
+        case: Optional[CaseSpec] = None,
     ) -> LiftSetup:
         """Dynamic factor, lateral and foundation settings for one hoist and mode.
 
         ``chart_max_load_t`` does not change any ABS factor (each is evaluated at the
         point's own LL); it only sets the representative LL, ``chart_max_load_t`` plus
         the mode's hook mass plus ``suspended_rope_mass_t``, at which the provenance
-        records state the dynamic and pedestal factors.
+        records state the dynamic and pedestal factors. ``case`` (shared signature with
+        the DNV profile) supplies the vessel motion; it defaults to the single ABS case,
+        whose motion is the condition's.
         """
         crane_class = _crane_class(doc)
         hoist = _hoist(doc, hoist_id)
         gravity = abs(doc.environment.gravity_m_s2)
-        motion = cond.vessel_motion
+        motion = (case if case is not None else self.cases(doc, cond)[0]).vessel_motion
         a_v_g = abs(motion.accel_z_m_s2) / GRAVITY_M_S2
         ll_kN = (chart_max_load_t + mode.hook_mass_t + suspended_rope_mass_t) * gravity
         if ll_kN <= 0.0:
