@@ -9,10 +9,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
-from ..calculation.dynamic_factor import as_dynamic_factor
+from ..calculation.dynamic_factor import DynamicFactor, as_dynamic_factor
 from ..calculation.engine import get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
+from .analysis_cases import analysis_mode_by_name
 from .demand_extraction import extract_connection_component_response
+from .lift_factor import LiftFactors
+from .load_condition import scene_load_condition
 from ..presentation.formatters import ConnectionFormatter, HoistFormatter, RopeFormatter
 from .drawn_loads import LoadConditions
 from .results import ResultRow
@@ -103,6 +106,27 @@ class HoistStateService:
 
     def __init__(self, session: SessionModel):
         self._session = session
+        self._lift: Optional[LiftFactors] = None
+        self._lift_doc: Optional[CraneDocument] = None  # the document ``_lift`` serves
+
+    def dynamic_factor(self, hoist: Optional[Hoist]) -> DynamicFactor:
+        """The factor the Scene converts payload and hook force with, for ``hoist``.
+
+        Legacy: the authored ``hook_daf`` (1.0 without a hoist). On a rules document, the
+        profile's factor under the Scene's condition (``scene_load_condition``) at the
+        hoist's current boom angle and hook mode, as the chart computes it there.
+        """
+        doc = self._session.document
+        if hoist is None or doc is None or doc.rules is None:
+            return as_dynamic_factor(float(hoist.hook_daf) if hoist is not None else 1.0)
+        if self._lift is None or self._lift_doc is not doc:
+            self._lift = LiftFactors(doc, get_calculator(doc))
+            self._lift_doc = doc
+        state = self._session.hoist_states.get(hoist.id)
+        split = bool(state is not None and state.split_mode_active)
+        mode = analysis_mode_by_name(hoist, "split" if split else "normal")
+        angle = float(state.scene_state.boom_angle_deg) if state is not None else 0.0
+        return self._lift.setup(scene_load_condition(doc), hoist.id, mode, angle).factor
 
     def contractual_points_for_hoist_mode(self, hoist: Optional[Hoist]) -> list:
         """Get contractual load points for hoist's current mode."""
@@ -196,7 +220,7 @@ class HoistStateService:
 
         payload = max(0.0, float(payload_t))
         hook_mass_t = 0.0
-        factor = as_dynamic_factor(float(hoist.hook_daf) if hoist is not None else 1.0)
+        factor = self.dynamic_factor(hoist)
         if hoist is not None:
             _, hook_mass_t, _ = self.effective_hoist_parameters(hoist.id)
         return factor.hook_force_kN(payload, hook_mass_t, self.gravity_abs())
@@ -205,7 +229,7 @@ class HoistStateService:
         """Inverse of ``payload_t_to_hook_force_kN`` for the selected hoist (floored at 0)."""
         hoist = self.selected_hoist()
         hook_mass_t = 0.0
-        factor = as_dynamic_factor(float(hoist.hook_daf) if hoist is not None else 1.0)
+        factor = self.dynamic_factor(hoist)
         if hoist is not None:
             _, hook_mass_t, _ = self.effective_hoist_parameters(hoist.id)
         gravity = self.gravity_abs()
@@ -501,7 +525,7 @@ class AnalysisCalculator:
             sc.boom_angle_deg,
             hoist_id,
             enabled,
-            hook_daf=hoist.hook_daf,
+            hook_daf=self._hoist.dynamic_factor(hoist),
             hook_mass_t=effective_hook_mass_t,
             wind_speed_m_s=sc.wind_speed_m_s,
             accel_x_m_s2=sc.accel_x_m_s2,

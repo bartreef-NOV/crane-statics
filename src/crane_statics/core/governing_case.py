@@ -26,7 +26,8 @@ from .chart_envelope import (
     lead_points,
 )
 from .demand_extraction import limit_responds_to_hook_load
-from .load_condition import condition_cases, condition_document
+from .lift_factor import LiftFactors
+from .load_condition import LoadCondition, condition_cases, condition_document
 
 # ``VesselInputs`` field -> ``SceneState`` field.
 _SCENE_VESSEL_FIELDS = {vessel: scene for scene, vessel in VESSEL_INPUT_FIELDS.items()}
@@ -40,12 +41,18 @@ class GoverningCase:
     fields reproduce the chart value only under that mode's hook configuration, so the
     Scene must set ``HoistState.split_mode_active = (mode_name == "split")`` before it
     applies ``scene_fields``.
+
+    ``condition_name`` and ``case_name`` name the load condition and its profile case
+    that governed (``LoadCondition.spec.name`` and ``.case.name``); None on a legacy
+    document.
     """
 
     limit_id: str
     mode_name: str
     scene_fields: dict[str, Any]
     outreach_m: float
+    condition_name: Optional[str] = None
+    case_name: Optional[str] = None
 
 
 def governing_case(
@@ -60,8 +67,9 @@ def governing_case(
     """The case of ``limit_id``'s chart point at ``outreach_m``, in mode ``mode_name``.
 
     ``condition_name`` is the chart's load condition, as ``run_mode_sweep`` takes it; the
-    case is searched over every case of that condition (the lowest hook load wins, the
-    first one on a tie). An unknown name raises ``KeyError``.
+    case is searched over every case of that condition, each with its own dynamic factor
+    (``lift_factor``), as the sweep does: the lowest payload wins, then the lowest hook
+    load, then the first one. An unknown name raises ``KeyError``.
 
     ``limit_id`` None takes the combined curve: the limit of lowest hook load there (the
     first one on a tie). Returns None when the outreach is unreachable or does not solve,
@@ -92,17 +100,22 @@ def governing_case(
     if angle is None:
         return None
 
-    # (hook load, envelope case, probes, wind speed) of the lowest limit over the cases.
-    best: Optional[tuple[float, EnvelopeCase, ProbeSet, float]] = None
+    # ((payload, hook load), envelope case, probes, condition) of the lowest limit over the
+    # cases. Within a case the factor is one, so the hook load orders as the payload does;
+    # it breaks payload ties, which keeps the legacy (hook load) choice exactly.
+    best: Optional[tuple[tuple[float, float], EnvelopeCase, ProbeSet, LoadCondition]] = None
+    lift: Optional[LiftFactors] = None
     for condition in conditions:
         calc = CraneCalculator(condition_document(doc, condition))
-        wind_speed = condition.wind_speed_m_s
+        if lift is None:
+            lift = LiftFactors(doc, calc)
         vessel = condition.vessel_motion
         probes = build_probes(
-            calc, hoist_id, angle, wind_speed, mode.runtime_overrides, vessel=vessel
+            calc, hoist_id, angle, condition.wind_speed_m_s, mode.runtime_overrides, vessel=vessel
         )
         if probes is None:
             return None  # run_mode_sweep has no point where a case does not solve
+        factor = lift.setup(condition, hoist_id, mode, angle, probes.zero).factor
         for lid in candidates:
             cap, case = envelope_capacity_case(
                 calc,
@@ -111,15 +124,16 @@ def governing_case(
                 vessel=vessel,
                 offlead_deg=offlead_deg,
                 sidelead_deg=sidelead_deg,
-                hook_daf=hoist.hook_daf,
+                hook_daf=factor,
                 hook_mass_t=mode.hook_mass_t,
             )
-            load_kN = float(cap.max_allowable_load_kN)
-            if case is not None and (best is None or load_kN < best[0]):
-                best = (load_kN, case, probes, wind_speed)
-    if best is None or not math.isfinite(best[0]):
+            rank = (float(cap.max_allowable_load_t), float(cap.max_allowable_load_kN))
+            if case is not None and (best is None or rank < best[0]):
+                best = (rank, case, probes, condition)
+    if best is None or not math.isfinite(best[0][1]):
         return None
-    load_kN, case, probes, wind_speed = best
+    (_load_t, load_kN), case, probes, condition = best
+    wind_speed = condition.wind_speed_m_s
     leads = lead_points(probes, offlead_deg, sidelead_deg)
     comps = enabled_limits[case.limit_id]
     if not any(limit_responds_to_hook_load(doc, pt, case.limit_id, comps) for pt in leads):
@@ -149,6 +163,8 @@ def governing_case(
         mode_name=mode.name,
         scene_fields=fields,
         outreach_m=float(outreach_m),
+        condition_name=None if condition.spec is None else condition.spec.name,
+        case_name=None if condition.case is None else condition.case.name,
     )
 
 

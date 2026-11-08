@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -149,8 +150,9 @@ def test_rules_governing_case_uses_the_condition() -> None:
     same = governing_case(
         legacy_equivalent(doc, 30.0, MOTION), HOIST, "normal", RULES_LIMITS, 30.0, None
     )
-    assert case is not None
-    assert case == same
+    assert case is not None and same is not None
+    # The manual daf (GT283 MH 1.1) is the factor of both, so only the names differ.
+    assert case == replace(same, condition_name="gale", case_name="In-service")
     assert case.scene_fields["wind_speed_m_s"] == 30.0
 
 
@@ -169,9 +171,12 @@ def test_rules_governing_case_is_the_lowest_case_of_the_condition() -> None:
         for c in condition_cases(doc, "gale")
     ]
     assert case is not None
-    assert case == min(
+    lowest = min(
         (c for c in per_case if c is not None), key=lambda c: c.scene_fields["hook_load_kN"]
     )
+    governing = condition_cases(doc, "gale")[per_case.index(lowest)].case
+    assert governing is not None
+    assert case == replace(lowest, condition_name="gale", case_name=governing.name)
 
 
 def test_rules_auto_set_uses_every_condition_case() -> None:

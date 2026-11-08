@@ -20,13 +20,18 @@ from .analysis_cases import (
     DirectionalAnalysisCase,
 )
 from .lead_channels import compose_lead_channel_point
-from .load_condition import condition_document, load_conditions
+from .lift_factor import LiftFactors
+from .load_condition import LoadCondition, condition_document, load_conditions
 from .demand_extraction import extract_rope_tension_demand, extract_connection_component_demand
 
 
 @dataclass
 class ContractualPointResult:
-    """Result from evaluating a single contractual point across all directional cases."""
+    """Result from evaluating a single contractual point across all directional cases.
+
+    ``condition_name`` and ``case_name`` name the load condition and profile case of the
+    best demand; None on a legacy document.
+    """
 
     hoist_id: str
     mode_name: str
@@ -35,6 +40,8 @@ class ContractualPointResult:
     angle_deg: float
     best_demand: float
     best_case: DirectionalAnalysisCase
+    condition_name: Optional[str] = None
+    case_name: Optional[str] = None
 
 
 @dataclass
@@ -54,6 +61,8 @@ class RopeAutoSetResult:
     governing_wind_direction: Optional[str] = None
     governing_mode: Optional[str] = None
     used_system_rope_fallback: bool = False
+    governing_condition: Optional[str] = None
+    governing_case: Optional[str] = None
 
 
 @dataclass
@@ -72,6 +81,8 @@ class ConnectionAutoSetResult:
     governing_sidelead_deg: Optional[float] = None
     governing_wind_direction: Optional[str] = None
     governing_mode: Optional[str] = None
+    governing_condition: Optional[str] = None
+    governing_case: Optional[str] = None
 
 
 def _required_hook_force_kN(
@@ -108,9 +119,11 @@ def _evaluate_contractual_points(
         List of ContractualPointResult with best demand per contractual point, over every
         load case of the document (``load_condition.load_conditions``). ``calc`` serves a
         legacy document; each case of a rules document gets a calculator of its own
-        environment.
+        environment. The contractual load becomes a hook force through each case's dynamic
+        factor at the point's boom angle (``lift_factor``), as the sweep converts it.
     """
     best: dict[tuple[str, str, int], ContractualPointResult] = {}
+    lift = LiftFactors(doc, calc)
     for condition in load_conditions(doc):
         case_calc = (
             calc if condition.spec is None else CraneCalculator(condition_document(doc, condition))
@@ -121,7 +134,8 @@ def _evaluate_contractual_points(
             kin,
             gravity,
             demand_extractor,
-            condition.wind_speed_m_s,
+            condition,
+            lift,
             use_lead_channel_composition,
         ):
             key = (result.hoist_id, result.mode_name, result.cp_index)
@@ -136,11 +150,15 @@ def _evaluate_condition(
     kin: KinematicsAdapter,
     gravity: float,
     demand_extractor: Callable[[Any, float, DirectionalAnalysisCase], Optional[float]],
-    wind_speed: float,
+    condition: LoadCondition,
+    lift: LiftFactors,
     use_lead_channel_composition: bool,
 ) -> list[ContractualPointResult]:
-    """``_evaluate_contractual_points`` for one load case, at ``wind_speed``."""
+    """``_evaluate_contractual_points`` for one load case."""
     results = []
+    wind_speed = condition.wind_speed_m_s
+    condition_name = None if condition.spec is None else condition.spec.name
+    case_name = None if condition.case is None else condition.case.name
 
     for hoist in hoists:
         for mode in iter_hoist_analysis_modes(hoist):
@@ -158,7 +176,7 @@ def _evaluate_condition(
                 hook_kN = _required_hook_force_kN(
                     cp.load_t,
                     mode.hook_mass_t,
-                    hoist.hook_daf,
+                    lift.setup(condition, hoist.id, mode, float(angle)).factor,
                     gravity,
                 )
                 points_by_wind: dict[str, Any] = {}
@@ -219,6 +237,8 @@ def _evaluate_condition(
                             angle_deg=float(angle),
                             best_demand=best_demand,
                             best_case=best_case,
+                            condition_name=condition_name,
+                            case_name=case_name,
                         )
                     )
 
@@ -271,20 +291,8 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
         """Extract rope tension from analysis point."""
         return extract_rope_tension_demand(pt, hook_kN, sensitivity_key)
 
-    def _evaluate(
-        hoists: list[Any],
-    ) -> tuple[
-        float,
-        int,
-        Optional[str],
-        Optional[int],
-        Optional[float],
-        Optional[float],
-        Optional[float],
-        Optional[float],
-        Optional[str],
-        Optional[str],
-    ]:
+    def _evaluate(hoists: list[Any]) -> tuple[int, Optional[ContractualPointResult]]:
+        """(evaluated points, the governing one) over ``hoists``."""
         results = _evaluate_contractual_points(
             hoists,
             doc,
@@ -294,36 +302,11 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
             rope_demand_extractor,
             use_lead_channel_composition=True,
         )
-
         if not results:
-            return float("-inf"), 0, None, None, None, None, None, None, None, None
+            return 0, None
+        return len(results), max(results, key=lambda r: r.best_demand)
 
-        best = max(results, key=lambda r: r.best_demand)
-        return (
-            best.best_demand,
-            len(results),
-            best.hoist_id,
-            best.cp_index,
-            best.cp_outreach_m,
-            best.angle_deg,
-            best.best_case.offlead_deg,
-            best.best_case.sidelead_deg,
-            best.best_case.wind_direction,
-            best.mode_name,
-        )
-
-    (
-        required_kN,
-        evaluated_points,
-        governing_hoist_id,
-        governing_cp_index,
-        governing_outreach_m,
-        governing_angle_deg,
-        governing_offlead_deg,
-        governing_sidelead_deg,
-        governing_wind_direction,
-        governing_mode,
-    ) = _evaluate(relevant_hoists)
+    evaluated_points, best = _evaluate(relevant_hoists)
 
     # For non-solve ropes, retry across all hoists if direct-owner points could
     # not be evaluated and the rope exists in the model.
@@ -333,22 +316,11 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
         and rope_obj
         and rope_obj.tension_mode != "solve"
     ):
-        (
-            required_kN,
-            evaluated_points,
-            governing_hoist_id,
-            governing_cp_index,
-            governing_outreach_m,
-            governing_angle_deg,
-            governing_offlead_deg,
-            governing_sidelead_deg,
-            governing_wind_direction,
-            governing_mode,
-        ) = _evaluate(list(doc.hoists))
+        evaluated_points, best = _evaluate(list(doc.hoists))
         if evaluated_points > 0:
             using_fallback = True
 
-    if evaluated_points == 0 or not math.isfinite(required_kN):
+    if evaluated_points == 0 or best is None or not math.isfinite(best.best_demand):
         return RopeAutoSetResult(
             required_kN=None,
             evaluated_points=0,
@@ -357,19 +329,21 @@ def compute_required_rope_capacity_kN(doc: CraneDocument, rope_id: str) -> RopeA
         )
 
     return RopeAutoSetResult(
-        required_kN=float(required_kN),
+        required_kN=float(best.best_demand),
         evaluated_points=evaluated_points,
         evaluated_hoists=len(relevant_hoists),
         message="ok",
-        governing_hoist_id=governing_hoist_id,
-        governing_cp_index=governing_cp_index,
-        governing_outreach_m=governing_outreach_m,
-        governing_angle_deg=governing_angle_deg,
-        governing_offlead_deg=governing_offlead_deg,
-        governing_sidelead_deg=governing_sidelead_deg,
-        governing_wind_direction=governing_wind_direction,
-        governing_mode=governing_mode,
+        governing_hoist_id=best.hoist_id,
+        governing_cp_index=best.cp_index,
+        governing_outreach_m=best.cp_outreach_m,
+        governing_angle_deg=best.angle_deg,
+        governing_offlead_deg=best.best_case.offlead_deg,
+        governing_sidelead_deg=best.best_case.sidelead_deg,
+        governing_wind_direction=best.best_case.wind_direction,
+        governing_mode=best.mode_name,
         used_system_rope_fallback=using_fallback,
+        governing_condition=best.condition_name,
+        governing_case=best.case_name,
     )
 
 
@@ -430,4 +404,6 @@ def compute_required_connection_capacity_kN(
         governing_sidelead_deg=best.best_case.sidelead_deg,
         governing_wind_direction=best.best_case.wind_direction,
         governing_mode=best.mode_name,
+        governing_condition=best.condition_name,
+        governing_case=best.case_name,
     )

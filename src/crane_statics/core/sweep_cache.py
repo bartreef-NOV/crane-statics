@@ -95,9 +95,13 @@ class ComputeScope:
         )
 
     def limit_result(
-        self, angle: float, signature: LimitSignature, compute: Callable[[], LimitResult]
+        self, angle: float, signature: Hashable, compute: Callable[[], LimitResult]
     ) -> LimitResult:
-        """Return the limit result at ``angle``, calling ``compute`` only on a miss."""
+        """Return the limit result at ``angle``, calling ``compute`` only on a miss.
+
+        ``signature`` is a ``LimitSignature``, or one paired with whatever else the result
+        depends on that the scope's fingerprint does not cover (a rules dynamic factor).
+        """
         key = (*self._prefix, _angle_key(angle), signature)
         return cast(LimitResult, self._cache._get_or_compute(self._cache._limits, key, compute))
 

@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Any, Callable, NamedTuple, Optional
+from typing import Any, Callable, Hashable, NamedTuple, Optional
 
+from ..calculation.dynamic_factor import DynamicFactor
 from ..calculation.engine import AllowableCapacity, AnalysisPoint, CraneCalculator
 from ..calculation.solver.kinematics import KinematicsAdapter
 from ..data.models import CraneDocument, VesselMotion
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .chart_envelope import ProbeSet, build_probes, envelope_capacity, lead_points
 from .demand_extraction import limit_responds_to_hook_load
+from .lift_factor import LiftFactors
 from .load_condition import LoadCondition, condition_cases, condition_document
 from .sweep_cache import ComputeScope, LimitResult, limit_signature
 
@@ -29,6 +31,7 @@ class _SweepCase(NamedTuple):
     wind_speed_m_s: float
     vessel: VesselMotion
     scope: Optional[ComputeScope]
+    condition: LoadCondition
 
 
 def _sweep_case(
@@ -41,7 +44,7 @@ def _sweep_case(
     if compute_scope is not None and condition.spec is not None:
         # Each case of a rules condition solves under its own wind and motion.
         scope = compute_scope.for_case(condition.name)
-    return _SweepCase(calc, condition.wind_speed_m_s, condition.vessel_motion, scope)
+    return _SweepCase(calc, condition.wind_speed_m_s, condition.vessel_motion, scope, condition)
 
 
 def _lowest_envelope(
@@ -193,6 +196,8 @@ def run_mode_sweep(
     # both signs; the chart reports the worst case over them, every slew and wind angle,
     # and every case of the condition.
     cases = [_sweep_case(doc, condition, compute_scope) for condition in conditions]
+    # The dynamic factor of each case at each boom angle (legacy: the constant hook_daf).
+    lift = LiftFactors(doc, cases[0].calc)
     offlead_deg = float(getattr(hoist, "offlead_deg", 0.0))
     sidelead_deg = float(getattr(hoist, "sidelead_deg", 0.0))
 
@@ -201,6 +206,7 @@ def run_mode_sweep(
         probes: ProbeSet,
         design_limits_map: dict[str, dict],
         hook_mass_t: float,
+        factor: DynamicFactor,
     ) -> AllowableCapacity:
         return envelope_capacity(
             case.calc,
@@ -209,12 +215,12 @@ def run_mode_sweep(
             vessel=case.vessel,
             offlead_deg=offlead_deg,
             sidelead_deg=sidelead_deg,
-            hook_daf=hoist.hook_daf,
+            hook_daf=factor,
             hook_mass_t=hook_mass_t,
         )
 
     def _limit_results(
-        case: _SweepCase, angle: float, probes: ProbeSet, hook_mass_t: float
+        case: _SweepCase, angle: float, probes: ProbeSet, hook_mass_t: float, factor: DynamicFactor
     ) -> dict[str, LimitResult]:
         leads: list[AnalysisPoint] = []
         results: dict[str, LimitResult] = {}
@@ -225,7 +231,7 @@ def run_mode_sweep(
             def compute(lid: str = lid, comps: dict = comps) -> LimitResult:
                 if not leads:
                     leads.extend(lead_points(probes, offlead_deg, sidelead_deg))
-                cap = _capacity(case, probes, {lid: comps}, hook_mass_t)
+                cap = _capacity(case, probes, {lid: comps}, hook_mass_t, factor)
                 # Sensitivities do not depend on motion or wind, but the lead channels
                 # add to them: a limit responds if it does at any lead sign case.
                 responsive = any(limit_responds_to_hook_load(doc, pt, lid, comps) for pt in leads)
@@ -234,7 +240,11 @@ def run_mode_sweep(
             if case.scope is None:
                 results[lid] = compute()
             else:
-                signature = limit_signature(lid, {c: v or 0.0 for c, v in comps.items()})
+                signature: Hashable = limit_signature(lid, {c: v or 0.0 for c, v in comps.items()})
+                if case.condition.spec is not None:
+                    # A rules factor depends on inputs the fingerprint leaves out (the rated
+                    # loads of the contractual points), so it keys the result too.
+                    signature = (signature, factor)
                 results[lid] = case.scope.limit_result(angle, signature, compute)
         return results
 
@@ -260,12 +270,16 @@ def run_mode_sweep(
         probes = build() if case.scope is None else case.scope.probes(angle, build)
         if probes is None:
             return None
-        results = _limit_results(case, angle, probes, mode.hook_mass_t)
+        factor = lift.setup(case.condition, hoist_id, mode, angle, probes.zero).factor
+        results = _limit_results(case, angle, probes, mode.hook_mass_t, factor)
         if results:
+            # One factor per case and angle: the lowest hook load is the lowest payload.
             load_t = min(results.values(), key=lambda r: r.load_kN).load_t
         else:
             # No limit applies: the unlimited capacity.
-            load_t = _capacity(case, probes, enabled_limits, mode.hook_mass_t).max_allowable_load_t
+            load_t = _capacity(
+                case, probes, enabled_limits, mode.hook_mass_t, factor
+            ).max_allowable_load_t
         return load_t, results
 
     # Stage 2 revisits the contractual outreaches of stage 1; their solves are reused.
