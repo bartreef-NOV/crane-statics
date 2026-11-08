@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -25,7 +26,7 @@ def test_reference_equals_single_case_when_everything_is_zero() -> None:
         hoist.sidelead_deg = 0.0
     calc = CraneCalculator(doc)
     limits = {"boom_hoist": {"T": 1.0e9}, "heel_point": {"Fz": 5000.0}}
-    kwargs = dict(hook_daf=hoist.hook_daf, hook_mass_t=hoist.hook_mass_t)
+    kwargs: dict[str, Any] = dict(hook_daf=hoist.hook_daf, hook_mass_t=hoist.hook_mass_t)
 
     pt = calc.compute_analysis_point(45.0, 0.0, "MH", wind_speed_m_s=0.0)
     assert pt is not None

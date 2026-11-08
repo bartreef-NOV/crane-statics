@@ -12,6 +12,7 @@ from ..calculation.engine import (
     compute_platform_base_min_bearing_line_load_kN_per_m,
     resolve_connection_component_linear_response,
 )
+from ..calculation.allowable import base_entity_id
 from ..data.models import CraneDocument
 from .limit_components import KNOWN_LIMIT_COMPONENTS
 
@@ -188,12 +189,14 @@ def limit_responds_to_hook_load(doc: CraneDocument, pt: Any, limit_key: str, com
     """
     entity = _limit_entity(limit_key)
     tol = 1e-9
-    if entity in pt.sensitivity_reactions:
+    # A factored copy (``platform_base_retaining``) responds as its base entity does.
+    connection = base_entity_id(entity)
+    if connection in pt.sensitivity_reactions:
         diameter = doc.support_widths.slewing_bearing_diameter_m
         for comp in comps:
             if connection_component_responds_to_hook_load(
                 pt,
-                entity,
+                connection,
                 comp,
                 support_widths_diameter_m=diameter,
                 tolerance=tol,

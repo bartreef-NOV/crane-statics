@@ -16,6 +16,7 @@ from crane_statics.core.sweep_cache import ComputeCache, compute_fingerprint
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mode_sweep
 from crane_statics.data.models import CraneDocument, VesselMotion
 from tests.rules_docs import (
+    without_foundation_factors,
     without_live_lateral,
     MOTION,
     gale,
@@ -114,6 +115,7 @@ def test_rules_sweep_uses_the_condition_wind_and_motion_not_the_dummies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
+    without_foundation_factors(monkeypatch)  # nor pedestal factors
     doc = _rules_doc("ABS", gale(wind=30.0))
     swept = run_mode_sweep(
         doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
@@ -142,6 +144,7 @@ def test_rules_chart_is_the_minimum_over_the_condition_cases(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
+    without_foundation_factors(monkeypatch)  # nor pedestal factors
     doc = _rules_doc("DNV", gale(wind=30.0), gale("calm", wind=5.0))
     case_i, case_ii = condition_cases(doc, "gale")
     swept = run_mode_sweep(
@@ -164,6 +167,7 @@ def test_rules_sweep_without_a_condition_takes_the_first() -> None:
 
 def test_rules_governing_case_uses_the_condition(monkeypatch: pytest.MonkeyPatch) -> None:
     without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
+    without_foundation_factors(monkeypatch)  # nor pedestal factors
     doc = _rules_doc("ABS", gale(wind=30.0))
     case = governing_case(doc, HOIST, "normal", RULES_LIMITS, 30.0, None, condition_name="gale")
     same = governing_case(
@@ -179,6 +183,7 @@ def test_rules_governing_case_is_the_lowest_case_of_the_condition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
+    without_foundation_factors(monkeypatch)  # nor pedestal factors
     doc = _rules_doc("DNV", gale(wind=30.0))
     case = governing_case(doc, HOIST, "normal", RULES_LIMITS, 30.0, None, condition_name="gale")
     per_case = [
@@ -203,6 +208,7 @@ def test_rules_governing_case_is_the_lowest_case_of_the_condition(
 
 def test_rules_auto_set_uses_every_condition_case(monkeypatch: pytest.MonkeyPatch) -> None:
     without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
+    without_foundation_factors(monkeypatch)  # nor pedestal factors
     doc = _rules_doc("ABS", gale(wind=30.0), gale("calm", wind=5.0, motion=VesselMotion()))
     rope_id = next(h for h in doc.hoists if h.id == "BH").rope_id  # wind and motion matter
     rules = compute_required_rope_capacity_kN(doc, rope_id)
@@ -261,6 +267,7 @@ ANGULAR_MOTION = VesselMotion(
 
 def test_rules_sweep_uses_the_condition_reference_point(monkeypatch: pytest.MonkeyPatch) -> None:
     without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
+    without_foundation_factors(monkeypatch)  # nor pedestal factors
     doc = _rules_doc("ABS", gale(wind=15.0, motion=ANGULAR_MOTION))
     swept = run_mode_sweep(doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {})
     same = run_mode_sweep(

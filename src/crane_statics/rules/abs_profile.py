@@ -58,6 +58,11 @@ def abs_v_hmin(h_sig_m: float) -> float:
 class AbsProfile:
     """ABS cases and lift setup for a document whose ``rules.standard`` is ABS."""
 
+    #: Name of the pedestal/foundation factor in reported rows.
+    foundation_label = "ABS PF"
+    #: Live-load factor of retaining components, 3.75 (2-2/5.13.5(c)).
+    retaining_live_factor = RETAINING_LIVE_FACTOR
+
     def cases(self, doc: CraneDocument, cond: ConditionSpec) -> tuple[CaseSpec, ...]:
         """ABS 2-2/5.1.1: one most-severe in-service case per condition."""
         _crane_class(doc)

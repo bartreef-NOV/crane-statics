@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from crane_statics.data.models import SavedLimit
 
+from .lift_factor import PLATFORM_BASE, RETAINING_ENTITY, has_retaining_limits
 from .limit_auto_set import compute_required_rope_capacity_kN
 from .limit_components import validate_limit_component
 
@@ -145,6 +146,19 @@ class DesignLimitFactory:
                             component=component,
                         )
                     )
+
+        # ABS retaining components (2-2/5.13.5(c)): the platform base's components under
+        # 3.75 x the live load, as an entity of their own.
+        if has_retaining_limits(doc):
+            for limit in [lim for lim in limits if lim.entity_id == PLATFORM_BASE]:
+                limits.append(
+                    DesignLimit(
+                        id=f"{RETAINING_ENTITY}_{limit.component}",
+                        kind="connection",
+                        entity_id=RETAINING_ENTITY,
+                        component=limit.component,
+                    )
+                )
 
         # Heel support limits
         for connection_id in ["heel_left", "heel_right"]:

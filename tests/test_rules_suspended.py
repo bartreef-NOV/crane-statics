@@ -26,7 +26,7 @@ from crane_statics.data.models import ConditionSpec, CraneDocument, VesselMotion
 from crane_statics.rules import validate_rules_document
 from crane_statics.rules.factors import LinearFactor
 from crane_statics.rules.suspended import suspended_rope_mass_t
-from tests.rules_docs import GT283, legacy_equivalent, rules_doc
+from tests.rules_docs import GT283, legacy_equivalent, rules_doc, without_foundation_factors
 
 HOIST = "MH"
 HOOK_T = 50.0  # GT283 MH hook block
@@ -288,13 +288,16 @@ def test_legacy_lift_setup_has_no_suspended_rope() -> None:
 FZ_LIMIT = {"platform_base": {"Fz": 12000.0}}
 
 
-def test_amplified_rope_lowers_the_capacity_by_the_hand_derived_amount() -> None:
+def test_amplified_rope_lowers_the_capacity_by_the_hand_derived_amount(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Rope r as dead load (legacy) against r in the amplified load, both at daf 1.3.
 
     With a vertical-reaction limit the rope weight moves out of the baseline into the hook
     force one for one, so at the legacy capacity the extra demand is r (daf - 1) g, and the
     capacity falls by r (daf - 1) / daf.
     """
+    without_foundation_factors(monkeypatch)  # the legacy run has no pedestal factor
     doc = _abs_deck_doc()
     rules = run_mode_sweep(doc, HOIST, "normal", FZ_LIMIT, 5.0, {})
     legacy = run_mode_sweep(

@@ -20,10 +20,11 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 import numpy as np
 
+from ..calculation.allowable import DemandScale, find_demand_scale, scaled_live_factor
 from ..calculation.dynamic_factor import DynamicFactor, DynamicFactorLike, as_dynamic_factor
 from ..calculation.engine import (
     AllowableCapacity,
@@ -586,10 +587,15 @@ class _LimitContext:
     hook_mass_t: float
     # VesselInputs fields (no slew) of each sign case, in the harmonics' case order.
     vessel_cases: tuple[dict[str, float], ...]
+    demand_scale: Optional[Mapping[str, DemandScale]] = None
 
     def capacity(self, point: AnalysisPoint, single_limit: dict[str, dict]) -> AllowableCapacity:
         return self.calc.compute_allowable_load(
-            point, single_limit, hook_daf=self.hook_daf, hook_mass_t=self.hook_mass_t
+            point,
+            single_limit,
+            hook_daf=self.hook_daf,
+            hook_mass_t=self.hook_mass_t,
+            demand_scale=self.demand_scale,
         )
 
     def case(
@@ -728,7 +734,23 @@ def _magnitude_capacity(
             # compute_allowable_load rejects this diameter; let it raise.
             return ctx.capacity(leads[0].point, single_limit), None
 
+    # A demand scale factors the ranked quantities as compute_allowable_load does: the
+    # baselines by ``dead``, the sensitivities by the live factor, here taken at one hook
+    # force (exact for a constant factor; for a load-dependent one, at the capacity found
+    # in stage 1, the rank error allowance covering the rest).
+    scale = find_demand_scale(ctx.demand_scale, limit_key, component)
+    rank_dead = 1.0 if scale is None else float(scale.dead)
+    live_at: Optional[Callable[[float], float]] = None
+    rank_live = 1.0
+    if scale is not None:
+        gravity = abs(float(ctx.calc.doc.environment.gravity_m_s2))
+        live_at = scaled_live_factor(scale, ctx.hook_daf, ctx.hook_mass_t, gravity)
+        rank_live = live_at(0.0)
+
     def _rank(sens: list[float], values: np.ndarray) -> np.ndarray:
+        if scale is not None:
+            sens = [rank_live * v for v in sens]
+            values = rank_dead * values
         if component in _BEARING_COMPONENTS:
             return _bearing_ranking(
                 limit,
@@ -780,9 +802,17 @@ def _magnitude_capacity(
     best: Optional[_Candidate] = None
     rank_error = 0.0
 
+    def _rank_error(rank: float, exact: float) -> float:
+        if math.isinf(rank) and not math.isinf(exact):
+            # The ranking missed a finite capacity: no pruning, every fine vertex is evaluated.
+            return math.inf
+        if not math.isinf(exact):
+            return abs(exact - rank)
+        return 0.0
+
     def _evaluate(
         lead: int, case: int, cos_v: float, sin_v: float, corner: int, rank: float
-    ) -> None:
+    ) -> float:
         nonlocal best, rank_error
         channels = harmonics.channels(case, cos_v, sin_v)
         point = _case_point(
@@ -790,24 +820,21 @@ def _magnitude_capacity(
         )
         cap = ctx.capacity(point, single_limit)
         exact = cap.max_allowable_load_kN
-        if math.isinf(rank) and not math.isinf(exact):
-            # The ranking missed a finite capacity: no pruning, every fine vertex is evaluated.
-            rank_error = math.inf
-        elif not math.isinf(exact):
-            rank_error = max(rank_error, abs(exact - rank))
+        rank_error = max(rank_error, _rank_error(rank, exact))
         found = ctx.case(leads[lead], case, cos_v, sin_v, _wind_axis(*corners[corner]), limit_key)
         best = _lower(best, (cap, found))
+        return float(exact)
 
     # Stage 1: a real capacity from the coarse ring and a lower bound per sign case.
     ring_cos, ring_sin = _ring(_COARSE_SIDES, outer=False)
     coarse_cos, coarse_sin = _ring(_COARSE_SIDES, outer=True)
     on_ring = _ring_baselines(b0, p, q, corner_values, ring_cos, ring_sin)
     coarse = _ring_baselines(b0, p, q, corner_values, coarse_cos, coarse_sin)
-    bounds = []
+    stage_one: list[tuple[int, int, int, int, float]] = []
     for lead, sens in enumerate(sens_by_lead):
         ranks = _rank(sens, on_ring + offsets[lead])
         case, side, corner = (int(i) for i in np.unravel_index(int(np.argmin(ranks)), ranks.shape))
-        _evaluate(
+        exact = _evaluate(
             lead,
             case,
             float(ring_cos[side]),
@@ -815,8 +842,20 @@ def _magnitude_capacity(
             corner,
             float(ranks[case, side, corner]),
         )
-        bounds.append(_rank(sens, coarse + offsets[lead]).min(axis=(1, 2)))
+        stage_one.append((lead, case, side, corner, exact))
     assert best is not None
+    if live_at is not None and math.isfinite(best[0].max_allowable_load_kN):
+        # Rank the rest with the live factor at the capacity found, its error re-measured.
+        rank_live = live_at(best[0].max_allowable_load_kN)
+        rank_error = 0.0
+        for lead, case, side, corner, exact in stage_one:
+            values = (on_ring + offsets[lead])[case, side, corner]
+            rank = float(_rank(sens_by_lead[lead], values))
+            rank_error = max(rank_error, _rank_error(rank, exact))
+    bounds = [
+        _rank(sens, coarse + offsets[lead]).min(axis=(1, 2))
+        for lead, sens in enumerate(sens_by_lead)
+    ]
     # A sign case is dropped only if its bound, less the rank error allowance, is above a
     # capacity that a real case reaches.
     lowest = best[0].max_allowable_load_kN
@@ -865,6 +904,7 @@ def envelope_capacity(
     hook_daf: DynamicFactorLike,
     hook_mass_t: float,
     hook_lateral: Optional[HookLateral] = None,
+    demand_scale: Optional[Mapping[str, DemandScale]] = None,
 ) -> AllowableCapacity:
     """Lowest allowable capacity over every case; see ``envelope_capacity_case``."""
     capacity, _ = envelope_capacity_case(
@@ -877,6 +917,7 @@ def envelope_capacity(
         hook_daf=hook_daf,
         hook_mass_t=hook_mass_t,
         hook_lateral=hook_lateral,
+        demand_scale=demand_scale,
     )
     return capacity
 
@@ -892,6 +933,7 @@ def envelope_capacity_case(
     hook_daf: DynamicFactorLike,
     hook_mass_t: float,
     hook_lateral: Optional[HookLateral] = None,
+    demand_scale: Optional[Mapping[str, DemandScale]] = None,
 ) -> tuple[AllowableCapacity, Optional[EnvelopeCase]]:
     """Lowest allowable capacity over every vessel sign case, slew, wind angle and lead sign.
 
@@ -916,6 +958,11 @@ def envelope_capacity_case(
     (``_linear_lateral_directions``), for a magnitude limit the vertices of a 16-gon
     circumscribing the circle of directions (never above the true minimum, at most
     1.96 % more lateral). The vectors' own directions are not used.
+
+    ``demand_scale`` (None: none) factors connection demands as ``compute_allowable_load``
+    does (pedestal and retaining-component factors). Every capacity is exact under it; the
+    linear extremes are unchanged (a positive scale keeps the worst baseline and lateral
+    direction), and the magnitude ranking takes it into account.
     """
     radius = 0.0 if hook_lateral is None else hook_lateral.magnitude()
     force_kN = 0.0 if hook_lateral is None else hook_lateral.constant_magnitude()
@@ -942,6 +989,7 @@ def envelope_capacity_case(
             {VESSEL_INPUT_FIELDS[key]: float(value) for key, value in case.items()}
             for case in vessel_motion_cases(vessel)
         ),
+        demand_scale=demand_scale,
     )
     leads = _leads(probes, offlead_deg, sidelead_deg)
     best: Optional[_Candidate] = None

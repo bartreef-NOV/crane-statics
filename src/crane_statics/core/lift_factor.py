@@ -12,9 +12,10 @@ from __future__ import annotations
 import math
 from collections import OrderedDict
 from dataclasses import replace
-from typing import Any, Hashable, Optional, cast
+from typing import Any, Callable, Hashable, Optional, cast
 
-from ..calculation.dynamic_factor import ConstantDynamicFactor
+from ..calculation.allowable import RETAINING_SUFFIX, DemandScale, base_entity_id
+from ..calculation.dynamic_factor import ConstantDynamicFactor, DynamicFactor
 from ..calculation.engine import AnalysisPoint, CraneCalculator
 from ..calculation.results import HookLateral
 from ..calculation.rope_mass import (
@@ -51,6 +52,13 @@ def _unit_factor(_live_load_kN: float) -> float:
 
 
 _NEUTRAL_FOUNDATION = FoundationFactors(live_factor=_unit_factor, dead_factor=1.0)
+
+#: The pedestal / slewing-bearing connection the foundation factor applies to.
+PLATFORM_BASE = "platform_base"
+#: Its retaining-component copy (ABS 2-2/5.13.5(c) 3.75 x live load).
+RETAINING_ENTITY = PLATFORM_BASE + RETAINING_SUFFIX
+#: Reported name of the retaining-component rows and limits.
+RETAINING_LABEL = "Retaining"
 
 
 def _hoist(doc: CraneDocument, hoist_id: str) -> Hoist:
@@ -112,6 +120,84 @@ def hook_lateral(
         constant_y_kN=wind * uy,
         min_fraction=lateral.min_fraction,
     )
+
+
+def live_load_kN(
+    factor: DynamicFactor,
+    hook_force_kN: float,
+    hook_mass_t: float,
+    rope_mass_t: float,
+    gravity_m_s2: float,
+) -> float:
+    """The unamplified live load at hook force ``hook_force_kN``, kN (ABS LL, spec 5).
+
+    Payload (``factor``'s inverse, floored at 0) plus hook block plus the suspended rope
+    the factor amplifies, times gravity: what ABS PF and the DNV SF1 band take.
+    """
+    payload_t = max(0.0, float(factor.payload_t(hook_force_kN, hook_mass_t, gravity_m_s2)))
+    return (payload_t + float(hook_mass_t) + float(rope_mass_t)) * float(gravity_m_s2)
+
+
+def demand_scales(
+    setup: LiftSetup, live_load: Callable[[float], float]
+) -> Optional[dict[str, DemandScale]]:
+    """The pedestal and retaining-component demand scales of ``setup`` (legacy: None).
+
+    ``platform_base`` (pedestal and slewing bearing) takes ``setup.foundation``: ABS PF on
+    the live-load terms, DNV SF1 on dead and live alike. ``platform_base_retaining`` takes
+    the retaining factor on the live-load terms and 1.0 on the dead load (spec 3.2; PF
+    not applied). ``live_load`` turns a hook force into LL (``live_load_kN``). The live
+    terms are the hook-force sensitivities, so the H-proportional lateral scales with
+    them and the wind on the load (in the baseline) does not.
+    """
+    if setup.foundation is _NEUTRAL_FOUNDATION:
+        return None
+    retaining = float(setup.retaining_live_factor)
+    return {
+        PLATFORM_BASE: DemandScale(
+            live=setup.foundation.live_factor,
+            dead=float(setup.foundation.dead_factor),
+            live_load_kN=live_load,
+        ),
+        RETAINING_ENTITY: DemandScale(live=lambda _ll: retaining, dead=1.0),
+    }
+
+
+def factored_point(
+    point: AnalysisPoint, scale: DemandScale, hook_force_kN: float, entity_id: str
+) -> AnalysisPoint:
+    """``point`` with ``entity_id``'s reactions under ``scale`` at ``hook_force_kN``.
+
+    ``entity_id`` may be a ``_retaining`` copy: its base entity's maps are replaced. The
+    baseline map is multiplied by ``scale.dead`` and the sensitivity map by ``scale.live``
+    at that hook force's LL, so any demand extractor reading the base entity at
+    ``hook_force_kN`` gets the factored demand ``dead * Q0 + live(LL) * s * H``, the one
+    ``compute_allowable_load`` inverts. ``scale.live_load_kN`` None: LL = H.
+    """
+    to_ll = scale.live_load_kN if scale.live_load_kN is not None else (lambda h: h)
+    live = float(scale.live(to_ll(float(hook_force_kN))))
+    source = base_entity_id(entity_id)
+    base = point.baseline_reactions.get(source, {})
+    sens = point.sensitivity_reactions.get(source, {})
+    baseline_reactions = dict(point.baseline_reactions)
+    sensitivity_reactions = dict(point.sensitivity_reactions)
+    baseline_reactions[source] = {k: float(scale.dead) * float(v) for k, v in base.items()}
+    sensitivity_reactions[source] = {k: live * float(v) for k, v in sens.items()}
+    return replace(
+        point,
+        baseline_reactions=baseline_reactions,
+        sensitivity_reactions=sensitivity_reactions,
+    )
+
+
+def foundation_label(doc: CraneDocument) -> Optional[str]:
+    """The reported name of the pedestal factor ("ABS PF", "DNV SF1"); None without rules."""
+    return None if doc.rules is None else str(profile_for(doc.rules).foundation_label)
+
+
+def has_retaining_limits(doc: CraneDocument) -> bool:
+    """Whether ``doc``'s standard has a separate retaining-component load (ABS: 3.75)."""
+    return doc.rules is not None and profile_for(doc.rules).retaining_live_factor != 1.0
 
 
 def needs_stiffness(condition: LoadCondition) -> bool:
@@ -394,6 +480,29 @@ class LiftFactors:
         )
         effective_mult = falls_override_effective_mult(doc_dict, _falls_by_hoist_id(mode))
         return suspended_rope_mass_t(doc_dict, hoist_id, positions, effective_mult)
+
+    def demand_scales(
+        self,
+        condition: LoadCondition,
+        hoist_id: str,
+        mode: HoistAnalysisMode,
+        angle: float,
+        setup: LiftSetup,
+        tackle_length_m: Optional[float] = None,
+    ) -> Optional[dict[str, DemandScale]]:
+        """``demand_scales(setup, ...)`` of a solve at ``angle`` (legacy condition: None).
+
+        LL counts the mode's hook mass and the suspended rope at ``tackle_length_m``
+        (``suspended_rope_mass_t``), the rope ``setup``'s factor amplifies.
+        """
+        if condition.spec is None:
+            return None
+        rope_t = self.suspended_rope_mass_t(hoist_id, mode, angle, tackle_length_m)
+        gravity = abs(float(self._doc.environment.gravity_m_s2))
+        factor, hook_t = setup.factor, float(mode.hook_mass_t)
+        return demand_scales(
+            setup, lambda hook_kN: live_load_kN(factor, hook_kN, hook_t, rope_t, gravity)
+        )
 
     def setup(
         self,

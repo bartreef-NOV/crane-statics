@@ -133,6 +133,7 @@ def governing_case(
                 setup, condition.wind_speed_m_s, support_z_m=lift.support_z_m(hoist_id, angle)
             )
         )
+        scales = lift.demand_scales(condition, hoist_id, mode, angle, setup)
         for lid in candidates:
             cap, case = envelope_capacity_case(
                 calc,
@@ -144,6 +145,7 @@ def governing_case(
                 hook_daf=factor,
                 hook_mass_t=mode.hook_mass_t,
                 hook_lateral=lateral,
+                demand_scale=scales,
             )
             rank = (float(cap.max_allowable_load_t), float(cap.max_allowable_load_kN))
             if case is not None and (best is None or rank < best[0]):

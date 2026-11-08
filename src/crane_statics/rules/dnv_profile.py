@@ -70,6 +70,11 @@ def dnv_v_h(h_s_m: float) -> float:
 class DnvProfile:
     """DNV cases and lift setup for a document whose ``rules.standard`` is DNV."""
 
+    #: Name of the pedestal/foundation factor in reported rows.
+    foundation_label = "DNV SF1"
+    #: Live-load factor of retaining components, 1.0: no separate retaining load.
+    retaining_live_factor = RETAINING_LIVE_FACTOR
+
     def cases(self, doc: CraneDocument, cond: ConditionSpec) -> tuple[CaseSpec, CaseSpec]:
         """DNV 4.2.2 and 4.2.3: Case I without wind, Case II with wind and 1.5x heel/trim.
 

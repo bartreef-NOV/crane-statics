@@ -7,7 +7,7 @@ from typing import Literal
 
 import pytest
 
-from crane_statics.core import governing_case, limit_auto_set, load_document, sweep
+from crane_statics.core import governing_case, lift_factor, limit_auto_set, load_document, sweep
 from crane_statics.data.models import ConditionSpec, CraneDocument, RulesSpec, VesselMotion
 
 GT283 = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
@@ -68,3 +68,13 @@ def without_live_lateral(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     for module in (sweep, governing_case, limit_auto_set):
         monkeypatch.setattr(module, "hook_lateral", lambda *_args, **_kwargs: None)
+
+
+def without_foundation_factors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Switch the pedestal and retaining-component demand scales off (Task 12).
+
+    A rules run checks platform-base limits against the factored demand (ABS PF, DNV
+    SF1); its ``legacy_equivalent`` has no factors. Tests that compare the two switch them
+    off; ``tests/test_foundation_factors.py`` covers the factors themselves.
+    """
+    monkeypatch.setattr(lift_factor.LiftFactors, "demand_scales", lambda *_a, **_k: None)

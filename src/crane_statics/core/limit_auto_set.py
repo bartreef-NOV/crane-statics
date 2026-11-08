@@ -22,7 +22,14 @@ from .analysis_cases import (
     DirectionalAnalysisCase,
 )
 from .lead_channels import compose_lead_channel_point
-from .lift_factor import LiftFactors, amplified_rope_hoist_id, hook_lateral
+from ..calculation.allowable import base_entity_id
+from .lift_factor import (
+    PLATFORM_BASE,
+    LiftFactors,
+    amplified_rope_hoist_id,
+    factored_point,
+    hook_lateral,
+)
 from .load_condition import LoadCondition, condition_document, load_conditions
 from .demand_extraction import extract_rope_tension_demand, extract_connection_component_demand
 
@@ -104,6 +111,7 @@ def _evaluate_contractual_points(
     gravity: float,
     demand_extractor: Callable[[Any, float, DirectionalAnalysisCase], Optional[float]],
     use_lead_channel_composition: bool = False,
+    factored_entity: Optional[str] = None,
 ) -> list[ContractualPointResult]:
     """Evaluate all contractual points across hoists/modes/cases using a custom demand extractor.
 
@@ -116,6 +124,10 @@ def _evaluate_contractual_points(
         demand_extractor: Callable(analysis_point, hook_kN, case) -> demand_value or None
         use_lead_channel_composition: Compose lead cases from one zero-lead
             point per wind direction instead of rerunning the solver per case.
+        factored_entity: On a rules case, read this entity's demand under the case's
+            demand scale (``lift_factor.demand_scales``: the pedestal factor on
+            ``platform_base``, the retaining factor on ``platform_base_retaining``), as
+            the chart checks it. None or a legacy case: the plain demand.
 
     Returns:
         List of ContractualPointResult with best demand per contractual point, over every
@@ -139,6 +151,7 @@ def _evaluate_contractual_points(
             condition,
             lift,
             use_lead_channel_composition,
+            factored_entity,
         ):
             key = (result.hoist_id, result.mode_name, result.cp_index)
             if key not in best or result.best_demand > best[key].best_demand:
@@ -155,6 +168,7 @@ def _evaluate_condition(
     condition: LoadCondition,
     lift: LiftFactors,
     use_lead_channel_composition: bool,
+    factored_entity: Optional[str] = None,
 ) -> list[ContractualPointResult]:
     """``_evaluate_contractual_points`` for one load case."""
     results = []
@@ -180,6 +194,16 @@ def _evaluate_condition(
                     cp.load_t, mode.hook_mass_t, setup.factor, gravity
                 )
                 amplified = amplified_rope_hoist_id(condition, hoist.id)
+                scales = (
+                    None
+                    if factored_entity is None
+                    else lift.demand_scales(condition, hoist.id, mode, float(angle), setup)
+                )
+                scale = (
+                    None
+                    if scales is None or factored_entity is None
+                    else scales.get(factored_entity)
+                )
                 # The live-load lateral (None: legacy): its wind rides in each solve, its
                 # H-proportional part is taken at the worst of the circumscribed 16-gon
                 # directions (the demand is convex in it; spec section 9.4).
@@ -244,6 +268,10 @@ def _evaluate_condition(
                     )
                     for fx, fy, cx, cy in directions:
                         demand_point = add_hook_lateral(lead_point, fx, fy, cx, cy)
+                        if scale is not None and factored_entity is not None:
+                            demand_point = factored_point(
+                                demand_point, scale, hook_kN, factored_entity
+                            )
                         demand = demand_extractor(demand_point, hook_kN, case)
                         if demand is None or not math.isfinite(demand):
                             continue
@@ -392,9 +420,11 @@ def compute_required_connection_capacity_kN(
         """Extract connection component demand from analysis point."""
         diameter = doc.support_widths.slewing_bearing_diameter_m
         return extract_connection_component_demand(
-            pt, hook_kN, connection_id, component, support_widths_diameter_m=diameter
+            pt, hook_kN, source_id, component, support_widths_diameter_m=diameter
         )
 
+    # A factored copy (``platform_base_retaining``) reads its base entity, factored.
+    source_id = base_entity_id(connection_id)
     results = _evaluate_contractual_points(
         doc.hoists,
         doc,
@@ -402,6 +432,7 @@ def compute_required_connection_capacity_kN(
         kin,
         gravity,
         connection_demand_extractor,
+        factored_entity=connection_id if source_id == PLATFORM_BASE else None,
     )
 
     if not results:

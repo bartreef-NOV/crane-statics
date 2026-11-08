@@ -9,7 +9,7 @@ This module implements the core mathematical solver for:
 """
 
 from dataclasses import dataclass
-from typing import Optional, Any, Sequence
+from typing import Optional, Any, Mapping, Sequence
 import math
 
 import numpy as np
@@ -23,7 +23,7 @@ from .solver.crane_solver import (
     inertia_force,
     rotate_boom_local_point,
 )
-from .allowable import allowable_hook_load
+from .allowable import DemandScale, allowable_hook_load, base_entity_id
 from .demand_formulas import (  # noqa: F401  (re-exported: used by core and scripts)
     compute_platform_base_fradial_kN,
     compute_platform_base_max_bearing_line_load_kN_per_m,
@@ -728,7 +728,8 @@ class CraneCalculator:
 
         ``limit_key`` may be an entity id ('boom_hoist') or a limit id ('rear_hinge_Fx'):
         a trailing ``_<component>`` suffix is stripped. For ``T`` limits the authored rope
-        id maps to its solver channel ('boom_hoist' for solved ropes).
+        id maps to its solver channel ('boom_hoist' for solved ropes). A factored copy
+        ('platform_base_retaining_Fz') reads its base entity (``allowable.base_entity_id``).
         """
         entity_id = limit_key
         for comp in _LIMIT_KEY_COMPONENTS:
@@ -737,6 +738,7 @@ class CraneCalculator:
                 entity_id = limit_key[: -len(suffix)]
                 break
         if component != "T":
+            entity_id = base_entity_id(entity_id)
             return entity_id, entity_id
 
         rope_ids_to_try = [entity_id]
@@ -761,11 +763,13 @@ class CraneCalculator:
         design_limits: dict[str, dict],  # entity_id -> {component -> max_kN}
         hook_daf: DynamicFactorLike = 1.0,
         hook_mass_t: float = 0.0,
+        demand_scale: Optional[Mapping[str, DemandScale]] = None,
     ) -> AllowableCapacity:
         """The most restrictive design limit's hook-force and payload capacity.
 
         design_limits keys may be either entity_id ('boom_hoist') or limit_id
-        ('boom_hoist_T'/'rear_hinge_Fx'); see :func:`allowable.allowable_hook_load`.
+        ('boom_hoist_T'/'rear_hinge_Fx'); ``demand_scale`` factors connection demands. See
+        :func:`allowable.allowable_hook_load`.
         """
         return allowable_hook_load(
             self.doc,
@@ -775,6 +779,7 @@ class CraneCalculator:
             tolerance=self.TOLERANCE,
             hook_daf=hook_daf,
             hook_mass_t=hook_mass_t,
+            demand_scale=demand_scale,
         )
 
     def compute_omnidirectional_allowable_load(
@@ -800,12 +805,13 @@ class CraneCalculator:
         tackle_length_m: Optional[float] = None,
         amplified_rope_hoist_id: Optional[str] = None,
         hook_lateral: Optional[HookLateral] = None,
+        demand_scale: Optional[Mapping[str, DemandScale]] = None,
     ) -> Optional[AllowableCapacity]:
         """The lowest ``compute_allowable_load`` over the candidate wind directions.
 
         ``amplified_rope_hoist_id`` as for ``compute_analysis_point``; ``hook_daf`` must
         then count that rope in the hook force. ``hook_lateral`` is passed to every
-        direction's solve as it is.
+        direction's solve as it is, ``demand_scale`` to every capacity.
         """
         wind_ref = (
             self.doc.environment.max_wind_speed_m_s
@@ -842,6 +848,7 @@ class CraneCalculator:
                 design_limits,
                 hook_daf=hook_daf,
                 hook_mass_t=hook_mass_t,
+                demand_scale=demand_scale,
             )
             capacity.governing_wind_direction = (
                 wind_direction if wind_ref > self.TOLERANCE else None

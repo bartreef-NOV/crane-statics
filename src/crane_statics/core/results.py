@@ -8,6 +8,14 @@ from typing import Optional
 
 @dataclass
 class ResultRow:
+    """One results-table row.
+
+    ``kind`` is "rope", "connection" or "factored": a factored row reports a platform-base
+    component under the rules profile's pedestal factor ("Platform Base (ABS PF)",
+    "Platform Base (DNV SF1)") or the ABS retaining-component factor ("Retaining"); its
+    ``entity_id`` is the limits' entity, ``runtime_id`` the entity whose reactions it reads.
+    """
+
     name: str
     unit: str = ""
     demand_kN: float = 0.0

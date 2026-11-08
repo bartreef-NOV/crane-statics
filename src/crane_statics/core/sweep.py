@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Any, Callable, Hashable, NamedTuple, Optional
+from typing import Any, Callable, Hashable, Mapping, NamedTuple, Optional
 
+from ..calculation.allowable import DemandScale
 from ..calculation.dynamic_factor import DynamicFactor
 from ..calculation.engine import AllowableCapacity, AnalysisPoint, CraneCalculator
 from ..calculation.results import HookLateral
@@ -212,6 +213,7 @@ def run_mode_sweep(
         hook_mass_t: float,
         factor: DynamicFactor,
         lateral: Optional[HookLateral],
+        scales: Optional[Mapping[str, DemandScale]],
     ) -> AllowableCapacity:
         return envelope_capacity(
             case.calc,
@@ -223,6 +225,7 @@ def run_mode_sweep(
             hook_daf=factor,
             hook_mass_t=hook_mass_t,
             hook_lateral=lateral,
+            demand_scale=scales,
         )
 
     def _limit_results(
@@ -232,6 +235,8 @@ def run_mode_sweep(
         hook_mass_t: float,
         factor: DynamicFactor,
         lateral: Optional[HookLateral],
+        scales: Optional[Mapping[str, DemandScale]],
+        scale_key: Hashable,
     ) -> dict[str, LimitResult]:
         leads: list[AnalysisPoint] = []
         results: dict[str, LimitResult] = {}
@@ -242,7 +247,7 @@ def run_mode_sweep(
             def compute(lid: str = lid, comps: dict = comps) -> LimitResult:
                 if not leads:
                     leads.extend(lead_points(probes, offlead_deg, sidelead_deg, lateral))
-                cap = _capacity(case, probes, {lid: comps}, hook_mass_t, factor, lateral)
+                cap = _capacity(case, probes, {lid: comps}, hook_mass_t, factor, lateral, scales)
                 # Sensitivities do not depend on motion or wind, but the lead channels
                 # add to them: a limit responds if it does at any lead sign case.
                 responsive = any(limit_responds_to_hook_load(doc, pt, lid, comps) for pt in leads)
@@ -253,9 +258,10 @@ def run_mode_sweep(
             else:
                 signature: Hashable = limit_signature(lid, {c: v or 0.0 for c, v in comps.items()})
                 if case.condition.spec is not None:
-                    # A rules factor and lateral depend on inputs the fingerprint leaves out
-                    # (the rated loads of the contractual points), so they key the result too.
-                    signature = (signature, factor, lateral)
+                    # A rules factor, lateral and demand scales depend on inputs the
+                    # fingerprint leaves out (the rated loads of the contractual points), so
+                    # they key the result too.
+                    signature = (signature, factor, lateral, scale_key)
                 results[lid] = case.scope.limit_result(angle, signature, compute)
         return results
 
@@ -292,14 +298,19 @@ def run_mode_sweep(
                 setup, case.wind_speed_m_s, support_z_m=lift.support_z_m(hoist_id, angle)
             )
         )
-        results = _limit_results(case, angle, probes, mode.hook_mass_t, factor, lateral)
+        # The pedestal and retaining-component factors of the case (None: legacy).
+        scales = lift.demand_scales(case.condition, hoist_id, mode, angle, setup)
+        scale_key = (setup.foundation.dead_factor, setup.retaining_live_factor)
+        results = _limit_results(
+            case, angle, probes, mode.hook_mass_t, factor, lateral, scales, scale_key
+        )
         if results:
             # One factor per case and angle: the lowest hook load is the lowest payload.
             load_t = min(results.values(), key=lambda r: r.load_kN).load_t
         else:
             # No limit applies: the unlimited capacity.
             load_t = _capacity(
-                case, probes, enabled_limits, mode.hook_mass_t, factor, lateral
+                case, probes, enabled_limits, mode.hook_mass_t, factor, lateral, scales
             ).max_allowable_load_t
         return load_t, results
 

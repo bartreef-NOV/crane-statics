@@ -119,6 +119,7 @@ class ConnectionFormatter:
         "rear_hinge": "Rear Hinge",
         "front_hinge": "Front Hinge",
         "platform_base": "Platform Base",
+        "platform_base_retaining": "Retaining",
     }
 
     _COMPONENT_LABELS = {
@@ -511,14 +512,18 @@ class ResultRowFormatter:
         if rope_rows:
             groups["ropes"] = ("Ropes", list(rope_rows))
         for row in connection_rows:
-            _, members = groups.setdefault(
-                f"connection:{row.entity_id}",
-                (ConnectionFormatter.display_name(str(row.entity_id or "")), []),
-            )
+            if row.kind == "factored":
+                # A factored row is named "<group> / <component>"; it groups by that name.
+                group_name = row.name.rsplit(" / ", 1)[0]
+                key = f"factored:{group_name}"
+            else:
+                group_name = ConnectionFormatter.display_name(str(row.entity_id or ""))
+                key = f"connection:{row.entity_id}"
+            _, members = groups.setdefault(key, (group_name, []))
             members.append(row)
 
         def row_name(row: ResultRow) -> str:
-            if row.kind == "connection":
+            if row.kind in ("connection", "factored"):
                 return ConnectionFormatter.component_display_name(str(row.component or ""))
             return row.name
 

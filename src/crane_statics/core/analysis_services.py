@@ -15,7 +15,15 @@ from ..calculation.engine import CraneCalculator, get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .demand_extraction import extract_connection_component_response
-from .lift_factor import LiftFactors, amplified_rope_hoist_id, hook_lateral
+from .lift_factor import (
+    PLATFORM_BASE,
+    RETAINING_ENTITY,
+    LiftFactors,
+    amplified_rope_hoist_id,
+    factored_point,
+    foundation_label,
+    hook_lateral,
+)
 from .load_condition import scene_load_condition
 from ..presentation.formatters import ConnectionFormatter, HoistFormatter, RopeFormatter
 from .drawn_loads import LoadConditions
@@ -23,6 +31,7 @@ from .results import ResultRow
 from ..calculation.vessel_frame import VesselInputs, crane_frame_motion
 
 if TYPE_CHECKING:
+    from ..calculation.allowable import DemandScale
     from ..calculation.engine import AllowableCapacity, AnalysisPoint
     from ..calculation.results import HookLateral
     from ..data.models import CraneDocument, Hoist
@@ -171,6 +180,22 @@ class HoistStateService:
         direction = (-float(motion.accel_x_m_s2), -float(motion.accel_y_m_s2))
         support_z = self._scene_lift(doc).support_z_m(hoist.id, angle)
         return hook_lateral(setup, float(sc.wind_speed_m_s), direction, support_z_m=support_z)
+
+    def demand_scales(self, hoist_id: str) -> Optional[dict[str, DemandScale]]:
+        """The pedestal and retaining-component scales of the Scene's solves (legacy: None).
+
+        From the Scene condition's lift setup (the one ``dynamic_factor`` uses), with LL
+        counting the rope hanging at the Scene hook (``lift_factor.demand_scales``).
+        """
+        doc = self._session.document
+        hoist = self._session.payload_hoist_by_id(hoist_id)
+        if doc is None or hoist is None or doc.rules is None:
+            return None
+        mode, angle, tackle_m = self._scene_hook_state(hoist)
+        lift = self._scene_lift(doc)
+        condition = scene_load_condition(doc)
+        setup = lift.setup(condition, hoist.id, mode, angle, tackle_length_m=tackle_m)
+        return lift.demand_scales(condition, hoist.id, mode, angle, setup, tackle_m)
 
     def _scene_lift(self, doc: CraneDocument) -> LiftFactors:
         """The Scene's ``LiftFactors``, rebuilt whenever the document changes."""
@@ -548,16 +573,29 @@ class AnalysisCalculator:
                 conn_ids_order.append(dl.entity_id)
             conn_limits_by_id[dl.entity_id].append(dl)
 
-        def _entity_result_rows(conn_id: str) -> list[ResultRow]:
+        hoist_id = self._session.selected_hoist_id
+        scales = None if hoist_id is None else self._hoist.demand_scales(hoist_id)
+        # With a profile the platform-base limits check the factored demand: the plain
+        # rows show the unfactored demand without a limit, the "factored" rows check it.
+        factored_ids = {PLATFORM_BASE} if scales else set()
+
+        def _entity_result_rows(
+            conn_id: str,
+            point: AnalysisPoint = pt,
+            kind: str = "connection",
+            label: Optional[str] = None,
+            limits_of: Optional[str] = None,
+        ) -> list[ResultRow]:
             rows: list[ResultRow] = []
-            for dl in conn_limits_by_id.get(conn_id, []):
+            limit_entity = limits_of or conn_id
+            for dl in conn_limits_by_id.get(limit_entity, []):
                 comp = dl.component
                 if comp == "M" and conn_id in pinned_momentless_connections:
                     continue
                 widths = getattr(self._session.document, "support_widths", None)
                 diameter = widths.slewing_bearing_diameter_m if widths is not None else None
                 demand = extract_connection_component_response(
-                    pt,
+                    point,
                     hook_load_kN,
                     conn_id,
                     comp,
@@ -565,20 +603,25 @@ class AnalysisCalculator:
                 )
                 if demand is None:
                     continue
-                limit = active_limits.get(f"{conn_id}_{comp}")
+                limit = active_limits.get(f"{limit_entity}_{comp}")
+                if kind == "connection" and conn_id in factored_ids:
+                    limit = None
                 limit_kN = limit.allowable_kN if limit is not None else None
                 if comp == "min_bearing_line_load":
                     demand = max(0.0, demand)  # uplift only
                 util_pct = abs(demand) / limit_kN * 100.0 if limit_kN else None
+                name = ConnectionFormatter.format_label(limit_entity, comp)
+                if label is not None:
+                    name = f"{label} / {ConnectionFormatter.component_display_name(comp)}"
                 rows.append(
                     ResultRow(
-                        name=ConnectionFormatter.format_label(conn_id, comp),
+                        name=name,
                         unit=ConnectionFormatter.component_unit(comp),
                         demand_kN=demand,
                         limit_kN=limit_kN,
                         utilization_pct=util_pct,
-                        kind="connection",
-                        entity_id=conn_id,
+                        kind=kind,
+                        entity_id=limit_entity,
                         component=comp,
                         runtime_id=conn_id,
                     )
@@ -586,7 +629,8 @@ class AnalysisCalculator:
             return rows
 
         present_conn_ids = set(conn_limits_by_id.keys())
-        processed: set[str] = set()
+        # The retaining copy has no reactions of its own: it is reported as factored rows.
+        processed: set[str] = {RETAINING_ENTITY}
 
         for top_entity_id in ConnectionFormatter.top_level_entities(conn_ids_order):
             if top_entity_id == "heel_point":
@@ -609,6 +653,22 @@ class AnalysisCalculator:
             conn_rows.extend(_entity_result_rows(conn_id))
             processed.add(conn_id)
 
+        if scales and PLATFORM_BASE in conn_limits_by_id:
+            doc = self._session.document
+            label = None if doc is None else foundation_label(doc)
+            pedestal = factored_point(pt, scales[PLATFORM_BASE], hook_load_kN, PLATFORM_BASE)
+            conn_rows.extend(
+                _entity_result_rows(PLATFORM_BASE, pedestal, "factored", f"Platform Base ({label})")
+            )
+            if RETAINING_ENTITY in conn_limits_by_id:
+                retaining = factored_point(
+                    pt, scales[RETAINING_ENTITY], hook_load_kN, RETAINING_ENTITY
+                )
+                conn_rows.extend(
+                    _entity_result_rows(
+                        PLATFORM_BASE, retaining, "factored", limits_of=RETAINING_ENTITY
+                    )
+                )
         return rope_rows, conn_rows
 
     def compute_current_result_rows(self) -> tuple[Optional[Any], list[ResultRow], list[ResultRow]]:
@@ -661,6 +721,7 @@ class AnalysisCalculator:
             tackle_length_m=sc.tackle_length_m,
             amplified_rope_hoist_id=self._hoist.amplified_rope_hoist_id(hoist_id),
             hook_lateral=self._hoist.hook_lateral(hoist_id),
+            demand_scale=self._hoist.demand_scales(hoist_id),
         )
 
     def resolve_row_demand(
