@@ -74,6 +74,7 @@ class AbsProfile:
         chart_max_load_t: float,
         *,
         case: Optional[CaseSpec] = None,
+        support_x_m: float = 0.0,
     ) -> LiftSetup:
         """Dynamic factor, lateral and foundation settings for one hoist and mode.
 
@@ -83,12 +84,24 @@ class AbsProfile:
         records state the dynamic and pedestal factors. ``case`` (shared signature with
         the DNV profile) supplies the vessel motion; it defaults to the single ABS case,
         whose motion is the condition's.
+
+        ``support_x_m`` is the crane-frame x of the node the hook hangs from (the boom tip)
+        at the point's boom angle. 5.17's a_v is the vertical acceleration there: the
+        linear ``|a_z|`` plus the angular accelerations times a bound on their lever arm
+        over every slew, ``(|alpha_pitch| + |alpha_roll|) * (|x_ref| + |x_tip|)`` (spec
+        section 9.7 item 10).
         """
         crane_class = _crane_class(doc)
         hoist = _hoist(doc, hoist_id)
         gravity = abs(doc.environment.gravity_m_s2)
         motion = (case if case is not None else self.cases(doc, cond)[0]).vessel_motion
-        a_v_g = abs(motion.accel_z_m_s2) / GRAVITY_M_S2
+        # The solver gives a point a_z - alpha_pitch_c * (x - x_ref), with alpha_pitch_c the
+        # slew-rotated (alpha_roll, alpha_pitch) and x_ref in the crane frame; physically the
+        # reference point stays on the vessel while the boom slews about x = 0. Both levers
+        # are at most |x_ref| + |x_tip|, and |alpha_pitch_c| <= |alpha_pitch| + |alpha_roll|.
+        lever_m = abs(motion.reference_x_m) + abs(float(support_x_m))
+        angular = abs(motion.pitch_angular_accel_rad_s2) + abs(motion.roll_angular_accel_rad_s2)
+        a_v_g = (abs(motion.accel_z_m_s2) + angular * lever_m) / GRAVITY_M_S2
         ll_kN = (chart_max_load_t + mode.hook_mass_t + suspended_rope_mass_t) * gravity
         if ll_kN <= 0.0:
             raise RulesValidationError(
@@ -101,13 +114,13 @@ class AbsProfile:
         if crane_class == "heavy_lift":
             factor = LinearFactor(HEAVY_LIFT_BASE_VAF + a_v_g, suspended_rope_mass_t)
             clause, formula = _CL_HEAVY, "VAF = 1.1 + a_v"
-            inputs = {"a_v_g": a_v_g}
+            inputs = {"a_v_g": a_v_g, "a_v_lever_m": lever_m}
             min_side_clause = _CL_HEAVY
         elif cond.lift == "onboard":
             factor = AbsOnboardFactor(a_v_g, suspended_rope_mass_t)
             clause = _CL_ONBOARD
             formula = "VAF = clamp(1.373 - LL/5220 + a_v, 1.1 + a_v, 1.33 + a_v)"
-            inputs = {"a_v_g": a_v_g}
+            inputs = {"a_v_g": a_v_g, "a_v_lever_m": lever_m}
             min_side_clause = _CL_ONBOARD
         else:
             v_r = _relative_velocity(cond, hoist, records, warnings)
@@ -119,7 +132,12 @@ class AbsProfile:
             )
             clause = _CL_OFFBOARD
             formula = "VAF = max(1 + v_r*sqrt(K/(g*LL)), VAF_onb)"
-            inputs = {"a_v_g": a_v_g, "K_kN_m": stiffness_kN_m, "v_r_m_s": v_r}
+            inputs = {
+                "a_v_g": a_v_g,
+                "a_v_lever_m": lever_m,
+                "K_kN_m": stiffness_kN_m,
+                "v_r_m_s": v_r,
+            }
             min_side_clause = _CL_ONBOARD
 
         computed = _value_at(factor, ll_kN, mode.hook_mass_t, suspended_rope_mass_t, gravity)

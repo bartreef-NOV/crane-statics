@@ -241,8 +241,13 @@ The solver adds this force at the support node: the point's sensitivity gains `0
    - It is the linear part plus the angular part about the `vessel_motion` reference point: `|a_x| + |α_pitch|·|z − z_ref|` and `|a_y| + |α_roll|·|z − z_ref|`. These are the solver's structural lever arms, `a_x + α_pitch·(z − z_ref)` and `a_y − α_roll·(z − z_ref)`, with the magnitudes added, as the direction is free.
    - The profile supplies `accel_fraction_per_m_x/y` and `reference_z_m`; core evaluates them at the support node's height (`LiftFactors.support_z_m`).
 9. **Load wind direction-free at full force** (review ruling). See 9.4, "Wind constant".
-10. **a_v is not taken at the boom tip** (owner-visible simplification). The ABS VAF uses `a_v = |accel_z|/g` and leaves out the rotational vertical components `α_pitch·Δx` and `α_roll·Δy` at the tip.
-    - The vertical lever arm `Δx` is measured in the vessel frame and so depends on the slew angle, which a chart point envelopes over.
-    - The factor is built inside the profile, before any slew is known.
-    - Including it would need the profile to take a tip position and a slew envelope.
-    - The structure's own inertia does include those terms.
+10. **ABS a_v at the boom tip, slew-free bound** (review ruling, conservative). The VAF's a_v (5.17, the vertical acceleration at the location) is
+    `a_v = (|a_z| + (|α_pitch| + |α_roll|) · (|x_ref| + |x_tip|)) / g`,
+    where `x_tip` is the crane-frame x of the hook's support node at the point's boom angle and `x_ref` is `vessel_motion.reference_x_m`.
+    - **Solver convention.** The solver applies `a_z − α_pitch,c · (x − x_ref)` at a point. Here `α_pitch,c = −sin(slew)·α_roll + cos(slew)·α_pitch` is the slew-rotated angular acceleration (`vessel_frame.crane_frame_motion`), and `x_ref` is taken in the crane frame.
+    - **Bound on the angular acceleration.** Over every slew, `|α_pitch,c| ≤ hypot(α_pitch, α_roll) ≤ |α_pitch| + |α_roll|`.
+    - **Bound on the lever, solver frame.** The solver's lever satisfies `|x_tip − x_ref| ≤ |x_tip| + |x_ref|`.
+    - **Bound on the lever, physical frame.** Physically the reference point stays on the vessel while the boom slews about the crane origin (the slew axis, x = y = 0). The horizontal distance from the reference point to the tip, in the vessel frame, is `|R(slew)·(x_tip, 0) − (x_ref, 0)| ≤ |x_tip| + |x_ref|` by the triangle inequality, at every slew angle.
+    - **Result.** The roll and pitch angular terms together are at most `(|α_pitch| + |α_roll|) · (|x_ref| + |x_tip|)`, and adding `|a_z|` bounds the vertical acceleration at the tip for every slew. The bound overstates whenever the angular accelerations or the levers do not align.
+    - **Implementation.** `LiftFactors.setup` passes `support_x_m` (the tip x at the angle) to `profile.lift_setup`, and `AbsProfile` forms a_v as above. The setup is cached per boom angle already. The dynamic-factor record carries `a_v_g` and `a_v_lever_m`.
+    - **Unchanged cases.** With zero angular acceleration, a_v is `|a_z|/g` as before. DNV is unchanged: both of its in-service cases have no vessel accelerations.

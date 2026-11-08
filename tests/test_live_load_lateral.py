@@ -12,7 +12,7 @@ import json
 import math
 import dataclasses
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
@@ -757,3 +757,99 @@ def test_scene_load_overview_shows_the_hook_lateral_step() -> None:
     assert names[-1] == "Hook lateral"
     assert overview["terms"][-1]["value_kN"] != 0.0
     assert overview["reconstructed_kN"] == pytest.approx(demand, abs=1e-6)
+
+
+# --- ABS a_v at the boom tip (review fix round 2) ----------------------------------------
+
+TIP_MOTION = VesselMotion(
+    accel_z_m_s2=0.5,
+    pitch_angular_accel_rad_s2=0.05,
+    roll_angular_accel_rad_s2=-0.03,
+    reference_x_m=-3.0,
+)
+
+
+def _abs_setup(
+    lift: Literal["onboard", "offboard"], motion: VesselMotion, support_x_m: float, **kw: Any
+):
+    cond = ConditionSpec(name="c", lift=lift, wind_speed_m_s=0.0, vessel_motion=motion, **kw)
+    doc = rules_doc("ABS", cond)
+    hoists = [h.model_copy(update={"max_hoisting_speed_m_s": 0.5}) for h in doc.hoists]
+    doc = doc.model_copy(update={"hoists": hoists})
+    hoist = next(h for h in doc.hoists if h.id == HOIST)
+    hoist = hoist.model_copy(update={"hook_daf": 1.0})
+    doc = doc.model_copy(update={"hoists": [hoist if h.id == HOIST else h for h in doc.hoists]})
+    mode = analysis_mode_by_name(hoist, "normal")
+    setup = AbsProfile().lift_setup(
+        doc, cond, HOIST, mode, 5000.0, 0.0, 300.0, support_x_m=support_x_m
+    )
+    return setup, mode
+
+
+def _vaf(setup, mode, ll_kN: float) -> float:
+    payload = ll_kN / G - mode.hook_mass_t
+    return float(setup.factor.hook_force_kN(payload, mode.hook_mass_t, G) / ll_kN)
+
+
+def test_abs_a_v_is_taken_at_the_boom_tip() -> None:
+    # a_v = (|a_z| + (|alpha_pitch| + |alpha_roll|) * (|x_ref| + |x_tip|)) / g
+    a_v = (0.5 + (0.05 + 0.03) * (3.0 + 40.0)) / G
+    assert a_v > 0.3  # ~0.4 g at a 40 m tip, against 0.05 g from a_z alone
+    setup, mode = _abs_setup("onboard", TIP_MOTION, 40.0)
+    for ll in (1000.0, 3000.0):
+        assert _vaf(setup, mode, ll) == pytest.approx(ref.abs_vaf_onboard(ll, a_v), rel=1e-12)
+    record = next(r for r in setup.records if r.quantity == "dynamic_factor")
+    assert record.inputs["a_v_g"] == pytest.approx(a_v, rel=1e-12)
+    assert record.inputs["a_v_lever_m"] == 43.0
+    # The lever bound is the same on either side of the slew axis.
+    mirrored, _ = _abs_setup("onboard", TIP_MOTION, -40.0)
+    assert _vaf(mirrored, mode, 1000.0) == pytest.approx(_vaf(setup, mode, 1000.0), rel=1e-15)
+
+
+def test_abs_a_v_without_angular_acceleration_is_the_linear_one() -> None:
+    still = TIP_MOTION.model_copy(
+        update={"pitch_angular_accel_rad_s2": 0.0, "roll_angular_accel_rad_s2": 0.0}
+    )
+    setup, mode = _abs_setup("onboard", still, 40.0)
+    assert _vaf(setup, mode, 1000.0) == pytest.approx(
+        ref.abs_vaf_onboard(1000.0, 0.5 / G), rel=1e-12
+    )
+
+
+def test_abs_offboard_factor_uses_the_tip_a_v() -> None:
+    a_v = (0.5 + 0.08 * 43.0) / G
+    setup, mode = _abs_setup(
+        "offboard",
+        TIP_MOTION,
+        40.0,
+        significant_wave_height_m=2.0,
+        v_in_m_s=0.8,
+        v_t_m_s=0.6,
+    )
+    v_r = ref.abs_v_r(0.5, 0.8, 0.6)
+    for ll in (1000.0, 3000.0, 8000.0):
+        assert _vaf(setup, mode, ll) == pytest.approx(
+            ref.abs_vaf_offboard(ll, 5000.0, v_r, a_v), rel=1e-12
+        )
+    # The onboard floor (with the tip a_v) governs at a large live load.
+    assert _vaf(setup, mode, 8000.0) == pytest.approx(ref.abs_vaf_onboard(8000.0, a_v), rel=1e-12)
+
+
+def test_lift_setup_passes_the_support_node_x_at_each_angle() -> None:
+    cond = ConditionSpec(name="c", wind_speed_m_s=0.0, vessel_motion=TIP_MOTION)
+    doc = rules_doc("ABS", cond)
+    condition = condition_cases(doc, "c")[0]
+    hoist = next(h for h in doc.hoists if h.id == HOIST)
+    mode = analysis_mode_by_name(hoist, "normal")
+    lift = LiftFactors(doc, CraneCalculator(doc))
+    doc_dict = doc.model_dump()
+    support = next(h for h in doc_dict["hoists"] if h["id"] == HOIST)["support_node_id"]
+    kin = KinematicsAdapter(doc_dict)
+    levers = []
+    for angle in (40.0, 70.0):
+        setup = lift.setup(condition, HOIST, mode, angle)
+        record = next(r for r in setup.records if r.quantity == "dynamic_factor")
+        x_tip = kin.compute_all_node_positions(angle)[support]["x"]
+        assert record.inputs["a_v_lever_m"] == pytest.approx(3.0 + abs(x_tip), rel=1e-12)
+        levers.append(record.inputs["a_v_lever_m"])
+    assert levers[0] != levers[1]  # cached per angle: the tip moves

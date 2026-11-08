@@ -100,6 +100,7 @@ class DnvProfile:
         chart_max_load_t: float,
         *,
         case: Optional[CaseSpec] = None,
+        support_x_m: float = 0.0,
     ) -> LiftSetup:
         """Dynamic factor, lateral and foundation settings for one hoist and mode.
 
@@ -108,6 +109,8 @@ class DnvProfile:
         floor; psi itself is evaluated at the point's own working load. The safe working
         load for SF1 is ``chart_max_load_t`` alone (accessories excluded, 4.1.2.1).
         ``case`` sets the heel/trim of the lateral spec; it defaults to Case I.
+        ``support_x_m`` (shared signature with the ABS profile) is unused: both DNV cases
+        have no vessel accelerations.
         """
         rules = _rules(doc)
         hoist = _hoist(doc, hoist_id)

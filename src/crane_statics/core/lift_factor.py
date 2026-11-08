@@ -213,6 +213,7 @@ def _profile_setup(
     mode: HoistAnalysisMode,
     stiffness_kN_m: float,
     rope_mass_t: float,
+    support_x_m: float,
 ) -> LiftSetup:
     assert doc.rules is not None and condition.spec is not None
     setup = profile_for(doc.rules).lift_setup(
@@ -224,6 +225,7 @@ def _profile_setup(
         rope_mass_t,
         chart_max_load_t(mode),
         case=condition.case,
+        support_x_m=support_x_m,
     )
     notes: list[str] = []
     if not mode.contractual_points:
@@ -354,8 +356,7 @@ class LiftFactors:
             )
         return float(self._stiffness[key])
 
-    def support_z_m(self, hoist_id: str, angle: float) -> float:
-        """Height of the node ``hoist_id``'s hook hangs from at ``angle`` (the boom tip)."""
+    def _support(self, hoist_id: str, angle: float) -> tuple[float, float]:
         doc_dict, kin = self._kinematics()
         positions = kin.compute_all_node_positions(float(angle))
         support = positions.get(hook_support_node_id(doc_dict, hoist_id))
@@ -363,7 +364,15 @@ class LiftFactors:
             raise RulesValidationError(
                 f"hoists.{hoist_id}: hook support node unresolved at {angle:g} deg"
             )
-        return float(support["z"])
+        return float(support["x"]), float(support["z"])
+
+    def support_z_m(self, hoist_id: str, angle: float) -> float:
+        """Height of the node ``hoist_id``'s hook hangs from at ``angle`` (the boom tip)."""
+        return self._support(hoist_id, angle)[1]
+
+    def support_x_m(self, hoist_id: str, angle: float) -> float:
+        """Crane-frame x of the node ``hoist_id``'s hook hangs from at ``angle``."""
+        return self._support(hoist_id, angle)[0]
 
     def suspended_rope_mass_t(
         self,
@@ -426,6 +435,16 @@ class LiftFactors:
             else:
                 stiffness = self._stiffness_kN_m(condition, hoist_id, angle) if per_angle else 0.0
                 rope_t = self.suspended_rope_mass_t(hoist_id, mode, angle, tackle_length_m)
-                setup = _profile_setup(self._doc, condition, hoist_id, mode, stiffness, rope_t)
+                # The ABS a_v is taken at the boom tip, which moves with the angle (the
+                # setup is cached per angle already).
+                setup = _profile_setup(
+                    self._doc,
+                    condition,
+                    hoist_id,
+                    mode,
+                    stiffness,
+                    rope_t,
+                    self.support_x_m(hoist_id, angle),
+                )
             self._setups.put(key, setup)
         return setup
