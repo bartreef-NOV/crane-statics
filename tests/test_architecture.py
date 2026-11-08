@@ -11,7 +11,7 @@ from crane_statics.core.session_model import SessionModel
 from crane_statics.qml_app.session import SessionState
 
 SOURCE_ROOT = Path(__file__).parent.parent / "src" / "crane_statics"
-PURE_PACKAGES = ("core", "data", "calculation")
+PURE_PACKAGES = ("core", "data", "calculation", "rules")
 FORBIDDEN_DOMAIN_IMPORTS = (
     "PyQt6",
     "crane_statics.qml_app",
@@ -160,3 +160,13 @@ def test_drawn_load_model_is_qt_free_and_in_plane():
     fields = set(drawn_loads.LoadConditions.__dataclass_fields__)
     for out_of_plane in ("accel_y_m_s2", "roll_accel_rad_s2", "sidelead_deg"):
         assert out_of_plane not in fields, f"{out_of_plane} is out-of-plane; not drawable in X/Z"
+
+
+def test_calculation_does_not_import_rules():
+    violations = {
+        path.relative_to(SOURCE_ROOT): _forbidden_imports(path, ("crane_statics.rules",))
+        | {i for i in _imports_in(path) if i == "rules" or i.startswith(("rules.", "..rules"))}
+        for path in (SOURCE_ROOT / "calculation").rglob("*.py")
+    }
+    violations = {k: v for k, v in violations.items() if v}
+    assert not violations, f"calculation imports rules: {violations}"

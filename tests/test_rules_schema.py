@@ -40,7 +40,7 @@ def _authored() -> dict:
                     "load_chart": [{"outreach_m": 30.0, "load_t": 100.0}],
                 },
             },
-            "rules": {"standard": "DNV", "crane_class": "offshore"},
+            "rules": {"standard": "DNV"},
             "conditions": {
                 "onboard_sea": {
                     "wind_speed_m_s": 20.0,

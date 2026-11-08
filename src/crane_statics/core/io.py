@@ -15,6 +15,7 @@ from ..data import (
     normalize_document,
     document_to_authored_form,
 )
+from ..rules import validate_rules_document
 from ..data.authored_models import (
     AuthoredDocument,
     AUTHORED_SCHEMA_MAJOR_VERSION,
@@ -128,6 +129,7 @@ def load_document(path: Path) -> CraneDocument:
     try:
         _validate_authored_schema(data)
         doc = normalize_document(data)
+        validate_rules_document(doc)
         return doc
     except DocumentIOError:
         raise
