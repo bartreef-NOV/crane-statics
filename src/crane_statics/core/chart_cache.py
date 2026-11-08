@@ -44,7 +44,14 @@ def chart_fingerprint(doc: CraneDocument, enabled_limits: dict, limit_display_na
 
 def empty_payload() -> dict[str, Any]:
     """A mode payload with no curve, used for modes that do not apply."""
-    return {"curve_data": [], "contractual_results": [], "limit_series": [], "n_points": 0}
+    return {
+        "curve_data": [],
+        "contractual_results": [],
+        "limit_series": [],
+        "n_points": 0,
+        "provenance": [],
+        "condition": "",
+    }
 
 
 class ChartCache:

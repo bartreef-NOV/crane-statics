@@ -18,6 +18,7 @@ from .demand_extraction import limit_responds_to_hook_load
 from .lift_factor import LiftFactors, amplified_rope_hoist_id, hook_lateral
 from .load_condition import LoadCondition, condition_cases, condition_document
 from ..rules import RulesValidationError
+from ..rules.types import ProvenanceRecord
 from .sweep_cache import ComputeScope, LimitResult, limit_signature
 
 _LOG = logging.getLogger(__name__)
@@ -25,6 +26,10 @@ _LOG = logging.getLogger(__name__)
 
 class SweepCancelled(Exception):
     """Raised when a capacity sweep is asked to stop cooperatively."""
+
+
+# (records, warnings) of one lift setup: the clause trail of a chart point.
+_Trail = tuple[tuple[ProvenanceRecord, ...], tuple[str, ...]]
 
 
 class _SweepCase(NamedTuple):
@@ -179,6 +184,11 @@ def run_mode_sweep(
     ``compute_scope`` (for this document, hoist and mode) supplies and keeps the probe
     solves and per-limit results, so a re-sweep only evaluates what changed; the payload
     is the same with or without it.
+    The payload's ``provenance`` is, for a rules condition, one ``(outreach, records,
+    warnings)`` per ``curve_data`` point: the ``LiftSetup.records``/``warnings`` of the case
+    that set that point's capacity (the one of lowest payload; the first on a tie), the very
+    setup its capacity was computed with. It is ``[]`` for a legacy document, whose factor
+    is the authored constant. ``condition`` is the swept condition's name.
     ``on_contractual`` receives a copy of the contractual results once, right after stage 1
     (not when the mode has no contractual points). ``on_limit_points`` receives, with each
     flush when any limit gained points (the final flush may bring limit points without a
@@ -265,6 +275,9 @@ def run_mode_sweep(
                 results[lid] = case.scope.limit_result(angle, signature, compute)
         return results
 
+    # Filled by _case_envelope for the angle being evaluated: case name -> clause trail.
+    trails: dict[str, _Trail] = {}
+
     def _case_envelope(
         case: _SweepCase, angle: float, mode: HoistAnalysisMode
     ) -> Optional[tuple[float, dict[str, LimitResult]]]:
@@ -312,10 +325,13 @@ def run_mode_sweep(
             load_t = _capacity(
                 case, probes, enabled_limits, mode.hook_mass_t, factor, lateral, scales
             ).max_allowable_load_t
+        trails[case.condition.name] = (setup.records, setup.warnings)
         return load_t, results
 
     # Stage 2 revisits the contractual outreaches of stage 1; their solves are reused.
     envelope_cache: dict[tuple[float, str], Optional[tuple[float, dict[str, LimitResult]]]] = {}
+    # The clause trail (records, warnings) of the case governing each cached envelope.
+    trail_cache: dict[tuple[float, str], _Trail] = {}
 
     def _envelope(
         angle: float, mode: HoistAnalysisMode
@@ -324,9 +340,14 @@ def run_mode_sweep(
         minimum over its cases (``_lowest_envelope``), None if unsolved."""
         key = (round(float(angle), 10), mode.name)
         if key not in envelope_cache:
-            envelope_cache[key] = _lowest_envelope(
-                [_case_envelope(case, angle, mode) for case in cases]
-            )
+            trails.clear()
+            envelopes = [_case_envelope(case, angle, mode) for case in cases]
+            envelope_cache[key] = _lowest_envelope(envelopes)
+            if all(e is not None for e in envelopes):
+                # The case of lowest payload governs (first on a tie, as min() keeps it).
+                loads = [e[0] for e in envelopes if e is not None]
+                governing = cases[loads.index(min(loads))]
+                trail_cache[key] = trails[governing.condition.name]
         return envelope_cache[key]
 
     step = max(0.01, float(outreach_step))
@@ -346,6 +367,8 @@ def run_mode_sweep(
                 "contractual_results": [],
                 "limit_series": [],
                 "n_points": 0,
+                "provenance": [],
+                "condition": conditions[0].condition_name,
             }
         mode_outreach_grid = sorted(
             set(
@@ -379,6 +402,8 @@ def run_mode_sweep(
 
         report(f"Stage 2/2 ({mode_name}): Capacity curve sweep...")
         curve_outreach: list[float] = []
+        # outreach -> clause trail of the point (rules conditions only)
+        trail_by_outreach: dict[float, _Trail] = {}
         curve_load_t: list[float] = []
         limit_series_map: dict[str, list] = {lid: [] for lid in enabled_limits}
         pending: list[tuple[float, float]] = []
@@ -416,6 +441,9 @@ def run_mode_sweep(
                         if result.responsive and math.isfinite(result.load_t):
                             limit_series_map[lid].append((outreach, result.load_t))
                     if math.isfinite(load_t):
+                        trail = trail_cache.get((round(float(angle), 10), mode.name))
+                        if trail is not None and cases[0].condition.spec is not None:
+                            trail_by_outreach[outreach] = trail
                         curve_outreach.append(outreach)
                         curve_load_t.append(load_t)
                         pending.append((outreach, load_t))
@@ -459,6 +487,10 @@ def run_mode_sweep(
             "contractual_results": contractual_results,
             "limit_series": limit_series,
             "n_points": len(curve_outreach),
+            "provenance": [
+                (x, *trail_by_outreach[x]) for x in curve_outreach if x in trail_by_outreach
+            ],
+            "condition": conditions[0].condition_name,
         }
 
     return _compute_mode(mode_name)

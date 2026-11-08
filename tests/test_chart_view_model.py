@@ -381,6 +381,91 @@ class TestExport:
         assert "CSV export failed" in chart_vm.statusText
 
 
+class TestClauseTrailExport:
+    @staticmethod
+    def _export(vm, tmp_path):
+        import csv
+        from PyQt6.QtCore import QUrl
+
+        target = tmp_path / "chart.csv"
+        assert vm.exportCsv(QUrl.fromLocalFile(str(target))) is True
+        return target, list(csv.reader(target.read_text(encoding="utf-8").splitlines()))
+
+    @staticmethod
+    def _rules_vm():
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        session = SessionState()
+        vm = ChartViewModel(session)
+        vm.setOutreachStep(20.0)
+        doc = without_suspended_rope(rules_doc("ABS", gale()))
+        session.model.set_document(doc)
+        vm.drawBlocking()
+        return vm
+
+    def test_legacy_export_is_byte_identical_to_the_three_column_format(self, chart_vm, tmp_path):
+        chart_vm.drawBlocking()
+        target, _rows = self._export(chart_vm, tmp_path)
+        expected = ["series,outreach_m,load_t"]
+        expected += [f"capacity,{x:.4f},{y:.4f}" for x, y in chart_vm.curvePoints]
+        for series in chart_vm.limitSeries:
+            expected += [f"{series['label']},{x:.4f},{y:.4f}" for x, y in series["points"]]
+        expected += [
+            f"contractual ({m['status']}),{m['outreach']:.4f},{m['load']:.4f}"
+            for m in chart_vm.markers
+        ]
+        text = "\r\n".join(expected) + "\r\n"
+        assert target.read_bytes() == text.encode("utf-8")
+
+    def test_rules_export_adds_the_clause_columns(self, tmp_path):
+        vm = self._rules_vm()
+        _target, rows = self._export(vm, tmp_path)
+        assert rows[0] == [
+            "series",
+            "outreach_m",
+            "load_t",
+            "condition",
+            "factor",
+            "clause",
+            "source",
+            "warnings",
+        ]
+        assert all(len(r) == 8 for r in rows)
+        capacity = [r for r in rows[1:] if r[0] == "capacity"]
+        assert capacity
+        assert {r[3] for r in capacity} == {"gale"}
+        assert {r[6] for r in capacity} <= {"computed", "override"}
+        assert all(r[5] for r in capacity)
+        factors = [r for r in capacity if r[4].startswith("dynamic_factor=")]
+        # One computed factor row per curve point (GT283's authored daf adds an override row).
+        assert len([r for r in factors if r[6] == "computed"]) == len(vm.curvePoints)
+        # Limit and contractual rows carry no clause trail.
+        others = [r for r in rows[1:] if r[0] != "capacity"]
+        assert all(r[3:] == ["", "", "", "", ""] for r in others)
+
+    def test_rules_export_marks_a_manual_daf_as_override(self, tmp_path):
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        session = SessionState()
+        vm = ChartViewModel(session)
+        vm.setOutreachStep(20.0)
+        doc = without_suspended_rope(rules_doc("ABS", gale()))
+        hoists = [h.model_copy(update={"hook_daf": 1.7}) for h in doc.hoists]
+        session.model.set_document(doc.model_copy(update={"hoists": hoists}))
+        vm.drawBlocking()
+        _target, rows = self._export(vm, tmp_path)
+        assert "override" in {r[6] for r in rows[1:]}
+
+    def test_export_refuses_while_partial(self, chart_vm, tmp_path):
+        from PyQt6.QtCore import QUrl
+
+        chart_vm.drawBlocking()
+        chart_vm._partial = True
+        target = tmp_path / "chart.csv"
+        assert chart_vm.exportCsv(QUrl.fromLocalFile(str(target))) is False
+        assert not target.exists()
+
+
 class TestChartCaching:
     @pytest.fixture
     def sweep_calls(self, monkeypatch):

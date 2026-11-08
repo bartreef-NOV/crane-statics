@@ -128,8 +128,13 @@ def test_rules_sweep_uses_the_condition_wind_and_motion_not_the_dummies(
     )
     assert swept is not None and same is not None and dummy is not None
     assert swept["curve_data"]
-    assert swept == same
+    assert _curves(swept) == _curves(same)
     assert swept["curve_data"] != dummy["curve_data"]  # the wind speed does matter here
+
+
+def _curves(payload: dict) -> dict:
+    """The payload without its clause trail (a legacy equivalent has none)."""
+    return {k: v for k, v in payload.items() if k not in ("provenance", "condition")}
 
 
 def _legacy_curve(doc: CraneDocument, wind: float, motion: VesselMotion) -> dict[float, float]:
@@ -279,5 +284,122 @@ def test_rules_sweep_uses_the_condition_reference_point(monkeypatch: pytest.Monk
     )
     assert swept is not None and same is not None and at_origin is not None
     assert swept["curve_data"]
-    assert swept == same
+    assert _curves(swept) == _curves(same)
     assert swept["curve_data"] != at_origin["curve_data"]  # the reference point matters
+
+
+# --- clause trail (provenance) -------------------------------------------------------------
+
+
+def test_legacy_payload_has_no_provenance() -> None:
+    payload = run_mode_sweep(_doc(), HOIST, "normal", LIMITS, STEP, {})
+    assert payload is not None and payload["curve_data"]
+    assert payload["provenance"] == []
+    assert payload["condition"] == DEFAULT_CONDITION_NAME
+
+
+def test_rules_payload_carries_the_records_of_every_curve_point() -> None:
+    doc = _rules_doc("ABS", gale(wind=30.0))
+    payload = run_mode_sweep(
+        doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
+    )
+    assert payload is not None and payload["curve_data"]
+    assert payload["condition"] == "gale"
+    prov = payload["provenance"]
+    assert [p[0] for p in prov] == [x for x, _y in payload["curve_data"]]
+    for _outreach, records, warnings in prov:
+        assert isinstance(records, tuple) and isinstance(warnings, tuple)
+        factor = [r for r in records if r.quantity == "dynamic_factor"]
+        # GT283 authors a non-default hook_daf, so the computed factor is followed by its override.
+        assert [r.source for r in factor][0] == "computed"
+        assert {r.source for r in factor} <= {"computed", "override"}
+        assert factor[0].clause
+
+
+def test_rules_records_are_the_setup_the_capacity_was_computed_with() -> None:
+    from crane_statics.core.analysis_cases import analysis_mode_by_name
+    from crane_statics.core.lift_factor import LiftFactors
+    from crane_statics.calculation.engine import CraneCalculator
+    from crane_statics.core.chart_envelope import build_probes
+    from crane_statics.core.lift_factor import amplified_rope_hoist_id
+    from crane_statics.core.load_condition import condition_document
+    from crane_statics.calculation.solver.kinematics import KinematicsAdapter
+
+    doc = _rules_doc("ABS", gale(wind=30.0))
+    payload = run_mode_sweep(
+        doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
+    )
+    assert payload is not None
+    outreach, records, warnings = payload["provenance"][len(payload["provenance"]) // 2]
+    (case,) = condition_cases(doc, "gale")
+    hoist = next(h for h in doc.hoists if h.id == HOIST)
+    mode = analysis_mode_by_name(hoist, "normal")
+    angle = KinematicsAdapter(doc.model_dump()).outreach_to_angle(outreach, HOIST)
+    calc = CraneCalculator(condition_document(doc, case))
+    assert angle is not None
+    probes = build_probes(
+        calc,
+        HOIST,
+        angle,
+        case.wind_speed_m_s,
+        mode.runtime_overrides,
+        vessel=case.vessel_motion,
+        amplified_rope_hoist_id=amplified_rope_hoist_id(case, HOIST),
+    )
+    assert probes is not None
+    setup = LiftFactors(doc, calc).setup(case, HOIST, mode, angle, probes.zero)
+    assert records == setup.records
+    assert warnings == setup.warnings
+
+
+def test_dnv_provenance_is_the_governing_cases() -> None:
+    doc = _rules_doc("DNV", gale(wind=30.0), gale("calm", wind=5.0))
+    payload = run_mode_sweep(
+        doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
+    )
+    assert payload is not None and payload["provenance"]
+    assert all(records for _x, records, _w in payload["provenance"])
+
+
+def test_manual_daf_is_recorded_as_an_override() -> None:
+    doc = _rules_doc("ABS", gale())
+    hoists = [h.model_copy(update={"hook_daf": 1.7}) if h.id == HOIST else h for h in doc.hoists]
+    doc = doc.model_copy(update={"hoists": hoists})
+    payload = run_mode_sweep(
+        doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
+    )
+    assert payload is not None and payload["provenance"]
+    for _x, records, _w in payload["provenance"]:
+        sources = [r.source for r in records if r.quantity == "dynamic_factor"]
+        assert sources == ["computed", "override"]
+
+
+def test_cached_rerun_returns_the_same_provenance() -> None:
+    doc = _rules_doc("ABS", gale())
+    cache = ComputeCache()
+    scope = cache.scope(compute_fingerprint(doc), HOIST, "normal")
+    first = run_mode_sweep(
+        doc,
+        HOIST,
+        "normal",
+        RULES_LIMITS,
+        RULES_STEP,
+        {},
+        compute_scope=scope,
+        condition_name="gale",
+    )
+    again = run_mode_sweep(
+        doc,
+        HOIST,
+        "normal",
+        RULES_LIMITS,
+        RULES_STEP,
+        {},
+        compute_scope=scope,
+        condition_name="gale",
+    )
+    plain = run_mode_sweep(
+        doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
+    )
+    assert first is not None and first["provenance"]
+    assert first == again == plain

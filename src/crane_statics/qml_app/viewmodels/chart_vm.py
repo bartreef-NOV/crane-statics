@@ -103,6 +103,25 @@ def _contractual_row(cp: Any, allowable: str, status: str) -> dict[str, str]:
     }
 
 
+# The columns a rules chart's CSV adds to series, outreach_m, load_t.
+_TRAIL_COLUMNS = ("condition", "factor", "clause", "source", "warnings")
+
+
+def _trail_rows(condition: str, trail: Optional[tuple]) -> list[list[str]]:
+    """The clause-trail cells of one capacity row: one row per provenance record.
+
+    ``factor`` is ``quantity=value`` of the record, ``source`` its ``computed`` or
+    ``override`` (a manual ``hook_daf`` replacing the standard's factor). The point's
+    warnings, joined by `` | ``, repeat on each of its rows so any row filters alone. A
+    point without a trail still gets one row, with the condition only.
+    """
+    if trail is None or not trail[0]:
+        return [[condition, "", "", "", ""]]
+    records, warnings = trail
+    joined = " | ".join(warnings)
+    return [[condition, f"{r.quantity}={r.value:.6g}", r.clause, r.source, joined] for r in records]
+
+
 class _SweepWorker(QThread):
     """Runs one (hoist, mode) capacity-curve sweep off the GUI thread."""
 
@@ -318,6 +337,9 @@ class ChartViewModel(QObject):
         self._displayed_chart: Optional[_DisplayedChart] = None
 
         self._curve_points: list[list[float]] = []
+        # The clause trail of the rendered capacity curve and its condition (rules only).
+        self._provenance: list[tuple[float, tuple, tuple]] = []
+        self._condition_name = ""
         self._limit_series: list[dict[str, Any]] = []
         self._markers: list[dict[str, Any]] = []
         # Streamed batches coalesce into one chartUpdated per event-loop turn.
@@ -1076,6 +1098,7 @@ class ChartViewModel(QObject):
         running = self._running
         stream = running.stream if running is not None else _JobStream([])
         self._curve_points = [list(point) for point in stream.points]
+        self._provenance = []
         self._limit_series = stream.limit_series()
         if stream.verdicts is None:
             pending = [(cp, None, None) for cp in self._contractual_points()]
@@ -1090,6 +1113,7 @@ class ChartViewModel(QObject):
 
     def _clear_display(self) -> None:
         self._curve_points = []
+        self._provenance = []
         self._limit_series = []
         self._markers = []
         # Drop the allowables a streamed or rendered chart left in the table.
@@ -1142,6 +1166,8 @@ class ChartViewModel(QObject):
 
     def _render_payload(self, payload: dict[str, Any]) -> None:
         self._curve_points = [[float(x), float(y)] for x, y in payload.get("curve_data", [])]
+        self._provenance = list(payload.get("provenance", []))
+        self._condition_name = str(payload.get("condition", ""))
         # The payload is the wanted chart's, computed with the limits enabled now.
         positions = self._limit_positions()
         self._limit_series = [
@@ -1327,18 +1353,33 @@ class ChartViewModel(QObject):
         try:
             with path.open("w", newline="", encoding="utf-8") as handle:
                 writer = csv.writer(handle)
-                writer.writerow(["series", "outreach_m", "load_t"])
+                # A rules chart adds the clause trail of its capacity rows; without one
+                # (legacy) the file is the plain three-column export.
+                trail = bool(self._provenance)
+                pad: list[str] = [""] * len(_TRAIL_COLUMNS) if trail else []
+                writer.writerow(
+                    ["series", "outreach_m", "load_t", *(_TRAIL_COLUMNS if trail else ())]
+                )
+                by_outreach = {
+                    round(float(x), 10): (rec, warn) for x, rec, warn in self._provenance
+                }
                 for x, y in self._curve_points:
-                    writer.writerow(["capacity", f"{x:.4f}", f"{y:.4f}"])
+                    head = ["capacity", f"{x:.4f}", f"{y:.4f}"]
+                    if not trail:
+                        writer.writerow(head)
+                        continue
+                    for tail in _trail_rows(self._condition_name, by_outreach.get(round(x, 10))):
+                        writer.writerow([*head, *tail])
                 for series in self._limit_series:
                     for x, y in series["points"]:
-                        writer.writerow([series["label"], f"{x:.4f}", f"{y:.4f}"])
+                        writer.writerow([series["label"], f"{x:.4f}", f"{y:.4f}", *pad])
                 for marker in self._markers:
                     writer.writerow(
                         [
                             f"contractual ({marker['status']})",
                             f"{marker['outreach']:.4f}",
                             f"{marker['load']:.4f}",
+                            *pad,
                         ]
                     )
         except OSError as exc:
