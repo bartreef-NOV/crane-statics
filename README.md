@@ -178,7 +178,7 @@ Keep QML declarative and route state changes through the owning view model. Add 
 ## References
 
 - `src/crane_statics/schemas/crane-statics-v11.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
-- ABS, *Requirements for Certification of Lifting Appliances*, January 2026. Part 2-2: 9.3 (p.53; v_hmin p.54), 5.15 (p.46), 5.13.5(c) (p.46), 5.17 (p.47-48), 5.19 (p.49-50), 5.21 (p.50-51), 11 (p.56-57)
+- ABS, *Requirements for Certification of Lifting Appliances*, January 2026. Part 2-2: 9.3 (p.52-54), 5.15 (p.46), 5.13.5(c) (p.46), 5.17 (p.47-48), 5.19 (p.49-50), 5.21 (p.50-51), 11 (p.56-57)
 - DNV-ST-0378, *Offshore and platform lifting appliances*, July 2019, amended October 2021: 4.1.3.2 (p.54), 4.2.2.1 (p.57), 4.2.3.2 and 4.2.3.3 (p.58), 8.2.2.1 (p.90), 8.2.2.2 (p.91), 8.2.2.4 (p.91)
 
 ## License

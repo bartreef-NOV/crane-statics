@@ -26,10 +26,12 @@ depend on the load being lifted.
   inputs, `computed` or `override`). `calculation/` stays class-free: it never names ABS or
   DNV and sees only a factor, case settings and multipliers.
 - **Closed-form, invertible factors.** Each dynamic factor is affine in the hook load for
-  the quantity the chart solves for (`rules/factors.py::LinearFactor`: factor and suspended
-  rope mass, with the standard's clamp or floor applied as a closed form), so `compute_allowable_load` still
+  the quantity the chart solves for (the classes in `rules/factors.py`, each with a closed-form
+  inverse; the standard's clamp or floor is applied in closed form), so `compute_allowable_load` still
   inverts `baseline + s * H` exactly with no iteration on the load.
-- **Two hooks are the only additions to the core.**
+- **Two hooks are the only additions to the solver and the allowable search.** (The analysis
+  point also gained the complete +x unit reactions, `lateral_x_unit_reactions`, so the hook
+  lateral reaches the left/right support entities.)
   - `HookLateral(fraction_x, fraction_y, constant_x_kN, constant_y_kN, min_fraction)`
     (`calculation/results.py`): the horizontal force the live load puts at the hoist's support
     node, split into the part proportional to the hook force and the wind constant.
