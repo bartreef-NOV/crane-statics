@@ -16,6 +16,10 @@ Essential terms for understanding the codebase structure. For the complete vocab
 
 **Hoist** — a lifting device with hook mass, falls, DAF, and contractual points (load/outreach duties).
 
+**Rules profile** — `rules/` ABS or DNV profile selected by `rules.standard`; supplies the dynamic factor, cases, lift setup, foundation factors and provenance so `calculation/` stays standard-neutral.
+
+**Condition** — a named in-service lift scenario (wind, vessel motion, Hs, velocities) under `conditions`; one load chart per condition.
+
 **Session** — the loaded document plus changes since load. Held by pure `core/session_model.py::SessionModel`.
 
 **Scene state** — the operator's inputs for one hoist: boom angle, hook load, tackle length, offlead, sidelead, wind, vessel motion (surge, sway, heave, roll, pitch, roll angle, pitch angle), and crane slewing angle. Surge, sway and heave are vessel-frame accelerations with gravity excluded. Scene vessel motion is clamped to the ± limits in the Model; the load chart uses only the Model limits and takes the worst case over ±.

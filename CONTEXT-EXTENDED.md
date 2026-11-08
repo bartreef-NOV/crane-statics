@@ -15,10 +15,19 @@ Decisions that should not be re-litigated live in [docs/adr/](docs/adr/).
 ## The document
 
 **Authored document** — the JSON a user writes and saves, validated against the
-strict `crane-statics` schema (currently `5.12.0`, in `src/crane_statics/schemas/`).
+strict `crane-statics` schema (currently `11.1.0`, in `src/crane_statics/schemas/`).
 It is allowed to be terse: omitted defaults, omitted empty arrays, no derived nodes.
 `data/models.py::document_to_authored_form` converts back to it for saving, so a
 load/save round-trip must not invent content.
+
+**Rules profile** — `rules/`'s `AbsProfile` or `DnvProfile`, chosen by the document's
+`rules.standard`. It turns a condition, a hoist and the geometry into a dynamic factor, the
+cases, the lift setup (lateral load, minimum side load), foundation factors and provenance.
+`calculation/` never imports it ([ADR-0004](docs/adr/0004-rules-profiles-keep-the-core-class-free.md)).
+
+**Condition** — a named in-service lift scenario under `conditions` (`lift` onboard or
+offboard, wind, vessel motion, Hs, Vin/Vt, load wind area). Each condition has its own load
+chart and produces every case its standard defines.
 
 **Normalized document** — an authored document after `normalize_document()`: defaults
 filled in, derived nodes generated, canonical connections generated, bodies in
