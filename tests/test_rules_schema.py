@@ -27,6 +27,7 @@ def _authored() -> dict:
             "hoists": {
                 "BH": {
                     "reeving": [{"node": "boom_heel"}, {"node": "rear_top", "parts": 4}],
+                    "rope": {"ea_kN": 90000.0},
                 },
                 "MH": {
                     "reeving": [
@@ -37,6 +38,8 @@ def _authored() -> dict:
                     "falls": 4,
                     "daf": 1.1,
                     "offlead_deg": 1.0,
+                    "rope": {"ea_kN": 40000.0},
+                    "max_hoisting_speed_m_s": 0.25,
                     "load_chart": [{"outreach_m": 30.0, "load_t": 100.0}],
                 },
             },
@@ -66,6 +69,9 @@ def _legacy() -> dict:
     data = _authored()
     md = data["model_definition"]
     del md["rules"], md["conditions"]
+    for hoist in md["hoists"].values():
+        hoist.pop("rope", None)
+        hoist.pop("max_hoisting_speed_m_s", None)
     md["environment"] = {"max_wind_speed_m_s": 20.0}
     return data
 
