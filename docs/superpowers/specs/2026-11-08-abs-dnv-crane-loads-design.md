@@ -151,14 +151,14 @@ l(H) = f'·H + c        f' = (fraction_x, fraction_y) floored:  |f'| = max(|f|, 
 ```
 
 - **Fractions `f`** are the parts proportional to H: `a/g` and `sin(incline)`. The floor keeps the direction of `f`; when `f = 0` it acts along +x.
-- **Constants `c`** are the wind force on the load, which is not proportional to H. `constant_x_kN` and `constant_y_kN` are the forces for a wind blowing along the x and y axes. A solve applies `constant_x · w_x` and `constant_y · w_y`, where `w = (V_x|V_x|, V_y|V_y|)/V²` are the signed squared direction cosines of the solve's wind. This is the same scaling as the structural wind, so an axis wind gives ±1 on one axis, and a solve without wind gives no constant.
+- **Constants `c`** are the wind force on the load, which is not proportional to H. `constant_x_kN` and `constant_y_kN` are its crane-frame components, applied as given by a single solve. (Revised in review fix round 1: they no longer follow the solve's wind direction; see 9.4.)
 - **`hook_lateral=None`** reproduces today's results bit for bit.
 
 The `rules` profiles fill `LiftSetup.lateral` (`LateralSpec`, which now also carries the load wind force as a function of wind speed). Core turns it into a `HookLateral`:
 
 | Term | ABS | DNV |
 |---|---|---|
-| H-proportional magnitude `r_c` | `hypot(a_x, a_y)/g + sin θ`, θ = √(list² + trim²) | `sin θ_case` (Case II: 1.5 × heel and trim) |
+| H-proportional magnitude `r_c` | `hypot(a_x,tip, a_y,tip)/g + sin θ`, θ = √(list² + trim²); `a_x,tip = |a_x| + |α_pitch|·|z_tip − z_ref|`, `a_y,tip = |a_y| + |α_roll|·|z_tip − z_ref|` (5.17: the acceleration at the boom tip, the solver's lever arm; z_tip is the hook's support node) | `sin θ_case` (Case II: 1.5 × heel and trim) |
 | Floor `m` | 0.02 | 0 |
 | Load wind force at speed V | `V² · Cs · A / 1637` | `0.5 · ρ · C · V² · A / 1000` (the solver's wind formula) |
 | Area A when `load_wind_area_m2` = 0 | `0.1215 · LL_max^(2/3)` (owner ruling, see below) | none: no wind on the load |
@@ -178,7 +178,7 @@ An analysis point already carries unit responses to 1 kN of horizontal force at 
 
 The hook lateral uses the **same unit-response mechanism**:
 - sensitivity gains `f'_x · X + f'_y · Y`;
-- baseline gains `c_x w_x · X + c_y w_y · Y`;
+- baseline gains `c_x · X + c_y · Y`;
 - X is the x unit and Y is the y unit. Rope tensions only see X.
 
 Leads and the hook lateral add **linearly** at the support node: `sin(offlead) + f'_x` on x, and `sin(sidelead) + f'_y` on y.
@@ -187,11 +187,12 @@ One addition was needed. The existing x unit (`offlead_lateral_unit_reactions`) 
 
 ### 9.4 Direction: maximising the demand
 
-**Wind constant**
-- The wind on the load blows with the structural wind. `candidate_wind_directions` (±X, ±Y) and the envelope's wind corners already enumerate those directions.
-- In the chart envelope, the load-wind baseline is added to the wind probes: `wind_x += c_x · X` and `wind_y += c_y · Y`.
-- Superposition then carries it to every wind corner and every wind angle with the structural wind, so no extra case is enumerated.
+**Wind constant** (revised in review fix round 1)
+- The first version tied the load wind to the structural wind's axis directions through the wind probes. A diagonal wind then gave only 0.707·F on a linear limit, up to 29 % low.
+- The wind on the load now has a **free direction at its full magnitude** `W = P·A`, like the H-proportional part. It acts together with that part, along the same candidate direction: the lateral is `(r·H + W)·u`.
+- The baseline of each lateral candidate gains `W·u` through the units (`_Lead.force`, added in `_case_point`; the magnitude ranking adds the same offset per lead).
 - The probes themselves (and their compute cache) stay free of the hook lateral.
+- For a linear limit, the baseline and the sensitivity respond to the lateral through the same gradient `R`, so `u* = R/|R|` is the exact worst direction for both. The load wind adds exactly `W·|R|`.
 
 **H-proportional part**
 - Its direction is free: any horizontal direction u. ABS chooses the angle of application "so as to induce the maximum loading", and a chart point is already the worst over slew.
@@ -201,13 +202,13 @@ One addition was needed. The existing x unit (`offlead_lateral_unit_reactions`) 
   - **Magnitude limits** (`_magnitude_capacity`: resultant, fradial, mradial, bearing line loads): the demand is convex in the lateral vector. The candidates are the 16 vertices of a polygon that circumscribes the circle `|l_H| = r`, at radius `r / cos(π/16)`. A hook load feasible at every vertex is feasible on the whole circle, so the result is never above the true minimum. It overestimates the H-proportional lateral by at most 1.96 %.
 - **Solver** (`calculation/solver/crane_solver.py` off-lead at the support node ~376-446, `engine._augment_point_with_out_of_plane_loads` ~458):
   - A single solve takes exact signed values, like every other input, and adds `l` through the units described in 9.3.
-  - `compute_omnidirectional_allowable_load` passes the same `HookLateral` to each of its wind directions, so the wind constant follows each wind.
-- **`EnvelopeCase`** records the signed lateral fractions it was evaluated at, as `GoverningCase` does.
-- **Auto-Set** (`limit_auto_set`): it maximises an opaque demand at the contractual hook force. For each wind/lead case it takes the worst of the 16 circumscribed-polygon directions, which is again conservative by at most 1.96 % of the lateral term.
+  - `compute_omnidirectional_allowable_load` passes the same `HookLateral`, as given, to each of its wind directions.
+- **`EnvelopeCase`** records the signed lateral fractions and constant force it was evaluated at (`lateral_x/y_fraction`, `lateral_x/y_kN`). `GoverningCase` does **not** record them, so the Scene cannot yet reproduce a governing lateral (Task 14).
+- **Auto-Set** (`limit_auto_set`): it maximises an opaque demand at the contractual hook force. For each wind/lead case it takes the worst of the 16 circumscribed-polygon directions, with the fractions and the load wind applied together. This is again conservative by at most 1.96 % of the lateral term.
 - **Scene:** a single state, with no limit to maximise.
   - The direction is the Scene's crane-frame horizontal inertia direction, `−(a_x, a_y)` of its resolved motion with tilt folded in. When that is zero, the direction is +x.
   - The magnitude comes from the Scene condition.
-  - The wind constant is taken at the Scene's wind speed and direction.
+  - The load wind is taken at the Scene's wind speed and points along the same direction as the H-proportional part.
   - The drawn loads show the in-plane (x) part at the sheave, so the equilibrium check closes. The out-of-plane part is not drawn, like the side lead.
 
 ### 9.5 Where the minimum floor acts in the superposition
@@ -234,5 +235,14 @@ The solver adds this force at the support node: the point's sensitivity gains `0
 3. **Leads and the hook lateral add linearly.** The ABS 9.3.2 combination formula for deck motion of the supporting vessel and own-vessel motion is lost in the text extract, and the linear sum bounds any root-sum-square combination.
 4. **DNV incline lateral uses the amplified hook force,** `ψ·W·sin θ`, not `W·sin θ`.
 5. **Polygon overestimate.** Magnitude limits and Auto-Set use a 16-gon circumscribing the circle of directions, which overestimates the lateral term by at most 1.96 %. Linear chart limits use the exact worst direction.
-6. **Scene direction.** The Scene points the lateral along its own horizontal inertia (+x when there is none). `GoverningCase` records the governing lateral fractions, but the Scene does not apply them yet (carried to Task 14 with the rest of the Scene's rules migration).
+6. **Scene direction.** The Scene points the lateral, and the load wind with it, along its own horizontal inertia (+x when there is none). `GoverningCase` does **not** record the governing lateral fractions or force: only the internal `EnvelopeCase` has them. So the Scene cannot show the governing lateral yet; this is carried to Task 14 with the rest of the Scene's rules migration.
 7. **Finding (pre-existing, not changed).** `core/lead_channels.compose_lead_channel_point` adds the off-lead to the hinge totals but not to the left/right support entities. The chart envelope's off-lead effect on `heel_left`, `front_leg_right`, and so on is therefore missing: at GT283 MH 45°, offlead 5° and sidelead 3°, the `front_leg_left` Fz sensitivity composes to 4.880 instead of the solver's 5.240. Legacy results are kept bit for bit, so this is reported to the owner, not fixed. The hook lateral uses the complete x unit and is not affected.
+8. **ABS a_h at the boom tip** (review ruling). ABS 5.17 a_h is the acceleration at the location. The horizontal acceleration of the live load is evaluated at the hook's support node.
+   - It is the linear part plus the angular part about the `vessel_motion` reference point: `|a_x| + |α_pitch|·|z − z_ref|` and `|a_y| + |α_roll|·|z − z_ref|`. These are the solver's structural lever arms, `a_x + α_pitch·(z − z_ref)` and `a_y − α_roll·(z − z_ref)`, with the magnitudes added, as the direction is free.
+   - The profile supplies `accel_fraction_per_m_x/y` and `reference_z_m`; core evaluates them at the support node's height (`LiftFactors.support_z_m`).
+9. **Load wind direction-free at full force** (review ruling). See 9.4, "Wind constant".
+10. **a_v is not taken at the boom tip** (owner-visible simplification). The ABS VAF uses `a_v = |accel_z|/g` and leaves out the rotational vertical components `α_pitch·Δx` and `α_roll·Δy` at the tip.
+    - The vertical lever arm `Δx` is measured in the vessel frame and so depends on the slew angle, which a chart point envelopes over.
+    - The factor is built inside the profile, before any slew is known.
+    - Including it would need the profile to take a tip position and a slew envelope.
+    - The structure's own inertia does include those terms.

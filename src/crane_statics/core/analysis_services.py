@@ -11,8 +11,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from ..calculation.dynamic_factor import DynamicFactor, as_dynamic_factor
-from ..calculation.engine import CraneCalculator, get_calculator, split_wind_speed_components
-from ..calculation.hook_lateral import wind_axis_weights
+from ..calculation.engine import CraneCalculator, get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .demand_extraction import extract_connection_component_response
@@ -141,7 +140,8 @@ class HoistStateService:
         ``dynamic_factor`` uses), its wind on the load at the Scene's wind speed. A single
         state has no limit to maximise, so it points along the Scene's crane-frame
         horizontal inertia, ``-(a_x, a_y)`` of the resolved vessel motion with the tilt
-        folded in (+x without any); spec section 9.4.
+        folded in (+x without any), and the wind on the load points the same way (both at
+        full magnitude, as the envelope's worst direction has them); spec section 9.4.
         """
         doc = self._session.document
         hoist = self._session.payload_hoist_by_id(hoist_id)
@@ -169,7 +169,8 @@ class HoistStateService:
             ),
         )
         direction = (-float(motion.accel_x_m_s2), -float(motion.accel_y_m_s2))
-        return hook_lateral(setup, float(sc.wind_speed_m_s), direction)
+        support_z = self._scene_lift(doc).support_z_m(hoist.id, angle)
+        return hook_lateral(setup, float(sc.wind_speed_m_s), direction, support_z_m=support_z)
 
     def _scene_lift(self, doc: CraneDocument) -> LiftFactors:
         """The Scene's ``LiftFactors``, rebuilt whenever the document changes."""
@@ -455,11 +456,7 @@ class AnalysisCalculator:
         if lateral is None:
             return 0.0
         fraction_x, _ = lateral.floored_fractions()
-        wind_x, wind_y = split_wind_speed_components(
-            float(sc.wind_speed_m_s), str(sc.wind_direction or "+X")
-        )
-        weight_x, _ = wind_axis_weights(wind_x, wind_y)
-        return fraction_x * float(sc.hook_load_kN) + float(lateral.constant_x_kN) * weight_x
+        return fraction_x * float(sc.hook_load_kN) + float(lateral.constant_x_kN)
 
     def compute_result_rows(
         self, pt: AnalysisPoint, hook_load_kN: float

@@ -15,21 +15,6 @@ from dataclasses import replace
 
 from .results import AnalysisPoint, HookLateral
 
-_WIND_ZERO = 1e-12
-
-
-def wind_axis_weights(wind_x_m_s: float, wind_y_m_s: float) -> tuple[float, float]:
-    """``(V_x|V_x|, V_y|V_y|) / V^2``: how much of an axis wind force a solve's wind gives.
-
-    The structural wind scales the same way (force ~ signed squared speed per axis), so an
-    axis wind gives +-1 on its axis and no wind gives nothing.
-    """
-    vx, vy = float(wind_x_m_s), float(wind_y_m_s)
-    speed_sq = vx * vx + vy * vy
-    if speed_sq <= _WIND_ZERO**2:
-        return 0.0, 0.0
-    return vx * abs(vx) / speed_sq, vy * abs(vy) / speed_sq
-
 
 def _add(
     values: dict[str, float],
@@ -94,14 +79,11 @@ def add_hook_lateral(
     )
 
 
-def apply_hook_lateral(
-    point: AnalysisPoint, lateral: HookLateral, wind_x_m_s: float, wind_y_m_s: float
-) -> AnalysisPoint:
-    """``point`` with ``lateral`` applied: floored fractions, wind-borne constants."""
+def apply_hook_lateral(point: AnalysisPoint, lateral: HookLateral) -> AnalysisPoint:
+    """``point`` with ``lateral`` applied: floored fractions and the constant force."""
     fx, fy = lateral.floored_fractions()
-    wx, wy = wind_axis_weights(wind_x_m_s, wind_y_m_s)
     return add_hook_lateral(
-        point, fx, fy, float(lateral.constant_x_kN) * wx, float(lateral.constant_y_kN) * wy
+        point, fx, fy, float(lateral.constant_x_kN), float(lateral.constant_y_kN)
     )
 
 

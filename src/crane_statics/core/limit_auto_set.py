@@ -183,16 +183,23 @@ def _evaluate_condition(
                 # The live-load lateral (None: legacy): its wind rides in each solve, its
                 # H-proportional part is taken at the worst of the circumscribed 16-gon
                 # directions (the demand is convex in it; spec section 9.4).
-                lateral = hook_lateral(setup, wind_speed)
-                load_wind: Optional[HookLateral] = None
-                directions: list[tuple[float, float]] = [(0.0, 0.0)]
+                lateral: Optional[HookLateral] = None
+                if condition.spec is not None:
+                    lateral = hook_lateral(
+                        setup,
+                        wind_speed,
+                        support_z_m=lift.support_z_m(hoist.id, float(angle)),
+                    )
+                # (fraction, force) pairs: the H-proportional part and the load wind act
+                # together, both at full magnitude, along each 16-gon vertex.
+                directions: list[tuple[float, float, float, float]] = [(0.0, 0.0, 0.0, 0.0)]
                 if lateral is not None:
-                    if lateral.constant_x_kN or lateral.constant_y_kN:
-                        load_wind = HookLateral(
-                            constant_x_kN=lateral.constant_x_kN,
-                            constant_y_kN=lateral.constant_y_kN,
-                        )
-                    directions = circumscribed_directions(lateral.magnitude()) or directions
+                    r, force = lateral.magnitude(), lateral.constant_magnitude()
+                    if r > 0.0 or force > 0.0:
+                        directions = [
+                            (r * ux, r * uy, force * ux, force * uy)
+                            for ux, uy in circumscribed_directions(1.0)
+                        ]
                 points_by_wind: dict[str, Any] = {}
                 if use_lead_channel_composition:
                     for case in iter_wind_lead_directional_cases(hoist, wind_speed):
@@ -208,7 +215,6 @@ def _evaluate_condition(
                             sidelead_deg=0.0,
                             hoist_runtime_overrides=mode.runtime_overrides,
                             amplified_rope_hoist_id=amplified,
-                            hook_lateral=load_wind,
                         )
 
                 for case in iter_wind_lead_directional_cases(hoist, wind_speed):
@@ -223,7 +229,6 @@ def _evaluate_condition(
                             sidelead_deg=case.sidelead_deg,
                             hoist_runtime_overrides=mode.runtime_overrides,
                             amplified_rope_hoist_id=amplified,
-                            hook_lateral=load_wind,
                         )
                     else:
                         pt = points_by_wind.get(case.wind_direction)
@@ -237,8 +242,8 @@ def _evaluate_condition(
                         if use_lead_channel_composition
                         else pt
                     )
-                    for fx, fy in directions:
-                        demand_point = add_hook_lateral(lead_point, fx, fy)
+                    for fx, fy, cx, cy in directions:
+                        demand_point = add_hook_lateral(lead_point, fx, fy, cx, cy)
                         demand = demand_extractor(demand_point, hook_kN, case)
                         if demand is None or not math.isfinite(demand):
                             continue

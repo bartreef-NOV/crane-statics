@@ -13,10 +13,10 @@ class HookLateral:
     signed values, like every other solve input). ``min_fraction`` floors their magnitude:
     a smaller fraction vector is scaled up to ``min_fraction`` in its own direction (along
     +x when it is zero), so the load stays linear in H. ``constant_x_kN``/``constant_y_kN``
-    are forces that do not grow with H, carried by the wind: the force when the solve's
-    wind blows along +x / +y. A solve applies ``constant_x_kN * w_x`` and
-    ``constant_y_kN * w_y`` with ``w = (V_x|V_x|, V_y|V_y|) / V^2`` (the structural wind's
-    scaling: +-1 for an axis wind, nothing without wind).
+    are the crane-frame components of a force that does not grow with H (the wind on the
+    suspended load), applied as given. An envelope (``core.chart_envelope``) uses only the
+    two magnitudes, ``magnitude()`` and ``constant_magnitude()``, and takes the worst
+    horizontal direction itself.
     """
 
     fraction_x: float = 0.0
@@ -39,6 +39,10 @@ class HookLateral:
     def magnitude(self) -> float:
         """The floored H-proportional magnitude ``max(|fraction|, min_fraction)``."""
         return max(math.hypot(self.fraction_x, self.fraction_y), abs(float(self.min_fraction)))
+
+    def constant_magnitude(self) -> float:
+        """The magnitude of the constant force, kN."""
+        return math.hypot(self.constant_x_kN, self.constant_y_kN)
 
 
 @dataclass

@@ -76,21 +76,27 @@ def hook_lateral(
     setup: LiftSetup,
     wind_speed_m_s: float,
     direction: tuple[float, float] = (1.0, 0.0),
+    *,
+    support_z_m: float,
 ) -> Optional[HookLateral]:
     """The live-load lateral of ``setup`` for a solve at ``wind_speed_m_s`` (spec section 9).
 
-    The H-proportional magnitude is ``hypot(a_x, a_y)/g + sin(incline)``: the vessel
-    accelerations and the list/trim incline taken in one direction, the worst. It points
-    along ``direction`` (crane frame; +x when zero); an envelope uses only its magnitude
-    and picks the worst direction itself. The floor is the setup's ``min_fraction``. The
-    wind on the suspended load, ``LateralSpec.wind_force_kN(wind_speed_m_s)``, is the
-    constant of both axes (the projected area is the same from every side). None when the
-    setup has no lateral at all (a legacy document).
+    The horizontal acceleration is the one at the hook's support node, height
+    ``support_z_m`` (``LiftFactors.support_z_m``): per axis the linear part plus the
+    angular-acceleration lever-arm part, ``a + a_per_m * |z - z_ref|`` (magnitudes added,
+    as the direction is free). The H-proportional magnitude is ``hypot(a_x, a_y)/g +
+    sin(incline)``: the accelerations and the list/trim incline taken in one direction,
+    the worst. The constant is the wind on the suspended load,
+    ``LateralSpec.wind_force_kN(wind_speed_m_s)``. Both point along ``direction`` (crane
+    frame; +x when zero); an envelope uses only their magnitudes and picks the worst
+    direction itself. The floor is the setup's ``min_fraction``. None when the setup has
+    no lateral at all (a legacy document).
     """
     lateral = setup.lateral
-    magnitude = math.hypot(lateral.accel_fraction_x, lateral.accel_fraction_y) + math.sin(
-        math.radians(lateral.incline_deg)
-    )
+    lever_m = abs(float(support_z_m) - lateral.reference_z_m)
+    accel_x = lateral.accel_fraction_x + lateral.accel_fraction_per_m_x * lever_m
+    accel_y = lateral.accel_fraction_y + lateral.accel_fraction_per_m_y * lever_m
+    magnitude = math.hypot(accel_x, accel_y) + math.sin(math.radians(lateral.incline_deg))
     wind = lateral.wind_force_kN(wind_speed_m_s)
     if magnitude == 0.0 and wind == 0.0 and lateral.min_fraction == 0.0:
         return None
@@ -98,11 +104,12 @@ def hook_lateral(
     size = math.hypot(ux, uy)
     if size == 0.0:
         ux, uy, size = 1.0, 0.0, 1.0
+    ux, uy = ux / size, uy / size
     return HookLateral(
-        fraction_x=magnitude * ux / size,
-        fraction_y=magnitude * uy / size,
-        constant_x_kN=wind,
-        constant_y_kN=wind,
+        fraction_x=magnitude * ux,
+        fraction_y=magnitude * uy,
+        constant_x_kN=wind * ux,
+        constant_y_kN=wind * uy,
         min_fraction=lateral.min_fraction,
     )
 
@@ -346,6 +353,17 @@ class LiftFactors:
                 ),
             )
         return float(self._stiffness[key])
+
+    def support_z_m(self, hoist_id: str, angle: float) -> float:
+        """Height of the node ``hoist_id``'s hook hangs from at ``angle`` (the boom tip)."""
+        doc_dict, kin = self._kinematics()
+        positions = kin.compute_all_node_positions(float(angle))
+        support = positions.get(hook_support_node_id(doc_dict, hoist_id))
+        if support is None:
+            raise RulesValidationError(
+                f"hoists.{hoist_id}: hook support node unresolved at {angle:g} deg"
+            )
+        return float(support["z"])
 
     def suspended_rope_mass_t(
         self,

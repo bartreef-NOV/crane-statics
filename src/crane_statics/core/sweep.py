@@ -285,7 +285,13 @@ def run_mode_sweep(
         setup = lift.setup(case.condition, hoist_id, mode, angle, probes.zero)
         factor = setup.factor
         # The live-load lateral of the case (None: legacy), its wind at the case wind speed.
-        lateral = hook_lateral(setup, case.wind_speed_m_s)
+        lateral = (
+            None
+            if case.condition.spec is None
+            else hook_lateral(
+                setup, case.wind_speed_m_s, support_z_m=lift.support_z_m(hoist_id, angle)
+            )
+        )
         results = _limit_results(case, angle, probes, mode.hook_mass_t, factor, lateral)
         if results:
             # One factor per case and angle: the lowest hook load is the lowest payload.

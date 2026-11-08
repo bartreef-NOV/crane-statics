@@ -601,9 +601,8 @@ class CraneCalculator:
 
         ``hook_lateral`` adds a horizontal live load at the hoist's support node,
         ``fraction * H + constant`` (``results.HookLateral``): the floored fractions join the
-        sensitivities and the wind-borne constants, scaled by this solve's wind, the
-        baseline, through the same unit responses as the off-lead and side-lead. None, the
-        default, adds nothing.
+        sensitivities and the constant force the baseline, through the same unit responses
+        as the off-lead and side-lead. None, the default, adds nothing.
 
         When it returns ``None`` for a known cause, ``unavailable_reason`` says why.
         """
@@ -712,7 +711,7 @@ class CraneCalculator:
                 hoist_runtime_overrides=hoist_runtime_overrides,
             )
             if hook_lateral is not None:
-                point = apply_hook_lateral(point, hook_lateral, wind_x_ref, wind_y_ref)
+                point = apply_hook_lateral(point, hook_lateral)
             return point
         except KeyError as exc:
             self.unavailable_reason = (
@@ -806,7 +805,7 @@ class CraneCalculator:
 
         ``amplified_rope_hoist_id`` as for ``compute_analysis_point``; ``hook_daf`` must
         then count that rope in the hook force. ``hook_lateral`` is passed to every
-        direction's solve, so its wind constant follows each wind.
+        direction's solve as it is.
         """
         wind_ref = (
             self.doc.environment.max_wind_speed_m_s

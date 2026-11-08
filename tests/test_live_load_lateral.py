@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import json
 import math
+import dataclasses
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from crane_statics.calculation.engine import CraneCalculator
+from crane_statics.calculation.hook_lateral import add_hook_lateral
 from crane_statics.calculation.results import AnalysisPoint, HookLateral
 from crane_statics.calculation.solver.kinematics import KinematicsAdapter
 from crane_statics.calculation.vessel_frame import VesselInputs, crane_frame_motion
@@ -147,32 +149,24 @@ def test_lateral_y_fraction_uses_the_side_lead_unit(calc: CraneCalculator) -> No
     _assert_scaled(_diff(_at(side, H_KN), _at(plain, H_KN)), _unit_y(calc), H_KN * SIN_INCLINE)
 
 
-@pytest.mark.parametrize(
-    ("direction", "unit", "sign"),
-    [("+X", "x", 1.0), ("-X", "x", -1.0), ("+Y", "y", 1.0), ("-Y", "y", -1.0)],
-)
-def test_wind_constant_follows_the_wind_and_does_not_depend_on_h(
-    calc: CraneCalculator, direction: str, unit: str, sign: float
+@pytest.mark.parametrize("wind", [("+X", 15.0), ("+Y", 15.0), ("-X", 0.0)])
+@pytest.mark.parametrize("force", [(7.0, 0.0), (0.0, -5.0), (3.0, 4.0)])
+def test_constant_force_is_applied_as_given_whatever_h_and_the_wind(
+    calc: CraneCalculator, wind: tuple[str, float], force: tuple[float, float]
 ) -> None:
-    lateral = HookLateral(0.0, 0.0, constant_x_kN=7.0, constant_y_kN=5.0)
-    kwargs = dict(wind_speed_m_s=15.0, wind_direction=direction, offlead_deg=0.0, sidelead_deg=0.0)
+    direction, speed = wind
+    kwargs = dict(wind_speed_m_s=speed, wind_direction=direction, offlead_deg=0.0, sidelead_deg=0.0)
     plain = _point(calc, **kwargs)
-    windy = _point(calc, hook_lateral=lateral, **kwargs)
-    assert windy.sensitivity_reactions == plain.sensitivity_reactions
-    assert windy.sensitivity_rope_tensions == plain.sensitivity_rope_tensions
-    expected_unit = _unit_x(calc) if unit == "x" else _unit_y(calc)
-    force = 7.0 if unit == "x" else 5.0
+    loaded = _point(calc, hook_lateral=HookLateral(0.0, 0.0, *force), **kwargs)
+    assert loaded.sensitivity_reactions == plain.sensitivity_reactions
+    assert loaded.sensitivity_rope_tensions == plain.sensitivity_rope_tensions
+    unit_x, unit_y = _unit_x(calc), _unit_y(calc)
+    expected = {
+        key: force[0] * unit_x.get(key, 0.0) + force[1] * unit_y.get(key, 0.0)
+        for key in set(unit_x) | set(unit_y)
+    }
     for hook in (0.0, 500.0, 2000.0):
-        _assert_scaled(_diff(_at(windy, hook), _at(plain, hook)), expected_unit, sign * force)
-
-
-def test_wind_constant_is_zero_without_wind(calc: CraneCalculator) -> None:
-    plain = _point(calc, offlead_deg=0.0, sidelead_deg=0.0)
-    calm = _point(
-        calc, offlead_deg=0.0, sidelead_deg=0.0, hook_lateral=HookLateral(0.0, 0.0, 7.0, 5.0)
-    )
-    assert calm.baseline_reactions == plain.baseline_reactions
-    assert calm.sensitivity_reactions == plain.sensitivity_reactions
+        _assert_scaled(_diff(_at(loaded, hook), _at(plain, hook)), expected, 1.0)
 
 
 def test_floor_without_fractions_gives_min_fraction_times_h_linearly(
@@ -332,17 +326,150 @@ def test_rules_hook_lateral_from_the_lift_setup() -> None:
     condition = condition_cases(doc, "c")[0]
     hoist = next(h for h in doc.hoists if h.id == HOIST)
     mode = analysis_mode_by_name(hoist, "normal")
-    setup = LiftFactors(doc, CraneCalculator(doc)).setup(condition, HOIST, mode, ANGLE)
-    lateral = lift_factor.hook_lateral(setup, condition.wind_speed_m_s)
+    lift = LiftFactors(doc, CraneCalculator(doc))
+    setup = lift.setup(condition, HOIST, mode, ANGLE)
+    support_z = lift.support_z_m(HOIST, ANGLE)
+    lateral = lift_factor.hook_lateral(setup, condition.wind_speed_m_s, support_z_m=support_z)
     assert lateral is not None
-    # a_h = hypot(0.6, 0.8)/g = 1/g, added to the list/trim term in the worst direction.
+    # a_h = hypot(0.6, 0.8)/g = 1/g (no angular acceleration, so the same at every height),
+    # added to the list/trim term in the worst direction.
     assert lateral.fraction_x == pytest.approx(1.0 / G + SIN_INCLINE, rel=1e-12)
     assert lateral.fraction_y == 0.0
     assert lateral.min_fraction == 0.02
     force = setup.lateral.wind_force_per_speed_sq * 100.0
-    assert lateral.constant_x_kN == lateral.constant_y_kN == pytest.approx(force)
+    assert lateral.constant_x_kN == pytest.approx(force) and lateral.constant_y_kN == 0.0
+    assert lateral.constant_magnitude() == pytest.approx(force)
     legacy = lift_factor.legacy_lift_setup(hoist)
-    assert lift_factor.hook_lateral(legacy, 10.0) is None
+    assert lift_factor.hook_lateral(legacy, 10.0, support_z_m=support_z) is None
+
+
+def test_abs_horizontal_acceleration_is_taken_at_the_boom_tip() -> None:
+    """5.17: a_h at the support node = linear + angular acceleration x lever arm (per axis)."""
+    motion = VesselMotion(
+        accel_x_m_s2=0.6,
+        accel_y_m_s2=0.3,
+        roll_deg=5.0,
+        pitch_deg=2.0,
+        pitch_angular_accel_rad_s2=0.04,
+        roll_angular_accel_rad_s2=0.06,
+        reference_x_m=12.0,
+        reference_z_m=-6.0,
+    )
+    cond = ConditionSpec(name="c", wind_speed_m_s=0.0, vessel_motion=motion)
+    doc = rules_doc("ABS", cond)
+    condition = condition_cases(doc, "c")[0]
+    hoist = next(h for h in doc.hoists if h.id == HOIST)
+    mode = analysis_mode_by_name(hoist, "normal")
+    lift = LiftFactors(doc, CraneCalculator(doc))
+    setup = lift.setup(condition, HOIST, mode, ANGLE)
+    # The support node's height, read independently of the factor code.
+    doc_dict = doc.model_dump()
+    positions = KinematicsAdapter(doc_dict).compute_all_node_positions(ANGLE)
+    support = next(h for h in doc_dict["hoists"] if h["id"] == HOIST)["support_node_id"]
+    lever = positions[support]["z"] - (-6.0)
+    assert lever > 10.0  # the boom tip is high above the reference point
+    a_x = 0.6 + 0.04 * lever  # the solver's a_x + pitch_accel * (z - z_ref)
+    a_y = 0.3 + 0.06 * lever  # |a_y - roll_accel * (z - z_ref)|, magnitudes added
+    lateral = lift_factor.hook_lateral(setup, 0.0, support_z_m=lift.support_z_m(HOIST, ANGLE))
+    assert lateral is not None
+    assert lateral.fraction_x == pytest.approx(math.hypot(a_x, a_y) / G + SIN_INCLINE, rel=1e-12)
+    # Without angular acceleration the old value.
+    still = motion.model_copy(
+        update={"pitch_angular_accel_rad_s2": 0.0, "roll_angular_accel_rad_s2": 0.0}
+    )
+    doc_still = rules_doc("ABS", cond.model_copy(update={"vessel_motion": still}))
+    lift_still = LiftFactors(doc_still, CraneCalculator(doc_still))
+    setup_still = lift_still.setup(condition_cases(doc_still, "c")[0], HOIST, mode, ANGLE)
+    plain = lift_factor.hook_lateral(
+        setup_still, 0.0, support_z_m=lift_still.support_z_m(HOIST, ANGLE)
+    )
+    assert plain is not None
+    assert plain.fraction_x == pytest.approx(math.hypot(0.6, 0.3) / G + SIN_INCLINE, rel=1e-12)
+
+
+def test_load_wind_takes_the_worst_direction_at_full_force(calc: CraneCalculator) -> None:
+    """A linear limit gains F*|R| (the resultant of its x and y responses), not max(|R|)*F."""
+    probes = _probes(calc)
+    limits = {"heel_left": {"Fx": 4000.0}}
+    kwargs: dict[str, Any] = dict(
+        vessel=VesselMotion(), offlead_deg=0.0, sidelead_deg=0.0, hook_daf=1.0, hook_mass_t=50.0
+    )
+    force = 40.0
+    plain, _ = envelope_capacity_case(calc, probes, limits, **kwargs)
+    windy, case = envelope_capacity_case(
+        calc, probes, limits, hook_lateral=HookLateral(0.0, 0.0, 0.0, force), **kwargs
+    )
+    zero = probes.zero
+    assert zero.lateral_x_unit_reactions is not None
+    assert zero.sidelead_lateral_unit_reactions is not None
+    r_x = zero.lateral_x_unit_reactions["heel_left"]["Fx"]
+    r_y = zero.sidelead_lateral_unit_reactions["heel_left"]["Fx"]
+    assert r_x != 0.0 and r_y != 0.0
+    s = zero.sensitivity_reactions["heel_left"]["Fx"]
+    # H = (L - B - F|R|)/s and H0 = (L - B)/s.
+    expected = plain.max_allowable_load_kN - force * math.hypot(r_x, r_y) / s
+    assert windy.max_allowable_load_kN == pytest.approx(expected, rel=1e-9)
+    axis_only = plain.max_allowable_load_kN - force * max(abs(r_x), abs(r_y)) / s
+    assert windy.max_allowable_load_kN < axis_only
+    assert case is not None
+    assert math.hypot(case.lateral_x_kN, case.lateral_y_kN) == pytest.approx(force)
+
+
+def _with_fixed_lateral(probes, fx: float, fy: float, cx: float, cy: float):
+    """Every probe with the same lateral: the envelope over everything else, one direction."""
+    return dataclasses.replace(
+        probes,
+        zero=add_hook_lateral(probes.zero, fx, fy, cx, cy),
+        motion=tuple(add_hook_lateral(m, fx, fy, cx, cy) for m in probes.motion),
+        wind_x=add_hook_lateral(probes.wind_x, fx, fy, cx, cy),
+        wind_y=add_hook_lateral(probes.wind_y, fx, fy, cx, cy),
+    )
+
+
+BRUTE_STEPS = 720
+MOVING = VesselMotion(
+    accel_x_m_s2=0.6,
+    accel_y_m_s2=0.3,
+    accel_z_m_s2=0.4,
+    roll_deg=2.0,
+    pitch_deg=1.0,
+    pitch_angular_accel_rad_s2=0.02,
+    roll_angular_accel_rad_s2=0.03,
+)
+
+
+@pytest.mark.parametrize(
+    "limits",
+    [
+        {"heel_left": {"Fx": 15000.0}},
+        {"boom_hoist": {"T": 5000.0}},
+        {"platform_base": {"fradial": 3000.0}},
+    ],
+)
+def test_envelope_lateral_matches_brute_force_with_leads_wind_and_motion(limits: dict) -> None:
+    calc = CraneCalculator(load_document(GT283))
+    probes = build_probes(calc, HOIST, ANGLE, 15.0, None, vessel=MOVING)
+    assert probes is not None
+    r, force = 0.05, 30.0
+    kwargs: dict[str, Any] = dict(
+        vessel=MOVING, offlead_deg=1.0, sidelead_deg=2.5, hook_daf=1.0, hook_mass_t=50.0
+    )
+    cap, _ = envelope_capacity_case(
+        calc, probes, limits, hook_lateral=HookLateral(r, 0.0, force, 0.0, 0.02), **kwargs
+    )
+    worst = math.inf
+    for step in range(BRUTE_STEPS):
+        phi = 2.0 * math.pi * step / BRUTE_STEPS
+        ux, uy = math.cos(phi), math.sin(phi)
+        fixed = _with_fixed_lateral(probes, r * ux, r * uy, force * ux, force * uy)
+        worst = min(
+            worst, envelope_capacity_case(calc, fixed, limits, **kwargs)[0].max_allowable_load_kN
+        )
+    assert math.isfinite(worst)
+    magnitude = "fradial" in str(limits)
+    assert cap.max_allowable_load_kN <= worst * (1.0 + 1e-6)
+    # The grid's own coarseness (0.5 deg) bounds the linear gap.
+    assert cap.max_allowable_load_kN >= worst * (0.97 if magnitude else 1.0 - 1e-4)
 
 
 # --- sweeps -------------------------------------------------------------------------------
@@ -352,8 +479,8 @@ ABS_MOTION = VesselMotion(accel_x_m_s2=0.5, roll_deg=5.0, pitch_deg=2.0)
 DAF = 1.3
 
 
-def _abs_sweep_doc():
-    cond = ConditionSpec(name="sea", wind_speed_m_s=0.0, vessel_motion=ABS_MOTION)
+def _abs_sweep_doc(motion: VesselMotion = ABS_MOTION):
+    cond = ConditionSpec(name="sea", wind_speed_m_s=0.0, vessel_motion=motion)
     doc = without_suspended_rope(rules_doc("ABS", cond))
     hoists = [h.model_copy(update={"hook_daf": DAF}) if h.id == HOIST else h for h in doc.hoists]
     doc = doc.model_copy(update={"hoists": hoists})
@@ -367,15 +494,25 @@ def _curve(doc, limits=LIMIT_T, condition_name=None) -> dict[float, float]:
     return dict(payload["curve_data"])
 
 
-def test_abs_sweep_capacity_drops_by_the_hand_derived_lateral(monkeypatch) -> None:
-    """boom_hoist T: s = s_hook + (sin(offlead) + r)|R_x| with r = a_x/g + sin(theta)."""
-    doc = _abs_sweep_doc()
+@pytest.mark.parametrize(
+    ("motion", "r"),
+    [
+        (ABS_MOTION, 0.5 / G + SIN_INCLINE),  # above the floor
+        # a_x/g + sin(0.5 deg) = 0.0138 < 0.02: the 0.02 VDL floor governs.
+        (VesselMotion(accel_x_m_s2=0.05, roll_deg=0.5), 0.02),
+    ],
+)
+def test_abs_sweep_capacity_drops_by_the_hand_derived_lateral(
+    monkeypatch, motion: VesselMotion, r: float
+) -> None:
+    """boom_hoist T: s = s_hook + (sin(offlead) + r)|R_x|, r = max(a_x/g + sin(theta), 0.02)."""
+    if r == 0.02:
+        assert 0.05 / G + math.sin(math.radians(0.5)) < 0.02
+    doc = _abs_sweep_doc(motion)
     with_lateral = _curve(doc)
     monkeypatch.setattr(sweep_module, "hook_lateral", lambda *_a, **_k: None)
     without = _curve(doc)
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    r = 0.5 / G + SIN_INCLINE
-    assert r > 0.02  # the floor does not govern
     kin = KinematicsAdapter(doc.model_dump())
     calc = CraneCalculator(doc)
     checked = 0
@@ -442,7 +579,7 @@ def test_dnv_case_ii_incline_and_load_wind_reach_the_sweep(monkeypatch) -> None:
     wind_kN = 0.5 * rho * 1.2 * 15.0**2 * 20.0 / 1000.0
     expected_lateral = {
         "Case I": HookLateral(math.sin(math.radians(theta_i)), 0.0, 0.0, 0.0, 0.0),
-        "Case II": HookLateral(math.sin(math.radians(1.5 * theta_i)), 0.0, wind_kN, wind_kN, 0.0),
+        "Case II": HookLateral(math.sin(math.radians(1.5 * theta_i)), 0.0, wind_kN, 0.0, 0.0),
     }
     for name, expected in expected_lateral.items():
         (got,) = seen[name]

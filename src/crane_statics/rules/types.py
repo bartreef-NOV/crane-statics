@@ -42,6 +42,10 @@ class LateralSpec:
     ``wind_force_per_speed_sq`` is the wind force on the suspended load per squared wind
     speed, kN/(m/s)^2, by the standard's pressure formula: the force at wind speed V is
     ``wind_force_per_speed_sq * V**2`` (0: no wind on the load).
+    ``accel_fraction_per_m_x``/``_y`` are the horizontal accelerations, in g per metre of
+    height above ``reference_z_m``, that the pitch (x) and roll (y) angular accelerations
+    add at a point (the solver's lever arm ``z - reference_z``): with them the horizontal
+    acceleration at the boom tip is ``accel_fraction + accel_fraction_per_m * |z - z_ref|``.
     """
 
     accel_fraction_x: float
@@ -51,6 +55,9 @@ class LateralSpec:
     wind_cd: float
     min_fraction: float
     wind_force_per_speed_sq: float = 0.0
+    accel_fraction_per_m_x: float = 0.0
+    accel_fraction_per_m_y: float = 0.0
+    reference_z_m: float = 0.0
 
     def wind_force_kN(self, wind_speed_m_s: float) -> float:
         """Wind force on the suspended load at ``wind_speed_m_s``, kN."""

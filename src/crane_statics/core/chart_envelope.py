@@ -10,9 +10,9 @@ lead channels do not depend on motion or wind and are taken from the zero probe.
 angle, every wind angle and both lead signs without enumerating them; see its docstring.
 ``envelope_capacity_case`` also returns that case (``EnvelopeCase``).
 
-A live-load lateral (``HookLateral``, spec section 9) is one more lead channel: its wind
-force joins the wind probes (``with_load_wind``), so it follows every wind corner, and its
-H-proportional part is taken in the worst horizontal direction per limit.
+A live-load lateral (``HookLateral``, spec section 9) is one more lead channel: its
+H-proportional part and its constant force (the wind on the load) act together in the
+worst horizontal direction per limit, each at its full magnitude.
 """
 
 from __future__ import annotations
@@ -349,9 +349,10 @@ class EnvelopeCase:
     ``vessel_inputs`` holds the vessel-frame ``VesselInputs`` fields other than
     ``slew_deg``; ``wind_axis`` is the axis wind ("+X", "-X", "+Y", "-Y"), or "" when the
     limit does not respond to wind; the leads are signed; ``limit_id`` is the limit key.
-    ``lateral_x_fraction``/``lateral_y_fraction`` are the signed crane-frame hook lateral
-    fractions the case was evaluated at (0 without a ``HookLateral``): with them as
-    ``HookLateral`` fractions (no floor) a solve reproduces the case.
+    ``lateral_x_fraction``/``lateral_y_fraction`` and ``lateral_x_kN``/``lateral_y_kN``
+    are the signed crane-frame hook lateral fractions and constant force the case was
+    evaluated at (0 without a ``HookLateral``): with them as a ``HookLateral`` (no floor)
+    a solve reproduces the case.
     For a magnitude limit the slew is that of a vertex of the polygon circumscribing the
     slew ellipse (see ``_magnitude_capacity``), so re-solving the case at that slew can
     give a capacity slightly above the envelope's.
@@ -365,16 +366,23 @@ class EnvelopeCase:
     limit_id: str
     lateral_x_fraction: float = 0.0
     lateral_y_fraction: float = 0.0
+    lateral_x_kN: float = 0.0
+    lateral_y_kN: float = 0.0
 
 
 @dataclass(frozen=True)
 class _Lead:
-    """The zero probe composed with one signed lead case (and hook lateral direction)."""
+    """The zero probe composed with one signed lead case (and hook lateral direction).
+
+    ``lateral`` are the hook lateral fractions already in ``point``'s sensitivities;
+    ``force`` is the constant hook lateral force (kN) every case baseline of this lead gets.
+    """
 
     point: AnalysisPoint
     offlead_deg: float
     sidelead_deg: float
     lateral: tuple[float, float] = (0.0, 0.0)
+    force: tuple[float, float] = (0.0, 0.0)
 
 
 def _leads(probes: ProbeSet, offlead_deg: float, sidelead_deg: float) -> list[_Lead]:
@@ -405,38 +413,6 @@ def lead_points(
     return leads + [add_hook_lateral(pt, fx, fy) for pt in leads for fx, fy in axes]
 
 
-# The last load-wind probe set: a sweep evaluates every limit of an angle with one set.
-_last_load_wind: Optional[tuple[ProbeSet, float, float, ProbeSet]] = None
-
-
-def with_load_wind(probes: ProbeSet, hook_lateral: Optional[HookLateral]) -> ProbeSet:
-    """``probes`` with the hook lateral's wind force added to the wind probes.
-
-    The wind probes blow along +X and +Y at the case wind speed, where the wind on the load
-    is ``constant_x_kN`` and ``constant_y_kN`` (``HookLateral``). Added to their baselines
-    through the lateral units, superposition carries the load wind to every wind corner and
-    angle with the structural wind. Without wind (the wind probes are the zero probe) or
-    without constants, ``probes`` itself is returned.
-    """
-    global _last_load_wind
-    if hook_lateral is None:
-        return probes
-    cx, cy = float(hook_lateral.constant_x_kN), float(hook_lateral.constant_y_kN)
-    no_wind = probes.wind_x is probes.zero and probes.wind_y is probes.zero
-    if (cx == 0.0 and cy == 0.0) or no_wind:
-        return probes
-    cached = _last_load_wind
-    if cached is not None and cached[0] is probes and cached[1] == cx and cached[2] == cy:
-        return cached[3]
-    windy = replace(
-        probes,
-        wind_x=add_hook_lateral(probes.wind_x, 0.0, 0.0, cx, 0.0),
-        wind_y=add_hook_lateral(probes.wind_y, 0.0, 0.0, 0.0, cy),
-    )
-    _last_load_wind = (probes, cx, cy, windy)
-    return windy
-
-
 def _linear_sensitivity(
     calc: CraneCalculator, point: AnalysisPoint, limit_key: str, component: str
 ) -> Optional[float]:
@@ -450,33 +426,42 @@ def _linear_sensitivity(
     return None
 
 
-def _with_lateral(lead: _Lead, directions: Sequence[tuple[float, float]]) -> list[_Lead]:
-    return [
-        _Lead(add_hook_lateral(lead.point, fx, fy), lead.offlead_deg, lead.sidelead_deg, (fx, fy))
-        for fx, fy in directions
-    ]
+def _with_lateral(
+    lead: _Lead, directions: Sequence[tuple[float, float]], radius: float, force_kN: float
+) -> list[_Lead]:
+    """``lead`` with the hook lateral along each of ``directions`` (vectors, scaled by the
+    H-proportional ``radius`` and the constant ``force_kN``)."""
+    out = []
+    for ux, uy in directions:
+        fraction = (radius * ux, radius * uy)
+        force = (force_kN * ux, force_kN * uy)
+        point = add_hook_lateral(lead.point, *fraction)
+        out.append(_Lead(point, lead.offlead_deg, lead.sidelead_deg, fraction, force))
+    return out
 
 
 def _linear_lateral_directions(
-    calc: CraneCalculator, zero: AnalysisPoint, limit_key: str, component: str, radius: float
+    calc: CraneCalculator, zero: AnalysisPoint, limit_key: str, component: str
 ) -> list[tuple[float, float]]:
-    """The two lateral directions of extreme sensitivity of a linear limit, at ``radius``.
+    """The two unit lateral directions of extreme response of a linear limit.
 
-    The limit's sensitivity is affine in the lateral fractions with gradient ``R`` (read
-    from unit compositions), so over the circle it is extreme at ``+-radius * R/|R|``;
-    ``(L - B)/s`` is lowest at the largest s. A limit the lateral does not load gets +x.
+    The limit responds to a support-node lateral linearly, with gradient ``R`` (read from
+    unit compositions of the sensitivity; the baseline responds to a constant force through
+    the same units). Over the circle of directions both the sensitivity and the baseline
+    are extreme at ``+-R/|R|``, and ``(L - B)/s`` is lowest at the largest ones. A limit the
+    lateral does not load gets +x.
     """
     base = _linear_sensitivity(calc, zero, limit_key, component)
     along_x = _linear_sensitivity(calc, add_hook_lateral(zero, 1.0, 0.0), limit_key, component)
     along_y = _linear_sensitivity(calc, add_hook_lateral(zero, 0.0, 1.0), limit_key, component)
     if base is None or along_x is None or along_y is None:
-        return [(radius, 0.0)]
+        return [(1.0, 0.0)]
     r_x, r_y = along_x - base, along_y - base
     size = math.hypot(r_x, r_y)
     if size == 0.0:
-        return [(radius, 0.0)]
+        return [(1.0, 0.0)]
     ux, uy = r_x / size, r_y / size
-    return [(radius * ux, radius * uy), (-radius * ux, -radius * uy)]
+    return [(ux, uy), (-ux, -uy)]
 
 
 def _wind_axis(wind_x_scale: float, wind_y_scale: float) -> str:
@@ -549,14 +534,16 @@ def _case_point(
     channels: Sequence[float] | np.ndarray,
     wind_x_scale: float,
     wind_y_scale: float,
+    force: tuple[float, float] = (0.0, 0.0),
 ) -> AnalysisPoint:
-    """One case's baseline with the lead case's sensitivities."""
+    """One case's baseline (plus a constant lateral ``force``) with the lead's sensitivities."""
     case = superpose(probes, channels, wind_x_scale, wind_y_scale)
-    return replace(
+    point = replace(
         lead_point,
         baseline_rope_tensions=case.baseline_rope_tensions,
         baseline_reactions=case.baseline_reactions,
     )
+    return add_hook_lateral(point, 0.0, 0.0, *force)
 
 
 def _is_magnitude(lead_point: AnalysisPoint, entity_id: str, component: str) -> bool:
@@ -623,6 +610,8 @@ class _LimitContext:
             limit_id=limit_id,
             lateral_x_fraction=float(lead.lateral[0]),
             lateral_y_fraction=float(lead.lateral[1]),
+            lateral_x_kN=float(lead.force[0]),
+            lateral_y_kN=float(lead.force[1]),
         )
 
 
@@ -679,7 +668,7 @@ def _linear_capacity(
             wind = (sign * math.copysign(1.0, quantity.wind_x), 0.0)
         else:
             wind = (0.0, sign * math.copysign(1.0, quantity.wind_y))
-        point = _case_point(ctx.probes, lead_point, channels, *wind)
+        point = _case_point(ctx.probes, lead_point, channels, *wind, force=lead.force)
         found = ctx.case(
             lead,
             case,
@@ -765,6 +754,21 @@ def _magnitude_capacity(
     if np.any(wind_a) or np.any(wind_b):
         corners = [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)]
     corner_values = np.array([u * wind_a + v * wind_b for u, v in corners])  # (C, K)
+    # The constant hook lateral of each lead shifts its baselines (``_case_point``).
+    offsets = []
+    for lead_case in leads:
+        shifted = add_hook_lateral(lead_case.point, 0.0, 0.0, *lead_case.force)
+        offsets.append(
+            np.array(
+                [
+                    _read_component(shifted.baseline_reactions.get(entity_id, {}), key, fallback)
+                    - _read_component(
+                        lead_case.point.baseline_reactions.get(entity_id, {}), key, fallback
+                    )
+                    for key, fallback in quantities
+                ]
+            )
+        )
     sens_by_lead = [
         [
             _read_component(lead.point.sensitivity_reactions.get(entity_id, {}), key, fallback)
@@ -781,7 +785,9 @@ def _magnitude_capacity(
     ) -> None:
         nonlocal best, rank_error
         channels = harmonics.channels(case, cos_v, sin_v)
-        point = _case_point(ctx.probes, leads[lead].point, channels, *corners[corner])
+        point = _case_point(
+            ctx.probes, leads[lead].point, channels, *corners[corner], force=leads[lead].force
+        )
         cap = ctx.capacity(point, single_limit)
         exact = cap.max_allowable_load_kN
         if math.isinf(rank) and not math.isinf(exact):
@@ -799,7 +805,7 @@ def _magnitude_capacity(
     coarse = _ring_baselines(b0, p, q, corner_values, coarse_cos, coarse_sin)
     bounds = []
     for lead, sens in enumerate(sens_by_lead):
-        ranks = _rank(sens, on_ring)
+        ranks = _rank(sens, on_ring + offsets[lead])
         case, side, corner = (int(i) for i in np.unravel_index(int(np.argmin(ranks)), ranks.shape))
         _evaluate(
             lead,
@@ -809,7 +815,7 @@ def _magnitude_capacity(
             corner,
             float(ranks[case, side, corner]),
         )
-        bounds.append(_rank(sens, coarse).min(axis=(1, 2)))
+        bounds.append(_rank(sens, coarse + offsets[lead]).min(axis=(1, 2)))
     assert best is not None
     # A sign case is dropped only if its bound, less the rank error allowance, is above a
     # capacity that a real case reaches.
@@ -824,7 +830,9 @@ def _magnitude_capacity(
         if keep.size == 0:
             continue
         ranks = _rank(
-            sens, _ring_baselines(b0[keep], p[keep], q[keep], corner_values, fine_cos, fine_sin)
+            sens,
+            _ring_baselines(b0[keep], p[keep], q[keep], corner_values, fine_cos, fine_sin)
+            + offsets[lead],
         )
         case_i, side_i, corner_i = np.unravel_index(np.arange(ranks.size), ranks.shape)
         ranks_parts.append(ranks.ravel())
@@ -901,16 +909,16 @@ def envelope_capacity_case(
     ``governing_limit_id`` and the case it was evaluated at (``None`` when no limit
     applies).
 
-    ``hook_lateral`` (None: none) adds the live-load lateral at the support node. Its wind
-    constants join the wind probes (``with_load_wind``). Its H-proportional part, of
-    magnitude ``HookLateral.magnitude()`` (the floor included), points in the worst
-    horizontal direction: for a linear limit the exact extreme pair
+    ``hook_lateral`` (None: none) adds the live-load lateral at the support node: its
+    H-proportional part of magnitude ``HookLateral.magnitude()`` (the floor included) and
+    its constant force of magnitude ``constant_magnitude()`` (the wind on the load), both
+    in the worst horizontal direction: for a linear limit the exact extreme pair
     (``_linear_lateral_directions``), for a magnitude limit the vertices of a 16-gon
     circumscribing the circle of directions (never above the true minimum, at most
-    1.96 % more lateral). The fractions' own direction is not used.
+    1.96 % more lateral). The vectors' own directions are not used.
     """
-    probes = with_load_wind(probes, hook_lateral)
     radius = 0.0 if hook_lateral is None else hook_lateral.magnitude()
+    force_kN = 0.0 if hook_lateral is None else hook_lateral.constant_magnitude()
     gravity = abs(float(calc.doc.environment.gravity_m_s2))
     harmonics = _slew_harmonics(gravity, vessel)
     missing = [
@@ -946,14 +954,16 @@ def envelope_capacity_case(
             # Which branch compute_allowable_load takes depends on sensitivity keys only.
             magnitude = [lead for lead in leads if _is_magnitude(lead.point, entity_id, component)]
             linear = [lead for lead in leads if not _is_magnitude(lead.point, entity_id, component)]
-            if radius > 0.0:
-                polygon = circumscribed_directions(radius)
-                magnitude = [m for lead in magnitude for m in _with_lateral(lead, polygon)]
+            if radius > 0.0 or force_kN > 0.0:
+                polygon = circumscribed_directions(1.0)
+                magnitude = [
+                    m for lead in magnitude for m in _with_lateral(lead, polygon, radius, force_kN)
+                ]
                 if linear:
-                    pair = _linear_lateral_directions(
-                        calc, probes.zero, limit_key, component, radius
-                    )
-                    linear = [m for lead in linear for m in _with_lateral(lead, pair)]
+                    pair = _linear_lateral_directions(calc, probes.zero, limit_key, component)
+                    linear = [
+                        m for lead in linear for m in _with_lateral(lead, pair, radius, force_kN)
+                    ]
             if magnitude:
                 best = _lower(
                     best,

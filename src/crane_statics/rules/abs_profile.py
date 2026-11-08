@@ -189,6 +189,11 @@ class AbsProfile:
             wind_cd=cond.load_drag_coefficient,
             min_fraction=MIN_SIDE_LOAD_FRACTION,
             wind_force_per_speed_sq=wind_per_v2,
+            # 5.17: a_h is the acceleration at the boom tip, so the angular accelerations
+            # add their lever-arm term there (core evaluates it at the support node).
+            accel_fraction_per_m_x=abs(motion.pitch_angular_accel_rad_s2) / GRAVITY_M_S2,
+            accel_fraction_per_m_y=abs(motion.roll_angular_accel_rad_s2) / GRAVITY_M_S2,
+            reference_z_m=motion.reference_z_m,
         )
         records.append(
             ProvenanceRecord(
