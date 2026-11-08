@@ -62,16 +62,21 @@ class DemandScale:
 def find_demand_scale(
     demand_scale: Optional[Mapping[str, DemandScale]], limit_key: str, component: str
 ) -> Optional[DemandScale]:
-    """The scale of a limit: by limit key, by the key without its ``_<component>`` suffix,
-    then by that entity's base entity (``base_entity_id``). None without one."""
-    if not demand_scale:
-        return None
+    """The scale of a limit: by limit key, then by the key without its ``_<component>``
+    suffix (the entity, e.g. ``"platform_base"``). None without one.
+
+    A factored copy (``<entity>_retaining``) has no unfactored meaning, so it never falls
+    back to its base entity's scale or to none: without its own entry this raises
+    ``ValueError`` (a caller forgot ``lift_factor.demand_scales``).
+    """
     suffix = f"_{component}"
     entity = limit_key[: -len(suffix)] if limit_key.endswith(suffix) else limit_key
-    for key in (limit_key, entity, base_entity_id(entity)):
-        scale = demand_scale.get(key)
+    for key in (limit_key, entity):
+        scale = None if not demand_scale else demand_scale.get(key)
         if scale is not None:
             return scale
+    if base_entity_id(entity) != entity:
+        raise ValueError(f"design limit {limit_key!r}: no demand scale for {entity!r}")
     return None
 
 

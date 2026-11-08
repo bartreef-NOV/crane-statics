@@ -344,3 +344,197 @@ def test_auto_set_takes_the_factored_demand(monkeypatch) -> None:
     plain = compute_required_connection_capacity_kN(doc, "platform_base", "Fz").required_kN
     assert plain is not None and pedestal is not None and retaining is not None
     assert plain < pedestal < retaining
+
+
+# --- review round 1 -----------------------------------------------------------------------
+
+
+def test_dnv_without_cabin_has_no_foundation_scale() -> None:
+    """SF1 does not apply: no scales, plain rows keep their limit, no factored rows."""
+    from crane_statics.core.analysis_cases import analysis_mode_by_name
+    from crane_statics.core.load_condition import condition_cases
+    from crane_statics.rules.types import NEUTRAL_FOUNDATION
+
+    doc = rules_doc("DNV", gale())
+    assert doc.rules is not None and not doc.rules.cabin_above_slewing_bearing
+    hoist = next(h for h in doc.hoists if h.id == "MH")
+    lift = LiftFactors(doc, CraneCalculator(doc))
+    for condition in condition_cases(doc, None):
+        mode = analysis_mode_by_name(hoist, "normal")
+        setup = lift.setup(condition, "MH", mode, 45.0)
+        assert setup.foundation is NEUTRAL_FOUNDATION
+        assert lift.demand_scales(condition, "MH", mode, 45.0, setup) is None
+
+    session = SessionModel()
+    session.set_document(doc)
+    limit = session.design_limits_by_id["platform_base_Fz"]
+    limit.max_kN, limit.enabled = 1.0e6, True
+    calculator = AnalysisCalculator(session, KinematicsService(session), HoistStateService(session))
+    pt = calculator.compute_analysis_point()
+    assert pt is not None
+    _ropes, rows = calculator.compute_result_rows(pt, hook_load_kN=800.0)
+    assert not any(r.kind == "factored" for r in rows)
+    plain = next(r for r in rows if r.entity_id == "platform_base" and r.component == "Fz")
+    assert plain.limit_kN == 1.0e6 and plain.utilization_pct is not None
+
+
+def test_retaining_limit_without_its_scale_raises(solved) -> None:
+    calc, point = solved
+    limits = {"platform_base_retaining_Fz": {"Fz": 1.0e6}}
+    for scales in (None, {"platform_base": DemandScale(live=lambda _ll: 1.5)}):
+        with pytest.raises(ValueError, match="platform_base_retaining"):
+            calc.compute_allowable_load(point, limits, demand_scale=scales)
+
+
+def test_factored_point_and_capacity_share_one_live_load_default(solved) -> None:
+    from crane_statics.core.lift_factor import factored_point
+
+    calc, point = solved
+    b, s = _fz(point)
+    scale = DemandScale(live=lambda ll: ref.abs_pedestal_factor(ll, "offshore"))
+    limit = b + 900.0 * s
+    capacity = _cap(calc, point, {"platform_base_Fz": {"Fz": limit}}, {"platform_base": scale})
+    factored = factored_point(
+        point, scale, capacity, "platform_base", hook_daf=DAF, hook_mass_t=HOOK_T, gravity_m_s2=G
+    )
+    demand = factored.baseline_reactions["platform_base"]["Fz"] + (
+        factored.sensitivity_reactions["platform_base"]["Fz"] * capacity
+    )
+    assert demand == pytest.approx(limit, abs=1e-6)
+
+
+def _windy_my(point):
+    """``point`` with a 50 kN constant (load wind) lateral, and its platform-base My."""
+    from crane_statics.calculation.hook_lateral import add_hook_lateral
+
+    windy = add_hook_lateral(point, 0.0, 0.0, 50.0, 0.0)
+    b0 = float(point.baseline_reactions["platform_base"]["My"])
+    b1 = float(windy.baseline_reactions["platform_base"]["My"])
+    s = float(windy.sensitivity_reactions["platform_base"]["My"])
+    assert abs(b1 - b0) > 1000.0 and s > 0.0  # the constant loads My
+    assert s == pytest.approx(float(point.sensitivity_reactions["platform_base"]["My"]))
+    return windy, b0, b1, s
+
+
+def test_retaining_factor_leaves_the_load_wind_constant_unscaled(solved) -> None:
+    calc, point = solved
+    windy, _b0, b1, s = _windy_my(point)
+    limit = b1 + 1000.0 * s
+    capacity = _cap(
+        calc,
+        windy,
+        {"platform_base_retaining_My": {"My": limit}},
+        {"platform_base_retaining": DemandScale(live=lambda _ll: 3.75, dead=1.0)},
+    )
+    # The wind term (in b1) at 1.0, the H term at 3.75.
+    assert capacity == pytest.approx((limit - b1) / (3.75 * s), rel=1e-9)
+
+
+def test_abs_pf_leaves_the_load_wind_unfactored_documented_limitation(solved) -> None:
+    """Pins spec 9.7: ABS PF multiplies the H terms only, not the load wind (the
+    non-conservative reading of 5.15, owner to confirm). The wind part stays at 1.0."""
+    calc, point = solved
+    windy, b0, b1, s = _windy_my(point)
+    limit = b1 + 1000.0 * s
+    scale = DemandScale(live=lambda ll: ref.abs_pedestal_factor(ll, "offshore"))
+    capacity = _cap(calc, windy, {"platform_base_My": {"My": limit}}, {"platform_base": scale})
+    pf = ref.abs_pedestal_factor(_ll(capacity), "offshore")
+    assert pf > 1.2
+    assert b1 + pf * s * capacity == pytest.approx(limit, abs=1e-6)
+    # The conservative reading (PF on the wind too) would exceed the limit at this H.
+    assert b0 + pf * (b1 - b0) + pf * s * capacity > limit + 1.0
+
+
+def test_auto_set_values_match_the_hand_factored_demand(monkeypatch) -> None:
+    from crane_statics.core.analysis_cases import analysis_mode_by_name
+    from crane_statics.core.limit_auto_set import compute_required_connection_capacity_kN
+    from crane_statics.core.load_condition import condition_document, load_conditions
+    from tests.rules_docs import without_live_lateral
+
+    without_live_lateral(monkeypatch)  # the governing lateral direction is not recorded
+    doc = rules_doc("ABS", gale())
+    (condition,) = load_conditions(doc)
+    calc = CraneCalculator(condition_document(doc, condition))
+    lift = LiftFactors(doc, calc)
+    g = abs(float(doc.environment.gravity_m_s2))
+
+    def hand(entity: str, live) -> None:
+        result = compute_required_connection_capacity_kN(doc, entity, "Fz")
+        assert result.required_kN is not None and result.governing_hoist_id is not None
+        hoist = next(h for h in doc.hoists if h.id == result.governing_hoist_id)
+        mode = analysis_mode_by_name(hoist, str(result.governing_mode))
+        cp = mode.contractual_points[int(result.governing_cp_index or 0)]
+        angle = float(result.governing_angle_deg or 0.0)
+        pt = calc.compute_analysis_point(
+            angle,
+            0.0,
+            hoist.id,
+            wind_speed_m_s=condition.wind_speed_m_s,
+            wind_direction=result.governing_wind_direction,
+            offlead_deg=result.governing_offlead_deg,
+            sidelead_deg=result.governing_sidelead_deg,
+            hoist_runtime_overrides=mode.runtime_overrides,
+            amplified_rope_hoist_id=hoist.id,
+        )
+        assert pt is not None
+        setup = lift.setup(condition, hoist.id, mode, angle)
+        hook_kN = setup.factor.hook_force_kN(cp.load_t, mode.hook_mass_t, g)
+        rope_t = lift.suspended_rope_mass_t(hoist.id, mode, angle)
+        ll = (cp.load_t + mode.hook_mass_t + rope_t) * g
+        b, s = _fz(pt)
+        assert result.required_kN == pytest.approx(abs(b + live(ll) * s * hook_kN), rel=1e-9)
+
+    hand("platform_base", lambda ll: ref.abs_pedestal_factor(ll, "offshore"))
+    hand("platform_base_retaining", lambda _ll: 3.75)
+
+
+def test_dnv_sf1_envelope_scales_dead_and_live_terms() -> None:
+    from crane_statics.core.analysis_cases import analysis_mode_by_name
+    from crane_statics.core.chart_envelope import build_probes, envelope_capacity
+    from crane_statics.core.lift_factor import chart_max_load_t
+    from crane_statics.core.load_condition import condition_cases, condition_document
+
+    doc = rules_doc("DNV", gale())
+    assert doc.rules is not None
+    doc = doc.model_copy(
+        update={"rules": doc.rules.model_copy(update={"cabin_above_slewing_bearing": True})}
+    )
+    hoist = next(h for h in doc.hoists if h.id == "MH")
+    mode = analysis_mode_by_name(hoist, "normal")
+    g = abs(float(doc.environment.gravity_m_s2))
+    sf1 = ref.dnv_sf1(chart_max_load_t(mode) * g)
+    lift = LiftFactors(doc, CraneCalculator(doc))
+    for condition in condition_cases(doc, None):
+        calc = CraneCalculator(condition_document(doc, condition))
+        probes = build_probes(
+            calc,
+            "MH",
+            45.0,
+            condition.wind_speed_m_s,
+            None,
+            vessel=condition.vessel_motion,
+            amplified_rope_hoist_id="MH",
+        )
+        assert probes is not None
+        setup = lift.setup(condition, "MH", mode, 45.0, probes.zero)
+        scales = lift.demand_scales(condition, "MH", mode, 45.0, setup)
+        assert scales is not None and scales["platform_base"].dead == pytest.approx(sf1)
+        b, s = _fz(probes.zero)
+        limit = 2.0 * b
+
+        def run(scale):
+            return envelope_capacity(
+                calc,
+                probes,
+                {"platform_base_Fz": {"Fz": limit}},
+                vessel=condition.vessel_motion,
+                offlead_deg=0.0,
+                sidelead_deg=0.0,
+                hook_daf=setup.factor,
+                hook_mass_t=mode.hook_mass_t,
+                demand_scale=scale,
+            ).max_allowable_load_kN
+
+        plain, factored = run(None), run(scales)
+        worst_b = limit - plain * s  # the worst baseline of the envelope, the same in both
+        assert factored == pytest.approx((limit - sf1 * worst_b) / (sf1 * s), rel=1e-9)

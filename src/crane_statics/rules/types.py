@@ -72,6 +72,15 @@ class FoundationFactors:
     dead_factor: float
 
 
+def _unit_factor(_live_load_kN: float) -> float:
+    return 1.0
+
+
+#: No foundation factor (legacy, DNV without a cabin above the slewing bearing): the
+#: calculation then leaves the platform base on its unfactored, linear path.
+NEUTRAL_FOUNDATION = FoundationFactors(live_factor=_unit_factor, dead_factor=1.0)
+
+
 @dataclass(frozen=True)
 class LiftSetup:
     """Everything a profile hands the calculation for one condition, hoist and mode."""

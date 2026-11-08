@@ -14,8 +14,13 @@ from collections import OrderedDict
 from dataclasses import replace
 from typing import Any, Callable, Hashable, Optional, cast
 
-from ..calculation.allowable import RETAINING_SUFFIX, DemandScale, base_entity_id
-from ..calculation.dynamic_factor import ConstantDynamicFactor, DynamicFactor
+from ..calculation.allowable import (
+    RETAINING_SUFFIX,
+    DemandScale,
+    base_entity_id,
+    scaled_live_factor,
+)
+from ..calculation.dynamic_factor import ConstantDynamicFactor, DynamicFactor, DynamicFactorLike
 from ..calculation.engine import AnalysisPoint, CraneCalculator
 from ..calculation.results import HookLateral
 from ..calculation.rope_mass import (
@@ -32,7 +37,7 @@ from ..rules.stiffness import (
     worst_case_tackle_length_m,
 )
 from ..rules.suspended import suspended_rope_mass_t
-from ..rules.types import FoundationFactors, LateralSpec, LiftSetup
+from ..rules.types import NEUTRAL_FOUNDATION, LateralSpec, LiftSetup
 from .analysis_cases import HoistAnalysisMode
 from .load_condition import LoadCondition
 
@@ -46,12 +51,6 @@ _NEUTRAL_LATERAL = LateralSpec(
     min_fraction=0.0,
 )
 
-
-def _unit_factor(_live_load_kN: float) -> float:
-    return 1.0
-
-
-_NEUTRAL_FOUNDATION = FoundationFactors(live_factor=_unit_factor, dead_factor=1.0)
 
 #: The pedestal / slewing-bearing connection the foundation factor applies to.
 PLATFORM_BASE = "platform_base"
@@ -73,7 +72,7 @@ def legacy_lift_setup(hoist: Hoist) -> LiftSetup:
     return LiftSetup(
         factor=ConstantDynamicFactor(hoist.hook_daf),
         lateral=_NEUTRAL_LATERAL,
-        foundation=_NEUTRAL_FOUNDATION,
+        foundation=NEUTRAL_FOUNDATION,
         retaining_live_factor=1.0,
         records=(),
         warnings=(),
@@ -141,7 +140,11 @@ def live_load_kN(
 def demand_scales(
     setup: LiftSetup, live_load: Callable[[float], float]
 ) -> Optional[dict[str, DemandScale]]:
-    """The pedestal and retaining-component demand scales of ``setup`` (legacy: None).
+    """The pedestal and retaining-component demand scales of ``setup``.
+
+    None when there is nothing to factor: a legacy setup, or DNV without a cabin above the
+    slewing bearing (``NEUTRAL_FOUNDATION`` and a retaining factor of 1.0); the limits
+    then stay on the unfactored path and the rows show no factored copies.
 
     ``platform_base`` (pedestal and slewing bearing) takes ``setup.foundation``: ABS PF on
     the live-load terms, DNV SF1 on dead and live alike. ``platform_base_retaining`` takes
@@ -150,7 +153,7 @@ def demand_scales(
     terms are the hook-force sensitivities, so the H-proportional lateral scales with
     them and the wind on the load (in the baseline) does not.
     """
-    if setup.foundation is _NEUTRAL_FOUNDATION:
+    if setup.foundation is NEUTRAL_FOUNDATION and setup.retaining_live_factor == 1.0:
         return None
     retaining = float(setup.retaining_live_factor)
     return {
@@ -164,7 +167,14 @@ def demand_scales(
 
 
 def factored_point(
-    point: AnalysisPoint, scale: DemandScale, hook_force_kN: float, entity_id: str
+    point: AnalysisPoint,
+    scale: DemandScale,
+    hook_force_kN: float,
+    entity_id: str,
+    *,
+    hook_daf: DynamicFactorLike,
+    hook_mass_t: float,
+    gravity_m_s2: float,
 ) -> AnalysisPoint:
     """``point`` with ``entity_id``'s reactions under ``scale`` at ``hook_force_kN``.
 
@@ -172,10 +182,11 @@ def factored_point(
     baseline map is multiplied by ``scale.dead`` and the sensitivity map by ``scale.live``
     at that hook force's LL, so any demand extractor reading the base entity at
     ``hook_force_kN`` gets the factored demand ``dead * Q0 + live(LL) * s * H``, the one
-    ``compute_allowable_load`` inverts. ``scale.live_load_kN`` None: LL = H.
+    ``compute_allowable_load`` inverts: LL as ``allowable.scaled_live_factor`` takes it
+    from ``hook_daf`` and ``hook_mass_t`` (the one default for ``scale.live_load_kN``
+    None).
     """
-    to_ll = scale.live_load_kN if scale.live_load_kN is not None else (lambda h: h)
-    live = float(scale.live(to_ll(float(hook_force_kN))))
+    live = scaled_live_factor(scale, hook_daf, hook_mass_t, gravity_m_s2)(float(hook_force_kN))
     source = base_entity_id(entity_id)
     base = point.baseline_reactions.get(source, {})
     sens = point.sensitivity_reactions.get(source, {})

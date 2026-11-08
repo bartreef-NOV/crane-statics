@@ -656,13 +656,24 @@ class AnalysisCalculator:
         if scales and PLATFORM_BASE in conn_limits_by_id:
             doc = self._session.document
             label = None if doc is None else foundation_label(doc)
-            pedestal = factored_point(pt, scales[PLATFORM_BASE], hook_load_kN, PLATFORM_BASE)
+            hoist = self._session.payload_hoist_by_id(hoist_id) if hoist_id else None
+            _falls, hook_mass_t, _support = (
+                self._hoist.effective_hoist_parameters(hoist_id) if hoist_id else (None, 0.0, 0.0)
+            )
+            lift_args: dict[str, Any] = dict(
+                hook_daf=self._hoist.dynamic_factor(hoist),
+                hook_mass_t=hook_mass_t,
+                gravity_m_s2=self._hoist.gravity_abs(),
+            )
+            pedestal = factored_point(
+                pt, scales[PLATFORM_BASE], hook_load_kN, PLATFORM_BASE, **lift_args
+            )
             conn_rows.extend(
                 _entity_result_rows(PLATFORM_BASE, pedestal, "factored", f"Platform Base ({label})")
             )
             if RETAINING_ENTITY in conn_limits_by_id:
                 retaining = factored_point(
-                    pt, scales[RETAINING_ENTITY], hook_load_kN, RETAINING_ENTITY
+                    pt, scales[RETAINING_ENTITY], hook_load_kN, RETAINING_ENTITY, **lift_args
                 )
                 conn_rows.extend(
                     _entity_result_rows(

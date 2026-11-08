@@ -270,7 +270,13 @@ def _evaluate_condition(
                         demand_point = add_hook_lateral(lead_point, fx, fy, cx, cy)
                         if scale is not None and factored_entity is not None:
                             demand_point = factored_point(
-                                demand_point, scale, hook_kN, factored_entity
+                                demand_point,
+                                scale,
+                                hook_kN,
+                                factored_entity,
+                                hook_daf=setup.factor,
+                                hook_mass_t=mode.hook_mass_t,
+                                gravity_m_s2=gravity,
                             )
                         demand = demand_extractor(demand_point, hook_kN, case)
                         if demand is None or not math.isfinite(demand):

@@ -22,7 +22,14 @@ from ..calculation.solver.crane_solver import wind_force_kN
 from ..data.models import ConditionSpec, CraneDocument, Hoist, RulesSpec, VesselMotion
 from .factors import LinearFactor, MaxFactor, RelativeVelocityFactor
 from .foundation import dnv_sf1
-from .types import CaseSpec, FoundationFactors, LateralSpec, LiftSetup, ProvenanceRecord
+from .types import (
+    NEUTRAL_FOUNDATION,
+    CaseSpec,
+    FoundationFactors,
+    LateralSpec,
+    LiftSetup,
+    ProvenanceRecord,
+)
 from .validation import RulesValidationError
 
 if TYPE_CHECKING:  # core imports rules at run time; keep this edge type-only.
@@ -237,7 +244,12 @@ class DnvProfile:
 
         swl_kN = chart_max_load_t * gravity
         sf1 = dnv_sf1(swl_kN) if rules.cabin_above_slewing_bearing else 1.0
-        foundation = FoundationFactors(live_factor=lambda _ll: sf1, dead_factor=sf1)
+        # Without a cabin above the bearing SF1 does not apply: the neutral factors.
+        foundation = (
+            FoundationFactors(live_factor=lambda _ll: sf1, dead_factor=sf1)
+            if rules.cabin_above_slewing_bearing
+            else NEUTRAL_FOUNDATION
+        )
         records.append(
             ProvenanceRecord(
                 "pedestal_factor",
