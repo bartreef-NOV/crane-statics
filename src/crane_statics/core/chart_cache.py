@@ -11,10 +11,15 @@ from ..data.models import CraneDocument
 
 
 class ChartJob(NamedTuple):
-    """One (hoist, analysis mode) sweep to precompute."""
+    """One (hoist, analysis mode, load condition) sweep to precompute.
+
+    ``condition`` is the condition name ``run_mode_sweep`` takes; None is the document's
+    first (on a legacy document, its only) condition.
+    """
 
     hoist_id: str
     mode: str
+    condition: Optional[str] = None
 
 
 class ChartKey(NamedTuple):
@@ -24,10 +29,12 @@ class ChartKey(NamedTuple):
     mode: str
     outreach_step: float
     fingerprint: str
+    # Two conditions of one hoist are different charts, whatever the document hash.
+    condition: Optional[str] = None
 
 
 def chart_fingerprint(doc: CraneDocument, enabled_limits: dict, limit_display_names: dict) -> str:
-    """Hash everything besides hoist, mode and step that a sweep result depends on."""
+    """Hash everything besides hoist, mode, step and condition a sweep result depends on."""
     digest = hashlib.sha256()
     digest.update(doc.model_dump_json().encode("utf-8"))
     for extra in (enabled_limits, limit_display_names):
@@ -69,13 +76,17 @@ class ChartCache:
 def plan_chart_jobs(
     visible: ChartJob, hoist_ids: Sequence[str], is_splitable: Callable[[str], bool]
 ) -> list[ChartJob]:
-    """Order precompute jobs: the visible one, its hoist's other mode, then other hoists."""
+    """Order precompute jobs: the visible one, its hoist's other mode, then other hoists.
+
+    Every job is for the visible job's condition.
+    """
+    condition = visible.condition
     other_mode = "split" if visible.mode == "normal" else "normal"
-    candidates = [visible, ChartJob(visible.hoist_id, other_mode)]
+    candidates = [visible, ChartJob(visible.hoist_id, other_mode, condition)]
     for hoist_id in hoist_ids:
         if hoist_id != visible.hoist_id:
-            candidates.append(ChartJob(hoist_id, "normal"))
-            candidates.append(ChartJob(hoist_id, "split"))
+            candidates.append(ChartJob(hoist_id, "normal", condition))
+            candidates.append(ChartJob(hoist_id, "split", condition))
     jobs: list[ChartJob] = []
     for job in candidates:
         if job.mode == "split" and not is_splitable(job.hoist_id):

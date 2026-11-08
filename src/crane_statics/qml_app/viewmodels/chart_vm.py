@@ -136,6 +136,7 @@ class _SweepWorker(QThread):
             outreach_step,
             limit_display_names,
         )
+        self._condition = job.condition
         self._compute_scope = compute_scope
 
     def _emit_points(self, points: list) -> None:
@@ -161,6 +162,7 @@ class _SweepWorker(QThread):
                 compute_scope=self._compute_scope,
                 on_contractual=self._emit_contractual,
                 on_limit_points=self._emit_limit_points,
+                condition_name=self._condition,
             )
             self.finishedWith.emit(payload if payload is not None else empty_payload())
         except SweepCancelled:
@@ -183,10 +185,11 @@ class _GoverningCaseWorker(QThread):
         enabled_limits: dict,
         outreach_m: float,
         limit_id: Optional[str],
+        condition: Optional[str] = None,
     ) -> None:
         # Parentless, as _SweepWorker: the view model holds it until `finished`.
         super().__init__()
-        self._args = (doc, hoist_id, mode, enabled_limits, outreach_m, limit_id)
+        self._args = (doc, hoist_id, mode, enabled_limits, outreach_m, limit_id, condition)
 
     def run(self) -> None:
         try:
@@ -694,7 +697,9 @@ class ChartViewModel(QObject):
                 doc, self._enabled_limits(), self._limit_display_names()
             )
             self._fingerprint_generation = self._generation
-        return ChartKey(job.hoist_id, job.mode, self._outreach_step, self._fingerprint)
+        return ChartKey(
+            job.hoist_id, job.mode, self._outreach_step, self._fingerprint, job.condition
+        )
 
     def _wanted_key(self) -> Optional[ChartKey]:
         """The cache key of the chart that should be on screen right now."""
@@ -786,7 +791,9 @@ class ChartViewModel(QObject):
         names = self._limit_display_names()
         self._fingerprint = chart_fingerprint(doc_copy, limits, names)
         self._fingerprint_generation = self._generation
-        key = ChartKey(job.hoist_id, job.mode, self._outreach_step, self._fingerprint)
+        key = ChartKey(
+            job.hoist_id, job.mode, self._outreach_step, self._fingerprint, job.condition
+        )
         if self._cache.get(key) is not None:
             return False
 
@@ -901,6 +908,7 @@ class ChartViewModel(QObject):
                 self._enabled_limits(),
                 self._outreach_step,
                 self._limit_display_names(),
+                condition_name=key.condition,
             )
             self._cache.put(key, payload or empty_payload())
         self._show_wanted()
@@ -1254,6 +1262,7 @@ class ChartViewModel(QObject):
             self._enabled_limits(),
             outreach_m,
             series_id or None,
+            key.condition,
         )
         worker.finishedWith.connect(lambda case, w=worker: self._on_case_finished(w, case))
         worker.failed.connect(lambda message, w=worker: self._on_case_failed(w, message))

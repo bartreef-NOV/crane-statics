@@ -8,7 +8,12 @@ import pytest
 
 import crane_statics.calculation.engine as engine
 from crane_statics.core import load_document
+from crane_statics.core.governing_case import governing_case
+from crane_statics.core.limit_auto_set import compute_required_rope_capacity_kN
+from crane_statics.core.load_condition import DEFAULT_CONDITION_NAME, condition_cases
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mode_sweep
+from crane_statics.data.models import CraneDocument, VesselMotion
+from tests.rules_docs import MOTION, gale, legacy_equivalent, rules_doc
 
 ROOT = Path(__file__).parent.parent
 EXAMPLE = ROOT / "examples" / "crane_input_22689.yaml"
@@ -61,3 +66,123 @@ def test_sweep_does_not_grow_the_calculator_cache() -> None:
     before = len(engine._CALCULATOR_CACHE)
     run_mode_sweep(doc, HOIST, "normal", LIMITS, STEP, {})
     assert len(engine._CALCULATOR_CACHE) == before
+
+
+# --- load conditions -----------------------------------------------------------------------
+
+RULES_LIMITS: dict[str, dict] = {
+    "boom_hoist": {"T": 5000.0},
+    "platform_base": {"max_bearing_line_load": 3000.0},
+}
+RULES_STEP = 20.0
+
+
+def test_legacy_sweep_without_a_condition_is_the_default_condition() -> None:
+    doc = _doc()
+    payload = run_mode_sweep(doc, HOIST, "normal", LIMITS, STEP, {}, condition_name=None)
+    named = run_mode_sweep(
+        doc, HOIST, "normal", LIMITS, STEP, {}, condition_name=DEFAULT_CONDITION_NAME
+    )
+    assert payload is not None and payload["curve_data"]
+    assert payload == named
+
+
+def test_sweep_for_an_unknown_condition_raises_naming_it() -> None:
+    with pytest.raises(KeyError, match="nope"):
+        run_mode_sweep(_doc(), HOIST, "normal", LIMITS, STEP, {}, condition_name="nope")
+    with pytest.raises(KeyError, match="nope"):
+        run_mode_sweep(
+            rules_doc("ABS", gale()), HOIST, "normal", LIMITS, STEP, {}, condition_name="nope"
+        )
+
+
+def test_rules_sweep_uses_the_condition_wind_and_motion_not_the_dummies() -> None:
+    doc = rules_doc("ABS", gale(wind=30.0))
+    swept = run_mode_sweep(
+        doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
+    )
+    same = run_mode_sweep(
+        legacy_equivalent(doc, 30.0, MOTION), HOIST, "normal", RULES_LIMITS, RULES_STEP, {}
+    )
+    dummy = run_mode_sweep(
+        legacy_equivalent(doc, 20.0, MOTION), HOIST, "normal", RULES_LIMITS, RULES_STEP, {}
+    )
+    assert swept is not None and same is not None and dummy is not None
+    assert swept["curve_data"]
+    assert swept == same
+    assert swept["curve_data"] != dummy["curve_data"]  # the wind speed does matter here
+
+
+def _legacy_curve(doc: CraneDocument, wind: float, motion: VesselMotion) -> dict[float, float]:
+    payload = run_mode_sweep(
+        legacy_equivalent(doc, wind, motion), HOIST, "normal", RULES_LIMITS, RULES_STEP, {}
+    )
+    assert payload is not None
+    return dict(payload["curve_data"])
+
+
+def test_rules_chart_is_the_minimum_over_the_condition_cases() -> None:
+    doc = rules_doc("DNV", gale(wind=30.0), gale("calm", wind=5.0))
+    case_i, case_ii = condition_cases(doc, "gale")
+    swept = run_mode_sweep(
+        doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
+    )
+    per_case = [_legacy_curve(doc, c.wind_speed_m_s, c.vessel_motion) for c in (case_i, case_ii)]
+    assert swept is not None and swept["curve_data"]
+    for outreach, load_t in swept["curve_data"]:
+        assert load_t == min(curve[outreach] for curve in per_case if outreach in curve)
+    assert any(per_case[0][x] != per_case[1][x] for x in per_case[0] if x in per_case[1])
+
+
+def test_rules_sweep_without_a_condition_takes_the_first() -> None:
+    doc = rules_doc("ABS", gale(wind=30.0), gale("calm", wind=5.0))
+    first = run_mode_sweep(doc, HOIST, "normal", LIMITS, RULES_STEP, {}, condition_name="gale")
+    assert run_mode_sweep(doc, HOIST, "normal", LIMITS, RULES_STEP, {}) == first
+    calm = run_mode_sweep(doc, HOIST, "normal", LIMITS, RULES_STEP, {}, condition_name="calm")
+    assert calm != first
+
+
+def test_rules_governing_case_uses_the_condition() -> None:
+    doc = rules_doc("ABS", gale(wind=30.0))
+    case = governing_case(doc, HOIST, "normal", RULES_LIMITS, 30.0, None, condition_name="gale")
+    same = governing_case(
+        legacy_equivalent(doc, 30.0, MOTION), HOIST, "normal", RULES_LIMITS, 30.0, None
+    )
+    assert case is not None
+    assert case == same
+    assert case.scene_fields["wind_speed_m_s"] == 30.0
+
+
+def test_rules_governing_case_is_the_lowest_case_of_the_condition() -> None:
+    doc = rules_doc("DNV", gale(wind=30.0))
+    case = governing_case(doc, HOIST, "normal", RULES_LIMITS, 30.0, None, condition_name="gale")
+    per_case = [
+        governing_case(
+            legacy_equivalent(doc, c.wind_speed_m_s, c.vessel_motion),
+            HOIST,
+            "normal",
+            RULES_LIMITS,
+            30.0,
+            None,
+        )
+        for c in condition_cases(doc, "gale")
+    ]
+    assert case is not None
+    assert case == min(
+        (c for c in per_case if c is not None), key=lambda c: c.scene_fields["hook_load_kN"]
+    )
+
+
+def test_rules_auto_set_uses_every_condition_case() -> None:
+    doc = rules_doc("ABS", gale(wind=30.0), gale("calm", wind=5.0, motion=VesselMotion()))
+    rope_id = next(h for h in doc.hoists if h.id == "BH").rope_id  # wind and motion matter
+    rules = compute_required_rope_capacity_kN(doc, rope_id)
+    per_condition = [
+        compute_required_rope_capacity_kN(legacy_equivalent(doc, 30.0, MOTION), rope_id),
+        compute_required_rope_capacity_kN(legacy_equivalent(doc, 5.0, VesselMotion()), rope_id),
+    ]
+    assert rules.required_kN is not None
+    required = [r.required_kN for r in per_condition if r.required_kN is not None]
+    assert len(required) == 2
+    assert rules.required_kN == max(required)
+    assert per_condition[0].required_kN != per_condition[1].required_kN

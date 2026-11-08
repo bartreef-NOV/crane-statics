@@ -65,17 +65,21 @@ class JobPriority:
 
 
 class ComputeScope:
-    """A view of the cache for one (fingerprint, hoist, mode)."""
+    """A view of the cache for one (fingerprint, hoist, mode), or one load case of it."""
 
     def __init__(
         self,
         cache: "ComputeCache",
-        prefix: tuple[str, str, str],
+        prefix: tuple[str, ...],
         priority: Optional[JobPriority] = None,
     ) -> None:
         self._cache = cache
         self._prefix = prefix
         self._priority = priority
+
+    def for_case(self, case_name: str) -> "ComputeScope":
+        """The view for one load case (``LoadCondition.name``): its solves are its own."""
+        return ComputeScope(self._cache, (*self._prefix, case_name), self._priority)
 
     def probes(self, angle: float, build: Callable[[], Optional[ProbeSet]]) -> Optional[ProbeSet]:
         """Return the probe set at ``angle``, calling ``build`` only on a miss.

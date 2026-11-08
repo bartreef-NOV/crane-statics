@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Any, Callable, Optional
+from typing import Any, Callable, NamedTuple, Optional
 
 from ..calculation.engine import AllowableCapacity, AnalysisPoint, CraneCalculator
 from ..calculation.solver.kinematics import KinematicsAdapter
-from ..data.models import CraneDocument
+from ..data.models import CraneDocument, VesselMotion
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .chart_envelope import ProbeSet, build_probes, envelope_capacity, lead_points
 from .demand_extraction import limit_responds_to_hook_load
-from .load_condition import default_load_condition
+from .load_condition import LoadCondition, condition_cases, condition_document
 from .sweep_cache import ComputeScope, LimitResult, limit_signature
 
 _LOG = logging.getLogger(__name__)
@@ -20,6 +20,50 @@ _LOG = logging.getLogger(__name__)
 
 class SweepCancelled(Exception):
     """Raised when a capacity sweep is asked to stop cooperatively."""
+
+
+class _SweepCase(NamedTuple):
+    """What one load case of the swept condition evaluates with."""
+
+    calc: CraneCalculator
+    wind_speed_m_s: float
+    vessel: VesselMotion
+    scope: Optional[ComputeScope]
+
+
+def _sweep_case(
+    doc: CraneDocument, condition: LoadCondition, compute_scope: Optional[ComputeScope]
+) -> _SweepCase:
+    # A private calculator: the shared get_calculator cache never evicts, so every sweep
+    # would leak a document copy. Built from the case's environment (legacy: ``doc``).
+    calc = CraneCalculator(condition_document(doc, condition))
+    scope = compute_scope
+    if compute_scope is not None and condition.spec is not None:
+        # Each case of a rules condition solves under its own wind and motion.
+        scope = compute_scope.for_case(condition.name)
+    return _SweepCase(calc, condition.wind_speed_m_s, condition.vessel_motion, scope)
+
+
+def _lowest_envelope(
+    envelopes: list[Optional[tuple[float, dict[str, LimitResult]]]],
+) -> Optional[tuple[float, dict[str, LimitResult]]]:
+    """The chart point of a condition: the minimum over its cases' points.
+
+    Unsolved if any case is unsolved. Per limit, the case of lowest payload is kept; the
+    limit responds to the hook load if it does in any case.
+    """
+    if len(envelopes) == 1:
+        return envelopes[0]
+    solved = [e for e in envelopes if e is not None]
+    if len(solved) != len(envelopes):
+        return None
+    load_t = min(e[0] for e in solved)
+    results: dict[str, LimitResult] = {}
+    for lid in solved[0][1]:
+        per_case = [e[1][lid] for e in solved]
+        low = min(per_case, key=lambda r: r.load_t)
+        results[lid] = LimitResult(low.load_t, low.load_kN, any(r.responsive for r in per_case))
+    return load_t, results
 
 
 def build_absolute_outreach_grid(lo_out: float, hi_out: float, outreach_step: float) -> list[float]:
@@ -113,10 +157,15 @@ def run_mode_sweep(
         Callable[[list[tuple[Any, Optional[float], Optional[bool]]]], None]
     ] = None,
     on_limit_points: Optional[Callable[[dict[str, list[tuple[float, float]]]], None]] = None,
+    condition_name: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Compute one analysis mode's curve, contractual verdicts and per-limit series.
 
     Returns None when the mode does not apply to the hoist (split without a split block).
+    ``condition_name`` names the load condition (``load_condition.condition_names``); None
+    is the document's first one, a legacy document's only one. Every value is the minimum
+    over the condition's cases (``load_condition.condition_cases``), each solved under its
+    own wind speed and vessel motion. An unknown name raises ``KeyError``.
     ``on_points`` receives the finite (outreach, load_t) pairs in ascending outreach, in
     batches of at most ``batch_points``; the batches concatenate to ``curve_data``.
     ``compute_scope`` (for this document, hoist and mode) supplies and keeps the probe
@@ -135,29 +184,29 @@ def run_mode_sweep(
         if cancel_requested():
             raise SweepCancelled()
 
+    conditions = condition_cases(doc, condition_name)
     hoist = next(h for h in doc.hoists if h.id == hoist_id)
     if mode_name == "split" and not _split_applies(hoist):
         return None
-    # A private calculator: the shared get_calculator cache never evicts, so every sweep
-    # would leak a document copy.
-    calc = CraneCalculator(doc)
     kin = KinematicsAdapter(doc.model_dump())
-    condition = default_load_condition(doc)
-    wind_speed = condition.wind_speed_m_s
     # The Model's vessel motion values are ± limits and the hoist's leads are taken with
-    # both signs; the chart reports the worst case over them, every slew and wind angle.
-    vessel = condition.vessel_motion
+    # both signs; the chart reports the worst case over them, every slew and wind angle,
+    # and every case of the condition.
+    cases = [_sweep_case(doc, condition, compute_scope) for condition in conditions]
     offlead_deg = float(getattr(hoist, "offlead_deg", 0.0))
     sidelead_deg = float(getattr(hoist, "sidelead_deg", 0.0))
 
     def _capacity(
-        probes: ProbeSet, design_limits_map: dict[str, dict], hook_mass_t: float
+        case: _SweepCase,
+        probes: ProbeSet,
+        design_limits_map: dict[str, dict],
+        hook_mass_t: float,
     ) -> AllowableCapacity:
         return envelope_capacity(
-            calc,
+            case.calc,
             probes,
             design_limits_map,
-            vessel=vessel,
+            vessel=case.vessel,
             offlead_deg=offlead_deg,
             sidelead_deg=sidelead_deg,
             hook_daf=hoist.hook_daf,
@@ -165,7 +214,7 @@ def run_mode_sweep(
         )
 
     def _limit_results(
-        angle: float, probes: ProbeSet, hook_mass_t: float
+        case: _SweepCase, angle: float, probes: ProbeSet, hook_mass_t: float
     ) -> dict[str, LimitResult]:
         leads: list[AnalysisPoint] = []
         results: dict[str, LimitResult] = {}
@@ -176,18 +225,48 @@ def run_mode_sweep(
             def compute(lid: str = lid, comps: dict = comps) -> LimitResult:
                 if not leads:
                     leads.extend(lead_points(probes, offlead_deg, sidelead_deg))
-                cap = _capacity(probes, {lid: comps}, hook_mass_t)
+                cap = _capacity(case, probes, {lid: comps}, hook_mass_t)
                 # Sensitivities do not depend on motion or wind, but the lead channels
                 # add to them: a limit responds if it does at any lead sign case.
                 responsive = any(limit_responds_to_hook_load(doc, pt, lid, comps) for pt in leads)
                 return LimitResult(cap.max_allowable_load_t, cap.max_allowable_load_kN, responsive)
 
-            if compute_scope is None:
+            if case.scope is None:
                 results[lid] = compute()
             else:
                 signature = limit_signature(lid, {c: v or 0.0 for c, v in comps.items()})
-                results[lid] = compute_scope.limit_result(angle, signature, compute)
+                results[lid] = case.scope.limit_result(angle, signature, compute)
         return results
+
+    def _case_envelope(
+        case: _SweepCase, angle: float, mode: HoistAnalysisMode
+    ) -> Optional[tuple[float, dict[str, LimitResult]]]:
+        """One case's combined payload capacity and per-limit results, None if unsolved.
+
+        envelope_capacity evaluates every limit on its own and keeps the lowest, so the
+        combined capacity is the per-limit result of lowest hook load (first one on a tie).
+        """
+
+        def build() -> Optional[ProbeSet]:
+            return build_probes(
+                case.calc,
+                hoist_id,
+                angle,
+                case.wind_speed_m_s,
+                mode.runtime_overrides,
+                vessel=case.vessel,
+            )
+
+        probes = build() if case.scope is None else case.scope.probes(angle, build)
+        if probes is None:
+            return None
+        results = _limit_results(case, angle, probes, mode.hook_mass_t)
+        if results:
+            load_t = min(results.values(), key=lambda r: r.load_kN).load_t
+        else:
+            # No limit applies: the unlimited capacity.
+            load_t = _capacity(case, probes, enabled_limits, mode.hook_mass_t).max_allowable_load_t
+        return load_t, results
 
     # Stage 2 revisits the contractual outreaches of stage 1; their solves are reused.
     envelope_cache: dict[tuple[float, str], Optional[tuple[float, dict[str, LimitResult]]]] = {}
@@ -195,32 +274,13 @@ def run_mode_sweep(
     def _envelope(
         angle: float, mode: HoistAnalysisMode
     ) -> Optional[tuple[float, dict[str, LimitResult]]]:
-        """Combined payload capacity and per-limit results at ``angle``, None if unsolved.
-
-        envelope_capacity evaluates every limit on its own and keeps the lowest, so the
-        combined capacity is the per-limit result of lowest hook load (first one on a tie).
-        """
+        """The condition's payload capacity and per-limit results at ``angle``: the
+        minimum over its cases (``_lowest_envelope``), None if unsolved."""
         key = (round(float(angle), 10), mode.name)
         if key not in envelope_cache:
-
-            def build() -> Optional[ProbeSet]:
-                return build_probes(
-                    calc, hoist_id, angle, wind_speed, mode.runtime_overrides, vessel=vessel
-                )
-
-            probes = build() if compute_scope is None else compute_scope.probes(angle, build)
-            if probes is None:
-                envelope_cache[key] = None
-            else:
-                results = _limit_results(angle, probes, mode.hook_mass_t)
-                if results:
-                    load_t = min(results.values(), key=lambda r: r.load_kN).load_t
-                else:
-                    # No limit applies: the unlimited capacity.
-                    load_t = _capacity(
-                        probes, enabled_limits, mode.hook_mass_t
-                    ).max_allowable_load_t
-                envelope_cache[key] = (load_t, results)
+            envelope_cache[key] = _lowest_envelope(
+                [_case_envelope(case, angle, mode) for case in cases]
+            )
         return envelope_cache[key]
 
     step = max(0.01, float(outreach_step))

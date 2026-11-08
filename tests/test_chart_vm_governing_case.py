@@ -244,8 +244,9 @@ def test_split_mode_uses_chart_mode(pair: Pair, monkeypatch) -> None:
     chart.showGoverningCase(ROPE, outreach)
     wait_until(lambda: shown[0] == 1)
 
-    _doc, hoist_id, mode_name, limits, at, limit_id = gate.calls[0]
+    _doc, hoist_id, mode_name, limits, at, limit_id, condition = gate.calls[0]
     assert (hoist_id, mode_name, at, limit_id) == ("MH", "split", outreach, ROPE)
+    assert condition is None  # the chart's condition: a legacy document's only one
     assert limits == chart._enabled_limits()
     assert scene.hookMode == "split"
 

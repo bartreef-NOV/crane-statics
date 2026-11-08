@@ -88,3 +88,28 @@ def test_plan_never_plans_split_for_a_non_splittable_hoist() -> None:
 def test_plan_has_no_duplicates() -> None:
     jobs = plan_chart_jobs(ChartJob("A", "split"), ["A", "A", "B"], lambda _h: True)
     assert len(jobs) == len(set(jobs))
+
+
+def test_key_differs_between_two_conditions_of_one_hoist() -> None:
+    gale = ChartKey("MH", "normal", 5.0, "fp", "gale")
+    calm = ChartKey("MH", "normal", 5.0, "fp", "calm")
+    assert gale != calm
+    cache = ChartCache()
+    cache.put(gale, {"curve_data": [(1.0, 2.0)]})
+    assert cache.get(calm) is None
+
+
+def test_legacy_keys_and_jobs_name_no_condition() -> None:
+    assert ChartKey("MH", "normal", 5.0, "fp").condition is None
+    assert ChartKey("MH", "normal", 5.0, "fp") == ChartKey("MH", "normal", 5.0, "fp", None)
+    assert ChartJob("MH", "normal").condition is None
+
+
+def test_plan_keeps_the_visible_condition() -> None:
+    jobs = plan_chart_jobs(ChartJob("A", "normal", "gale"), ["A", "B"], lambda _h: True)
+    assert jobs == [
+        ChartJob("A", "normal", "gale"),
+        ChartJob("A", "split", "gale"),
+        ChartJob("B", "normal", "gale"),
+        ChartJob("B", "split", "gale"),
+    ]

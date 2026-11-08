@@ -14,6 +14,7 @@ from crane_statics.data import CraneDocument, Hoist, payload_hoist_ids
 from .edit_history import EditHistory
 from .limit_components import validate_limit_component
 from .limit_factory import DesignLimitFactory
+from .load_condition import scene_load_condition
 from .vessel_envelope import vessel_limit
 
 
@@ -150,8 +151,9 @@ class SessionModel:
         self.design_limits_by_id.clear()
 
         if doc is not None:
-            env = doc.environment
-            vessel_motion = env.vessel_motion
+            # Not doc.environment: on a rules document its wind and motion are placeholders.
+            condition = scene_load_condition(doc)
+            vessel_motion = condition.vessel_motion
             for hoist in doc.hoists:
                 self.hoist_states[hoist.id] = HoistState(
                     hoist_id=hoist.id,
@@ -159,7 +161,7 @@ class SessionModel:
                         tackle_length_m=0.0,
                         offlead_deg=float(hoist.offlead_deg),
                         sidelead_deg=float(hoist.sidelead_deg),
-                        wind_speed_m_s=float(env.max_wind_speed_m_s),
+                        wind_speed_m_s=float(condition.wind_speed_m_s),
                         wind_direction="+X",
                         # The Model's vessel motion values are ± limits; the Scene starts at +limit.
                         vessel_roll_deg=vessel_limit(vessel_motion, "roll_deg"),

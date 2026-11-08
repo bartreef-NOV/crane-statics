@@ -20,7 +20,7 @@ from .analysis_cases import (
     DirectionalAnalysisCase,
 )
 from .lead_channels import compose_lead_channel_point
-from .load_condition import default_load_condition
+from .load_condition import condition_document, load_conditions
 from .demand_extraction import extract_rope_tension_demand, extract_connection_component_demand
 
 
@@ -96,7 +96,7 @@ def _evaluate_contractual_points(
 
     Args:
         hoists: List of hoist objects to evaluate
-        doc: Crane document for wind speed
+        doc: Crane document, for its load conditions
         calc: Calculator for analysis points
         kin: Kinematics adapter for angle conversion
         gravity: Gravity magnitude
@@ -105,10 +105,42 @@ def _evaluate_contractual_points(
             point per wind direction instead of rerunning the solver per case.
 
     Returns:
-        List of ContractualPointResult with best demand per contractual point.
+        List of ContractualPointResult with best demand per contractual point, over every
+        load case of the document (``load_condition.load_conditions``). ``calc`` serves a
+        legacy document; each case of a rules document gets a calculator of its own
+        environment.
     """
+    best: dict[tuple[str, str, int], ContractualPointResult] = {}
+    for condition in load_conditions(doc):
+        case_calc = (
+            calc if condition.spec is None else CraneCalculator(condition_document(doc, condition))
+        )
+        for result in _evaluate_condition(
+            hoists,
+            case_calc,
+            kin,
+            gravity,
+            demand_extractor,
+            condition.wind_speed_m_s,
+            use_lead_channel_composition,
+        ):
+            key = (result.hoist_id, result.mode_name, result.cp_index)
+            if key not in best or result.best_demand > best[key].best_demand:
+                best[key] = result
+    return list(best.values())
+
+
+def _evaluate_condition(
+    hoists: list[Any],
+    calc: CraneCalculator,
+    kin: KinematicsAdapter,
+    gravity: float,
+    demand_extractor: Callable[[Any, float, DirectionalAnalysisCase], Optional[float]],
+    wind_speed: float,
+    use_lead_channel_composition: bool,
+) -> list[ContractualPointResult]:
+    """``_evaluate_contractual_points`` for one load case, at ``wind_speed``."""
     results = []
-    wind_speed = default_load_condition(doc).wind_speed_m_s
 
     for hoist in hoists:
         for mode in iter_hoist_analysis_modes(hoist):
