@@ -6,11 +6,12 @@ form a cleaner API surface than the original monolithic AnalysisService.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from ..calculation.dynamic_factor import DynamicFactor, as_dynamic_factor
-from ..calculation.engine import get_calculator
+from ..calculation.engine import CraneCalculator, get_calculator
 from ..calculation.solver.kinematics import KinematicsAdapter
 from .analysis_cases import analysis_mode_by_name
 from .demand_extraction import extract_connection_component_response
@@ -27,6 +28,9 @@ if TYPE_CHECKING:
     from .session_model import SessionModel
 
 _LOG = logging.getLogger(__name__)
+
+#: Boom angles the Scene keeps a rules lift setup for (dragging the boom adds new ones).
+_SCENE_LIFT_ENTRIES = 64
 
 
 class KinematicsService:
@@ -107,7 +111,8 @@ class HoistStateService:
     def __init__(self, session: SessionModel):
         self._session = session
         self._lift: Optional[LiftFactors] = None
-        self._lift_doc: Optional[CraneDocument] = None  # the document ``_lift`` serves
+        # The state of the document ``_lift`` serves: the app edits documents in place.
+        self._lift_key: Optional[tuple[int, str]] = None
 
     def dynamic_factor(self, hoist: Optional[Hoist]) -> DynamicFactor:
         """The factor the Scene converts payload and hook force with, for ``hoist``.
@@ -119,9 +124,13 @@ class HoistStateService:
         doc = self._session.document
         if hoist is None or doc is None or doc.rules is None:
             return as_dynamic_factor(float(hoist.hook_daf) if hoist is not None else 1.0)
-        if self._lift is None or self._lift_doc is not doc:
-            self._lift = LiftFactors(doc, get_calculator(doc))
-            self._lift_doc = doc
+        # Every input of the factor, the contractual (rated) loads included.
+        key = (id(doc), hashlib.sha256(doc.model_dump_json().encode("utf-8")).hexdigest())
+        if self._lift is None or self._lift_key != key:
+            # A private calculator: the shared one is never rebuilt after an in-place edit.
+            calc = CraneCalculator(doc)
+            self._lift = LiftFactors(doc, calc, max_entries=_SCENE_LIFT_ENTRIES)
+            self._lift_key = key
         state = self._session.hoist_states.get(hoist.id)
         split = bool(state is not None and state.split_mode_active)
         mode = analysis_mode_by_name(hoist, "split" if split else "normal")

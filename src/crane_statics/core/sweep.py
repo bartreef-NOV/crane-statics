@@ -15,6 +15,7 @@ from .chart_envelope import ProbeSet, build_probes, envelope_capacity, lead_poin
 from .demand_extraction import limit_responds_to_hook_load
 from .lift_factor import LiftFactors
 from .load_condition import LoadCondition, condition_cases, condition_document
+from ..rules import RulesValidationError
 from .sweep_cache import ComputeScope, LimitResult, limit_signature
 
 _LOG = logging.getLogger(__name__)
@@ -168,7 +169,9 @@ def run_mode_sweep(
     ``condition_name`` names the load condition (``load_condition.condition_names``); None
     is the document's first one, a legacy document's only one. Every value is the minimum
     over the condition's cases (``load_condition.condition_cases``), each solved under its
-    own wind speed and vessel motion. An unknown name raises ``KeyError``.
+    own wind speed and vessel motion and with its own dynamic factor at each boom angle
+    (``lift_factor.LiftFactors``; legacy: the constant ``hook_daf``). An unknown name
+    raises ``KeyError``; an inconsistent rules document raises ``RulesValidationError``.
     ``on_points`` receives the finite (outreach, load_t) pairs in ascending outreach, in
     batches of at most ``batch_points``; the batches concatenate to ``curve_data``.
     ``compute_scope`` (for this document, hoist and mode) supplies and keeps the probe
@@ -389,6 +392,8 @@ def run_mode_sweep(
                         pending.append((outreach, load_t))
                         if len(pending) >= batch_points:
                             _flush()
+                except RulesValidationError:
+                    raise  # an inconsistent rules document is an error, not a skipped point
                 except (TypeError, ValueError, ArithmeticError) as exc:
                     _LOG.debug(
                         "Skipping outreach %.3f m for hoist %s (%s): %s",
@@ -398,6 +403,8 @@ def run_mode_sweep(
                         exc,
                     )
             _flush()
+        except RulesValidationError:
+            raise
         except (TypeError, ValueError, RuntimeError) as exc:
             _LOG.warning("Capacity sweep failed for hoist %s (%s): %s", hoist_id, mode_name, exc)
             curve_outreach, curve_load_t = [], []

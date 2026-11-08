@@ -9,7 +9,9 @@ Every consumer of the factor (sweep, governing case, Auto-Set, the Scene) goes t
 
 from __future__ import annotations
 
-from typing import Any, Hashable, Optional
+from collections import OrderedDict
+from dataclasses import replace
+from typing import Any, Hashable, Optional, cast
 
 from ..calculation.dynamic_factor import ConstantDynamicFactor
 from ..calculation.engine import AnalysisPoint, CraneCalculator
@@ -144,7 +146,7 @@ def _profile_setup(
     stiffness_kN_m: float,
 ) -> LiftSetup:
     assert doc.rules is not None and condition.spec is not None
-    return profile_for(doc.rules).lift_setup(
+    setup = profile_for(doc.rules).lift_setup(
         doc,
         condition.spec,
         hoist_id,
@@ -154,6 +156,21 @@ def _profile_setup(
         chart_max_load_t(mode),
         case=condition.case,
     )
+    notes: list[str] = []
+    if not mode.contractual_points:
+        notes.append(
+            f"hoists.{hoist_id} ({mode.name}): no contractual points, so the curve's maximum "
+            "rated load is taken as 0 t (hook mass only) for the representative live load, "
+            "the DNV psi floor and SF1"
+        )
+    if needs_stiffness(condition) and mode.runtime_overrides:
+        notes.append(
+            f"hoists.{hoist_id} ({mode.name}): the hook stiffness uses the authored reeving "
+            "(falls and support node), not the split block"
+        )
+    if not notes:
+        return setup
+    return replace(setup, warnings=(*setup.warnings, *notes))
 
 
 def factor_for_point(
@@ -172,26 +189,28 @@ def factor_for_point(
     incline). For an offboard lift the vertical hook stiffness comes from ``point``
     (see ``stiffness_point``; required then, unused otherwise) with the hook at
     ``stiffness_tackle_length_m``. The suspended rope is not counted yet (0 t).
+    The same computation as ``LiftFactors.setup``, uncached.
     """
-    hoist = _hoist(doc, hoist_id)
-    if condition.spec is None:
-        return legacy_lift_setup(hoist)
-    stiffness = 0.0
-    if needs_stiffness(condition):
-        if point is None:
-            raise RulesValidationError(
-                f"hoists.{hoist_id}: no analysis point for the hook stiffness at "
-                f"{boom_angle_deg:g} deg"
-            )
-        tackle_m = stiffness_tackle_length_m(doc, condition, hoist_id, boom_angle_deg)
-        stiffness = hook_stiffness_kN_per_m(
-            payload_hoist_stiffness_terms(doc, point, hoist_id, tackle_m)
-        )
-    return _profile_setup(doc, condition, hoist_id, mode, stiffness)
+    return LiftFactors(doc, None).setup(condition, hoist_id, mode, boom_angle_deg, point=point)
 
 
 def _angle_key(angle: float) -> float:
     return round(float(angle), 10)
+
+
+class _Lru(OrderedDict[Hashable, Any]):
+    """A dict that keeps at most ``limit`` entries (None: unbounded), dropping the oldest."""
+
+    def __init__(self, limit: Optional[int]) -> None:
+        super().__init__()
+        self._limit = limit
+
+    def put(self, key: Hashable, value: Any) -> None:
+        self[key] = value
+        self.move_to_end(key)
+        if self._limit is not None:
+            while len(self) > self._limit:
+                self.popitem(last=False)
 
 
 class LiftFactors:
@@ -201,17 +220,24 @@ class LiftFactors:
     not depend on the stiffness (legacy, onboard) is cached without the angle. The
     stiffness point (one solve) and the stiffness itself are cached per hoist and angle
     (and tackle length), so the cases and conditions of a run share them. ``calc`` is any
-    calculator of ``doc``: the stiffness point does not read the environment.
+    calculator of ``doc`` (the stiffness point does not read the environment); None when
+    every stiffness point is supplied. ``max_entries`` bounds each cache (None: a run's
+    caches grow with its angles). The caches assume ``doc`` is not edited meanwhile.
     """
 
-    def __init__(self, doc: CraneDocument, calc: CraneCalculator) -> None:
+    def __init__(
+        self,
+        doc: CraneDocument,
+        calc: Optional[CraneCalculator],
+        max_entries: Optional[int] = None,
+    ) -> None:
         self._doc = doc
         self._calc = calc
         self._doc_dict: Optional[dict[str, Any]] = None
         self._kin: Optional[KinematicsAdapter] = None
-        self._setups: dict[Hashable, LiftSetup] = {}
-        self._points: dict[tuple[str, float], Optional[AnalysisPoint]] = {}
-        self._stiffness: dict[tuple[str, float, float], float] = {}
+        self._setups = _Lru(max_entries)
+        self._points = _Lru(max_entries)
+        self._stiffness = _Lru(max_entries)
 
     def _kinematics(self) -> tuple[dict[str, Any], KinematicsAdapter]:
         if self._doc_dict is None or self._kin is None:
@@ -222,8 +248,13 @@ class LiftFactors:
     def _point(self, hoist_id: str, angle: float) -> Optional[AnalysisPoint]:
         key = (hoist_id, _angle_key(angle))
         if key not in self._points:
-            self._points[key] = stiffness_point(self._calc, hoist_id, angle)
-        return self._points[key]
+            if self._calc is None:
+                raise RulesValidationError(
+                    f"hoists.{hoist_id}: no analysis point for the hook stiffness at "
+                    f"{angle:g} deg"
+                )
+            self._points.put(key, stiffness_point(self._calc, hoist_id, angle))
+        return cast(Optional[AnalysisPoint], self._points[key])
 
     def _stiffness_kN_m(self, condition: LoadCondition, hoist_id: str, angle: float) -> float:
         doc_dict, kin = self._kinematics()
@@ -238,10 +269,13 @@ class LiftFactors:
                     f"hoists.{hoist_id}: the hook stiffness point does not solve at "
                     f"{angle:g} deg"
                 )
-            self._stiffness[key] = hook_stiffness_kN_per_m(
-                payload_hoist_stiffness_terms(self._doc, point, hoist_id, tackle_m)
+            self._stiffness.put(
+                key,
+                hook_stiffness_kN_per_m(
+                    payload_hoist_stiffness_terms(self._doc, point, hoist_id, tackle_m)
+                ),
             )
-        return self._stiffness[key]
+        return float(self._stiffness[key])
 
     def setup(
         self,
@@ -250,22 +284,30 @@ class LiftFactors:
         mode: HoistAnalysisMode,
         angle: float,
         zero_probe: Optional[AnalysisPoint] = None,
+        *,
+        point: Optional[AnalysisPoint] = None,
     ) -> LiftSetup:
         """``factor_for_point(doc, condition, hoist_id, mode, <stiffness point>, angle)``.
 
-        ``zero_probe`` (``chart_envelope.ProbeSet.zero`` at ``angle``) saves the stiffness
-        point's solve: in a mode without runtime overrides it is that same solve.
+        ``point`` is the stiffness point at ``angle`` when the caller has it. ``zero_probe``
+        (``chart_envelope.ProbeSet.zero`` at ``angle``) saves its solve: in a mode without
+        runtime overrides it is that same solve.
         """
         per_angle = needs_stiffness(condition)
-        if per_angle and zero_probe is not None and not mode.runtime_overrides:
-            self._points.setdefault((hoist_id, _angle_key(angle)), zero_probe)
+        if per_angle:
+            seed = point
+            if seed is None and zero_probe is not None and not mode.runtime_overrides:
+                seed = zero_probe
+            point_key = (hoist_id, _angle_key(angle))
+            if seed is not None and point_key not in self._points:
+                self._points.put(point_key, seed)
         key = (condition.name, hoist_id, mode.name, _angle_key(angle) if per_angle else None)
-        setup = self._setups.get(key)
+        setup = cast(Optional[LiftSetup], self._setups.get(key))
         if setup is None:
             if condition.spec is None:
                 setup = legacy_lift_setup(_hoist(self._doc, hoist_id))
             else:
                 stiffness = self._stiffness_kN_m(condition, hoist_id, angle) if per_angle else 0.0
                 setup = _profile_setup(self._doc, condition, hoist_id, mode, stiffness)
-            self._setups[key] = setup
+            self._setups.put(key, setup)
         return setup
