@@ -13,6 +13,8 @@ from typing import Optional, Callable, Any
 from ..data.models import CraneDocument
 from ..calculation.dynamic_factor import DynamicFactorLike, as_dynamic_factor
 from ..calculation.engine import CraneCalculator, get_calculator
+from ..calculation.hook_lateral import add_hook_lateral, circumscribed_directions
+from ..calculation.results import HookLateral
 from ..calculation.solver.kinematics import KinematicsAdapter
 from .analysis_cases import (
     iter_wind_lead_directional_cases,
@@ -20,7 +22,7 @@ from .analysis_cases import (
     DirectionalAnalysisCase,
 )
 from .lead_channels import compose_lead_channel_point
-from .lift_factor import LiftFactors, amplified_rope_hoist_id
+from .lift_factor import LiftFactors, amplified_rope_hoist_id, hook_lateral
 from .load_condition import LoadCondition, condition_document, load_conditions
 from .demand_extraction import extract_rope_tension_demand, extract_connection_component_demand
 
@@ -173,13 +175,24 @@ def _evaluate_condition(
                 best_demand = float("-inf")
                 best_case = None
 
+                setup = lift.setup(condition, hoist.id, mode, float(angle))
                 hook_kN = _required_hook_force_kN(
-                    cp.load_t,
-                    mode.hook_mass_t,
-                    lift.setup(condition, hoist.id, mode, float(angle)).factor,
-                    gravity,
+                    cp.load_t, mode.hook_mass_t, setup.factor, gravity
                 )
                 amplified = amplified_rope_hoist_id(condition, hoist.id)
+                # The live-load lateral (None: legacy): its wind rides in each solve, its
+                # H-proportional part is taken at the worst of the circumscribed 16-gon
+                # directions (the demand is convex in it; spec section 9.4).
+                lateral = hook_lateral(setup, wind_speed)
+                load_wind: Optional[HookLateral] = None
+                directions: list[tuple[float, float]] = [(0.0, 0.0)]
+                if lateral is not None:
+                    if lateral.constant_x_kN or lateral.constant_y_kN:
+                        load_wind = HookLateral(
+                            constant_x_kN=lateral.constant_x_kN,
+                            constant_y_kN=lateral.constant_y_kN,
+                        )
+                    directions = circumscribed_directions(lateral.magnitude()) or directions
                 points_by_wind: dict[str, Any] = {}
                 if use_lead_channel_composition:
                     for case in iter_wind_lead_directional_cases(hoist, wind_speed):
@@ -195,6 +208,7 @@ def _evaluate_condition(
                             sidelead_deg=0.0,
                             hoist_runtime_overrides=mode.runtime_overrides,
                             amplified_rope_hoist_id=amplified,
+                            hook_lateral=load_wind,
                         )
 
                 for case in iter_wind_lead_directional_cases(hoist, wind_speed):
@@ -209,26 +223,29 @@ def _evaluate_condition(
                             sidelead_deg=case.sidelead_deg,
                             hoist_runtime_overrides=mode.runtime_overrides,
                             amplified_rope_hoist_id=amplified,
+                            hook_lateral=load_wind,
                         )
                     else:
                         pt = points_by_wind.get(case.wind_direction)
                     if pt is None:
                         continue
 
-                    demand_point = (
+                    lead_point = (
                         compose_lead_channel_point(
                             pt, float(case.offlead_deg or 0.0), float(case.sidelead_deg or 0.0)
                         )
                         if use_lead_channel_composition
                         else pt
                     )
-                    demand = demand_extractor(demand_point, hook_kN, case)
-                    if demand is None or not math.isfinite(demand):
-                        continue
+                    for fx, fy in directions:
+                        demand_point = add_hook_lateral(lead_point, fx, fy)
+                        demand = demand_extractor(demand_point, hook_kN, case)
+                        if demand is None or not math.isfinite(demand):
+                            continue
 
-                    if demand > best_demand:
-                        best_demand = demand
-                        best_case = case
+                        if demand > best_demand:
+                            best_demand = demand
+                            best_case = case
 
                 if math.isfinite(best_demand) and best_demand > 0.0 and best_case is not None:
                     results.append(

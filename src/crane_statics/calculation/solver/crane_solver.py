@@ -117,6 +117,14 @@ def rotate_boom_local_point(
     return gx, gz
 
 
+def wind_force_kN(air_density_kg_m3: float, speed_m_s: float, cd: float, area_m2: float) -> float:
+    """Aerodynamic wind force ``0.5 * rho * V^2 * Cd * A / 1000`` in kN (rho in kg/m^3).
+
+    The force every structural wind area gets in the solve.
+    """
+    return 0.5 * air_density_kg_m3 * speed_m_s**2 * cd * area_m2 / 1000.0
+
+
 def boom_wind_projection_scale(boom_angle_deg: float) -> float:
     """Return |sin(boom angle)|: the boom's projected wind area on a vertical surface."""
     return abs(math.sin(math.radians(boom_angle_deg)))
@@ -259,7 +267,8 @@ def _accumulate_loads(
 
     def _wind_fx(area: float, cd: float, is_boom_body: bool) -> float:
         eff_area = area * boom_scale if is_boom_body else area
-        return float(wind_sign * 0.5 * air_density * v_mag**2 * cd * eff_area / 1000.0)
+        # The sign is +-1 or 0, so applying it last gives exactly the same float.
+        return float(wind_sign * wind_force_kN(air_density, v_mag, cd, eff_area))
 
     # This basis composes X-axis wind effects only; Y-axis wind is handled by
     # the explicit directional scene-analysis path in engine.py.

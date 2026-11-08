@@ -9,12 +9,14 @@ Every consumer of the factor (sweep, governing case, Auto-Set, the Scene) goes t
 
 from __future__ import annotations
 
+import math
 from collections import OrderedDict
 from dataclasses import replace
 from typing import Any, Hashable, Optional, cast
 
 from ..calculation.dynamic_factor import ConstantDynamicFactor
 from ..calculation.engine import AnalysisPoint, CraneCalculator
+from ..calculation.results import HookLateral
 from ..calculation.rope_mass import (
     active_hook_positions,
     falls_override_effective_mult,
@@ -67,6 +69,41 @@ def legacy_lift_setup(hoist: Hoist) -> LiftSetup:
         retaining_live_factor=1.0,
         records=(),
         warnings=(),
+    )
+
+
+def hook_lateral(
+    setup: LiftSetup,
+    wind_speed_m_s: float,
+    direction: tuple[float, float] = (1.0, 0.0),
+) -> Optional[HookLateral]:
+    """The live-load lateral of ``setup`` for a solve at ``wind_speed_m_s`` (spec section 9).
+
+    The H-proportional magnitude is ``hypot(a_x, a_y)/g + sin(incline)``: the vessel
+    accelerations and the list/trim incline taken in one direction, the worst. It points
+    along ``direction`` (crane frame; +x when zero); an envelope uses only its magnitude
+    and picks the worst direction itself. The floor is the setup's ``min_fraction``. The
+    wind on the suspended load, ``LateralSpec.wind_force_kN(wind_speed_m_s)``, is the
+    constant of both axes (the projected area is the same from every side). None when the
+    setup has no lateral at all (a legacy document).
+    """
+    lateral = setup.lateral
+    magnitude = math.hypot(lateral.accel_fraction_x, lateral.accel_fraction_y) + math.sin(
+        math.radians(lateral.incline_deg)
+    )
+    wind = lateral.wind_force_kN(wind_speed_m_s)
+    if magnitude == 0.0 and wind == 0.0 and lateral.min_fraction == 0.0:
+        return None
+    ux, uy = float(direction[0]), float(direction[1])
+    size = math.hypot(ux, uy)
+    if size == 0.0:
+        ux, uy, size = 1.0, 0.0, 1.0
+    return HookLateral(
+        fraction_x=magnitude * ux / size,
+        fraction_y=magnitude * uy / size,
+        constant_x_kN=wind,
+        constant_y_kN=wind,
+        min_fraction=lateral.min_fraction,
     )
 
 

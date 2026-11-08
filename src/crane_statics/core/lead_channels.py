@@ -6,12 +6,20 @@ from dataclasses import replace
 import math
 
 from ..calculation.engine import AnalysisPoint
+from ..calculation.hook_lateral import add_hook_lateral
 
 
 def compose_lead_channel_point(
-    pt: AnalysisPoint, offlead_deg: float, sidelead_deg: float
+    pt: AnalysisPoint,
+    offlead_deg: float,
+    sidelead_deg: float,
+    lateral: tuple[float, float] = (0.0, 0.0),
 ) -> AnalysisPoint:
-    """Compose one lead-sign case from a zero-lead analysis point."""
+    """Compose one lead-sign case from a zero-lead analysis point.
+
+    ``lateral`` adds an H-proportional hook lateral ``(fraction_x, fraction_y)`` at the
+    support node on top of the leads (``calculation.hook_lateral.add_hook_lateral``).
+    """
     offlead_scale = math.sin(math.radians(float(offlead_deg)))
     sidelead_scale = math.sin(math.radians(float(sidelead_deg)))
     offlead_rope_channels = pt.offlead_lateral_unit_rope_tensions or {}
@@ -40,8 +48,9 @@ def compose_lead_channel_point(
             for component in component_ids
         }
 
-    return replace(
+    composed = replace(
         pt,
         sensitivity_rope_tensions=sensitivity_ropes,
         sensitivity_reactions=sensitivity_reactions,
     )
+    return add_hook_lateral(composed, float(lateral[0]), float(lateral[1]))

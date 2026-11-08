@@ -518,6 +518,19 @@ class _LoadBuilder:
                     label=f"Offlead {abs(offlead_fx):.0f} kN",
                 )
             )
+        lateral_fx = float(self._c.hook_lateral_x_kN)
+        if abs(lateral_fx) > 1e-6:
+            # Rules: the in-plane live-load lateral (vessel motion, incline, load wind).
+            vectors.append(
+                LoadVector(
+                    world_x=float(anchor["x"]),
+                    world_z=float(anchor["z"]),
+                    fx_kN=lateral_fx,
+                    fz_kN=0.0,
+                    category=HOOK_LOAD,
+                    label=f"Hook lateral {abs(lateral_fx):.0f} kN",
+                )
+            )
         return tuple(vectors)
 
     # -- rope tension -----------------------------------------------------

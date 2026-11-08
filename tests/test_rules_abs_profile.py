@@ -172,8 +172,8 @@ def test_heavy_lift_manual_daf_overrides_and_keeps_rope():
     assert "2-2/11.3" in sources["override"].clause
 
 
-def test_zero_load_wind_area_warns_default_area_not_applied():
-    assert any("5.19.3" in w for w in _setup(_doc(), _cond()).warnings)
+def test_zero_load_wind_area_warns_the_default_area_is_applied():
+    assert any("5.19.3" in w and "is applied" in w for w in _setup(_doc(), _cond()).warnings)
     cond = _cond().model_copy(update={"load_wind_area_m2": 10.0})
     assert not any("5.19.3" in w for w in _setup(_doc(), cond).warnings)
 

@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from crane_statics.core import load_document
+import pytest
+
+from crane_statics.core import governing_case, limit_auto_set, load_document, sweep
 from crane_statics.data.models import ConditionSpec, CraneDocument, RulesSpec, VesselMotion
 
 GT283 = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
@@ -54,3 +56,15 @@ def legacy_equivalent(doc: CraneDocument, wind: float, motion: VesselMotion) -> 
     """``doc`` without rules, its environment at ``wind`` and ``motion``."""
     env = doc.environment.model_copy(update={"max_wind_speed_m_s": wind, "vessel_motion": motion})
     return doc.model_copy(update={"rules": None, "conditions": {}, "environment": env})
+
+
+def without_live_lateral(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Switch the live-load lateral (``lift_factor.hook_lateral``) off in the chart consumers.
+
+    A rules run puts the vessel-motion, incline, load-wind and minimum side load on the
+    hook (spec section 9); its ``legacy_equivalent`` has none of them. Tests that check the
+    condition plumbing against the legacy run switch it off; the lateral itself is covered
+    by ``tests/test_live_load_lateral.py``.
+    """
+    for module in (sweep, governing_case, limit_auto_set):
+        monkeypatch.setattr(module, "hook_lateral", lambda *_args, **_kwargs: None)

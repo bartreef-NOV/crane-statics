@@ -15,7 +15,14 @@ from crane_statics.core.load_condition import DEFAULT_CONDITION_NAME, condition_
 from crane_statics.core.sweep_cache import ComputeCache, compute_fingerprint
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mode_sweep
 from crane_statics.data.models import CraneDocument, VesselMotion
-from tests.rules_docs import MOTION, gale, legacy_equivalent, rules_doc, without_suspended_rope
+from tests.rules_docs import (
+    without_live_lateral,
+    MOTION,
+    gale,
+    legacy_equivalent,
+    rules_doc,
+    without_suspended_rope,
+)
 
 ROOT = Path(__file__).parent.parent
 EXAMPLE = ROOT / "examples" / "crane_input_22689.yaml"
@@ -103,7 +110,10 @@ def test_sweep_for_an_unknown_condition_raises_naming_it() -> None:
         )
 
 
-def test_rules_sweep_uses_the_condition_wind_and_motion_not_the_dummies() -> None:
+def test_rules_sweep_uses_the_condition_wind_and_motion_not_the_dummies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
     doc = _rules_doc("ABS", gale(wind=30.0))
     swept = run_mode_sweep(
         doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {}, condition_name="gale"
@@ -128,7 +138,10 @@ def _legacy_curve(doc: CraneDocument, wind: float, motion: VesselMotion) -> dict
     return dict(payload["curve_data"])
 
 
-def test_rules_chart_is_the_minimum_over_the_condition_cases() -> None:
+def test_rules_chart_is_the_minimum_over_the_condition_cases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
     doc = _rules_doc("DNV", gale(wind=30.0), gale("calm", wind=5.0))
     case_i, case_ii = condition_cases(doc, "gale")
     swept = run_mode_sweep(
@@ -149,7 +162,8 @@ def test_rules_sweep_without_a_condition_takes_the_first() -> None:
     assert calm != first
 
 
-def test_rules_governing_case_uses_the_condition() -> None:
+def test_rules_governing_case_uses_the_condition(monkeypatch: pytest.MonkeyPatch) -> None:
+    without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
     doc = _rules_doc("ABS", gale(wind=30.0))
     case = governing_case(doc, HOIST, "normal", RULES_LIMITS, 30.0, None, condition_name="gale")
     same = governing_case(
@@ -161,7 +175,10 @@ def test_rules_governing_case_uses_the_condition() -> None:
     assert case.scene_fields["wind_speed_m_s"] == 30.0
 
 
-def test_rules_governing_case_is_the_lowest_case_of_the_condition() -> None:
+def test_rules_governing_case_is_the_lowest_case_of_the_condition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
     doc = _rules_doc("DNV", gale(wind=30.0))
     case = governing_case(doc, HOIST, "normal", RULES_LIMITS, 30.0, None, condition_name="gale")
     per_case = [
@@ -184,7 +201,8 @@ def test_rules_governing_case_is_the_lowest_case_of_the_condition() -> None:
     assert case == replace(lowest, condition_name="gale", case_name=governing.name)
 
 
-def test_rules_auto_set_uses_every_condition_case() -> None:
+def test_rules_auto_set_uses_every_condition_case(monkeypatch: pytest.MonkeyPatch) -> None:
+    without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
     doc = _rules_doc("ABS", gale(wind=30.0), gale("calm", wind=5.0, motion=VesselMotion()))
     rope_id = next(h for h in doc.hoists if h.id == "BH").rope_id  # wind and motion matter
     rules = compute_required_rope_capacity_kN(doc, rope_id)
@@ -241,7 +259,8 @@ ANGULAR_MOTION = VesselMotion(
 )
 
 
-def test_rules_sweep_uses_the_condition_reference_point() -> None:
+def test_rules_sweep_uses_the_condition_reference_point(monkeypatch: pytest.MonkeyPatch) -> None:
+    without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
     doc = _rules_doc("ABS", gale(wind=15.0, motion=ANGULAR_MOTION))
     swept = run_mode_sweep(doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {})
     same = run_mode_sweep(

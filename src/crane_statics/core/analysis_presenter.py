@@ -15,6 +15,7 @@ from . import drawn_loads
 from .drawn_loads import BodyLoads, FreeBodyFilter, LoadConditions
 
 if TYPE_CHECKING:
+    from ..calculation.results import HookLateral
     from .session_model import SessionModel
     from .analysis_services import AnalysisCalculator, HoistStateService
 
@@ -237,6 +238,7 @@ class AnalysisPresenter:
         boom_angle_deg: float,
         tackle_length_m: float,
         hoist_runtime_overrides: Optional[dict[str, dict[str, Any]]] = None,
+        hook_lateral: Optional[HookLateral] = None,
     ) -> Optional[float]:
         """Compute demand for a result row at specific environmental conditions."""
         from ..calculation.engine import CraneCalculator
@@ -264,6 +266,7 @@ class AnalysisPresenter:
             vessel_pitch_deg=vessel_pitch_deg,
             crane_slewing_angle_deg=crane_slewing_angle_deg,
             amplified_rope_hoist_id=self._hoist_state.amplified_rope_hoist_id(hoist_id),
+            hook_lateral=hook_lateral,
         )
         if point is None:
             return None
@@ -342,6 +345,10 @@ class AnalysisPresenter:
             ("Off lead", hook, dict(offlead_deg=float(sc.offlead_deg))),
             ("Side lead", hook, dict(sidelead_deg=float(sc.sidelead_deg))),
         ]
+        lateral = self._hoist_state.hook_lateral(hoist_id)
+        if lateral is not None:
+            # Rules: the live-load lateral at the sheave, as the Scene solve applies it.
+            steps.append(("Hook lateral", hook, dict(hook_lateral=lateral)))
 
         terms: list[dict[str, Any]] = []
         env = dict(zero_env)

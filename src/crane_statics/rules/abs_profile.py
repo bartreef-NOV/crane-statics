@@ -39,6 +39,11 @@ _CL_OFFBOARD = "ABS 2-2/9.3.2, p.53"
 _CL_V_HMIN = "ABS 2-2/9.3.2, p.54"
 _CL_HEAVY = "ABS 2-2/11.3, p.56-57"
 _CL_LIST_TRIM = "ABS 2-2/5.21, p.50"
+_CL_WIND = "ABS 2-2/5.19.2-5.19.3, p.49-50"
+#: ABS 2-2/5.19.2: P = V^2 * Cs / 1637 kN/m^2 (V in m/s).
+WIND_PRESSURE_DIVISOR = 1637.0
+#: ABS 2-2/5.19.3 i): A_LL = 0.1215 * LL^(2/3) m^2 (LL in kN).
+LIVE_LOAD_AREA_COEFF = 0.1215
 _CL_PEDESTAL = "ABS 2-2/5.15, p.46"
 _CL_RETAINING = "ABS 2-2/5.13.5(c), p.46"
 
@@ -138,19 +143,52 @@ class AbsProfile:
                     "override",
                 )
             )
-        if cond.load_wind_area_m2 == 0.0:
+        area_m2 = cond.load_wind_area_m2
+        if area_m2 == 0.0:
+            # Owner ruling: the LL-dependent default is evaluated once, at the chart's
+            # maximum live load, so the wind force is a constant (conservative, linear in H).
+            area_m2 = LIVE_LOAD_AREA_COEFF * ll_kN ** (2.0 / 3.0)
             warnings.append(
                 f"conditions.{cond.name}.load_wind_area_m2: 0; the ABS 2-2/5.19.3 (p.50) "
-                "default projected load area 0.1215*LL^(2/3) m^2 is not applied"
+                f"default projected load area 0.1215*LL^(2/3) = {area_m2:.4g} m^2 is applied, "
+                f"evaluated at the chart's maximum live load LL = {ll_kN:.6g} kN"
             )
+            records.append(
+                ProvenanceRecord(
+                    "load_wind_area",
+                    area_m2,
+                    "m^2",
+                    _CL_WIND,
+                    "A_LL = 0.1215 * LL^(2/3), LL at the chart maximum (default area)",
+                    {"LL_kN": ll_kN},
+                    "computed",
+                )
+            )
+        wind_per_v2 = cond.load_drag_coefficient * area_m2 / WIND_PRESSURE_DIVISOR
+        records.append(
+            ProvenanceRecord(
+                "load_wind_force",
+                wind_per_v2 * cond.wind_speed_m_s**2,
+                "kN",
+                _CL_WIND,
+                "HL_wind = P * A; P = V^2 * Cs / 1637",
+                {
+                    "V_m_s": cond.wind_speed_m_s,
+                    "Cs": cond.load_drag_coefficient,
+                    "A_m2": area_m2,
+                },
+                "computed",
+            )
+        )
 
         lateral = LateralSpec(
             accel_fraction_x=abs(motion.accel_x_m_s2) / GRAVITY_M_S2,
             accel_fraction_y=abs(motion.accel_y_m_s2) / GRAVITY_M_S2,
             incline_deg=math.hypot(motion.roll_deg, motion.pitch_deg),
-            wind_area_m2=cond.load_wind_area_m2,
+            wind_area_m2=area_m2,
             wind_cd=cond.load_drag_coefficient,
             min_fraction=MIN_SIDE_LOAD_FRACTION,
+            wind_force_per_speed_sq=wind_per_v2,
         )
         records.append(
             ProvenanceRecord(

@@ -37,8 +37,11 @@ class LateralSpec:
 
     ``accel_fraction_*`` are the vessel accelerations in g, ``incline_deg`` the combined
     list/trim angle, ``wind_area_m2``/``wind_cd`` the suspended load's projected area and
-    drag coefficient, and ``min_fraction`` the minimum total side load as a fraction of
-    the vertical design load.
+    drag coefficient (the area the profile uses: ABS fills its 5.19.3 default), and
+    ``min_fraction`` the minimum total side load as a fraction of the vertical design load.
+    ``wind_force_per_speed_sq`` is the wind force on the suspended load per squared wind
+    speed, kN/(m/s)^2, by the standard's pressure formula: the force at wind speed V is
+    ``wind_force_per_speed_sq * V**2`` (0: no wind on the load).
     """
 
     accel_fraction_x: float
@@ -47,6 +50,11 @@ class LateralSpec:
     wind_area_m2: float
     wind_cd: float
     min_fraction: float
+    wind_force_per_speed_sq: float = 0.0
+
+    def wind_force_kN(self, wind_speed_m_s: float) -> float:
+        """Wind force on the suspended load at ``wind_speed_m_s``, kN."""
+        return self.wind_force_per_speed_sq * float(wind_speed_m_s) ** 2
 
 
 @dataclass(frozen=True)

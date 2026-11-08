@@ -87,5 +87,8 @@ class LoadConditions:
     amplified_rope_hoist_id: Optional[str] = None
     #: That rope's mass in t, as the dynamic factor amplifies it (for the Hook label); 0: none.
     suspended_rope_mass_t: float = 0.0
+    #: The in-plane (crane x) part of the live-load lateral at the sheave, in kN, at
+    #: ``hook_load_kN`` (a rules document, ``HookLateral``); 0: none.
+    hook_lateral_x_kN: float = 0.0
     gravity_x_m_s2: Optional[float] = None
     gravity_z_m_s2: Optional[float] = None

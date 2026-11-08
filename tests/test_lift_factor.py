@@ -23,7 +23,13 @@ from crane_statics.data.models import ConditionSpec, CraneDocument, VesselMotion
 from crane_statics.rules import RulesValidationError, validate_rules_document
 from crane_statics.rules.stiffness import payload_hoist_stiffness_terms
 from tests import rules_reference as ref
-from tests.rules_docs import GT283, legacy_equivalent, rules_doc, without_suspended_rope
+from tests.rules_docs import (
+    without_live_lateral,
+    GT283,
+    legacy_equivalent,
+    rules_doc,
+    without_suspended_rope,
+)
 
 HOIST = "MH"
 HOOK_T = 50.0  # GT283 MH hook block
@@ -150,7 +156,8 @@ def _oracle_payload_t(hook_force_kN: float, k_kN_m: float, a_v_g: float) -> floa
     return 0.5 * (lo + hi) / G - HOOK_T
 
 
-def test_abs_offboard_sweep_capacity_matches_the_oracle() -> None:
+def test_abs_offboard_sweep_capacity_matches_the_oracle(monkeypatch: pytest.MonkeyPatch) -> None:
+    without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
     # Without payload-rope mass the daf-1 legacy chart has the rules run's dead load, so its
     # limiting hook force is the rules one exactly (the rope: tests/test_rules_suspended.py).
     doc = without_suspended_rope(_abs_doc())
@@ -181,7 +188,10 @@ def test_abs_offboard_factor_varies_with_outreach() -> None:
 # --- manual daf --------------------------------------------------------------------------
 
 
-def test_manual_daf_gives_the_legacy_capacity_and_both_records() -> None:
+def test_manual_daf_gives_the_legacy_capacity_and_both_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
     # Without payload-rope mass; the amplified suspended rope: tests/test_rules_suspended.py.
     doc = without_suspended_rope(_abs_doc(daf=1.25))
     swept = _curve(doc)
@@ -314,7 +324,7 @@ def test_scene_factor_follows_in_place_document_edits() -> None:
     service = HoistStateService(session)
 
     def factor() -> float:
-        return service.payload_t_to_hook_force_kN(100.0, HOIST) / ((100.0 + HOOK_T) * G)
+        return float(service.payload_t_to_hook_force_kN(100.0, HOIST) / ((100.0 + HOOK_T) * G))
 
     # Rated 1000 t: W = 1050 t * g > 5000 kN, so the DNV psi floor is 1.1.
     assert factor() == pytest.approx(ref.dnv_psi_floor((1000.0 + HOOK_T) * G))

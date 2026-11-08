@@ -11,11 +11,12 @@ import logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from ..calculation.dynamic_factor import DynamicFactor, as_dynamic_factor
-from ..calculation.engine import CraneCalculator, get_calculator
+from ..calculation.engine import CraneCalculator, get_calculator, split_wind_speed_components
+from ..calculation.hook_lateral import wind_axis_weights
 from ..calculation.solver.kinematics import KinematicsAdapter
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .demand_extraction import extract_connection_component_response
-from .lift_factor import LiftFactors, amplified_rope_hoist_id
+from .lift_factor import LiftFactors, amplified_rope_hoist_id, hook_lateral
 from .load_condition import scene_load_condition
 from ..presentation.formatters import ConnectionFormatter, HoistFormatter, RopeFormatter
 from .drawn_loads import LoadConditions
@@ -24,6 +25,7 @@ from ..calculation.vessel_frame import VesselInputs, crane_frame_motion
 
 if TYPE_CHECKING:
     from ..calculation.engine import AllowableCapacity, AnalysisPoint
+    from ..calculation.results import HookLateral
     from ..data.models import CraneDocument, Hoist
     from .session_model import SessionModel
 
@@ -131,6 +133,43 @@ class HoistStateService:
             .setup(scene_load_condition(doc), hoist.id, mode, angle, tackle_length_m=tackle_m)
             .factor
         )
+
+    def hook_lateral(self, hoist_id: str) -> Optional[HookLateral]:
+        """The live-load lateral the Scene's solves of ``hoist_id`` apply (legacy: None).
+
+        Its magnitude and floor come from the Scene condition's lift setup (the one
+        ``dynamic_factor`` uses), its wind on the load at the Scene's wind speed. A single
+        state has no limit to maximise, so it points along the Scene's crane-frame
+        horizontal inertia, ``-(a_x, a_y)`` of the resolved vessel motion with the tilt
+        folded in (+x without any); spec section 9.4.
+        """
+        doc = self._session.document
+        hoist = self._session.payload_hoist_by_id(hoist_id)
+        if doc is None or hoist is None or doc.rules is None:
+            return None
+        state = self._session.hoist_states.get(hoist.id)
+        if state is None:
+            return None
+        mode, angle, tackle_m = self._scene_hook_state(hoist)
+        setup = self._scene_lift(doc).setup(
+            scene_load_condition(doc), hoist.id, mode, angle, tackle_length_m=tackle_m
+        )
+        sc = state.scene_state
+        motion = crane_frame_motion(
+            abs(float(doc.environment.gravity_m_s2)),
+            VesselInputs(
+                accel_x_m_s2=float(sc.accel_x_m_s2),
+                accel_y_m_s2=float(sc.accel_y_m_s2),
+                accel_z_m_s2=float(sc.accel_z_m_s2),
+                roll_deg=float(sc.vessel_roll_deg),
+                pitch_deg=float(sc.vessel_pitch_deg),
+                slew_deg=float(sc.crane_slewing_angle_deg),
+                roll_accel_rad_s2=float(sc.roll_accel_rad_s2),
+                pitch_accel_rad_s2=float(sc.pitch_accel_rad_s2),
+            ),
+        )
+        direction = (-float(motion.accel_x_m_s2), -float(motion.accel_y_m_s2))
+        return hook_lateral(setup, float(sc.wind_speed_m_s), direction)
 
     def _scene_lift(self, doc: CraneDocument) -> LiftFactors:
         """The Scene's ``LiftFactors``, rebuilt whenever the document changes."""
@@ -351,6 +390,7 @@ class AnalysisCalculator:
             vessel_pitch_deg=sc.vessel_pitch_deg,
             crane_slewing_angle_deg=sc.crane_slewing_angle_deg,
             amplified_rope_hoist_id=self._hoist.amplified_rope_hoist_id(hoist_id),
+            hook_lateral=self._hoist.hook_lateral(hoist_id),
         )
         self._unavailable_reason = None if point is not None else calc.unavailable_reason
         return point
@@ -405,7 +445,21 @@ class AnalysisCalculator:
             ),
             gravity_x_m_s2=motion.gravity_crane[0],
             gravity_z_m_s2=motion.gravity_crane[2],
+            hook_lateral_x_kN=self._hook_lateral_x_kN(sc),
         )
+
+    def _hook_lateral_x_kN(self, sc: Any) -> float:
+        """The in-plane part of the Scene's live-load lateral at its hook force, kN."""
+        hoist_id = self._session.selected_hoist_id
+        lateral = None if hoist_id is None else self._hoist.hook_lateral(hoist_id)
+        if lateral is None:
+            return 0.0
+        fraction_x, _ = lateral.floored_fractions()
+        wind_x, wind_y = split_wind_speed_components(
+            float(sc.wind_speed_m_s), str(sc.wind_direction or "+X")
+        )
+        weight_x, _ = wind_axis_weights(wind_x, wind_y)
+        return fraction_x * float(sc.hook_load_kN) + float(lateral.constant_x_kN) * weight_x
 
     def compute_result_rows(
         self, pt: AnalysisPoint, hook_load_kN: float
@@ -609,6 +663,7 @@ class AnalysisCalculator:
             crane_slewing_angle_deg=sc.crane_slewing_angle_deg,
             tackle_length_m=sc.tackle_length_m,
             amplified_rope_hoist_id=self._hoist.amplified_rope_hoist_id(hoist_id),
+            hook_lateral=self._hoist.hook_lateral(hoist_id),
         )
 
     def resolve_row_demand(

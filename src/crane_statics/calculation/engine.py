@@ -31,11 +31,19 @@ from .demand_formulas import (  # noqa: F401  (re-exported: used by core and scr
     compute_platform_base_mradial_kNm,
     resolve_connection_component_linear_response,
 )
-from .results import AllowableCapacity, AnalysisPoint
+from .hook_lateral import apply_hook_lateral
+from .results import AllowableCapacity, AnalysisPoint, HookLateral
 from .dynamic_factor import DynamicFactorLike
 from .vessel_frame import CraneFrameMotion, VesselInputs, crane_frame_motion
 
 _WIND_DIRECTIONS = {"+X", "-X", "+Y", "-Y"}
+# Hinge total -> its (left, right) support entities; an x force on the centreline splits
+# half and half between them.
+_SPLIT_ENTITIES = {
+    "heel_point": ("heel_left", "heel_right"),
+    "front_hinge": ("front_leg_left", "front_leg_right"),
+    "rear_hinge": ("rear_leg_left", "rear_leg_right"),
+}
 
 # Module-level calculator cache for cross-service reuse
 # Maps document id -> CraneCalculator instance
@@ -535,6 +543,18 @@ class CraneCalculator:
         platform_base["My"] = float(platform_base.get("M", 0.0))
         platform_base_sens["My"] = float(platform_base_sens.get("M", 0.0))
         point.sidelead_lateral_unit_reactions = side_unit_reactions
+        # The +x unit with the split supports: a centreline x force has no moment about x
+        # or z, so each side takes half the hinge total (``_out_of_plane_variants``).
+        offlead_unit = point.offlead_lateral_unit_reactions or {}
+        lateral_x_unit = {entity: dict(comps) for entity, comps in offlead_unit.items()}
+        for total_entity, sides in _SPLIT_ENTITIES.items():
+            total = offlead_unit.get(total_entity, {})
+            for side in sides:
+                lateral_x_unit[side] = {
+                    "Fx": 0.5 * float(total.get("Fx", 0.0)),
+                    "Fz": 0.5 * float(total.get("Fz", 0.0)),
+                }
+        point.lateral_x_unit_reactions = lateral_x_unit
 
     def compute_analysis_point(
         self,
@@ -557,6 +577,7 @@ class CraneCalculator:
         crane_slewing_angle_deg: Optional[float] = None,
         wind_angle_deg: Optional[float] = None,
         amplified_rope_hoist_id: Optional[str] = None,
+        hook_lateral: Optional[HookLateral] = None,
     ) -> Optional[AnalysisPoint]:
         """Full linear response at one boom angle.
 
@@ -577,6 +598,12 @@ class CraneCalculator:
         hook) the caller counts in the hook load instead of as dead load: that segment's
         mass is left out of the dead node masses (``rope_mass.hook_segment_mass_t`` is what
         is left out). None, the default, keeps every rope as dead load.
+
+        ``hook_lateral`` adds a horizontal live load at the hoist's support node,
+        ``fraction * H + constant`` (``results.HookLateral``): the floored fractions join the
+        sensitivities and the wind-borne constants, scaled by this solve's wind, the
+        baseline, through the same unit responses as the off-lead and side-lead. None, the
+        default, adds nothing.
 
         When it returns ``None`` for a known cause, ``unavailable_reason`` says why.
         """
@@ -684,6 +711,8 @@ class CraneCalculator:
                 sidelead_deg=sidelead_ref,
                 hoist_runtime_overrides=hoist_runtime_overrides,
             )
+            if hook_lateral is not None:
+                point = apply_hook_lateral(point, hook_lateral, wind_x_ref, wind_y_ref)
             return point
         except KeyError as exc:
             self.unavailable_reason = (
@@ -771,11 +800,13 @@ class CraneCalculator:
         crane_slewing_angle_deg: Optional[float] = None,
         tackle_length_m: Optional[float] = None,
         amplified_rope_hoist_id: Optional[str] = None,
+        hook_lateral: Optional[HookLateral] = None,
     ) -> Optional[AllowableCapacity]:
         """The lowest ``compute_allowable_load`` over the candidate wind directions.
 
         ``amplified_rope_hoist_id`` as for ``compute_analysis_point``; ``hook_daf`` must
-        then count that rope in the hook force.
+        then count that rope in the hook force. ``hook_lateral`` is passed to every
+        direction's solve, so its wind constant follows each wind.
         """
         wind_ref = (
             self.doc.environment.max_wind_speed_m_s
@@ -803,6 +834,7 @@ class CraneCalculator:
                 crane_slewing_angle_deg=crane_slewing_angle_deg,
                 tackle_length_m=tackle_length_m,
                 amplified_rope_hoist_id=amplified_rope_hoist_id,
+                hook_lateral=hook_lateral,
             )
             if point is None:
                 continue

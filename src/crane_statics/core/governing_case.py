@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from ..calculation.engine import CraneCalculator
+from ..calculation.results import HookLateral
 from ..calculation.rope_mass import active_hook_positions, hook_support_node_id
 from ..calculation.solver.kinematics import KinematicsAdapter
 from ..data.models import CraneDocument
@@ -26,7 +27,7 @@ from .chart_envelope import (
     lead_points,
 )
 from .demand_extraction import limit_responds_to_hook_load
-from .lift_factor import LiftFactors, amplified_rope_hoist_id
+from .lift_factor import LiftFactors, amplified_rope_hoist_id, hook_lateral
 from .load_condition import LoadCondition, condition_cases, condition_document
 
 # ``VesselInputs`` field -> ``SceneState`` field.
@@ -100,10 +101,12 @@ def governing_case(
     if angle is None:
         return None
 
-    # ((payload, hook load), envelope case, probes, condition) of the lowest limit over the
-    # cases. Within a case the factor is one, so the hook load orders as the payload does;
-    # it breaks payload ties, which keeps the legacy (hook load) choice exactly.
-    best: Optional[tuple[tuple[float, float], EnvelopeCase, ProbeSet, LoadCondition]] = None
+    # ((payload, hook load), envelope case, probes, condition, lateral) of the lowest limit
+    # over the cases. Within a case the factor is one, so the hook load orders as the
+    # payload does; it breaks payload ties, which keeps the legacy (hook load) choice exactly.
+    best: Optional[
+        tuple[tuple[float, float], EnvelopeCase, ProbeSet, LoadCondition, Optional[HookLateral]]
+    ] = None
     lift: Optional[LiftFactors] = None
     for condition in conditions:
         calc = CraneCalculator(condition_document(doc, condition))
@@ -121,7 +124,9 @@ def governing_case(
         )
         if probes is None:
             return None  # run_mode_sweep has no point where a case does not solve
-        factor = lift.setup(condition, hoist_id, mode, angle, probes.zero).factor
+        setup = lift.setup(condition, hoist_id, mode, angle, probes.zero)
+        factor = setup.factor
+        lateral = hook_lateral(setup, condition.wind_speed_m_s)
         for lid in candidates:
             cap, case = envelope_capacity_case(
                 calc,
@@ -132,15 +137,16 @@ def governing_case(
                 sidelead_deg=sidelead_deg,
                 hook_daf=factor,
                 hook_mass_t=mode.hook_mass_t,
+                hook_lateral=lateral,
             )
             rank = (float(cap.max_allowable_load_t), float(cap.max_allowable_load_kN))
             if case is not None and (best is None or rank < best[0]):
-                best = (rank, case, probes, condition)
+                best = (rank, case, probes, condition, lateral)
     if best is None or not math.isfinite(best[0][1]):
         return None
-    (_load_t, load_kN), case, probes, condition = best
+    (_load_t, load_kN), case, probes, condition, lateral = best
     wind_speed = condition.wind_speed_m_s
-    leads = lead_points(probes, offlead_deg, sidelead_deg)
+    leads = lead_points(probes, offlead_deg, sidelead_deg, lateral)
     comps = enabled_limits[case.limit_id]
     if not any(limit_responds_to_hook_load(doc, pt, case.limit_id, comps) for pt in leads):
         return None

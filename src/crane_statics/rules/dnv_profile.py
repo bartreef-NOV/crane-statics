@@ -18,6 +18,7 @@ import math
 from typing import TYPE_CHECKING, Optional
 
 from ..calculation.dynamic_factor import DynamicFactor
+from ..calculation.solver.crane_solver import wind_force_kN
 from ..data.models import ConditionSpec, CraneDocument, Hoist, RulesSpec, VesselMotion
 from .factors import LinearFactor, MaxFactor, RelativeVelocityFactor
 from .foundation import dnv_sf1
@@ -174,7 +175,10 @@ class DnvProfile:
                 )
             )
 
-        # 4.2.3.3: the engineer enters the largest load area facing the wind and C.
+        # 4.2.3.3: the engineer enters the largest load area facing the wind and C. The
+        # pressure is the solver's aerodynamic one (0.5 rho V^2 C), as for the structure.
+        rho = float(doc.environment.air_density_kg_m3)
+        wind_per_v2 = wind_force_kN(rho, 1.0, cond.load_drag_coefficient, cond.load_wind_area_m2)
         lateral = LateralSpec(
             accel_fraction_x=0.0,
             accel_fraction_y=0.0,
@@ -182,6 +186,7 @@ class DnvProfile:
             wind_area_m2=cond.load_wind_area_m2,
             wind_cd=cond.load_drag_coefficient,
             min_fraction=MIN_SIDE_LOAD_FRACTION,
+            wind_force_per_speed_sq=wind_per_v2,
         )
         records.append(
             ProvenanceRecord(
@@ -202,6 +207,22 @@ class DnvProfile:
                 _CL_LOAD_WIND,
                 "largest load area facing the wind; C = 1.2 containers, 1.0 other (entered)",
                 {"C": cond.load_drag_coefficient},
+                "computed",
+            )
+        )
+        records.append(
+            ProvenanceRecord(
+                "load_wind_force",
+                lateral.wind_force_kN(case.wind_speed_m_s),
+                "kN",
+                _CL_LOAD_WIND,
+                "F = 0.5 * rho * C * V^2 * A / 1000 (Case I: no wind)",
+                {
+                    "V_m_s": case.wind_speed_m_s,
+                    "C": cond.load_drag_coefficient,
+                    "A_m2": cond.load_wind_area_m2,
+                    "rho_kg_m3": rho,
+                },
                 "computed",
             )
         )
