@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from crane_statics.calculation.dynamic_factor import ConstantDynamicFactor
 from crane_statics.calculation.engine import CraneCalculator
 from crane_statics.calculation.rope_mass import (
     active_hook_positions,
@@ -279,7 +280,7 @@ def test_legacy_lift_setup_has_no_suspended_rope() -> None:
     setup = LiftFactors(doc, None).setup(
         condition, HOIST, analysis_mode_by_name(hoist, "normal"), GOLDEN_ANGLE
     )
-    assert not hasattr(setup.factor, "extra_mass_t")
+    assert setup.factor == ConstantDynamicFactor(hoist.hook_daf)
 
 
 # --- the sweep -----------------------------------------------------------------------------

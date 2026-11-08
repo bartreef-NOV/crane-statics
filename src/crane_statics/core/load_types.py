@@ -82,5 +82,8 @@ class LoadConditions:
     pitch_accel_rad_s2: float = 0.0
     offlead_deg: float = 0.0
     split_mode_active: bool = False
+    #: The hoist whose hook-segment rope rides in ``hook_load_kN`` (a rules document), so
+    #: it is drawn as part of the hook load rather than as rope weight; None: legacy.
+    amplified_rope_hoist_id: Optional[str] = None
     gravity_x_m_s2: Optional[float] = None
     gravity_z_m_s2: Optional[float] = None

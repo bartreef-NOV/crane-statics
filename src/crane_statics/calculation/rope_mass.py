@@ -90,13 +90,7 @@ def compute_reeved_length_m(
         )
         if length is None:
             return None
-        authored_mult = max(1, int(seg.get("mult", 1)))
-        mult = (
-            authored_mult
-            if effective_mult is None
-            else max(1, int(effective_mult(rope_id, seg, authored_mult)))
-        )
-        total += length * mult
+        total += length * _segment_mult(effective_mult, rope_id, seg)
     return total
 
 
@@ -110,7 +104,7 @@ def falls_override_effective_mult(
     support node and its hook is affected; every other segment keeps its
     authored multiplier.
     """
-    managed: dict[str, tuple[frozenset[str], int]] = {}
+    managed: dict[str, tuple[dict[str, Any], int]] = {}
     for hoist_id, falls in falls_by_hoist_id.items():
         hoist = _find_hoist(doc_dict, str(hoist_id))
         if hoist is None:
@@ -120,18 +114,14 @@ def falls_override_effective_mult(
         rope_id = str(hoist.get("rope_id") or "")
         if not (support_id and load_node_id and rope_id):
             continue
-        managed[rope_id] = (frozenset((support_id, load_node_id)), max(1, int(falls)))
+        managed[rope_id] = (hoist, max(1, int(falls)))
 
     def effective_mult(rope_id: str, segment: dict[str, Any], authored_mult: int) -> int:
         entry = managed.get(str(rope_id))
         if entry is None:
             return authored_mult
-        endpoints, falls = entry
-        segment_endpoints = {
-            str(segment.get("from_node_id", "")),
-            str(segment.get("to_node_id", "")),
-        }
-        return falls if segment_endpoints == endpoints else authored_mult
+        hoist, falls = entry
+        return falls if is_hook_segment(hoist, segment) else authored_mult
 
     return effective_mult
 

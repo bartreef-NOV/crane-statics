@@ -201,7 +201,7 @@ class SceneViewModel(QObject):
         state.scene_state.boom_angle_deg = float(angle)
         self.geometryChanged.emit()
         self._sync_outreach_from_angle(float(angle))
-        self._after_state_changed()
+        self._refresh_rules_load()
 
     def _on_canvas_tackle_changed(self, tackle_m: float) -> None:
         state = self._model.get_active_hoist_state()
@@ -210,6 +210,28 @@ class SceneViewModel(QObject):
         self._end_governing_label()
         state.scene_state.tackle_length_m = float(tackle_m)
         self.geometryChanged.emit()
+        self._refresh_rules_load()
+
+    def _refresh_rules_load(self) -> None:
+        """Re-solve after a hook-position, boom-angle or hook-mode change.
+
+        On a rules document the hook force of a payload depends on those (the suspended
+        rope and the per-angle factor), so it follows them: an Auto load is recomputed, a
+        set payload (``_hook_load_t``) is converted again. A governing case being applied
+        sets its force itself and is left alone. Legacy documents keep the stored force.
+        """
+        state = self._model.get_active_hoist_state()
+        follows = self._hoist_state.hook_force_follows_scene_state()
+        if state is None or not follows or self._applying:
+            self._after_state_changed()
+            return
+        if state.scene_state.hook_load_auto:
+            self.recomputeAutoLoad()
+            return
+        force_kN = self._hoist_state.payload_t_to_hook_force_kN(self._hook_load_t)
+        if force_kN != state.scene_state.hook_load_kN:
+            state.scene_state.hook_load_kN = force_kN
+            self.loadChanged.emit()
         self._after_state_changed()
 
     @pyqtSlot(str, float, float)
@@ -308,7 +330,7 @@ class SceneViewModel(QObject):
         self._set_contractual_selection(None)
         self.hookModeChanged.emit()
         self._rebuild_contractual_rows()
-        self._after_state_changed()
+        self._refresh_rules_load()
         self._model.mark_content_changed(scope="scene")
 
     # ------------------------------------------------------------------
@@ -338,7 +360,7 @@ class SceneViewModel(QObject):
             if state.scene_state.hook_load_auto:
                 self.recomputeAutoLoad()
             else:
-                self._after_state_changed()
+                self._refresh_rules_load()
             self._model.mark_content_changed(scope="scene", key="angle")
         finally:
             self._geometry_sync_active = False
@@ -419,7 +441,7 @@ class SceneViewModel(QObject):
             return
         state.scene_state.tackle_length_m = float(value)
         self.geometryChanged.emit()
-        self._after_state_changed()
+        self._refresh_rules_load()
         self._model.mark_content_changed(scope="scene", key="tackle")
 
     @pyqtProperty(float, notify=tackleBoundsChanged)

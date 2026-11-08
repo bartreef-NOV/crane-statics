@@ -141,6 +141,15 @@ class HoistStateService:
             scene_load_condition(doc), hoist.id, mode, angle, tackle_length_m=tackle_m
         ).factor
 
+    def hook_force_follows_scene_state(self) -> bool:
+        """Whether a payload's hook force changes with the boom angle, hook position and mode.
+
+        True on a rules document: its factor is per boom angle and counts the suspended rope
+        hanging at the Scene hook. A legacy factor is the constant ``hook_daf``.
+        """
+        doc = self._session.document
+        return doc is not None and doc.rules is not None
+
     def amplified_rope_hoist_id(self, hoist_id: str) -> Optional[str]:
         """The hoist whose hook rope the Scene's solves count in the hook force, if any.
 
@@ -360,6 +369,11 @@ class AnalysisCalculator:
             pitch_accel_rad_s2=motion.pitch_accel_rad_s2,
             offlead_deg=float(sc.offlead_deg),
             split_mode_active=bool(state.split_mode_active),
+            amplified_rope_hoist_id=(
+                None
+                if self._session.selected_hoist_id is None
+                else self._hoist.amplified_rope_hoist_id(self._session.selected_hoist_id)
+            ),
             gravity_x_m_s2=motion.gravity_crane[0],
             gravity_z_m_s2=motion.gravity_crane[2],
         )
