@@ -14,7 +14,7 @@ from crane_statics.data import CraneDocument, Hoist, payload_hoist_ids
 from .edit_history import EditHistory
 from .limit_components import validate_limit_component
 from .limit_factory import DesignLimitFactory
-from .load_condition import scene_load_condition
+from .load_condition import LoadCondition, scene_case
 from .vessel_envelope import vessel_limit
 
 
@@ -82,6 +82,24 @@ class DesignLimit:
 SessionListener = Callable[..., None]
 
 
+def _scene_seed(condition: LoadCondition) -> dict[str, Any]:
+    """The ``SceneState`` wind and vessel-motion fields a Scene starts at under ``condition``.
+
+    The vessel motion values are ± limits; the Scene starts at +limit.
+    """
+    motion = condition.vessel_motion
+    return {
+        "wind_speed_m_s": float(condition.wind_speed_m_s),
+        "vessel_roll_deg": vessel_limit(motion, "roll_deg"),
+        "vessel_pitch_deg": vessel_limit(motion, "pitch_deg"),
+        "accel_x_m_s2": vessel_limit(motion, "accel_x_m_s2"),
+        "accel_y_m_s2": vessel_limit(motion, "accel_y_m_s2"),
+        "accel_z_m_s2": vessel_limit(motion, "accel_z_m_s2"),
+        "pitch_accel_rad_s2": vessel_limit(motion, "pitch_angular_accel_rad_s2"),
+        "roll_accel_rad_s2": vessel_limit(motion, "roll_angular_accel_rad_s2"),
+    }
+
+
 @dataclass(frozen=True, eq=False)
 class HoistSnapshot:
     """The restorable part of a hoist's runtime state (sweep caches are not kept)."""
@@ -123,6 +141,10 @@ class SessionModel:
         self.history: EditHistory[SessionSnapshot] = EditHistory()
         self._restoring = False
         self._history_extras: dict[str, tuple[Callable[[], Any], Callable[[Any], None]]] = {}
+        # The (condition, case) names the Scene runs under on a rules document; None for
+        # either takes the first condition and its most severe case (``scene_case``).
+        self.scene_condition_name: Optional[str] = None
+        self.scene_case_name: Optional[str] = None
 
     def subscribe(self, event: str, listener: SessionListener) -> Callable[[], None]:
         """Register a listener and return an unsubscribe callback."""
@@ -149,11 +171,12 @@ class SessionModel:
         self.selected_editor_hoist_id = None
         self.design_limits.clear()
         self.design_limits_by_id.clear()
+        self.scene_condition_name = None
+        self.scene_case_name = None
 
         if doc is not None:
             # Not doc.environment: on a rules document its wind and motion are placeholders.
-            condition = scene_load_condition(doc)
-            vessel_motion = condition.vessel_motion
+            seed = _scene_seed(self.scene_condition())
             for hoist in doc.hoists:
                 self.hoist_states[hoist.id] = HoistState(
                     hoist_id=hoist.id,
@@ -161,19 +184,9 @@ class SessionModel:
                         tackle_length_m=0.0,
                         offlead_deg=float(hoist.offlead_deg),
                         sidelead_deg=float(hoist.sidelead_deg),
-                        wind_speed_m_s=float(condition.wind_speed_m_s),
                         wind_direction="+X",
-                        # The Model's vessel motion values are ± limits; the Scene starts at +limit.
-                        vessel_roll_deg=vessel_limit(vessel_motion, "roll_deg"),
-                        vessel_pitch_deg=vessel_limit(vessel_motion, "pitch_deg"),
                         crane_slewing_angle_deg=0.0,
-                        accel_x_m_s2=vessel_limit(vessel_motion, "accel_x_m_s2"),
-                        accel_y_m_s2=vessel_limit(vessel_motion, "accel_y_m_s2"),
-                        accel_z_m_s2=vessel_limit(vessel_motion, "accel_z_m_s2"),
-                        pitch_accel_rad_s2=vessel_limit(
-                            vessel_motion, "pitch_angular_accel_rad_s2"
-                        ),
-                        roll_accel_rad_s2=vessel_limit(vessel_motion, "roll_angular_accel_rad_s2"),
+                        **seed,
                     ),
                 )
             visible_payload_hoists = payload_hoist_ids(doc)
@@ -188,6 +201,41 @@ class SessionModel:
         self._emit("document_changed", self.document)
         # After the listeners ran, so view-model state captured as extras is initialised.
         self._reset_history()
+
+    def scene_condition(self) -> LoadCondition:
+        """The analysis case the Scene runs under (legacy: the document's default).
+
+        A stored name the document no longer has falls back to the first condition and
+        its most severe case.
+        """
+        doc = self.document
+        if doc is None:
+            raise ValueError("no document loaded")
+        try:
+            return scene_case(doc, self.scene_condition_name, self.scene_case_name)
+        except KeyError:
+            return scene_case(doc, None, None)
+
+    def set_scene_condition(
+        self, condition_name: Optional[str], case_name: Optional[str] = None, *, seed: bool
+    ) -> bool:
+        """Run the Scene under ``case_name`` of ``condition_name``; True when it changed.
+
+        With ``seed`` every hoist's wind speed and vessel motion restart at the case's
+        values (+limits), as on opening the document. A legacy document has one condition:
+        nothing changes.
+        """
+        doc = self.document
+        if doc is None or doc.rules is None:
+            return False
+        before = (self.scene_condition_name, self.scene_case_name)
+        self.scene_condition_name = condition_name
+        self.scene_case_name = case_name
+        if seed:
+            values = _scene_seed(self.scene_condition())
+            for state in self.hoist_states.values():
+                state.scene_state = dataclasses.replace(state.scene_state, **values)
+        return before != (condition_name, case_name)
 
     def payload_hoist_ids(self) -> list[str]:
         return [] if self.document is None else list(payload_hoist_ids(self.document))

@@ -415,6 +415,7 @@ Item {
         target: chartVm
         function onChartUpdated() { root.rebuild() }
         function onResetViewRequested() { root.resetView() }
+        function onDetailsReset() { root.clearPinnedPoint() }
     }
 
     MouseArea {

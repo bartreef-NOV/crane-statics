@@ -336,6 +336,8 @@ class ChartViewModel(QObject):
     conditionChanged = pyqtSignal()
     # The calculation details (clause trail of the inspected point) changed.
     provenanceChanged = pyqtSignal()
+    # A document was opened, undone or redone: the plot drops its pinned point.
+    detailsReset = pyqtSignal()
 
     def __init__(self, session: SessionState, parent=None):
         super().__init__(parent)
@@ -462,6 +464,7 @@ class ChartViewModel(QObject):
             return
         self._condition = name
         self.conditionChanged.emit()
+        self._scene_follows_condition()
         # Work for the previous condition is dropped: every job is re-planned for this one.
         running = self._running
         if running is not None and running.job.condition != name:
@@ -479,12 +482,20 @@ class ChartViewModel(QObject):
         condition = self._condition if self._condition in names else (names[0] if names else None)
         notes = ProvenanceFormatter.standing_notes(None if rules is None else str(rules.standard))
         if names != self._condition_names or condition != self._condition:
+            followed = condition != self._condition
             self._condition_names = names
             self._condition = condition
             self.conditionChanged.emit()
+            if followed:
+                self._scene_follows_condition()
         if notes != self._calculation_notes:
             self._calculation_notes = notes
             self.provenanceChanged.emit()
+
+    def _scene_follows_condition(self) -> None:
+        """Without a governing case the Scene runs under the chart's condition."""
+        if self._scene_vm is not None and self._condition is not None:
+            self._scene_vm.follow_chart_condition(self._condition)
 
     # ------------------------------------------------------------------
     # Status
@@ -1325,6 +1336,18 @@ class ChartViewModel(QObject):
     # Calculation details
     # ------------------------------------------------------------------
 
+    @pyqtSlot("QVariant")
+    def inspectChartPoint(self, point: Any) -> None:
+        """Inspect the plot's pinned or hovered point: a curve point (one with a
+        ``seriesId``) shows its outreach's trail; a contractual marker or none clears it."""
+        if isinstance(point, dict) and isinstance(point.get("seriesId"), str):
+            try:
+                self.setDetailOutreach(float(point["outreach"]))
+                return
+            except (KeyError, TypeError, ValueError):
+                pass
+        self.setDetailOutreach(-1.0)
+
     @pyqtSlot(float)
     def setDetailOutreach(self, outreach: float) -> None:
         """Inspect the capacity point nearest ``outreach`` (negative: none)."""
@@ -1469,7 +1492,10 @@ class ChartViewModel(QObject):
             return
         name = self._limit_display_names().get(case.limit_id) or case.limit_id
         # Not a content change: that would clear the label the Scene shows.
-        scene.apply_governing_case(case, f"Governing case: {name} at {request.outreach_m:.1f} m")
+        where = f"{name} at {request.outreach_m:.1f} m"
+        if case.condition_name is not None:
+            where += f" ({case.condition_name} / {case.case_name})"
+        scene.apply_governing_case(case, f"Governing case: {where}")
         if self._status_text.startswith("Finding the governing case"):
             self._set_status(request.previous_status)
         self.showSceneRequested.emit()
@@ -1544,7 +1570,11 @@ class ChartViewModel(QObject):
         # reference, so swap in a new one rather than clearing it under the worker.
         self._compute_cache = ComputeCache()
         self._compute_cache_fingerprint = None
+        if not self._model.restoring:
+            # Another document: its first condition. Undo/redo keeps the selection.
+            self._condition = None
         self._detail_outreach = None
+        self.detailsReset.emit()
         self._refresh_conditions()
         self.reload()
 

@@ -18,6 +18,7 @@ from crane_statics.core.analysis_services import (
 )
 from crane_statics.core.drawn_loads import active_hoist_dict
 from crane_statics.core.governing_case import GoverningCase
+from crane_statics.core.load_condition import scene_case
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
 from crane_statics.core.session_model import SceneState
 from crane_statics.qml_app.adapters.scene_adapter import SceneStateAdapter
@@ -53,6 +54,8 @@ class _InputsSnapshot:
     split_flags: dict[str, bool]
     # The tackle of the case shown last: the tackle range covers it until Restore.
     case_tackle_m: float
+    # The Scene's (condition, case) names before the case (rules documents).
+    scene_condition: tuple[Optional[str], Optional[str]] = (None, None)
 
 
 class SceneViewModel(QObject):
@@ -77,8 +80,10 @@ class SceneViewModel(QObject):
         super().__init__(parent)
         self._session = session
         self._model = session.model
-        self._kinematics = KinematicsService(self._model)
         self._hoist_state = HoistStateService(self._model)
+        # The Scene draws its condition's document (rules), so the drawn loads read the
+        # condition's vessel-motion reference point.
+        self._kinematics = KinematicsService(self._model, self._hoist_state.scene_document)
         self._calculator = AnalysisCalculator(self._model, self._kinematics, self._hoist_state)
         self._presenter = AnalysisPresenter(self._model, self._calculator, self._hoist_state)
         self._canvas: Optional[Any] = None
@@ -844,6 +849,7 @@ class SceneViewModel(QObject):
                 contractual_idx=state.selected_contractual_idx,
                 split_flags=self._model.split_flags(),
                 case_tackle_m=0.0,
+                scene_condition=(self._model.scene_condition_name, self._model.scene_case_name),
             )
         case_tackle = case.scene_fields.get("tackle_length_m", state.scene_state.tackle_length_m)
         self._snapshot = dataclasses.replace(self._snapshot, case_tackle_m=float(case_tackle))
@@ -854,6 +860,11 @@ class SceneViewModel(QObject):
             if state.split_mode_active != want_split:
                 self._model.set_active_split_hoist(hoist_id if want_split else None)
             state.selected_contractual_idx = None
+            # The case's condition and lateral first: the payload shown is the chart's
+            # only under the factor of the case that governed.
+            if case.condition_name is not None:
+                self._model.set_scene_condition(case.condition_name, case.case_name, seed=False)
+            self._hoist_state.set_case_lateral(case.hook_lateral)
             state.scene_state = dataclasses.replace(state.scene_state, **case.scene_fields)
             self._hook_load_t = self._hoist_state.hook_force_kN_to_payload_t(
                 state.scene_state.hook_load_kN
@@ -866,6 +877,28 @@ class SceneViewModel(QObject):
         self._governing_label = str(label)
         self.governingCaseChanged.emit()
 
+    def follow_chart_condition(self, condition_name: Optional[str]) -> None:
+        """Run the Scene under ``condition_name`` (the Load Chart's), at its most severe case.
+
+        The wind and vessel-motion inputs restart at the condition's values; like a user
+        edit this ends a governing case shown (Restore stays available). Legacy: no-op.
+        """
+        doc = self._model.document
+        if doc is None or doc.rules is None:
+            return
+        try:
+            target = scene_case(doc, condition_name, None)
+        except KeyError:
+            return
+        if self._model.scene_condition().name == target.name:
+            # Already under that case (the document's first condition on opening it).
+            self._model.set_scene_condition(condition_name, None, seed=False)
+            return
+        self._end_governing_label()
+        self._model.set_scene_condition(condition_name, None, seed=True)
+        self.environmentChanged.emit()
+        self._refresh_rules_load()
+
     @pyqtSlot()
     def restoreInputs(self) -> None:
         """Put back the inputs the first governing case replaced, as a user edit would."""
@@ -874,6 +907,8 @@ class SceneViewModel(QObject):
         if snapshot is None or state is None or snapshot.hoist_id != self._model.selected_hoist_id:
             return
         self._model.restore_split_flags(snapshot.split_flags)
+        self._model.set_scene_condition(*snapshot.scene_condition, seed=False)
+        self._hoist_state.set_case_lateral(None)
         state.scene_state = dataclasses.replace(snapshot.scene_state)
         state.selected_contractual_idx = snapshot.contractual_idx
         self._hook_load_t = snapshot.hook_load_t
@@ -897,13 +932,18 @@ class SceneViewModel(QObject):
 
     def _end_governing_label(self) -> None:
         """A user edit: the Scene no longer shows the case (Restore stays available)."""
-        if self._applying or not self._governing_label:
+        if self._applying:
+            return
+        # The edited state is the Scene's own again: its lateral follows its inertia.
+        self._hoist_state.set_case_lateral(None)
+        if not self._governing_label:
             return
         self._governing_label = ""
         self.governingCaseChanged.emit()
 
     def _drop_snapshot(self) -> None:
         """Another hoist or document: the saved inputs no longer apply."""
+        self._hoist_state.set_case_lateral(None)
         if self._snapshot is None and not self._governing_label:
             return
         self._snapshot = None

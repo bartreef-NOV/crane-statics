@@ -64,8 +64,24 @@ def environment_settings(doc: Optional[CraneDocument]) -> dict:
     return EnvironmentSettings.from_dict(env_dict).to_dict()
 
 
+# Settings a rules document takes from its load conditions (``doc.conditions``) instead:
+# its environment carries runtime placeholders for them, which no analysis reads.
+CONDITION_ENVIRONMENT_KEYS = {"max_wind_speed_m_s", *VESSEL_MOTION_KEYS}
+
+
+def environment_from_conditions(doc: Optional[CraneDocument]) -> bool:
+    """Whether wind speed and vessel motion come from the load conditions (rules)."""
+    return doc is not None and doc.rules is not None
+
+
 def set_environment_value(doc: CraneDocument, key: str, value: float) -> bool:
-    """Set one scalar setting; False when the key is unknown or the value is unchanged."""
+    """Set one scalar setting; False when the key is unknown or the value is unchanged.
+
+    On a rules document the wind speed and vessel motion are per condition: setting the
+    placeholder is refused (False).
+    """
+    if key in CONDITION_ENVIRONMENT_KEYS and environment_from_conditions(doc):
+        return False
     target: Any
     if key in ENVIRONMENT_KEYS:
         target = doc.environment

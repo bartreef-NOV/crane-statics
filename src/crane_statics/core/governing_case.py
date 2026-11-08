@@ -46,6 +46,10 @@ class GoverningCase:
     ``condition_name`` and ``case_name`` name the load condition and its profile case
     that governed (``LoadCondition.spec.name`` and ``.case.name``); None on a legacy
     document.
+
+    ``hook_lateral`` is the hook lateral the point was evaluated at (signed, crane frame,
+    no floor: the envelope's worst direction), for the Scene to solve the case with; None
+    without one (legacy).
     """
 
     limit_id: str
@@ -54,6 +58,7 @@ class GoverningCase:
     outreach_m: float
     condition_name: Optional[str] = None
     case_name: Optional[str] = None
+    hook_lateral: Optional[HookLateral] = None
 
 
 def governing_case(
@@ -185,6 +190,16 @@ def governing_case(
         outreach_m=float(outreach_m),
         condition_name=None if condition.spec is None else condition.spec.name,
         case_name=None if condition.case is None else condition.case.name,
+        hook_lateral=(
+            None
+            if lateral is None
+            else HookLateral(
+                fraction_x=case.lateral_x_fraction,
+                fraction_y=case.lateral_y_fraction,
+                constant_x_kN=case.lateral_x_kN,
+                constant_y_kN=case.lateral_y_kN,
+            )
+        ),
     )
 
 

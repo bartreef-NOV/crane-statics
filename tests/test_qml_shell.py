@@ -896,3 +896,22 @@ def test_condition_selector_switches_the_chart_and_details_list_the_trail(qml_en
     chart_vm._cancel_all()
     chart_vm._refresh_timer.stop()
     assert warnings == []
+
+
+def test_environment_panel_hides_the_condition_settings_of_a_rules_document(qml_engine, tmp_path):
+    from crane_statics.core.io import save_document
+    from tests.rules_docs import gale, rules_doc
+
+    engine, app_vm, _model_vm, warnings = qml_engine
+    path = tmp_path / "rules.yaml"
+    save_document(rules_doc("DNV", gale()), path)
+    app_vm.openPath(str(path))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "EnvironmentPanel.qml")))
+    panel = component.create()
+    assert panel is not None
+    assert panel.findChild(QObject, "vesselMotionGroup").property("visible") is False
+    assert panel.findChild(QObject, "conditionEnvironmentNote").property("visible") is True
+    app_vm.openPath(str(EXAMPLE))
+    assert panel.findChild(QObject, "vesselMotionGroup").property("visible") is True
+    assert panel.findChild(QObject, "conditionEnvironmentNote").property("visible") is False
+    assert warnings == []

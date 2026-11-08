@@ -149,12 +149,29 @@ ColumnLayout {
             anchors.fill: parent
             spacing: root.layoutSpacing
 
-            EnvRow { label: qsTr("Max Wind Speed (m/s)"); fieldKey: "max_wind_speed_m_s" }
+            EnvRow {
+                label: qsTr("Max Wind Speed (m/s)")
+                fieldKey: "max_wind_speed_m_s"
+                visible: !modelVm.environmentFromConditions
+            }
+
+            // A rules document sets these per load condition; its environment values are
+            // placeholders no analysis reads, so they are not offered for editing.
+            Label {
+                objectName: "conditionEnvironmentNote"
+                Layout.fillWidth: true
+                Layout.preferredWidth: 100
+                visible: modelVm.environmentFromConditions
+                wrapMode: Text.WordWrap
+                text: qsTr("Wind speed and vessel motion are set per load condition of the rules document.")
+            }
         }
     }
 
     GroupBox {
+        objectName: "vesselMotionGroup"
         Layout.fillWidth: true
+        visible: !modelVm.environmentFromConditions
         title: qsTr("Vessel Motion (± limits)")
 
         ColumnLayout {
@@ -194,8 +211,16 @@ ColumnLayout {
 
             EnvRow { label: qsTr("Gravity (m/s²)"); fieldKey: "gravity_m_s2" }
             EnvRow { label: qsTr("Air Density (kg/m³)"); fieldKey: "air_density_kg_m3" }
-            EnvRow { label: qsTr("Vessel Motion Reference X (m)"); fieldKey: "reference_x_m" }
-            EnvRow { label: qsTr("Vessel Motion Reference Z (m)"); fieldKey: "reference_z_m" }
+            EnvRow {
+                label: qsTr("Vessel Motion Reference X (m)")
+                fieldKey: "reference_x_m"
+                visible: !modelVm.environmentFromConditions
+            }
+            EnvRow {
+                label: qsTr("Vessel Motion Reference Z (m)")
+                fieldKey: "reference_z_m"
+                visible: !modelVm.environmentFromConditions
+            }
         }
     }
 }

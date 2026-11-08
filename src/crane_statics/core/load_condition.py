@@ -115,6 +115,28 @@ def scene_load_condition(doc: CraneDocument) -> LoadCondition:
     )
 
 
+def scene_case(
+    doc: CraneDocument, condition_name: Optional[str], case_name: Optional[str] = None
+) -> LoadCondition:
+    """The analysis case the Scene runs under: ``case_name`` of ``condition_name``.
+
+    Legacy: the default condition (both names ignored). On a rules document None names the
+    first condition; a ``case_name`` of None takes the profile's most severe case, its
+    last one (profiles list their cases mildest first: ABS has one, DNV Case I then Case
+    II, which adds the wind and 1.5 times the heel/trim). Raises ``KeyError`` naming an
+    unknown condition or case.
+    """
+    if doc.rules is None:
+        return default_load_condition(doc)
+    cases = condition_cases(doc, condition_name)
+    if case_name is None:
+        return cases[-1]
+    for case in cases:
+        if case.case is not None and case.case.name == case_name:
+            return case
+    raise KeyError(f"unknown load case {case_name!r} of condition {condition_name!r}")
+
+
 def condition_document(doc: CraneDocument, condition: LoadCondition) -> CraneDocument:
     """``doc`` with the environment ``condition`` runs under, for the calculator.
 

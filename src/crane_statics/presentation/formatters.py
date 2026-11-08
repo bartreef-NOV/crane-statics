@@ -7,6 +7,7 @@ is pure (no side effects, no Qt dependencies) and fully testable without Qt.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping, Optional
 
@@ -750,6 +751,24 @@ class ProvenanceFormatter:
     )
 
     @staticmethod
+    def plain_number(value: Any, significant: int = 4) -> str:
+        """``value`` to ``significant`` digits without an exponent (10600, 0.00012);
+        booleans as ``true``/``false``."""
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        x = float(value)
+        if x == 0.0 or not math.isfinite(x):
+            return f"{x:g}"
+        if abs(x) >= 10 ** (significant - 1):
+            return f"{x:.0f}"  # whole units: no digit of the integer part is dropped
+        rounded = float(f"{x:.{significant}g}")
+        decimals = max(0, significant - 1 - math.floor(math.log10(abs(rounded))))
+        text = f"{rounded:.{decimals}f}"
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+        return "0" if text in ("-0", "") else text
+
+    @staticmethod
     def quantity_label(quantity: str) -> str:
         """``dynamic_factor`` -> ``Dynamic factor``."""
         text = str(quantity).replace("_", " ").strip()
@@ -762,22 +781,30 @@ class ProvenanceFormatter:
         Keys: quantity, value, unit, clause, formula, source, warnings (the point's,
         joined by `` | ``), case, inputs (``name=value; ...``) and isOverride.
         """
+        number = ProvenanceFormatter.plain_number
         joined = " | ".join(str(w) for w in warnings)
         rows = []
         for r in records:
             unit = "" if str(r.unit) in ("", "-") else str(r.unit)
+            quantity = ProvenanceFormatter.quantity_label(r.quantity)
+            value = number(r.value)
+            override = r.source == "override"
+            display = f"{quantity} = {value}{' ' + unit if unit else ''}  [{r.clause}]  {r.formula}"
+            if override:
+                display += "  (manual override)"
             rows.append(
                 {
-                    "quantity": ProvenanceFormatter.quantity_label(r.quantity),
-                    "value": f"{float(r.value):.4g}",
+                    "quantity": quantity,
+                    "value": value,
                     "unit": unit,
                     "clause": str(r.clause),
                     "formula": str(r.formula),
                     "source": str(r.source),
                     "warnings": joined,
                     "case": str(case),
-                    "inputs": "; ".join(f"{k}={float(v):.4g}" for k, v in r.inputs.items()),
-                    "isOverride": r.source == "override",
+                    "inputs": "; ".join(f"{k}={number(v)}" for k, v in r.inputs.items()),
+                    "isOverride": override,
+                    "display": display,
                 }
             )
         return rows

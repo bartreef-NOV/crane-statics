@@ -25,6 +25,7 @@ from crane_statics.data import payload_hoist_ids
 from ..models.document_forms import (
     clear_support_width,
     contractual_fields,
+    environment_from_conditions,
     environment_settings,
     hoist_fields,
     mass_kwargs,
@@ -300,6 +301,11 @@ class ModelViewModel(QObject):
     @pyqtProperty("QVariantMap", notify=environmentChanged)
     def environment(self) -> dict:
         return environment_settings(self._model.document)
+
+    @pyqtProperty(bool, notify=environmentChanged)
+    def environmentFromConditions(self) -> bool:
+        """True on a rules document: wind and vessel motion are set per load condition."""
+        return environment_from_conditions(self._model.document)
 
     @pyqtSlot(str, float)
     def setEnvironmentValue(self, key: str, value: float) -> None:

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional
 
 from ..calculation.dynamic_factor import DynamicFactor, as_dynamic_factor
 from ..calculation.engine import CraneCalculator, get_calculator
@@ -24,7 +24,7 @@ from .lift_factor import (
     foundation_label,
     hook_lateral,
 )
-from .load_condition import scene_load_condition
+from .load_condition import LoadCondition, condition_document
 from ..presentation.formatters import ConnectionFormatter, HoistFormatter, RopeFormatter
 from .drawn_loads import LoadConditions
 from .results import ResultRow
@@ -43,11 +43,28 @@ _LOG = logging.getLogger(__name__)
 _SCENE_LIFT_ENTRIES = 64
 
 
+class _SceneContext(NamedTuple):
+    """The Scene's solve context under its condition (rules documents)."""
+
+    key: tuple[int, str, str]
+    condition: LoadCondition
+    document: CraneDocument
+    calc: CraneCalculator
+    lift: LiftFactors
+
+
 class KinematicsService:
     """Pure kinematics management: angle bounds, boom reach calculations."""
 
-    def __init__(self, session: SessionModel):
+    def __init__(
+        self,
+        session: SessionModel,
+        scene_document: Optional[Callable[[], Optional[CraneDocument]]] = None,
+    ):
         self._session = session
+        # The document the Scene draws (``HoistStateService.scene_document``: on a rules
+        # document, its environment is the Scene's condition); the session's by default.
+        self._scene_document = scene_document
         self._angle_bounds: dict[str, tuple[float, float]] = {}
         self._kin: Optional[KinematicsAdapter] = None
         self._kin_doc: Optional[CraneDocument] = (
@@ -66,6 +83,8 @@ class KinematicsService:
     def kinematics(self) -> Optional[KinematicsAdapter]:
         """Get kinematics adapter, computing on first access and caching thereafter."""
         doc = self._session.document
+        if doc is not None and self._scene_document is not None:
+            doc = self._scene_document()
         if doc is None:
             self._kin = None
             self._kin_doc = None
@@ -120,9 +139,51 @@ class HoistStateService:
 
     def __init__(self, session: SessionModel):
         self._session = session
-        self._lift: Optional[LiftFactors] = None
-        # The state of the document ``_lift`` serves: the app edits documents in place.
-        self._lift_key: Optional[tuple[int, str]] = None
+        # The Scene's condition document, calculator and lift factors, rebuilt when the
+        # document (the app edits documents in place) or the Scene's condition changes.
+        self._scene: Optional[_SceneContext] = None
+        # The hook lateral of the governing case on show (None: the Scene's own).
+        self._case_lateral: Optional[HookLateral] = None
+
+    def set_case_lateral(self, lateral: Optional[HookLateral]) -> None:
+        """Solve with the hook lateral of an applied governing case (None: the Scene's).
+
+        A chart point's lateral points the envelope's worst way, which the Scene's state
+        alone cannot give; while the case is shown its solves use exactly that lateral.
+        """
+        self._case_lateral = lateral
+
+    def scene_condition(self) -> LoadCondition:
+        """The analysis case the Scene runs under (``SessionModel.scene_condition``)."""
+        return self._session.scene_condition()
+
+    def scene_document(self) -> Optional[CraneDocument]:
+        """The document the Scene solves: legacy the session's, else its condition's."""
+        doc = self._session.document
+        if doc is None or doc.rules is None:
+            return doc
+        return self._scene_context(doc).document
+
+    def scene_calculator(self, doc: CraneDocument) -> CraneCalculator:
+        """The Scene's calculator: legacy the shared ``get_calculator(doc)``; on a rules
+        document a private one of the Scene condition's document."""
+        if doc.rules is None:
+            return get_calculator(doc)
+        return self._scene_context(doc).calc
+
+    def _scene_context(self, doc: CraneDocument) -> _SceneContext:
+        condition = self.scene_condition()
+        # Every input of the factor, the contractual (rated) loads included.
+        digest = hashlib.sha256(doc.model_dump_json().encode("utf-8")).hexdigest()
+        key = (id(doc), digest, condition.name)
+        if self._scene is None or self._scene.key != key:
+            document = condition_document(doc, condition)
+            # Private calculators: the shared one is never rebuilt after an in-place edit,
+            # and an id-keyed cache must not hold the copies.
+            calc = CraneCalculator(document)
+            lift = LiftFactors(doc, calc, max_entries=_SCENE_LIFT_ENTRIES)
+            self._scene = _SceneContext(key, condition, document, calc, lift)
+        return self._scene
 
     def dynamic_factor(self, hoist: Optional[Hoist]) -> DynamicFactor:
         """The factor the Scene converts payload and hook force with, for ``hoist``.
@@ -138,7 +199,7 @@ class HoistStateService:
         mode, angle, tackle_m = self._scene_hook_state(hoist)
         return (
             self._scene_lift(doc)
-            .setup(scene_load_condition(doc), hoist.id, mode, angle, tackle_length_m=tackle_m)
+            .setup(self.scene_condition(), hoist.id, mode, angle, tackle_length_m=tackle_m)
             .factor
         )
 
@@ -159,9 +220,11 @@ class HoistStateService:
         state = self._session.hoist_states.get(hoist.id)
         if state is None:
             return None
+        if self._case_lateral is not None and hoist_id == self._session.selected_hoist_id:
+            return self._case_lateral
         mode, angle, tackle_m = self._scene_hook_state(hoist)
         setup = self._scene_lift(doc).setup(
-            scene_load_condition(doc), hoist.id, mode, angle, tackle_length_m=tackle_m
+            self.scene_condition(), hoist.id, mode, angle, tackle_length_m=tackle_m
         )
         sc = state.scene_state
         motion = crane_frame_motion(
@@ -193,20 +256,13 @@ class HoistStateService:
             return None
         mode, angle, tackle_m = self._scene_hook_state(hoist)
         lift = self._scene_lift(doc)
-        condition = scene_load_condition(doc)
+        condition = self.scene_condition()
         setup = lift.setup(condition, hoist.id, mode, angle, tackle_length_m=tackle_m)
         return lift.demand_scales(condition, hoist.id, mode, angle, setup, tackle_m)
 
     def _scene_lift(self, doc: CraneDocument) -> LiftFactors:
         """The Scene's ``LiftFactors``, rebuilt whenever the document changes."""
-        # Every input of the factor, the contractual (rated) loads included.
-        key = (id(doc), hashlib.sha256(doc.model_dump_json().encode("utf-8")).hexdigest())
-        if self._lift is None or self._lift_key != key:
-            # A private calculator: the shared one is never rebuilt after an in-place edit.
-            calc = CraneCalculator(doc)
-            self._lift = LiftFactors(doc, calc, max_entries=_SCENE_LIFT_ENTRIES)
-            self._lift_key = key
-        return self._lift
+        return self._scene_context(doc).lift
 
     def _scene_hook_state(self, hoist: Hoist) -> tuple[HoistAnalysisMode, float, Optional[float]]:
         """(mode, boom angle, tackle length) of ``hoist`` in the Scene."""
@@ -248,7 +304,7 @@ class HoistStateService:
         doc = self._session.document
         if doc is None:
             return None
-        return amplified_rope_hoist_id(scene_load_condition(doc), hoist_id)
+        return amplified_rope_hoist_id(self.scene_condition(), hoist_id)
 
     def contractual_points_for_hoist_mode(self, hoist: Optional[Hoist]) -> list:
         """Get contractual load points for hoist's current mode."""
@@ -395,7 +451,7 @@ class AnalysisCalculator:
         if not state:
             return None
         sc = state.scene_state
-        calc = get_calculator(doc)
+        calc = self._hoist.scene_calculator(doc)
         overrides = self._hoist.active_hoist_runtime_overrides()
         point = calc.compute_analysis_point(
             sc.boom_angle_deg,
@@ -703,7 +759,7 @@ class AnalysisCalculator:
         if not state:
             return None
         sc = state.scene_state
-        calc = get_calculator(doc)
+        calc = self._hoist.scene_calculator(doc)
         enabled = {
             dl.id: {dl.component: dl.allowable_kN}
             for dl in self._session.design_limits

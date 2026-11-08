@@ -13,11 +13,9 @@ Item {
         8
     )
 
-    // The curve point the calculation details describe: the pinned one, else the hovered
-    // one. A contractual marker has no clause trail.
+    // The point the calculation details describe: the pinned one, else the hovered one.
     readonly property var inspectedPoint: plot.pinnedPoint || plot.hoveredPoint
-    onInspectedPointChanged: chartVm.setDetailOutreach(
-        inspectedPoint && typeof inspectedPoint.seriesId === "string" ? inspectedPoint.outreach : -1)
+    onInspectedPointChanged: chartVm.inspectChartPoint(inspectedPoint || null)
 
     // The menu acts on the chart point under the cursor (null when there is none).
     function openChartMenu(position) {
@@ -229,13 +227,7 @@ Item {
                                     wrapMode: Text.WordWrap
                                     textFormat: Text.PlainText
                                     font.bold: modelData.isOverride
-                                    text: qsTr("%1 = %2%3  [%4]  %5%6")
-                                          .arg(modelData.quantity)
-                                          .arg(modelData.value)
-                                          .arg(modelData.unit === "" ? "" : " " + modelData.unit)
-                                          .arg(modelData.clause)
-                                          .arg(modelData.formula)
-                                          .arg(modelData.isOverride ? qsTr("  (manual override)") : "")
+                                    text: modelData.display
                                     ToolTip.visible: detailHover.hovered && modelData.inputs !== ""
                                     ToolTip.text: modelData.inputs
 
@@ -255,7 +247,7 @@ Item {
                             // Wraps to the panel width instead of sizing the panel from the text.
                             Layout.preferredWidth: 100
                             wrapMode: Text.WordWrap
-                            color: "#c62828"
+                            color: plot.failColor
                             text: qsTr("⚠ %1").arg(modelData)
                         }
                     }

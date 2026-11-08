@@ -740,7 +740,9 @@ class TestConditionSelector:
         # The gale chart is not reused for calm: nothing is shown until it is computed.
         assert vm._cache.get(calm_key) is None
         assert vm.curvePoints == [] and vm.provenanceRows == []
-        assert all(job.condition == "calm" for job in vm._queue)
+        # Every job is re-planned for calm: the one started and the precompute behind it.
+        assert vm._running is not None and vm._running.job.condition == "calm"
+        assert vm._queue and all(job.condition == "calm" for job in vm._queue)
         vm._cancel_all()
         vm.drawBlocking()
         assert vm.curvePoints and vm.curvePoints != gale_points
@@ -795,19 +797,70 @@ class TestCalculationDetails:
         assert vm.provenanceRows == []
         vm.shutdown()
 
-    def test_a_manual_daf_shows_as_an_override_and_warnings_are_listed(self):
+    def test_a_manual_daf_shows_as_an_override(self):
         from tests.rules_docs import gale, rules_doc, without_suspended_rope
 
         doc = without_suspended_rope(rules_doc("ABS", gale()))
         hoists = [h.model_copy(update={"hook_daf": 1.7}) for h in doc.hoists]
         vm = self._drawn(doc.model_copy(update={"hoists": hoists}))
-        x, records, _warnings, case = vm._provenance[0]
-        vm._provenance[0] = (x, records, ("hoisting speed below the minimum",), case)
-        vm.setDetailOutreach(x)
+        vm.setDetailOutreach(vm.curvePoints[0][0])
         overrides = [r for r in vm.provenanceRows if r["source"] == "override"]
         assert overrides and overrides[0]["quantity"] == "Dynamic factor"
-        assert vm.provenanceWarnings == ["hoisting speed below the minimum"]
-        assert all(r["warnings"] == "hoisting speed below the minimum" for r in vm.provenanceRows)
+        assert overrides[0]["display"].endswith("(manual override)")
+        assert not any(
+            r["display"].endswith("(manual override)")
+            for r in vm.provenanceRows
+            if r["source"] == "computed"
+        )
+        vm.shutdown()
+
+    def test_a_hoisting_speed_below_the_minimum_is_listed_as_a_warning(self):
+        from tests.rules_docs import rules_doc
+        from tests.test_lift_factor import _rules, _sea
+
+        doc = _rules(rules_doc("ABS", _sea()), daf=1.0)
+        hoists = [
+            h.model_copy(update={"max_hoisting_speed_m_s": 0.1}) if h.id == "MH" else h
+            for h in doc.hoists
+        ]
+        vm = _rules_chart_vm(doc.model_copy(update={"hoists": hoists}))
+        vm.selectHoist("MH")
+        vm.drawBlocking()
+        vm.setDetailOutreach(vm.curvePoints[0][0])
+        warnings = vm.provenanceWarnings
+        speed = [w for w in warnings if "max_hoisting_speed_m_s" in w]
+        assert len(speed) == 1 and "below the ABS minimum" in speed[0]
+        assert all(r["warnings"] == " | ".join(warnings) for r in vm.provenanceRows)
+        vm.shutdown()
+
+    def test_values_and_inputs_are_plain_numbers(self):
+        from crane_statics.presentation.formatters import ProvenanceFormatter
+        from crane_statics.rules.types import ProvenanceRecord
+
+        record = ProvenanceRecord(
+            "load_wind_force", 10600.0, "kN", "c", "F", {"W_kN": 10560.4, "cabin": True}, "computed"
+        )
+        (row,) = ProvenanceFormatter.detail_rows([record], (), "Case II")
+        assert row["value"] == "10600" and row["unit"] == "kN"
+        assert row["inputs"] == "W_kN=10560; cabin=true"
+        assert row["display"] == "Load wind force = 10600 kN  [c]  F"
+        assert ProvenanceFormatter.plain_number(0.00012) == "0.00012"
+        assert ProvenanceFormatter.plain_number(4.71683) == "4.717"
+        assert "e" not in ProvenanceFormatter.plain_number(1.06e-7)
+
+    def test_the_plot_point_decides_what_is_inspected(self):
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        vm = self._drawn(without_suspended_rope(rules_doc("ABS", gale())))
+        x = vm.curvePoints[0][0]
+        vm.inspectChartPoint({"seriesId": "", "outreach": x, "load": 1.0})
+        assert vm.provenanceRows
+        vm.inspectChartPoint({"index": 0, "outreach": x, "load": 1.0})  # a contractual marker
+        assert vm.provenanceRows == []
+        vm.inspectChartPoint({"seriesId": "BH__rope_T", "outreach": x})
+        assert vm.provenanceRows
+        vm.inspectChartPoint(None)
+        assert vm.provenanceRows == []
         vm.shutdown()
 
     def test_dnv_notes_state_that_sh_is_omitted(self):
@@ -824,3 +877,54 @@ class TestCalculationDetails:
         assert chart_vm.provenanceRows == []
         assert chart_vm.calculationNotes == []
         assert chart_vm.provenanceHeading == ""
+
+
+class TestConditionLifecycle:
+    @staticmethod
+    def _doc():
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        return without_suspended_rope(rules_doc("ABS", gale(wind=30.0), gale("calm", wind=5.0)))
+
+    def test_switching_during_a_running_sweep_ignores_the_old_payload(self):
+        from tests.qt_helpers import wait_until
+
+        reference = _rules_chart_vm(self._doc())
+        reference.setCurrentCondition("calm")
+        reference._cancel_all()
+        reference.drawBlocking()
+        calm_points = [list(p) for p in reference.curvePoints]
+        reference.shutdown()
+
+        vm = _rules_chart_vm(self._doc())
+        vm.draw()  # the gale sweep starts on its worker
+        assert vm._running is not None and vm._running.job.condition == "gale"
+        vm.setCurrentCondition("calm")
+        calm_key = vm._wanted_key()
+        wait_until(lambda: vm._cache.get(calm_key) is not None and vm.chartComplete)
+        wait_until(lambda: vm._displayed_key == calm_key)
+        assert [list(p) for p in vm.curvePoints] == calm_points
+        assert vm._displayed_key.condition == "calm"
+        vm.shutdown()
+
+    def test_the_condition_persists_across_edits_and_resets_on_another_document(self):
+        vm = _rules_chart_vm(self._doc())
+        model = vm._model
+        resets: list[int] = []
+        vm.detailsReset.connect(lambda: resets.append(1))
+        vm.setCurrentCondition("calm")
+        vm._cancel_all()
+        limit = next(dl for dl in model.design_limits if dl.kind == "rope")
+        vm.setLimitMax(limit.id, "1234")  # an edit of the same document
+        vm._cancel_all()
+        assert vm.currentCondition == "calm"
+        assert model.undo()
+        vm._cancel_all()
+        assert vm.currentCondition == "calm" and resets == [1]
+        assert model.redo()
+        vm._cancel_all()
+        assert vm.currentCondition == "calm" and resets == [1, 1]
+        model.set_document(self._doc())  # another document: its first condition
+        vm._cancel_all()
+        assert vm.currentCondition == "gale" and len(resets) == 3
+        vm.shutdown()
