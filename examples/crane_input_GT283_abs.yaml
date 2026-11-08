@@ -16,7 +16,6 @@ model_definition:
         roll_angular_accel_rad_s2: 0.0
         reference_x_m: 0.0
         reference_z_m: 0.0
-      significant_wave_height_m: 2.0
     offboard_supply:
       lift: offboard
       wind_speed_m_s: 15.0
@@ -101,7 +100,7 @@ model_definition:
       daf: 1.0
       offlead_deg: 1.0
       sidelead_deg: 2.5
-      max_hoisting_speed_m_s: 0.15
+      max_hoisting_speed_m_s: 0.25
       lowest_hook_height_m: -53.0
       load_chart:
       - {outreach_m: 16.0, load_t: 1000.0}
