@@ -8,7 +8,10 @@ import pytest
 from crane_statics.core.io import DocumentIOError, load_document, save_document
 from crane_statics.data import normalize_document
 
-EXAMPLES = sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
+_ALL_EXAMPLES = sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
+#: The ``*_abs``/``*_dnv`` examples carry rules; the others are legacy documents.
+RULES_EXAMPLES = [p for p in _ALL_EXAMPLES if p.stem.endswith(("_abs", "_dnv"))]
+EXAMPLES = [p for p in _ALL_EXAMPLES if p not in RULES_EXAMPLES]
 
 
 def _authored() -> dict:
@@ -89,6 +92,16 @@ def test_legacy_examples_unchanged(example):
     assert doc.conditions == {}
     assert all(h.max_hoisting_speed_m_s is None for h in doc.hoists)
     assert all(r.axial_stiffness_kN is None for r in doc.ropes)
+
+
+def test_rules_examples_carry_rules_and_offboard_inputs():
+    assert [p.stem for p in RULES_EXAMPLES] == ["crane_input_GT283_abs", "crane_input_GT283_dnv"]
+    for example in RULES_EXAMPLES:
+        doc = load_document(example)
+        assert doc.rules is not None and doc.rules.standard == example.stem[-3:].upper()
+        assert doc.conditions
+        assert all(r.axial_stiffness_kN is not None for r in doc.ropes)
+        assert all(h.hook_daf == 1.0 for h in doc.hoists)
 
 
 def test_rules_document_round_trips(tmp_path):
