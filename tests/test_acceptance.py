@@ -1341,6 +1341,32 @@ class TestSplitModeAutosetAndChart:
                 legacy.sensitivity_rope_tensions
             )
 
+    @pytest.mark.parametrize("offlead_deg", [-5.0, 3.0, 5.0])
+    def test_offlead_composition_matches_direct_solve_for_every_entity(self, offlead_deg):
+        doc = self._example_doc()
+        calc = CraneCalculator(doc)
+        zero = calc.compute_analysis_point(45.0, 0.0, "MH", offlead_deg=0.0, sidelead_deg=0.0)
+        direct = calc.compute_analysis_point(
+            45.0, 0.0, "MH", offlead_deg=offlead_deg, sidelead_deg=0.0
+        )
+        assert zero is not None and direct is not None
+        composed = compose_lead_channel_point(zero, offlead_deg, 0.0)
+
+        split = {
+            "heel_left",
+            "heel_right",
+            "front_leg_left",
+            "front_leg_right",
+            "rear_leg_left",
+            "rear_leg_right",
+        }
+        assert split <= set(direct.sensitivity_reactions)
+        for entity, components in direct.sensitivity_reactions.items():
+            for component, value in components.items():
+                assert composed.sensitivity_reactions[entity][component] == pytest.approx(
+                    value, abs=1e-9
+                ), (entity, component)
+
     def test_rope_autoset_composes_lead_cases_from_one_point_per_wind(self, monkeypatch):
         doc = self._example_doc()
         hoist = next(item for item in doc.hoists if item.id == "MH")

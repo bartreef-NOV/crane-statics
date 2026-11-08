@@ -23,7 +23,11 @@ def compose_lead_channel_point(
     offlead_scale = math.sin(math.radians(float(offlead_deg)))
     sidelead_scale = math.sin(math.radians(float(sidelead_deg)))
     offlead_rope_channels = pt.offlead_lateral_unit_rope_tensions or {}
-    offlead_reaction_channels = pt.offlead_lateral_unit_reactions or {}
+    # The +x unit reactions are the off-lead channel plus the split support entities
+    # (heel_left, front_leg_left, ...), which the hinge-level off-lead channel lacks.
+    offlead_reaction_channels = (
+        pt.lateral_x_unit_reactions or pt.offlead_lateral_unit_reactions or {}
+    )
     sidelead_reaction_channels = pt.sidelead_lateral_unit_reactions or {}
 
     sensitivity_ropes = {
