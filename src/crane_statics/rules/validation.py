@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from ..calculation.rope_mass import derive_hook_geometry
-from ..data.models import CraneDocument, is_solve_hoist, payload_hoist_ids
+import math
+from typing import Any, Optional
+
+from ..calculation.rope_mass import derive_hook_geometry, hook_support_node_id
+from ..data.models import CraneDocument, VesselMotion, is_solve_hoist, payload_hoist_ids
 
 #: Gravitational acceleration, m/s^2.
 GRAVITY_M_S2 = 9.81
@@ -14,6 +17,61 @@ _REL_TOL = 1e-9
 
 class RulesValidationError(ValueError):
     """A rules document is inconsistent; the message is one line and names the field."""
+
+
+def tip_vertical_accel_g(motion: VesselMotion, support_x_m: float) -> tuple[float, float]:
+    """ABS 5.17 a_v at a hook support node at crane-frame x ``support_x_m``: (a_v in g, lever).
+
+    The linear ``|a_z|`` plus the angular accelerations times a bound on their lever arm
+    over every slew, ``(|alpha_pitch| + |alpha_roll|) * (|x_ref| + |x_tip|)``. It grows
+    with ``|support_x_m|``, so a bound on the reach bounds a_v.
+    """
+    lever_m = abs(motion.reference_x_m) + abs(float(support_x_m))
+    angular = abs(motion.pitch_angular_accel_rad_s2) + abs(motion.roll_angular_accel_rad_s2)
+    return (abs(motion.accel_z_m_s2) + angular * lever_m) / GRAVITY_M_S2, lever_m
+
+
+def check_heavy_lift_a_v(
+    condition_name: str,
+    motion: VesselMotion,
+    support_x_m: float,
+    where: str = "at the boom tip",
+) -> float:
+    """ABS 2-2/11.3: a heavy-lift a_v over 0.07 g raises; returns a_v in g."""
+    a_v_g, lever_m = tip_vertical_accel_g(motion, support_x_m)
+    if a_v_g > HEAVY_LIFT_MAX_ACCEL_G * (1.0 + _REL_TOL):
+        raise RulesValidationError(
+            f"conditions.{condition_name}.vessel_motion: a_v {a_v_g:.4g} g {where} "
+            f"(x {abs(float(support_x_m)):g} m, lever arm {lever_m:g} m) exceeds "
+            f"{HEAVY_LIFT_MAX_ACCEL_G:g} g for heavy_lift; see the offshore crane requirements"
+        )
+    return a_v_g
+
+
+def max_support_reach_m(doc_dict: dict[str, Any], hoist_id: str) -> Optional[float]:
+    """An upper bound on ``|x|`` of ``hoist_id``'s hook support node at any boom angle.
+
+    A boom-local node at (u, w) from the heel lies at ``heel_x + u cos(a) - w sin(a)``,
+    so ``|x| <= |heel_x| + hypot(u, w)``; a fixed node is at its own x and a hanging node
+    at the x of the node it hangs below (as ``KinematicsAdapter`` resolves them). None
+    when the node cannot be resolved.
+    """
+    nodes = {n.get("id"): n for n in doc_dict.get("nodes", []) or []}
+    node = nodes.get(hook_support_node_id(doc_dict, hoist_id))
+    for _ in range(len(nodes) + 1):
+        if node is None:
+            return None
+        if node.get("body") == "boom" and node.get("local_x_m") is not None:
+            heel_x = float((nodes.get("boom_heel") or {}).get("x_m", 0.0))
+            local = math.hypot(float(node["local_x_m"]), float(node.get("local_z_m") or 0.0))
+            return abs(heel_x) + local
+        if node.get("below_node_id") is not None:
+            node = nodes.get(node["below_node_id"])
+            continue
+        if node.get("x_m") is not None:
+            return abs(float(node["x_m"]))
+        return None
+    return None
 
 
 def validate_rules_document(doc: CraneDocument) -> None:
@@ -44,6 +102,7 @@ def validate_rules_document(doc: CraneDocument) -> None:
                         f"{HEAVY_LIFT_MAX_ACCEL_G:g} g for heavy_lift; see the offshore "
                         "crane requirements"
                     )
+            _validate_heavy_lift_tip(doc, name)
         if cond.lift == "offboard":
             for field in ("v_in_m_s", "v_t_m_s", "significant_wave_height_m"):
                 if getattr(cond, field) is None:
@@ -52,6 +111,25 @@ def validate_rules_document(doc: CraneDocument) -> None:
     if any(c.lift == "offboard" for c in doc.conditions.values()):
         _validate_offboard_inputs(doc)
     _validate_hook_heights(doc)
+
+
+def _validate_heavy_lift_tip(doc: CraneDocument, condition_name: str) -> None:
+    """a_v at the largest boom-tip reach of each payload hoist is within 0.07 g.
+
+    The profile checks a_v at each point's actual tip (``AbsProfile.lift_setup``); the
+    reach bounds every such tip, so a document passing here passes there too.
+    """
+    motion = doc.conditions[condition_name].vessel_motion
+    if motion.pitch_angular_accel_rad_s2 == 0.0 and motion.roll_angular_accel_rad_s2 == 0.0:
+        return  # a_v is |a_z|, checked above
+    doc_dict = doc.model_dump()
+    for hoist_id in payload_hoist_ids(doc):
+        reach = max_support_reach_m(doc_dict, hoist_id)
+        if reach is None:
+            continue
+        check_heavy_lift_a_v(
+            condition_name, motion, reach, where=f"at hoists.{hoist_id}'s largest boom-tip reach"
+        )
 
 
 def _validate_offboard_inputs(doc: CraneDocument) -> None:

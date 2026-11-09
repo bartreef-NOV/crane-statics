@@ -22,6 +22,7 @@ from crane_statics.core.load_condition import scene_case
 from crane_statics.core.scene_build import SceneDisplay, SceneInputs, build_scene_frame
 from crane_statics.core.session_model import SceneState
 from crane_statics.presentation.formatters import ProvenanceFormatter
+from crane_statics.rules import RulesValidationError
 from crane_statics.qml_app.adapters.scene_adapter import SceneStateAdapter
 from crane_statics.qml_app.scene.scene_drag import DragEdit, DragLimits, SceneDrag
 from crane_statics.qml_app.qt_compat import pyqtProperty
@@ -1102,23 +1103,28 @@ class SceneViewModel(QObject):
         pt = None
         rope_rows: list = []
         conn_rows: list = []
+        rules_error: Optional[str] = None
         if self._model.get_active_hoist_state() is not None:
             try:
                 pt, rope_rows, conn_rows = self._calculator.compute_current_result_rows()
             except (TypeError, ValueError, RuntimeError) as exc:
                 _LOG.warning("Scene analysis refresh failed: %s", exc)
                 pt, rope_rows, conn_rows = None, [], []
+                if isinstance(exc, RulesValidationError):
+                    rules_error = str(exc)  # the user's to fix: say so in the status
 
         # Reaction overlays are only ever drawn from the point just solved for, so a
         # failed solve clears them rather than leaving the previous one on screen.
         self._analysis_point = pt
-        self._announce_unavailable(pt)
+        self._announce_unavailable(pt, rules_error)
         self._set_result_rows(rope_rows, conn_rows)
         self._publish_scene_frame()
 
-    def _announce_unavailable(self, pt: Any) -> None:
-        """Say why the Scene shows no analysis; once per distinct reason, not on every refresh."""
-        reason = None if pt is not None else self._calculator.unavailable_reason()
+    def _announce_unavailable(self, pt: Any, rules_error: Optional[str] = None) -> None:
+        """Say why the Scene shows no analysis; once per distinct reason, not on every refresh.
+
+        ``rules_error`` is a rules check the solve failed (``RulesValidationError``)."""
+        reason = None if pt is not None else rules_error or self._calculator.unavailable_reason()
         if reason != self._last_unavailable_text:
             self._last_unavailable_text = reason
             if reason:

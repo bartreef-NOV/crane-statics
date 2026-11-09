@@ -346,8 +346,9 @@ def test_abs_heavy_lift_vaf(no_lateral: None) -> None:
 
 
 def test_abs_heavy_lift_rejects_a_v_above_0_07_g_at_the_boom_tip() -> None:
-    """2-2/11.3: a_z 0.6 m/s^2 (0.061 g) passes validation, but with a pitch angular
-    acceleration of 0.02 rad/s^2 the boom-tip a_v exceeds 0.07 g; the sweep fails."""
+    """2-2/11.3: a_z 0.6 m/s^2 (0.061 g) passes the linear check, but with a pitch angular
+    acceleration of 0.02 rad/s^2 the boom-tip a_v exceeds 0.07 g: validation rejects the
+    document at the largest reach, and the sweep (which checks each point's tip) too."""
     doc = load_document(ABS_EXAMPLE)
     assert doc.rules is not None
     motion = VesselMotion(accel_z_m_s2=0.6, pitch_angular_accel_rad_s2=0.02)
@@ -358,7 +359,8 @@ def test_abs_heavy_lift_rejects_a_v_above_0_07_g_at_the_boom_tip() -> None:
             "conditions": {"mild": cond},
         }
     )
-    validate_rules_document(doc)  # the linear accelerations are within 0.07 g
+    with pytest.raises(RulesValidationError, match=r"largest boom-tip reach .* 0\.07 g"):
+        validate_rules_document(doc)
     with pytest.raises(RulesValidationError, match=r"a_v .* g at the boom tip .* 0\.07 g"):
         run_mode_sweep(doc, HOOK, "normal", {MH_ROPE_LIMIT: {"T": 600.0}}, 5.0, {})
 

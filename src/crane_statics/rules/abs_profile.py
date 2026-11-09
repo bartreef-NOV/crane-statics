@@ -22,7 +22,12 @@ from .factors import AbsOnboardFactor, LinearFactor, MaxFactor
 from .factors import RelativeVelocityFactor
 from .foundation import abs_pedestal_factor
 from .types import CaseSpec, FoundationFactors, LateralSpec, LiftSetup, ProvenanceRecord
-from .validation import GRAVITY_M_S2, HEAVY_LIFT_MAX_ACCEL_G, RulesValidationError
+from .validation import (
+    GRAVITY_M_S2,
+    RulesValidationError,
+    check_heavy_lift_a_v,
+    tip_vertical_accel_g,
+)
 
 if TYPE_CHECKING:  # core imports rules at run time; keep this edge type-only.
     from ..core.analysis_cases import HoistAnalysisMode
@@ -35,8 +40,6 @@ RETAINING_LIVE_FACTOR = 3.75
 HEAVY_LIFT_BASE_VAF = 1.1
 #: ``Hoist.hook_daf`` default; any other value is a manual override.
 _DEFAULT_DAF = 1.0
-#: Relative tolerance of the 0.07 g heavy-lift check, as in ``validation``.
-_REL_TOL = 1e-9
 
 _CL_ONBOARD = "ABS 2-2/9.3.1, p.53"
 _CL_OFFBOARD = "ABS 2-2/9.3.2, p.53"
@@ -111,16 +114,15 @@ class AbsProfile:
         # slew-rotated (alpha_roll, alpha_pitch) and x_ref in the crane frame; physically the
         # reference point stays on the vessel while the boom slews about x = 0. Both levers
         # are at most |x_ref| + |x_tip|, and |alpha_pitch_c| <= |alpha_pitch| + |alpha_roll|.
-        lever_m = abs(motion.reference_x_m) + abs(float(support_x_m))
-        angular = abs(motion.pitch_angular_accel_rad_s2) + abs(motion.roll_angular_accel_rad_s2)
-        a_v_g = (abs(motion.accel_z_m_s2) + angular * lever_m) / GRAVITY_M_S2
+        a_v_g, lever_m = tip_vertical_accel_g(motion, support_x_m)
         ll_kN = (chart_max_load_t + mode.hook_mass_t + suspended_rope_mass_t) * gravity
 
         records: list[ProvenanceRecord] = []
         warnings: list[str] = []
         factor: DynamicFactor
         if crane_class == "heavy_lift":
-            _check_heavy_lift_a_v(cond, a_v_g, support_x_m, lever_m)
+            # 2-2/11.3; validate_rules_document checked the largest reach already.
+            check_heavy_lift_a_v(cond.name, motion, support_x_m)
             factor = LinearFactor(HEAVY_LIFT_BASE_VAF + a_v_g, suspended_rope_mass_t)
             clause, formula = _CL_HEAVY, "VAF = 1.1 + a_v"
             inputs = {"a_v_g": a_v_g, "a_v_lever_m": lever_m}
@@ -291,22 +293,6 @@ class AbsProfile:
             retaining_live_factor=RETAINING_LIVE_FACTOR,
             records=tuple(records),
             warnings=tuple(warnings),
-        )
-
-
-def _check_heavy_lift_a_v(
-    cond: ConditionSpec, a_v_g: float, support_x_m: float, lever_m: float
-) -> None:
-    """ABS 2-2/11.3: heavy-lift cranes are limited to 0.07 g, here a_v at the boom tip.
-
-    ``validation.validate_rules_document`` checks the linear accelerations; the angular
-    terms depend on the boom tip, so the tip value is checked per point here.
-    """
-    if a_v_g > HEAVY_LIFT_MAX_ACCEL_G * (1.0 + _REL_TOL):
-        raise RulesValidationError(
-            f"conditions.{cond.name}.vessel_motion: a_v {a_v_g:.4g} g at the boom tip "
-            f"(x {float(support_x_m):g} m, lever arm {lever_m:g} m) exceeds "
-            f"{HEAVY_LIFT_MAX_ACCEL_G:g} g for heavy_lift; see the offshore crane requirements"
         )
 
 

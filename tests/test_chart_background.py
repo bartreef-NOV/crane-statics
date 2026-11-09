@@ -330,7 +330,7 @@ def test_failed_wanted_sweep_leaves_no_partial_curve(vm, sweeps):
     assert vm.markers == []
     assert vm._partial is False
     assert vm.chartComplete is True
-    assert vm.statusText == "⚠ Sweep error"
+    assert vm.statusText == "⚠ Sweep error: sweep blew up"
     assert vm.busy is False
 
 

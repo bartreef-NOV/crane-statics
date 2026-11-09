@@ -164,6 +164,9 @@ class SessionModel:
             listener(*args)
 
     def set_document(self, doc: Optional[CraneDocument], path: Optional[Path] = None) -> None:
+        """Open ``doc``. Its design limits are built first: a rules document they reject
+        (``RulesValidationError``) raises before anything of the session changes."""
+        limits = [] if doc is None else DesignLimitFactory.create_for_document(doc)
         self.document = doc
         self.document_path = path
         self.dirty = False
@@ -196,7 +199,6 @@ class SessionModel:
                 self.selected_hoist_id = visible_payload_hoists[0]
             if doc.hoists:
                 self.selected_editor_hoist_id = doc.hoists[0].id
-            limits = DesignLimitFactory.create_for_document(doc)
             self.design_limits = limits
             self.design_limits_by_id = DesignLimitFactory.index_by_id(limits)
 

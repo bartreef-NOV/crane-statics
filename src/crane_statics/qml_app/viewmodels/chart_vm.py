@@ -1138,7 +1138,7 @@ class ChartViewModel(QObject):
         # A failed background job marks nothing stale; it is retried on the next draw().
         _LOG.warning("Chart sweep failed for %s/%s: %s", key.hoist_id, key.mode, message)
         if key == self._wanted_key() and (generation is None or generation == self._generation):
-            self._set_status("⚠ Sweep error")
+            self._set_status(f"⚠ Sweep error: {message}" if message else "⚠ Sweep error")
         self._after_job(key)
 
     def _after_job(self, key: ChartKey) -> None:

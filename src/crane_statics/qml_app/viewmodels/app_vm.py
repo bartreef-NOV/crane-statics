@@ -16,6 +16,7 @@ from crane_statics.core.io import (
     save_document,
 )
 from crane_statics.qml_app.session import SessionState
+from crane_statics.rules import RulesValidationError
 
 
 class AppViewModel(QObject):
@@ -153,7 +154,7 @@ class AppViewModel(QObject):
             return False
         try:
             save_document(doc, path, limits=self._model.design_limits)
-        except DocumentIOError as exc:
+        except (DocumentIOError, RulesValidationError) as exc:
             self.notification.emit(str(exc), "error")
             return False
         self._model.document_path = path
@@ -164,7 +165,12 @@ class AppViewModel(QObject):
         return True
 
     def _apply_document(self, doc, path: Optional[Path], status: str) -> None:
-        self._model.set_document(doc, path)
+        try:
+            self._model.set_document(doc, path)
+        except RulesValidationError as exc:
+            # A user error in the document, not a crash: the open session is unchanged.
+            self.notification.emit(f"Failed to open document: {exc}", "error")
+            return
         self.setStatusText(status)
         self.hasDocumentChanged.emit()
         self.currentPathChanged.emit()
