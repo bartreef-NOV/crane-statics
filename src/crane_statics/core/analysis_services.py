@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional
 
 from ..calculation.dynamic_factor import DynamicFactor, as_dynamic_factor
 from ..calculation.engine import CraneCalculator, get_calculator
-from ..calculation.solver.kinematics import KinematicsAdapter
+from ..calculation.solver.kinematics import KinematicsAdapter, hoist_angle_bounds
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .demand_extraction import extract_connection_component_response
 from .lift_factor import (
@@ -105,19 +105,10 @@ class KinematicsService:
             _LOG.warning("Failed to initialize kinematics adapter for angle-bounds: %s", exc)
             return
         for hoist in doc.hoists:
-            lo_outreach = hoist.outreach_min_m or 0.0
-            hi_outreach = hoist.outreach_max_m or 200.0
             try:
-                a_lo = kin.outreach_to_angle(lo_outreach, hoist.id)
-                a_hi = kin.outreach_to_angle(hi_outreach, hoist.id)
-                if a_lo is not None and a_hi is not None:
-                    self._angle_bounds[hoist.id] = (float(min(a_lo, a_hi)), float(max(a_lo, a_hi)))
-                    continue
-                angles = [a * 0.25 for a in range(0, int(180 / 0.25) + 1)]
-                samples = [(a, kin.compute_outreach(a, hoist.id)) for a in angles]
-                lo_angle = float(min(samples, key=lambda s: abs(s[1] - lo_outreach))[0])
-                hi_angle = float(min(samples, key=lambda s: abs(s[1] - hi_outreach))[0])
-                self._angle_bounds[hoist.id] = (min(lo_angle, hi_angle), max(lo_angle, hi_angle))
+                self._angle_bounds[hoist.id] = hoist_angle_bounds(
+                    kin, hoist.id, hoist.outreach_min_m, hoist.outreach_max_m
+                )
             except (TypeError, ValueError, RuntimeError) as exc:
                 _LOG.debug("Falling back to default angle bounds for hoist %s: %s", hoist.id, exc)
                 self._angle_bounds[hoist.id] = (0.0, 90.0)

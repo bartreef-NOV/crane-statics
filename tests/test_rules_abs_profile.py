@@ -96,16 +96,18 @@ def _heavy_tip_cond(accel_z=0.6, pitch_alpha=0.02):
     return ConditionSpec(name="c", wind_speed_m_s=12.0, vessel_motion=motion)
 
 
-def test_heavy_lift_rejects_a_v_above_0_07_g_at_the_boom_tip():
-    # a_z alone is 0.061 g (validation passes); the pitch term at a 16 m tip adds 0.033 g.
+def test_heavy_lift_warns_of_a_v_above_0_07_g_at_the_boom_tip():
+    # a_z alone is 0.061 g; the pitch term at a 16 m tip adds 0.033 g. Validation rejects
+    # this at a rated angle; a point here is beyond them, so it warns, with VAF 1.1 + a_v.
     cond = _heavy_tip_cond()
     a_v = (0.6 + 0.02 * 16.0) / G
     assert 0.6 / G < 0.07 < a_v
-    pattern = r"conditions\.c\.vessel_motion.*0\.07 g"
-    with pytest.raises(RulesValidationError, match=pattern) as err:
-        _setup(_doc("heavy_lift"), cond, support_x_m=16.0)
-    message = str(err.value)
+    setup = _setup(_doc("heavy_lift"), cond, support_x_m=16.0)
+    (message,) = [w for w in setup.warnings if "0.07 g" in w]
+    assert message.startswith("conditions.c.vessel_motion: ")
     assert f"{a_v:.4g} g" in message and "16 m" in message and "heavy_lift" in message
+    assert "outside the hoist's operating range" in message
+    assert _factor_at(setup.factor, LL_KN) == pytest.approx(1.1 + a_v, rel=1e-12)
 
 
 def test_heavy_lift_accepts_a_v_up_to_0_07_g_at_the_boom_tip():

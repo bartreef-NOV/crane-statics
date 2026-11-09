@@ -5,8 +5,8 @@ lateral live-load settings, the pedestal factor and the retaining-component fact
 each with a provenance record. Document consistency (crane class, heavy-lift 0.07 g
 limit on the linear accelerations, offboard inputs) is checked by
 ``validation.validate_rules_document``; this module only guards what it needs to build
-the factors, and the heavy-lift 0.07 g limit on a_v at the boom tip, which depends on
-the point.
+the factors; the heavy-lift 0.07 g limit on a_v at the boom tip is checked at load over
+the rated angles and warned here at a point beyond them.
 
 Clause strings carry the printed page number of the ABS document.
 """
@@ -25,7 +25,7 @@ from .types import CaseSpec, FoundationFactors, LateralSpec, LiftSetup, Provenan
 from .validation import (
     GRAVITY_M_S2,
     RulesValidationError,
-    check_heavy_lift_a_v,
+    heavy_lift_a_v_excess,
     tip_vertical_accel_g,
 )
 
@@ -102,9 +102,11 @@ class AbsProfile:
         linear ``|a_z|`` plus the angular accelerations times a bound on their lever arm
         over every slew, ``(|alpha_pitch| + |alpha_roll|) * (|x_ref| + |x_tip|)`` (spec
         section 9.7 item 10). It is required: a default of 0 would drop the lever arm.
-        A heavy-lift crane whose a_v there exceeds 0.07 g is rejected (2-2/11.3: the
-        offshore requirements apply instead). A representative LL of 0 (no hook mass, no
-        load chart) leaves out the computed dynamic-factor record, with a warning.
+        A heavy-lift a_v over 0.07 g there warns: ``validate_rules_document`` rejects a
+        document exceeding it at any rated angle (2-2/11.3: the offshore requirements apply
+        instead), so only a point beyond them, such as the Scene's free angle, gets here.
+        A representative LL of 0 (no hook mass, no load chart) leaves out the computed
+        dynamic-factor record, with a warning.
         """
         crane_class = _crane_class(doc)
         hoist = _hoist(doc, hoist_id)
@@ -121,8 +123,14 @@ class AbsProfile:
         warnings: list[str] = []
         factor: DynamicFactor
         if crane_class == "heavy_lift":
-            # 2-2/11.3; validate_rules_document checked the largest reach already.
-            check_heavy_lift_a_v(cond.name, motion, support_x_m)
+            # 2-2/11.3: validate_rules_document rejected a_v over 0.07 g at every rated
+            # angle; a point beyond them (the Scene's free angle) warns instead.
+            excess = heavy_lift_a_v_excess(cond.name, motion, support_x_m)
+            if excess is not None:
+                warnings.append(
+                    f"{excess} (this boom angle is outside the hoist's operating range and "
+                    "load chart, over which the document was checked)"
+                )
             factor = LinearFactor(HEAVY_LIFT_BASE_VAF + a_v_g, suspended_rope_mass_t)
             clause, formula = _CL_HEAVY, "VAF = 1.1 + a_v"
             inputs = {"a_v_g": a_v_g, "a_v_lever_m": lever_m}

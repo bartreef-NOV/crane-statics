@@ -129,3 +129,32 @@ class KinematicsAdapter:
             resolved[node_id] = (rx, rz - drop_m)
 
         return resolved
+
+
+#: Outreach bounds of a hoist without authored ones, m.
+DEFAULT_OUTREACH_MIN_M = 0.0
+DEFAULT_OUTREACH_MAX_M = 200.0
+
+
+def hoist_angle_bounds(
+    kin: KinematicsAdapter,
+    hoist_id: str,
+    outreach_min_m: float | None,
+    outreach_max_m: float | None,
+) -> Tuple[float, float]:
+    """The boom-angle range ``(lo, hi)`` of ``hoist_id``'s operating outreach range, deg.
+
+    Missing bounds are 0 and 200 m. An unreachable bound takes the sampled angle (0.25 deg
+    steps over 0-180 deg) whose outreach is closest. Raises what the kinematics raise.
+    """
+    lo_outreach = outreach_min_m or DEFAULT_OUTREACH_MIN_M
+    hi_outreach = outreach_max_m or DEFAULT_OUTREACH_MAX_M
+    a_lo = kin.outreach_to_angle(lo_outreach, hoist_id)
+    a_hi = kin.outreach_to_angle(hi_outreach, hoist_id)
+    if a_lo is not None and a_hi is not None:
+        return float(min(a_lo, a_hi)), float(max(a_lo, a_hi))
+    angles = [a * 0.25 for a in range(0, int(180 / 0.25) + 1)]
+    samples = [(a, kin.compute_outreach(a, hoist_id)) for a in angles]
+    lo_angle = float(min(samples, key=lambda s: abs(s[1] - lo_outreach))[0])
+    hi_angle = float(min(samples, key=lambda s: abs(s[1] - hi_outreach))[0])
+    return min(lo_angle, hi_angle), max(lo_angle, hi_angle)

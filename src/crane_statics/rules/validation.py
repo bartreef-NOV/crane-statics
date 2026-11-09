@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Optional
+from typing import Optional
 
 from ..calculation.rope_mass import derive_hook_geometry, hook_support_node_id
-from ..data.models import CraneDocument, VesselMotion, is_solve_hoist, payload_hoist_ids
+from ..calculation.solver.kinematics import KinematicsAdapter, hoist_angle_bounds
+from ..data.models import CraneDocument, Hoist, VesselMotion, is_solve_hoist, payload_hoist_ids
 
 #: Gravitational acceleration, m/s^2.
 GRAVITY_M_S2 = 9.81
@@ -31,47 +32,68 @@ def tip_vertical_accel_g(motion: VesselMotion, support_x_m: float) -> tuple[floa
     return (abs(motion.accel_z_m_s2) + angular * lever_m) / GRAVITY_M_S2, lever_m
 
 
-def check_heavy_lift_a_v(
+def heavy_lift_a_v_excess(
     condition_name: str,
     motion: VesselMotion,
     support_x_m: float,
     where: str = "at the boom tip",
-) -> float:
-    """ABS 2-2/11.3: a heavy-lift a_v over 0.07 g raises; returns a_v in g."""
+) -> Optional[str]:
+    """ABS 2-2/11.3: the message when a heavy-lift a_v exceeds 0.07 g there, else None."""
     a_v_g, lever_m = tip_vertical_accel_g(motion, support_x_m)
-    if a_v_g > HEAVY_LIFT_MAX_ACCEL_G * (1.0 + _REL_TOL):
-        raise RulesValidationError(
-            f"conditions.{condition_name}.vessel_motion: a_v {a_v_g:.4g} g {where} "
-            f"(x {abs(float(support_x_m)):g} m, lever arm {lever_m:g} m) exceeds "
-            f"{HEAVY_LIFT_MAX_ACCEL_G:g} g for heavy_lift; see the offshore crane requirements"
-        )
-    return a_v_g
-
-
-def max_support_reach_m(doc_dict: dict[str, Any], hoist_id: str) -> Optional[float]:
-    """An upper bound on ``|x|`` of ``hoist_id``'s hook support node at any boom angle.
-
-    A boom-local node at (u, w) from the heel lies at ``heel_x + u cos(a) - w sin(a)``,
-    so ``|x| <= |heel_x| + hypot(u, w)``; a fixed node is at its own x and a hanging node
-    at the x of the node it hangs below (as ``KinematicsAdapter`` resolves them). None
-    when the node cannot be resolved.
-    """
-    nodes = {n.get("id"): n for n in doc_dict.get("nodes", []) or []}
-    node = nodes.get(hook_support_node_id(doc_dict, hoist_id))
-    for _ in range(len(nodes) + 1):
-        if node is None:
-            return None
-        if node.get("body") == "boom" and node.get("local_x_m") is not None:
-            heel_x = float((nodes.get("boom_heel") or {}).get("x_m", 0.0))
-            local = math.hypot(float(node["local_x_m"]), float(node.get("local_z_m") or 0.0))
-            return abs(heel_x) + local
-        if node.get("below_node_id") is not None:
-            node = nodes.get(node["below_node_id"])
-            continue
-        if node.get("x_m") is not None:
-            return abs(float(node["x_m"]))
+    if a_v_g <= HEAVY_LIFT_MAX_ACCEL_G * (1.0 + _REL_TOL):
         return None
-    return None
+    return (
+        f"conditions.{condition_name}.vessel_motion: a_v {a_v_g:.4g} g {where} "
+        f"(x {abs(float(support_x_m)):g} m, lever arm {lever_m:g} m) exceeds "
+        f"{HEAVY_LIFT_MAX_ACCEL_G:g} g for heavy_lift; see the offshore crane requirements"
+    )
+
+
+def heavy_lift_tip_reach_m(doc: CraneDocument, hoist: Hoist) -> Optional[float]:
+    """The largest ``|x|`` of ``hoist``'s hook support node over its rated angles, m.
+
+    The rated angles are the operating range (``kinematics.hoist_angle_bounds``, as the
+    Scene and the sweep take it from ``outreach_min_m``/``outreach_max_m``) widened to
+    the angle of every contractual point (normal and split), which the sweep and the
+    limit auto-set also evaluate. A boom-local node (u, w) lies at
+    ``heel_x + R cos(a + atan2(w, u))``, so ``|x|`` peaks at an end of the range or where
+    ``a + atan2(w, u)`` is a multiple of 180 deg; a fixed node does not move and a
+    hanging node takes the x of the node it hangs below. The x values come from
+    ``KinematicsAdapter.compute_all_node_positions``, as ``LiftFactors.support_x_m``.
+    None when the geometry does not resolve.
+    """
+    doc_dict = doc.model_dump()
+    support_id = hook_support_node_id(doc_dict, hoist.id)
+    try:
+        kin = KinematicsAdapter(doc_dict)
+        lo, hi = hoist_angle_bounds(kin, hoist.id, hoist.outreach_min_m, hoist.outreach_max_m)
+        for point in (*hoist.contractual_points, *hoist.split_contractual_points):
+            angle = kin.outreach_to_angle(float(point.outreach_m), hoist.id)
+            if angle is not None:
+                lo, hi = min(lo, float(angle)), max(hi, float(angle))
+        candidates = {lo, hi}
+        node = kin.nodes.get(support_id)
+        for _ in range(len(kin.nodes) + 1):
+            if node is None or node.get("local_x_m") is not None:
+                break
+            node = kin.nodes.get(str(node.get("below_node_id")))
+        if node is not None and node.get("body") == "boom" and node.get("local_x_m") is not None:
+            phase = math.degrees(
+                math.atan2(float(node.get("local_z_m") or 0.0), float(node["local_x_m"]))
+            )
+            for k in range(-3, 4):
+                angle = -phase + 180.0 * k
+                if lo < angle < hi:
+                    candidates.add(angle)
+        reach = 0.0
+        for angle in candidates:
+            position = kin.compute_all_node_positions(angle).get(support_id)
+            if position is None:
+                return None
+            reach = max(reach, abs(float(position["x"])))
+        return reach
+    except (TypeError, ValueError, RuntimeError):
+        return None
 
 
 def validate_rules_document(doc: CraneDocument) -> None:
@@ -114,22 +136,30 @@ def validate_rules_document(doc: CraneDocument) -> None:
 
 
 def _validate_heavy_lift_tip(doc: CraneDocument, condition_name: str) -> None:
-    """a_v at the largest boom-tip reach of each payload hoist is within 0.07 g.
+    """a_v at each payload hoist's largest rated boom-tip reach is within 0.07 g.
 
-    The profile checks a_v at each point's actual tip (``AbsProfile.lift_setup``); the
-    reach bounds every such tip, so a document passing here passes there too.
+    ``heavy_lift_tip_reach_m`` covers every angle a sweep, a contractual point or the
+    limit auto-set evaluates, so those never exceed 0.07 g; a point outside them (the
+    Scene's free angle) only warns (``AbsProfile.lift_setup``).
     """
     motion = doc.conditions[condition_name].vessel_motion
     if motion.pitch_angular_accel_rad_s2 == 0.0 and motion.roll_angular_accel_rad_s2 == 0.0:
         return  # a_v is |a_z|, checked above
-    doc_dict = doc.model_dump()
-    for hoist_id in payload_hoist_ids(doc):
-        reach = max_support_reach_m(doc_dict, hoist_id)
+    payload = set(payload_hoist_ids(doc))
+    for hoist in doc.hoists:
+        if hoist.id not in payload:
+            continue
+        reach = heavy_lift_tip_reach_m(doc, hoist)
         if reach is None:
             continue
-        check_heavy_lift_a_v(
-            condition_name, motion, reach, where=f"at hoists.{hoist_id}'s largest boom-tip reach"
+        message = heavy_lift_a_v_excess(
+            condition_name,
+            motion,
+            reach,
+            where=f"at hoists.{hoist.id}'s largest boom-tip reach in its operating range",
         )
+        if message is not None:
+            raise RulesValidationError(message)
 
 
 def _validate_offboard_inputs(doc: CraneDocument) -> None:

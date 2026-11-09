@@ -154,7 +154,7 @@ class AppViewModel(QObject):
             return False
         try:
             save_document(doc, path, limits=self._model.design_limits)
-        except (DocumentIOError, RulesValidationError) as exc:
+        except DocumentIOError as exc:
             self.notification.emit(str(exc), "error")
             return False
         self._model.document_path = path
