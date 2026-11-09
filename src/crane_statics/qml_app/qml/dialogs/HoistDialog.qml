@@ -15,12 +15,12 @@ Dialog {
         idField.text = values && values.id !== undefined ? values.id : ""
         nodeCombo.currentIndex = values ? nodeIds.indexOf(values.support_node_id) : -1
         fallsSpin.value = values && values.falls ? values.falls : 1
-        hookMassField.setValue(values && values.hook_mass_t !== undefined ? values.hook_mass_t : 0)
+        lowerBlockMassField.setValue(values && values.lower_block_mass_t !== undefined ? values.lower_block_mass_t : 0)
         linearMassField.setValue(values && values.linear_mass_kg_m !== undefined ? values.linear_mass_kg_m : 0)
         splitableCheck.checked = values ? !!values.splitable_block : false
         splitFallsSpin.value = values && values.split_falls ? values.split_falls : fallsSpin.value
-        splitHookMassField.setValue(values && values.split_hook_mass_t !== undefined && values.split_hook_mass_t !== null
-                                    ? values.split_hook_mass_t : hookMassField.value)
+        splitLowerBlockMassField.setValue(values && values.split_lower_block_mass_t !== undefined && values.split_lower_block_mass_t !== null
+                                    ? values.split_lower_block_mass_t : lowerBlockMassField.value)
         dafField.setValue(values && values.hook_daf !== undefined ? values.hook_daf : 1)
         offleadField.setValue(values && values.offlead_deg !== undefined ? values.offlead_deg : 0)
         sideleadField.setValue(values && values.sidelead_deg !== undefined ? values.sidelead_deg : 0)
@@ -37,11 +37,11 @@ Dialog {
         "id": idField.text,
         "support_node_id": nodeCombo.currentText,
         "falls": fallsSpin.value,
-        "hook_mass_t": hookMassField.value,
+        "lower_block_mass_t": lowerBlockMassField.value,
         "linear_mass_kg_m": linearMassField.value,
         "splitable_block": splitableCheck.checked,
         "split_falls": splitFallsSpin.value,
-        "split_hook_mass_t": splitHookMassField.value,
+        "split_lower_block_mass_t": splitLowerBlockMassField.value,
         "hook_daf": dafField.value,
         "offlead_deg": offleadField.value,
         "sidelead_deg": sideleadField.value,
@@ -66,8 +66,8 @@ Dialog {
         Label { text: qsTr("Falls:") }
         SpinBox { id: fallsSpin; Layout.preferredWidth: 200; from: 1; to: 99; value: 1 }
 
-        Label { text: qsTr("Hook Mass (t):") }
-        NumberField { id: hookMassField; Layout.preferredWidth: 200 }
+        Label { text: qsTr("Lower block mass (t):") }
+        NumberField { id: lowerBlockMassField; Layout.preferredWidth: 200 }
 
         Label { text: qsTr("Linear Mass (kg/m):") }
         NumberField {
@@ -92,8 +92,8 @@ Dialog {
             value: 1
         }
 
-        Label { text: qsTr("Split Hook Mass (t):"); visible: splitableCheck.checked }
-        NumberField { id: splitHookMassField; Layout.preferredWidth: 200; visible: splitableCheck.checked }
+        Label { text: qsTr("Split lower block mass (t):"); visible: splitableCheck.checked }
+        NumberField { id: splitLowerBlockMassField; Layout.preferredWidth: 200; visible: splitableCheck.checked }
 
         Label { text: qsTr("DAF:") }
         NumberField { id: dafField; Layout.preferredWidth: 200 }

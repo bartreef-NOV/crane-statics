@@ -352,10 +352,10 @@ class HoistFormatter:
                 editable=payload_only,
             ),
             Column(
-                "Hook Mass (t)",
-                payload_value(lambda h: h.hook_mass_t),
+                "Lower block mass (t)",
+                payload_value(lambda h: h.lower_block_mass_t),
                 decimals=3,
-                field="hook_mass_t",
+                field="lower_block_mass_t",
                 editable=payload_only,
             ),
             Column(
@@ -380,10 +380,10 @@ class HoistFormatter:
                 editable=split_only,
             ),
             Column(
-                "Split Hook Mass (t)",
-                payload_value(lambda h: h.split_hook_mass_t),
+                "Split lower block mass (t)",
+                payload_value(lambda h: h.split_lower_block_mass_t),
                 decimals=3,
-                field="split_hook_mass_t",
+                field="split_lower_block_mass_t",
                 editable=split_only,
             ),
             Column(

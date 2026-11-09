@@ -133,7 +133,7 @@ class DnvProfile:
         if case is None:
             case = self.cases(doc, cond)[0]
         motion = case.vessel_motion
-        w_kN = (chart_max_load_t + mode.hook_mass_t + suspended_rope_mass_t) * gravity
+        w_kN = (chart_max_load_t + mode.lower_block_mass_t + suspended_rope_mass_t) * gravity
 
         records: list[ProvenanceRecord] = []
         warnings: list[str] = []
@@ -173,7 +173,9 @@ class DnvProfile:
             inputs = {"psi_min": floor, "K_kN_m": stiffness_kN_m, "v_r_m_s": v_r}
 
         if w_kN > 0.0:
-            computed = _value_at(factor, w_kN, mode.hook_mass_t, suspended_rope_mass_t, gravity)
+            computed = _value_at(
+                factor, w_kN, mode.lower_block_mass_t, suspended_rope_mass_t, gravity
+            )
             rec_inputs = {
                 **inputs,
                 "W_kN": w_kN,
@@ -388,8 +390,12 @@ def _relative_velocity(
 
 
 def _value_at(
-    factor: DynamicFactor, w_kN: float, hook_mass_t: float, rope_mass_t: float, gravity: float
+    factor: DynamicFactor,
+    w_kN: float,
+    lower_block_mass_t: float,
+    rope_mass_t: float,
+    gravity: float,
 ) -> float:
     """The factor ``F / W`` at working load ``w_kN``."""
-    payload_t = w_kN / gravity - hook_mass_t - rope_mass_t
-    return factor.hook_force_kN(payload_t, hook_mass_t, gravity) / w_kN
+    payload_t = w_kN / gravity - lower_block_mass_t - rope_mass_t
+    return factor.hook_force_kN(payload_t, lower_block_mass_t, gravity) / w_kN

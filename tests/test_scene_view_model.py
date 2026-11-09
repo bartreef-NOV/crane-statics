@@ -85,7 +85,7 @@ class TestSceneViewModelState:
 
         assert state is not None
         assert hoist is not None
-        expected = hoist.hook_mass_t * hoist.hook_daf * scene_vm._hoist_state.gravity_abs()
+        expected = hoist.lower_block_mass_t * hoist.hook_daf * scene_vm._hoist_state.gravity_abs()
         assert state.scene_state.hook_load_kN == pytest.approx(expected)
 
     def test_second_canvas_stays_synchronized(self, scene_vm):

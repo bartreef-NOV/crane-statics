@@ -323,7 +323,7 @@ class HoistStateService:
         return self._session.payload_hoist_by_id(hoist_id)
 
     def effective_hoist_parameters(self, hoist_id: str) -> tuple[int | None, float, float]:
-        """Get (falls, hook_mass_t, support_comp_mass_t) for current runtime mode."""
+        """Get (falls, lower_block_mass_t, support_comp_mass_t) for current runtime mode."""
         doc = self._session.document
         if doc is None:
             return None, 0.0, 0.0
@@ -332,7 +332,7 @@ class HoistStateService:
             return None, 0.0, 0.0
 
         falls = int(hoist.falls) if hoist.falls is not None else None
-        hook_mass_t = float(hoist.hook_mass_t)
+        lower_block_mass_t = float(hoist.lower_block_mass_t)
         support_comp_mass_t = 0.0
 
         state = self._session.hoist_states.get(hoist_id)
@@ -342,13 +342,13 @@ class HoistStateService:
             split_falls = getattr(hoist, "split_falls", None)
             if split_falls is not None:
                 falls = int(split_falls)
-            split_hook_mass_t = getattr(hoist, "split_hook_mass_t", None)
-            if split_hook_mass_t is not None:
-                split_hook_mass_t = float(split_hook_mass_t)
-                support_comp_mass_t = max(0.0, hook_mass_t - split_hook_mass_t)
-                hook_mass_t = split_hook_mass_t
+            split_lower_block_mass_t = getattr(hoist, "split_lower_block_mass_t", None)
+            if split_lower_block_mass_t is not None:
+                split_lower_block_mass_t = float(split_lower_block_mass_t)
+                support_comp_mass_t = max(0.0, lower_block_mass_t - split_lower_block_mass_t)
+                lower_block_mass_t = split_lower_block_mass_t
 
-        return falls, hook_mass_t, support_comp_mass_t
+        return falls, lower_block_mass_t, support_comp_mass_t
 
     def active_hoist_runtime_overrides(self) -> dict[str, dict[str, Any]]:
         """Build runtime override payload for selected hoist (split mode only)."""
@@ -362,7 +362,7 @@ class HoistStateService:
         if hoist is None:
             return {}
 
-        falls, hook_mass_t, support_comp_mass_t = self.effective_hoist_parameters(hoist_id)
+        falls, lower_block_mass_t, support_comp_mass_t = self.effective_hoist_parameters(hoist_id)
         state = self._session.hoist_states.get(hoist_id)
         if state is None or not state.split_mode_active:
             return {}
@@ -370,7 +370,7 @@ class HoistStateService:
             return {}
 
         payload: dict[str, Any] = {
-            "hook_mass_t": float(hook_mass_t),
+            "lower_block_mass_t": float(lower_block_mass_t),
             "support_comp_mass_t": float(support_comp_mass_t),
         }
         if falls is not None:
@@ -388,23 +388,23 @@ class HoistStateService:
             hoist = self._session.payload_hoist_by_id(hoist_id)
 
         payload = max(0.0, float(payload_t))
-        hook_mass_t = 0.0
+        lower_block_mass_t = 0.0
         factor = self.dynamic_factor(hoist)
         if hoist is not None:
-            _, hook_mass_t, _ = self.effective_hoist_parameters(hoist.id)
-        return factor.hook_force_kN(payload, hook_mass_t, self.gravity_abs())
+            _, lower_block_mass_t, _ = self.effective_hoist_parameters(hoist.id)
+        return factor.hook_force_kN(payload, lower_block_mass_t, self.gravity_abs())
 
     def hook_force_kN_to_payload_t(self, hook_force_kN: float) -> float:
         """Inverse of ``payload_t_to_hook_force_kN`` for the selected hoist (floored at 0)."""
         hoist = self.selected_hoist()
-        hook_mass_t = 0.0
+        lower_block_mass_t = 0.0
         factor = self.dynamic_factor(hoist)
         if hoist is not None:
-            _, hook_mass_t, _ = self.effective_hoist_parameters(hoist.id)
+            _, lower_block_mass_t, _ = self.effective_hoist_parameters(hoist.id)
         gravity = self.gravity_abs()
         if gravity <= 0.0:
             return 0.0
-        return max(0.0, factor.payload_t(float(hook_force_kN), hook_mass_t, gravity))
+        return max(0.0, factor.payload_t(float(hook_force_kN), lower_block_mass_t, gravity))
 
 
 class AnalysisCalculator:
@@ -704,12 +704,12 @@ class AnalysisCalculator:
             doc = self._session.document
             label = None if doc is None else foundation_label(doc)
             hoist = self._session.payload_hoist_by_id(hoist_id) if hoist_id else None
-            _falls, hook_mass_t, _support = (
+            _falls, lower_block_mass_t, _support = (
                 self._hoist.effective_hoist_parameters(hoist_id) if hoist_id else (None, 0.0, 0.0)
             )
             lift_args: dict[str, Any] = dict(
                 hook_daf=self._hoist.dynamic_factor(hoist),
-                hook_mass_t=hook_mass_t,
+                lower_block_mass_t=lower_block_mass_t,
                 gravity_m_s2=self._hoist.gravity_abs(),
             )
             pedestal = factored_point(
@@ -763,7 +763,7 @@ class AnalysisCalculator:
             hoist_id,
             enabled,
             hook_daf=self._hoist.dynamic_factor(hoist),
-            hook_mass_t=effective_hook_mass_t,
+            lower_block_mass_t=effective_hook_mass_t,
             wind_speed_m_s=sc.wind_speed_m_s,
             accel_x_m_s2=sc.accel_x_m_s2,
             accel_y_m_s2=sc.accel_y_m_s2,

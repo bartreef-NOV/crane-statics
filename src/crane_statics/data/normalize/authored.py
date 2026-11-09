@@ -284,11 +284,13 @@ def _normalize_payload_hoist(
         "falls": normal_falls,
         "splitable_block": split_mode_obj is not None,
         "split_falls": split_falls,
-        "split_hook_mass_t": float(
-            split_mode_obj["hook_mass_t"] if split_mode_obj is not None else hoist["hook_mass_t"]
+        "split_lower_block_mass_t": float(
+            split_mode_obj["lower_block_mass_t"]
+            if split_mode_obj is not None
+            else hoist["lower_block_mass_t"]
         ),
         "hook": {
-            "mass_t": float(hoist["hook_mass_t"]),
+            "mass_t": float(hoist["lower_block_mass_t"]),
             "daf": float(hoist["daf"]),
             "offlead_deg_limit": float(hoist["offlead_deg"]),
             "sidelead_deg_limit": float(hoist["sidelead_deg"]),
@@ -594,7 +596,7 @@ def _runtime_hoists(
                 "falls",
                 "splitable_block",
                 "split_falls",
-                "split_hook_mass_t",
+                "split_lower_block_mass_t",
                 "split_contractual_points",
                 "linear_mass_kg_m",
                 "lowest_hook_height_m",
@@ -644,9 +646,9 @@ def _runtime_hoists(
                 "falls": hoist.get("falls"),
                 "splitable_block": bool(hoist.get("splitable_block", False)),
                 "split_falls": hoist.get("split_falls"),
-                "split_hook_mass_t": hoist.get("split_hook_mass_t"),
+                "split_lower_block_mass_t": hoist.get("split_lower_block_mass_t"),
                 "split_contractual_points": split_cps,
-                "hook_mass_t": float(hook["mass_t"]),
+                "lower_block_mass_t": float(hook["mass_t"]),
                 "hook_daf": float(hook["daf"]),
                 "offlead_deg": float(hook["offlead_deg_limit"]),
                 "sidelead_deg": float(

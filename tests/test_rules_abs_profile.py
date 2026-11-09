@@ -55,7 +55,7 @@ def _setup(doc, cond, chart_max_load_t=50.0, support_x_m=0.0, hook_t=None, rope_
     hoist = next(h for h in doc.hoists if h.id == hoist_id)
     mode = iter_hoist_analysis_modes(hoist)[0]
     if hook_t is not None:
-        mode = dataclasses.replace(mode, hook_mass_t=hook_t)
+        mode = dataclasses.replace(mode, lower_block_mass_t=hook_t)
     return AbsProfile().lift_setup(
         doc, cond, hoist_id, mode, K, rope_t, chart_max_load_t, support_x_m=support_x_m
     )
@@ -215,7 +215,7 @@ def test_manual_daf_overrides_and_keeps_computed_record():
     assert sources["override"].value == 1.4
     doc = _doc()
     hoist = next(h for h in doc.hoists if h.id == payload_hoist_ids(doc)[0])
-    ll = (50.0 + hoist.hook_mass_t + ROPE_T) * G
+    ll = (50.0 + hoist.lower_block_mass_t + ROPE_T) * G
     assert sources["computed"].value == pytest.approx(ref.abs_vaf_onboard(ll, 0.0), rel=1e-12)
 
 

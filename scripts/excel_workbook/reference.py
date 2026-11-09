@@ -135,10 +135,10 @@ JSON. Lengths m, masses t, areas m^2, angles deg. Top level:
 * ``hoists``: list of {``id``, ``rope_id``, ``is_payload`` (false for the boom hoist),
   ``load_node_id`` (hook node; for the boom hoist the boom sheave), ``support_node_id``,
   ``falls``, ``parts_at_hook`` (rope parts meeting the hook node, which the solver
-  divides the hook load by), ``hook_mass_t``, ``hook_daf``, ``offlead_deg``,
+  divides the hook load by), ``lower_block_mass_t``, ``hook_daf``, ``offlead_deg``,
   ``sidelead_deg`` (authored defaults), ``linear_mass_kg_m``, ``rope_length_m`` (total
   rope incl. spooled), ``max_hook_travel_m``, ``lowest_hook_height_m``,
-  ``splitable_block``, ``split_falls``, ``split_hook_mass_t``, ``spool_node_id``}.
+  ``splitable_block``, ``split_falls``, ``split_lower_block_mass_t``, ``spool_node_id``}.
 
 Name-based rules in the solver and models (audit, 2026-10-25)
 -------------------------------------------------------------
@@ -158,7 +158,7 @@ Rules that key on id strings rather than on explicit fields:
 3. ``rope_id == "boom_hoist"`` exclusions of idle hoists
    (``crane_solver._inactive_rope_mass_per_part``, ``drawn_loads._idle_hook_masses``):
    the runtime boom-hoist rope id is ``BH__rope``, so these never match; the boom hoist
-   is excluded in effect only because its ``hook_mass_t`` is 0.
+   is excluded in effect only because its ``lower_block_mass_t`` is 0.
 4. Fixed topology node ids: ``boom_heel``, ``rear_base``, ``rear_top``, ``front_base``,
    ``front_top``, ``platform_base``, ``platform_heel``, ``platform_rear``,
    ``platform_front`` (``crane_solver._run_statics``, ``engine._out_of_plane_geometry``
@@ -427,7 +427,7 @@ def _expanded_model_from_document(doc: CraneDocument, source: str) -> dict[str, 
                 "support_node_id": h.get("support_node_id"),
                 "falls": h.get("falls"),
                 "parts_at_hook": max(1, int(parts)),
-                "hook_mass_t": float(h["hook_mass_t"]),
+                "lower_block_mass_t": float(h["lower_block_mass_t"]),
                 "hook_daf": float(h["hook_daf"]),
                 "offlead_deg": float(h["offlead_deg"]),
                 "sidelead_deg": float(h["sidelead_deg"]),
@@ -437,7 +437,7 @@ def _expanded_model_from_document(doc: CraneDocument, source: str) -> dict[str, 
                 "lowest_hook_height_m": h.get("lowest_hook_height_m"),
                 "splitable_block": bool(h.get("splitable_block")),
                 "split_falls": h.get("split_falls"),
-                "split_hook_mass_t": h.get("split_hook_mass_t"),
+                "split_lower_block_mass_t": h.get("split_lower_block_mass_t"),
                 "spool_node_id": spool_by_hoist[h["id"]],
             }
         )

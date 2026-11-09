@@ -30,8 +30,8 @@ from pydantic import (
 )
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
-AUTHORED_SCHEMA_MAJOR_VERSION = 11
-AUTHORED_SCHEMA_VERSION = "11.1.0"
+AUTHORED_SCHEMA_MAJOR_VERSION = 12
+AUTHORED_SCHEMA_VERSION = "12.0.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -457,7 +457,7 @@ class AuthoredSplitMode(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    hook_mass_t: float = Field(ge=0, description="Hook block mass in split mode.")
+    lower_block_mass_t: float = Field(ge=0, description="Hook block mass in split mode.")
     falls: int = Field(ge=1, description="Rope falls between the support sheave and the hook.")
     load_chart: list[AuthoredLoadChartPoint] = Field(min_length=1)
 
@@ -484,7 +484,7 @@ class AuthoredPayloadHoist(BaseModel):
                             "parts": 2,
                         },
                     ],
-                    "hook_mass_t": 50.0,
+                    "lower_block_mass_t": 50.0,
                     "falls": 20,
                     "daf": 1.1,
                     "offlead_deg": 1.0,
@@ -500,7 +500,7 @@ class AuthoredPayloadHoist(BaseModel):
         default=None,
         description="Reeving node the hook hangs from. Omit to use the last reeving entry.",
     )
-    hook_mass_t: float = Field(ge=0, description="Hook block mass.")
+    lower_block_mass_t: float = Field(ge=0, description="Hook block mass.")
     falls: int = Field(ge=1, description="Rope falls between the support sheave and the hook.")
     daf: float = Field(ge=1, description="Hook dynamic amplification factor.")
     offlead_deg: float = Field(ge=0)
@@ -527,8 +527,8 @@ class AuthoredPayloadHoist(BaseModel):
         if self.split is not None:
             if self.split.falls > self.falls:
                 raise ValueError("split.falls must be <= falls")
-            if self.split.hook_mass_t > self.hook_mass_t:
-                raise ValueError("split.hook_mass_t must be <= hook_mass_t")
+            if self.split.lower_block_mass_t > self.lower_block_mass_t:
+                raise ValueError("split.lower_block_mass_t must be <= lower_block_mass_t")
         return self
 
 
@@ -705,7 +705,7 @@ EXAMPLE_DOCUMENT: dict = {
                     {"node": "boom_heel"},
                     {"node": "hook", "body": "boom", "u_m": 0.0, "w_m": 0.0},
                 ],
-                "hook_mass_t": 0.0,
+                "lower_block_mass_t": 0.0,
                 "falls": 1,
                 "daf": 1.0,
                 "offlead_deg": 0.0,

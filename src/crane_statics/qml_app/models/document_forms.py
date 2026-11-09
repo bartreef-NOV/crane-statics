@@ -173,14 +173,16 @@ def hoist_fields(hoist: Any, *, is_boom_hoist: bool) -> dict[str, Any]:
         "is_boom_hoist": is_boom_hoist,
         "support_node_id": hoist.support_node_id or hoist.load_node_id,
         "falls": int(hoist.falls or 1),
-        "hook_mass_t": float(hoist.hook_mass_t),
+        "lower_block_mass_t": float(hoist.lower_block_mass_t),
         "linear_mass_kg_m": float(hoist.linear_mass_kg_m),
         "rope_length_m": None if hoist.rope_length_m is None else float(hoist.rope_length_m),
         "lowest_hook_height_m": float(hoist.lowest_hook_height_m or 0.0),
         "splitable_block": bool(hoist.splitable_block),
         "split_falls": int(hoist.split_falls or hoist.falls or 1),
-        "split_hook_mass_t": float(
-            hoist.split_hook_mass_t if hoist.split_hook_mass_t is not None else hoist.hook_mass_t
+        "split_lower_block_mass_t": float(
+            hoist.split_lower_block_mass_t
+            if hoist.split_lower_block_mass_t is not None
+            else hoist.lower_block_mass_t
         ),
         "hook_daf": float(hoist.hook_daf),
         "offlead_deg": float(hoist.offlead_deg),
@@ -249,12 +251,14 @@ def hoist_kwargs(fields: dict) -> dict:
         "hoist_id": str(fields.get("id", "")),
         "support_node_id": str(fields.get("support_node_id", "")),
         "falls": int(fields.get("falls", 1)),
-        "hook_mass_t": float(fields.get("hook_mass_t", 0.0)),
+        "lower_block_mass_t": float(fields.get("lower_block_mass_t", 0.0)),
         "linear_mass_kg_m": max(0.0, float(fields.get("linear_mass_kg_m", 0.0))),
         "lowest_hook_height_m": float(fields.get("lowest_hook_height_m", 0.0)),
         "splitable_block": splitable,
         "split_falls": int(fields.get("split_falls", 1)) if splitable else None,
-        "split_hook_mass_t": float(fields.get("split_hook_mass_t", 0.0)) if splitable else None,
+        "split_lower_block_mass_t": (
+            float(fields.get("split_lower_block_mass_t", 0.0)) if splitable else None
+        ),
         "hook_daf": float(fields.get("hook_daf", 1.0)),
         "offlead_deg": float(fields.get("offlead_deg", 0.0)),
         "sidelead_deg": float(fields.get("sidelead_deg", 0.0)),

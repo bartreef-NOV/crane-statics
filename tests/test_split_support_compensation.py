@@ -27,10 +27,10 @@ def _platform_reaction(calc: CraneCalculator, overrides=None) -> dict[str, float
 
 def test_split_compensation_mass_adds_no_side_force() -> None:
     doc = load_document(EXAMPLE)
-    hook_mass_t = next(h for h in doc.hoists if h.id == "MH").hook_mass_t
+    lower_block_mass_t = next(h for h in doc.hoists if h.id == "MH").lower_block_mass_t
     calc = CraneCalculator(doc)
     normal = _platform_reaction(calc)
-    split = _platform_reaction(calc, {"MH": {"hook_mass_t": hook_mass_t - 10.0}})
+    split = _platform_reaction(calc, {"MH": {"lower_block_mass_t": lower_block_mass_t - 10.0}})
 
     # The compensation mass sits on the support node (y = 0): no side force, no extra Mx.
     assert split["Fy"] == pytest.approx(normal["Fy"], abs=1e-9)

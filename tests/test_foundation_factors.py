@@ -56,7 +56,7 @@ def _ll(hook_kN: float) -> float:
 
 def _cap(calc, point, limits, scale=None):
     return calc.compute_allowable_load(
-        point, limits, hook_daf=DAF, hook_mass_t=HOOK_T, demand_scale=scale
+        point, limits, hook_daf=DAF, lower_block_mass_t=HOOK_T, demand_scale=scale
     ).max_allowable_load_kN
 
 
@@ -68,11 +68,11 @@ def test_no_scale_equals_todays_capacity(solved) -> None:
         "platform_base_fradial": {"fradial": 500.0},
         "boom_hoist_T": {"T": 3000.0},
     }
-    today = calc.compute_allowable_load(point, limits, hook_daf=DAF, hook_mass_t=HOOK_T)
+    today = calc.compute_allowable_load(point, limits, hook_daf=DAF, lower_block_mass_t=HOOK_T)
     no_scales: tuple[Optional[dict[str, DemandScale]], ...] = (None, {})
     for scale in no_scales:
         capacity = calc.compute_allowable_load(
-            point, limits, hook_daf=DAF, hook_mass_t=HOOK_T, demand_scale=scale
+            point, limits, hook_daf=DAF, lower_block_mass_t=HOOK_T, demand_scale=scale
         )
         assert capacity == today
 
@@ -135,7 +135,7 @@ def test_retaining_limit_takes_the_retaining_factor(solved) -> None:
         point,
         {"platform_base_retaining_Fz": {"Fz": limit}},
         hook_daf=DAF,
-        hook_mass_t=HOOK_T,
+        lower_block_mass_t=HOOK_T,
         demand_scale=scales,
     )
     assert capacity.max_allowable_load_kN == pytest.approx((limit - b) / (3.75 * s), rel=1e-9)
@@ -321,7 +321,7 @@ def test_envelope_magnitude_pruning_is_exact_under_a_load_dependent_scale(
             offlead_deg=2.0,
             sidelead_deg=1.0,
             hook_daf=DAF,
-            hook_mass_t=HOOK_T,
+            lower_block_mass_t=HOOK_T,
             demand_scale=scales,
         ).max_allowable_load_kN
 
@@ -395,7 +395,13 @@ def test_factored_point_and_capacity_share_one_live_load_default(solved) -> None
     limit = b + 900.0 * s
     capacity = _cap(calc, point, {"platform_base_Fz": {"Fz": limit}}, {"platform_base": scale})
     factored = factored_point(
-        point, scale, capacity, "platform_base", hook_daf=DAF, hook_mass_t=HOOK_T, gravity_m_s2=G
+        point,
+        scale,
+        capacity,
+        "platform_base",
+        hook_daf=DAF,
+        lower_block_mass_t=HOOK_T,
+        gravity_m_s2=G,
     )
     demand = factored.baseline_reactions["platform_base"]["Fz"] + (
         factored.sensitivity_reactions["platform_base"]["Fz"] * capacity
@@ -478,9 +484,9 @@ def test_auto_set_values_match_the_hand_factored_demand(monkeypatch) -> None:
         )
         assert pt is not None
         setup = lift.setup(condition, hoist.id, mode, angle)
-        hook_kN = setup.factor.hook_force_kN(cp.load_t, mode.hook_mass_t, g)
+        hook_kN = setup.factor.hook_force_kN(cp.load_t, mode.lower_block_mass_t, g)
         rope_t = lift.suspended_rope_mass_t(hoist.id, mode, angle)
-        ll = (cp.load_t + mode.hook_mass_t + rope_t) * g
+        ll = (cp.load_t + mode.lower_block_mass_t + rope_t) * g
         b, s = _fz(pt)
         assert result.required_kN == pytest.approx(abs(b + live(ll) * s * hook_kN), rel=1e-9)
 
@@ -531,7 +537,7 @@ def test_dnv_sf1_envelope_scales_dead_and_live_terms() -> None:
                 offlead_deg=0.0,
                 sidelead_deg=0.0,
                 hook_daf=setup.factor,
-                hook_mass_t=mode.hook_mass_t,
+                lower_block_mass_t=mode.lower_block_mass_t,
                 demand_scale=scale,
             ).max_allowable_load_kN
 

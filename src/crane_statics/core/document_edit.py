@@ -126,10 +126,10 @@ def build_payload_hoist(
     support_node_id: str,
     *,
     falls: int = 1,
-    hook_mass_t: float = 0.0,
+    lower_block_mass_t: float = 0.0,
     splitable_block: bool = False,
     split_falls: Optional[int] = None,
-    split_hook_mass_t: Optional[float] = None,
+    split_lower_block_mass_t: Optional[float] = None,
     hook_daf: float = 1.0,
     offlead_deg: float = 0.0,
     sidelead_deg: float = 0.0,
@@ -142,7 +142,9 @@ def build_payload_hoist(
     if splitable_block:
         if split_falls is None or int(split_falls) > int(falls):
             raise DocumentEditError("Split falls must be <= normal falls")
-        if split_hook_mass_t is None or float(split_hook_mass_t) > float(hook_mass_t):
+        if split_lower_block_mass_t is None or float(split_lower_block_mass_t) > float(
+            lower_block_mass_t
+        ):
             raise DocumentEditError("Split hook mass must be <= normal hook mass")
 
     return Hoist(
@@ -151,10 +153,12 @@ def build_payload_hoist(
         load_node_id=_managed_hook_node_id(hoist_id),
         support_node_id=support_node_id.strip(),
         falls=int(falls),
-        hook_mass_t=float(hook_mass_t),
+        lower_block_mass_t=float(lower_block_mass_t),
         splitable_block=bool(splitable_block),
         split_falls=None if split_falls is None else int(split_falls),
-        split_hook_mass_t=None if split_hook_mass_t is None else float(split_hook_mass_t),
+        split_lower_block_mass_t=(
+            None if split_lower_block_mass_t is None else float(split_lower_block_mass_t)
+        ),
         hook_daf=float(hook_daf),
         offlead_deg=float(offlead_deg),
         sidelead_deg=float(sidelead_deg),

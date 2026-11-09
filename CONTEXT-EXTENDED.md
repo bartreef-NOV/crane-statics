@@ -15,7 +15,7 @@ Decisions that should not be re-litigated live in [docs/adr/](docs/adr/).
 ## The document
 
 **Authored document** — the JSON a user writes and saves, validated against the
-strict `crane-statics` schema (currently `11.1.0`, in `src/crane_statics/schemas/`).
+strict `crane-statics` schema (currently `12.0.0`, in `src/crane_statics/schemas/`).
 It is allowed to be terse: omitted defaults, omitted empty arrays, no derived nodes.
 `data/models.py::document_to_authored_form` converts back to it for saving, so a
 load/save round-trip must not invent content.

@@ -316,7 +316,7 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
             }
             continue
 
-        hook_mass = float(hoist.get("hook_mass_t", 0.0))
+        lower_block_mass = float(hoist.get("lower_block_mass_t", 0.0))
         hook_offlead = float(hoist.get("offlead_deg", 0.0))
         hook_sidelead = float(hoist.get("sidelead_deg", hook_offlead))
         load_node_id = str(hoist.get("load_node_id") or "")
@@ -361,7 +361,7 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         )
         if support_name != last:
             hoist_out["support_node"] = support_name
-        hoist_out["hook_mass_t"] = hook_mass
+        hoist_out["lower_block_mass_t"] = lower_block_mass
         hoist_out["falls"] = int(falls)
         hoist_out["daf"] = float(hoist.get("hook_daf", 1.0))
         hoist_out["offlead_deg"] = hook_offlead
@@ -373,9 +373,9 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         hoist_out["load_chart"] = _chart(hoist.get("contractual_points", []))
         if bool(hoist.get("splitable_block", False)):
             split_falls = hoist.get("split_falls")
-            split_mass = hoist.get("split_hook_mass_t")
+            split_mass = hoist.get("split_lower_block_mass_t")
             hoist_out["split"] = {
-                "hook_mass_t": float(hook_mass if split_mass is None else split_mass),
+                "lower_block_mass_t": float(lower_block_mass if split_mass is None else split_mass),
                 "falls": int(falls if split_falls is None else split_falls),
                 "load_chart": _chart(hoist.get("split_contractual_points", [])),
             }

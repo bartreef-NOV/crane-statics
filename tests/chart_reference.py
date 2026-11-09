@@ -31,7 +31,7 @@ def reference_capacity(
     limits: dict[str, dict],
     *,
     hook_daf: float,
-    hook_mass_t: float,
+    lower_block_mass_t: float,
     overrides: dict[str, dict[str, Any]] | None,
     slew_step_deg: float = 15.0,
     wind_step_deg: float = 15.0,
@@ -44,7 +44,7 @@ def reference_capacity(
         angle_deg,
         [limits],
         hook_daf=hook_daf,
-        hook_mass_t=hook_mass_t,
+        lower_block_mass_t=lower_block_mass_t,
         overrides=overrides,
         slew_step_deg=slew_step_deg,
         wind_step_deg=wind_step_deg,
@@ -59,7 +59,7 @@ def reference_capacities(
     limit_sets: Sequence[dict[str, dict]],
     *,
     hook_daf: float,
-    hook_mass_t: float,
+    lower_block_mass_t: float,
     overrides: dict[str, dict[str, Any]] | None,
     slew_step_deg: float = 15.0,
     wind_step_deg: float = 15.0,
@@ -95,7 +95,10 @@ def reference_capacities(
                     lead_pt = compose_lead_channel_point(pt, off, side)
                     for index, limits in enumerate(limit_sets):
                         cap = calc.compute_allowable_load(
-                            lead_pt, limits, hook_daf=hook_daf, hook_mass_t=hook_mass_t
+                            lead_pt,
+                            limits,
+                            hook_daf=hook_daf,
+                            lower_block_mass_t=lower_block_mass_t,
                         )
                         current = best[index]
                         if (

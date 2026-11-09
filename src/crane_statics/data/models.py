@@ -215,7 +215,7 @@ class Hoist(BaseModel):
     falls: Optional[int] = Field(
         default=None, description="Hook falls count for managed hook synthesis"
     )
-    hook_mass_t: float = Field(default=0.0, description="Hook block mass in tonnes")
+    lower_block_mass_t: float = Field(default=0.0, description="Hook block mass in tonnes")
     hook_daf: float = Field(default=1.0, description="Dynamic amplification factor")
     outreach_min_m: Optional[float] = Field(default=None, description="Minimum outreach")
     outreach_max_m: Optional[float] = Field(default=None, description="Maximum outreach")
@@ -227,7 +227,7 @@ class Hoist(BaseModel):
     split_falls: Optional[int] = Field(
         default=None, description="Hook falls count when block is split"
     )
-    split_hook_mass_t: Optional[float] = Field(
+    split_lower_block_mass_t: Optional[float] = Field(
         default=None, description="Hook block mass in tonnes when split"
     )
     split_contractual_points: list[ContractualPoint] = Field(default_factory=list)
@@ -294,20 +294,20 @@ class Hoist(BaseModel):
         if self.outreach_min_m > self.outreach_max_m:
             raise ValueError("outreach_min_m must be <= outreach_max_m")
 
-        if self.split_hook_mass_t is not None and float(self.split_hook_mass_t) < 0.0:
-            raise ValueError("split_hook_mass_t must be >= 0")
+        if self.split_lower_block_mass_t is not None and float(self.split_lower_block_mass_t) < 0.0:
+            raise ValueError("split_lower_block_mass_t must be >= 0")
 
         if self.splitable_block:
             if self.falls is None:
                 raise ValueError("splitable_block requires falls")
             if self.split_falls is None:
                 raise ValueError("splitable_block requires split_falls")
-            if self.split_hook_mass_t is None:
-                raise ValueError("splitable_block requires split_hook_mass_t")
+            if self.split_lower_block_mass_t is None:
+                raise ValueError("splitable_block requires split_lower_block_mass_t")
             if int(self.split_falls) > int(self.falls):
                 raise ValueError("split_falls must be <= falls")
-            if float(self.split_hook_mass_t) > float(self.hook_mass_t):
-                raise ValueError("split_hook_mass_t must be <= hook_mass_t")
+            if float(self.split_lower_block_mass_t) > float(self.lower_block_mass_t):
+                raise ValueError("split_lower_block_mass_t must be <= lower_block_mass_t")
             if not self.split_contractual_points:
                 raise ValueError("splitable_block requires split_contractual_points")
 

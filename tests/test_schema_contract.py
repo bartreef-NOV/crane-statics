@@ -39,3 +39,17 @@ def test_package_data_glob_still_matches_schema_filename():
     assert any(
         fnmatch.fnmatch(relative_path, pattern) for pattern in patterns
     ), f"{relative_path!r} is not matched by any package-data glob {patterns!r} in pyproject.toml"
+
+
+def test_authored_schema_version_is_12():
+    from crane_statics.data.authored_models import AUTHORED_SCHEMA_VERSION
+
+    assert AUTHORED_SCHEMA_VERSION == "12.0.0"
+    assert AUTHORED_SCHEMA_MAJOR_VERSION == 12
+
+
+def test_hoist_field_is_lower_block_mass():
+    schema = generate_schema()
+    hoist = schema["$defs"]["AuthoredPayloadHoist"]
+    assert "lower_block_mass_t" in hoist["properties"]
+    assert "hook_mass_t" not in render(schema)

@@ -75,7 +75,7 @@ def case_doc(
     condition: ConditionSpec,
     *,
     rated_load_t: float,
-    hook_mass_t: Optional[float] = None,
+    lower_block_mass_t: Optional[float] = None,
     crane_class: Optional[str] = None,
     cabin: Optional[bool] = None,
 ) -> CraneDocument:
@@ -104,8 +104,8 @@ def case_doc(
                     ContractualPoint(load_t=rated_load_t, outreach_m=OUTREACH_M)
                 ],
             }
-            if hook_mass_t is not None:
-                update["hook_mass_t"] = hook_mass_t
+            if lower_block_mass_t is not None:
+                update["lower_block_mass_t"] = lower_block_mass_t
             h = h.model_copy(update=update)
         hoists.append(h)
     doc = doc.model_copy(
@@ -114,8 +114,8 @@ def case_doc(
     return without_suspended_rope(doc)
 
 
-def hook_mass_t(doc: CraneDocument) -> float:
-    return float(next(h for h in doc.hoists if h.id == HOOK).hook_mass_t)
+def lower_block_mass_t(doc: CraneDocument) -> float:
+    return float(next(h for h in doc.hoists if h.id == HOOK).lower_block_mass_t)
 
 
 def sweep(doc: CraneDocument, limits: dict) -> dict[str, Any]:
@@ -139,7 +139,7 @@ def allowable_hook_force_kN(
     """
     legacy = legacy_equivalent(doc, max(wind_m_s, 1e-6), motion)
     assert next(h for h in legacy.hoists if h.id == HOOK).hook_daf == 1.0
-    return (capacity_t(sweep(legacy, limits)) + hook_mass_t(doc)) * G
+    return (capacity_t(sweep(legacy, limits)) + lower_block_mass_t(doc)) * G
 
 
 def live_load_at(force_kN: float, factor: Callable[[float], float]) -> float:
@@ -225,13 +225,13 @@ def test_abs_onboard_vaf(no_lateral: None) -> None:
     factor = lambda ll: ref.abs_vaf_onboard(ll, a_v)  # noqa: E731
     ll = live_load_at(force, factor)
     assert 1.1 + a_v < factor(ll) < 1.33 + a_v  # the linear range, not a clamp
-    assert capacity_t(payload) == approx(oracle_capacity_t(force, factor, hook_mass_t(doc)))
+    assert capacity_t(payload) == approx(oracle_capacity_t(force, factor, lower_block_mass_t(doc)))
     records, _warnings, case = records_at(payload)
     assert case == "In-service"
     rec = records["dynamic_factor"]
     assert rec.inputs["a_v_g"] == approx(a_v)
     assert rec.value == approx(ref.abs_vaf_onboard(rec.inputs["LL_kN"], a_v))
-    assert rec.inputs["LL_kN"] == approx((100.0 + hook_mass_t(doc)) * G)
+    assert rec.inputs["LL_kN"] == approx((100.0 + lower_block_mass_t(doc)) * G)
 
 
 @pytest.mark.parametrize(
@@ -242,7 +242,9 @@ def test_abs_onboard_vaf(no_lateral: None) -> None:
 def test_abs_onboard_vaf_clamps(no_lateral: None, target_ll: float, bound: str) -> None:
     """A2/A3: the onboard VAF is clamped to [1.1, 1.33] (a_v = 0)."""
     cond = ConditionSpec(name="onboard", wind_speed_m_s=10.0)
-    doc = case_doc(ABS_EXAMPLE, cond, rated_load_t=10.0, hook_mass_t=5.0, crane_class="offshore")
+    doc = case_doc(
+        ABS_EXAMPLE, cond, rated_load_t=10.0, lower_block_mass_t=5.0, crane_class="offshore"
+    )
     limits = {MH_ROPE_LIMIT: {"T": ref.abs_vaf_onboard(target_ll, 0.0) * target_ll / MH_FALLS}}
 
     force = allowable_hook_force_kN(doc, limits, 10.0, VesselMotion())
@@ -250,7 +252,7 @@ def test_abs_onboard_vaf_clamps(no_lateral: None, target_ll: float, bound: str) 
 
     factor = lambda ll: ref.abs_vaf_onboard(ll, 0.0)  # noqa: E731
     assert factor(live_load_at(force, factor)) == (1.33 if bound == "cap" else 1.1)
-    assert capacity_t(payload) == approx(oracle_capacity_t(force, factor, hook_mass_t(doc)))
+    assert capacity_t(payload) == approx(oracle_capacity_t(force, factor, lower_block_mass_t(doc)))
 
 
 def test_abs_offboard_vaf(no_lateral: None) -> None:
@@ -289,7 +291,7 @@ def test_abs_offboard_vaf(no_lateral: None) -> None:
     factor = lambda ll: ref.abs_vaf_offboard(ll, k, v_r, a_v)  # noqa: E731
     ll = live_load_at(force, factor)
     assert factor(ll) > ref.abs_vaf_onboard(ll, a_v)  # the relative-velocity term governs
-    assert capacity_t(payload) == approx(oracle_capacity_t(force, factor, hook_mass_t(doc)))
+    assert capacity_t(payload) == approx(oracle_capacity_t(force, factor, lower_block_mass_t(doc)))
     assert rec.value == approx(ref.abs_vaf_offboard(rec.inputs["LL_kN"], k, v_r, a_v))
 
 
@@ -324,7 +326,7 @@ def test_abs_offboard_never_below_onboard(no_lateral: None) -> None:
     ll = live_load_at(force, factor)
     assert 1.0 + v_r * math.sqrt(k / (G * ll)) < ref.abs_vaf_onboard(ll, a_v)
     assert factor(ll) == ref.abs_vaf_onboard(ll, a_v)  # the onboard VAF governs
-    assert capacity_t(payload) == approx(oracle_capacity_t(force, factor, hook_mass_t(doc)))
+    assert capacity_t(payload) == approx(oracle_capacity_t(force, factor, lower_block_mass_t(doc)))
 
 
 def test_abs_heavy_lift_vaf(no_lateral: None) -> None:
@@ -340,7 +342,7 @@ def test_abs_heavy_lift_vaf(no_lateral: None) -> None:
     vaf = ref.abs_heavy_lift_vaf(A_Z_005G / G)
     assert vaf == pytest.approx(1.15)
     assert capacity_t(payload) == approx(
-        oracle_capacity_t(force, lambda _ll: vaf, hook_mass_t(doc))
+        oracle_capacity_t(force, lambda _ll: vaf, lower_block_mass_t(doc))
     )
     assert records_at(payload)[0]["dynamic_factor"].value == approx(vaf)
 
@@ -374,7 +376,11 @@ def test_payload_hoist_without_hook_mass_or_load_chart_sweeps(example: Path) -> 
     runs and warns instead of failing."""
     doc = without_suspended_rope(load_document(example))
     hoists = [
-        h.model_copy(update={"hook_mass_t": 0.0, "contractual_points": []}) if h.id == "AH" else h
+        (
+            h.model_copy(update={"lower_block_mass_t": 0.0, "contractual_points": []})
+            if h.id == "AH"
+            else h
+        )
         for h in doc.hoists
     ]
     doc = doc.model_copy(update={"hoists": hoists})
@@ -407,7 +413,7 @@ def test_dnv_case_i_offboard_psi(no_lateral: None) -> None:
     v_l = float(next(h for h in doc.hoists if h.id == HOOK).max_hoisting_speed_m_s or 0.0)
     v_r = ref.dnv_v_r(v_l, 0.8, 0.6, 2.0)
     assert v_r == pytest.approx(1.3)
-    w_max = (200.0 + hook_mass_t(doc)) * G
+    w_max = (200.0 + lower_block_mass_t(doc)) * G
     floor = ref.dnv_psi_floor(w_max)
     limits = {MH_ROPE_LIMIT: {"T": 4000.0 / MH_FALLS}}
 
@@ -424,7 +430,7 @@ def test_dnv_case_i_offboard_psi(no_lateral: None) -> None:
     factor = lambda w: max(ref.dnv_psi(c, w, v_r), floor)  # noqa: E731
     w = live_load_at(force, factor)
     assert ref.dnv_psi(c, w, v_r) > floor  # psi governs, not its floor
-    assert capacity_t(payload) == approx(oracle_capacity_t(force, factor, hook_mass_t(doc)))
+    assert capacity_t(payload) == approx(oracle_capacity_t(force, factor, lower_block_mass_t(doc)))
 
 
 def test_dnv_case_ii_governs_with_wind_and_heel(no_lateral: None) -> None:
@@ -442,9 +448,9 @@ def test_dnv_case_ii_governs_with_wind_and_heel(no_lateral: None) -> None:
 
     payload = sweep(doc, limits)
 
-    psi = ref.dnv_psi_floor((150.0 + hook_mass_t(doc)) * G)
+    psi = ref.dnv_psi_floor((150.0 + lower_block_mass_t(doc)) * G)
     assert psi == pytest.approx(1.3)
-    expected = oracle_capacity_t(min(case_i, case_ii), lambda _w: psi, hook_mass_t(doc))
+    expected = oracle_capacity_t(min(case_i, case_ii), lambda _w: psi, lower_block_mass_t(doc))
     assert capacity_t(payload) == approx(expected)
     records, _warnings, case = records_at(payload)
     assert case == "Case II"
@@ -459,7 +465,7 @@ def test_dnv_case_ii_governs_with_wind_and_heel(no_lateral: None) -> None:
 def test_dnv_psi_floor_bands(no_lateral: None, w_max_kN: float, expected_floor: float) -> None:
     """D2-D4: the onboard psi is the 8.2.2.1 floor at the curve's maximum working load."""
     cond = ConditionSpec(name="onboard", wind_speed_m_s=10.0)
-    hook_t = hook_mass_t(load_document(DNV_EXAMPLE))
+    hook_t = lower_block_mass_t(load_document(DNV_EXAMPLE))
     rated = w_max_kN / G - hook_t  # W = rated load + hook block (massless rope)
     doc = case_doc(DNV_EXAMPLE, cond, rated_load_t=rated, cabin=False)
     limits = {MH_ROPE_LIMIT: {"T": 600.0}}
@@ -493,8 +499,8 @@ def test_dnv_sf1_on_the_capacity_curve(no_lateral: None) -> None:
         doc, {"platform_base_Fz": {"Fz": limit / sf1}}, 0.0, VesselMotion()
     )
 
-    psi = ref.dnv_psi_floor((rated + hook_mass_t(doc)) * G)
-    expected = oracle_capacity_t(force, lambda _w: psi, hook_mass_t(doc))
+    psi = ref.dnv_psi_floor((rated + lower_block_mass_t(doc)) * G)
+    expected = oracle_capacity_t(force, lambda _w: psi, lower_block_mass_t(doc))
     assert capacity_t(payload) == approx(expected)
     assert records_at(payload)[0]["pedestal_factor"].value == approx(sf1)
 
@@ -542,7 +548,7 @@ def test_abs_pedestal_and_retaining_rows(
     """A11-A15 and 5.13.5(c): pedestal rows b + PF(LL) s H, retaining rows b + 3.75 s H."""
     cond = ConditionSpec(name="onboard", wind_speed_m_s=10.0)
     doc = case_doc(
-        ABS_EXAMPLE, cond, rated_load_t=100.0, hook_mass_t=hook_t, crane_class=crane_class
+        ABS_EXAMPLE, cond, rated_load_t=100.0, lower_block_mass_t=hook_t, crane_class=crane_class
     )
     if crane_class == "heavy_lift":
         vaf: Callable[[float], float] = lambda _ll: ref.abs_heavy_lift_vaf(0.0)  # noqa: E731
@@ -580,7 +586,7 @@ def test_dnv_sf1_rows(cabin: bool, swl_kN: float, expected_sf1: Optional[float])
     assert rated_kN == swl_kN  # exact: the 2500 kN boundary is hit, not approached
     if swl_kN == 2200.0:
         # SWL excludes the hook block (4.1.2.1): with it the load would be above 2500 kN.
-        assert swl_kN + hook_mass_t(doc) * G > 2500.0
+        assert swl_kN + lower_block_mass_t(doc) * G > 2500.0
     hook_kN = 2500.0
 
     factored, plain, b, s = _factored_rows(doc, hook_kN)

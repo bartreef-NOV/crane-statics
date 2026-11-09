@@ -108,7 +108,7 @@ def build_absolute_outreach_grid(lo_out: float, hi_out: float, outreach_step: fl
 def _split_applies(hoist: Any) -> bool:
     return (
         bool(getattr(hoist, "splitable_block", False))
-        and getattr(hoist, "split_hook_mass_t", None) is not None
+        and getattr(hoist, "split_lower_block_mass_t", None) is not None
         and getattr(hoist, "split_falls", None) is not None
     )
 
@@ -221,7 +221,7 @@ def run_mode_sweep(
         case: _SweepCase,
         probes: ProbeSet,
         design_limits_map: dict[str, dict],
-        hook_mass_t: float,
+        lower_block_mass_t: float,
         factor: DynamicFactor,
         lateral: Optional[HookLateral],
         scales: Optional[Mapping[str, DemandScale]],
@@ -234,7 +234,7 @@ def run_mode_sweep(
             offlead_deg=offlead_deg,
             sidelead_deg=sidelead_deg,
             hook_daf=factor,
-            hook_mass_t=hook_mass_t,
+            lower_block_mass_t=lower_block_mass_t,
             hook_lateral=lateral,
             demand_scale=scales,
         )
@@ -243,7 +243,7 @@ def run_mode_sweep(
         case: _SweepCase,
         angle: float,
         probes: ProbeSet,
-        hook_mass_t: float,
+        lower_block_mass_t: float,
         factor: DynamicFactor,
         lateral: Optional[HookLateral],
         scales: Optional[Mapping[str, DemandScale]],
@@ -258,7 +258,9 @@ def run_mode_sweep(
             def compute(lid: str = lid, comps: dict = comps) -> LimitResult:
                 if not leads:
                     leads.extend(lead_points(probes, offlead_deg, sidelead_deg, lateral))
-                cap = _capacity(case, probes, {lid: comps}, hook_mass_t, factor, lateral, scales)
+                cap = _capacity(
+                    case, probes, {lid: comps}, lower_block_mass_t, factor, lateral, scales
+                )
                 # Sensitivities do not depend on motion or wind, but the lead channels
                 # add to them: a limit responds if it does at any lead sign case.
                 responsive = any(limit_responds_to_hook_load(doc, pt, lid, comps) for pt in leads)
@@ -316,7 +318,7 @@ def run_mode_sweep(
         scales = lift.demand_scales(case.condition, hoist_id, mode, angle, setup)
         scale_key = (setup.foundation.dead_factor, setup.retaining_live_factor)
         results = _limit_results(
-            case, angle, probes, mode.hook_mass_t, factor, lateral, scales, scale_key
+            case, angle, probes, mode.lower_block_mass_t, factor, lateral, scales, scale_key
         )
         if results:
             # One factor per case and angle: the lowest hook load is the lowest payload.
@@ -324,7 +326,7 @@ def run_mode_sweep(
         else:
             # No limit applies: the unlimited capacity.
             load_t = _capacity(
-                case, probes, enabled_limits, mode.hook_mass_t, factor, lateral, scales
+                case, probes, enabled_limits, mode.lower_block_mass_t, factor, lateral, scales
             ).max_allowable_load_t
         case_spec = case.condition.case
         trails[case.condition.name] = (

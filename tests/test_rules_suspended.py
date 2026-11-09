@@ -238,7 +238,7 @@ def _split_doc(doc: CraneDocument) -> CraneDocument:
                 update={
                     "splitable_block": True,
                     "split_falls": 10,
-                    "split_hook_mass_t": 30.0,
+                    "split_lower_block_mass_t": 30.0,
                     "split_contractual_points": h.contractual_points,
                 }
             )

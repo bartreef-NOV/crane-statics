@@ -160,7 +160,7 @@ def test_cases_exercise_their_feature() -> None:
     model = expanded_model(YAML_PATH)
     mh = next(h for h in model["hoists"] if h["id"] == base.hoist_id)
     g = abs(model["environment"]["gravity_m_s2"])
-    expected = mh["hook_mass_t"] * (g + idle.accel_z_m_s2) / mh["falls"]
+    expected = mh["lower_block_mass_t"] * (g + idle.accel_z_m_s2) / mh["falls"]
     assert math.isclose(idle_results[f"tension.{base.hoist_id}"], expected, abs_tol=1e-9)
 
 

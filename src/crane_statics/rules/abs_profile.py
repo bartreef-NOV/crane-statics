@@ -117,7 +117,7 @@ class AbsProfile:
         # reference point stays on the vessel while the boom slews about x = 0. Both levers
         # are at most |x_ref| + |x_tip|, and |alpha_pitch_c| <= |alpha_pitch| + |alpha_roll|.
         a_v_g, lever_m = tip_vertical_accel_g(motion, support_x_m)
-        ll_kN = (chart_max_load_t + mode.hook_mass_t + suspended_rope_mass_t) * gravity
+        ll_kN = (chart_max_load_t + mode.lower_block_mass_t + suspended_rope_mass_t) * gravity
 
         records: list[ProvenanceRecord] = []
         warnings: list[str] = []
@@ -160,7 +160,9 @@ class AbsProfile:
             min_side_clause = _CL_ONBOARD
 
         if ll_kN > 0.0:
-            computed = _value_at(factor, ll_kN, mode.hook_mass_t, suspended_rope_mass_t, gravity)
+            computed = _value_at(
+                factor, ll_kN, mode.lower_block_mass_t, suspended_rope_mass_t, gravity
+            )
             rec_inputs = {
                 **inputs,
                 "LL_kN": ll_kN,
@@ -375,8 +377,12 @@ def _relative_velocity(
 
 
 def _value_at(
-    factor: DynamicFactor, ll_kN: float, hook_mass_t: float, rope_mass_t: float, gravity: float
+    factor: DynamicFactor,
+    ll_kN: float,
+    lower_block_mass_t: float,
+    rope_mass_t: float,
+    gravity: float,
 ) -> float:
     """The factor ``F / LL`` at live load ``ll_kN``."""
-    payload_t = ll_kN / gravity - hook_mass_t - rope_mass_t
-    return factor.hook_force_kN(payload_t, hook_mass_t, gravity) / ll_kN
+    payload_t = ll_kN / gravity - lower_block_mass_t - rope_mass_t
+    return factor.hook_force_kN(payload_t, lower_block_mass_t, gravity) / ll_kN

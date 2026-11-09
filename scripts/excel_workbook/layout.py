@@ -423,7 +423,7 @@ HOIST_FIELDS = (
     _f("load_node_id", "Hook node", kind="text", note="boom hoist: its boom sheave"),
     _f("support_node_id", "Support node", kind="text", note="sheave the hook hangs below"),
     _f("falls", "Falls"),
-    _f("hook_mass_t", "Hook block mass", "t"),
+    _f("lower_block_mass_t", "Hook block mass", "t"),
     _f("hook_daf", "Hook DAF"),
     _f("offlead_deg", "Offlead (document default)", "deg", note="scene value is used"),
     _f("sidelead_deg", "Sidelead (document default)", "deg", note="scene value is used"),
@@ -433,7 +433,7 @@ HOIST_FIELDS = (
     _f("lowest_hook_height_m", "Lowest hook height", "m", note="information only"),
     _f("splitable_block", "Splitable block", "1/0", "flag", note="split mode unsupported"),
     _f("split_falls", "Split falls", note="split mode unsupported"),
-    _f("split_hook_mass_t", "Split hook mass", "t", note="split mode unsupported"),
+    _f("split_lower_block_mass_t", "Split hook mass", "t", note="split mode unsupported"),
 )
 
 # -- Geometry sheet ------------------------------------------------------------------
@@ -605,7 +605,7 @@ ROPE_TENSION_FIELDS = (
     _f("hoist_row", "Row of its hoist in hoists", "row", note="first active hoist; 0 = none"),
     _f("hook_node_id", "Its hoist's hook node", kind="text"),
     _f("n_parts", "Parts at the hook", note="max(1, sum of mults touching the hook)"),
-    _f("hook_mass_t", "Its hoist's hook mass", "t"),
+    _f("lower_block_mass_t", "Its hoist's hook mass", "t"),
     _f("tension_kN", "Tension", "kN", note="0 for the solve rope (solved on Statics)"),
 )
 

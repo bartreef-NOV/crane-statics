@@ -11,7 +11,7 @@ from crane_statics.core.io import DocumentIOError, save_document
 
 def _minimal_v6() -> dict:
     return {
-        "schema": {"name": "crane-statics", "version": "11.0.0"},
+        "schema": {"name": "crane-statics", "version": "12.0.0"},
         "metadata": {"name": "V6 Minimal"},
         "model_definition": {
             "environment": {
@@ -36,7 +36,7 @@ def _minimal_v6() -> dict:
                         {"node": "boom_heel"},
                         {"node": "hook", "body": "boom", "u_m": 40.0, "w_m": -2.0},
                     ],
-                    "hook_mass_t": 0.0,
+                    "lower_block_mass_t": 0.0,
                     "falls": 1,
                     "daf": 1.0,
                     "offlead_deg": 0.0,
@@ -158,6 +158,16 @@ def test_load_document_rejects_schema_v6(tmp_path):
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
     with pytest.raises(DocumentIOError, match="Unsupported authored schema version"):
+        load_document(path)
+
+
+def test_v11_file_is_rejected_with_rename_hint(tmp_path):
+    data = _minimal_v6()
+    data["schema"]["version"] = "11.1.0"
+    path = tmp_path / "model.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    with pytest.raises(DocumentIOError, match="lower_block_mass_t"):
         load_document(path)
 
 

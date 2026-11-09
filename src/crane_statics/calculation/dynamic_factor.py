@@ -14,11 +14,15 @@ from typing import Protocol, Union
 class DynamicFactor(Protocol):
     """Converts between payload mass and the force applied at the hook."""
 
-    def hook_force_kN(self, payload_t: float, hook_mass_t: float, gravity_m_s2: float) -> float:
+    def hook_force_kN(
+        self, payload_t: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
         """Hook force for a payload; the factor applies to payload and hook block alike."""
         ...
 
-    def payload_t(self, hook_force_kN: float, hook_mass_t: float, gravity_m_s2: float) -> float:
+    def payload_t(
+        self, hook_force_kN: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
         """Inverse of ``hook_force_kN``; not floored, so a heavy hook gives a negative payload."""
         ...
 
@@ -29,11 +33,15 @@ class ConstantDynamicFactor:
 
     value: float = 1.0
 
-    def hook_force_kN(self, payload_t: float, hook_mass_t: float, gravity_m_s2: float) -> float:
-        return (payload_t + hook_mass_t) * self.value * gravity_m_s2
+    def hook_force_kN(
+        self, payload_t: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
+        return (payload_t + lower_block_mass_t) * self.value * gravity_m_s2
 
-    def payload_t(self, hook_force_kN: float, hook_mass_t: float, gravity_m_s2: float) -> float:
-        return hook_force_kN / self.value / gravity_m_s2 - hook_mass_t
+    def payload_t(
+        self, hook_force_kN: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
+        return hook_force_kN / self.value / gravity_m_s2 - lower_block_mass_t
 
 
 DynamicFactorLike = Union[float, DynamicFactor]

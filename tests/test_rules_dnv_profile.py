@@ -67,7 +67,7 @@ def _hoist_mode(doc):
 def _setup(doc, cond, chart_max_load_t=50.0, profile=None, hook_t=None, rope_t=ROPE_T, **kw):
     hoist_id, mode = _hoist_mode(doc)
     if hook_t is not None:
-        mode = dataclasses.replace(mode, hook_mass_t=hook_t)
+        mode = dataclasses.replace(mode, lower_block_mass_t=hook_t)
     profile = profile or DnvProfile()
     kw.setdefault("support_x_m", 0.0)
     return profile.lift_setup(doc, cond, hoist_id, mode, K, rope_t, chart_max_load_t, **kw)
@@ -76,7 +76,7 @@ def _setup(doc, cond, chart_max_load_t=50.0, profile=None, hook_t=None, rope_t=R
 def _chart_t_for_w(doc, w_kN):
     """Chart max load giving a working load (chart + hook + rope) of ``w_kN``."""
     _, mode = _hoist_mode(doc)
-    return w_kN / G - mode.hook_mass_t - ROPE_T
+    return w_kN / G - mode.lower_block_mass_t - ROPE_T
 
 
 def _factor_at(factor, w_kN, hook_t=2.0):
@@ -266,7 +266,7 @@ def test_manual_daf_overrides_and_keeps_computed_record():
     assert set(sources) == {"computed", "override"}
     assert sources["override"].value == 1.45
     _, mode = _hoist_mode(doc)
-    w = (50.0 + mode.hook_mass_t + ROPE_T) * G
+    w = (50.0 + mode.lower_block_mass_t + ROPE_T) * G
     v_r = ref.dnv_v_r(0.5, 0.8, 0.6, 2.0)
     expected = max(ref.dnv_psi_floor(w), ref.dnv_psi(K, w, v_r))
     assert sources["computed"].value == pytest.approx(expected, rel=1e-12)

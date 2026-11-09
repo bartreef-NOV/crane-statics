@@ -646,12 +646,12 @@ class _LoadBuilder:
                 continue
 
             try:
-                hook_mass_t = float(hoist.get("hook_mass_t", 0.0) or 0.0)
+                lower_block_mass_t = float(hoist.get("lower_block_mass_t", 0.0) or 0.0)
             except Exception:
-                hook_mass_t = 0.0
-            if hook_mass_t <= 0.0:
+                lower_block_mass_t = 0.0
+            if lower_block_mass_t <= 0.0:
                 continue
-            masses.append((node_id, hook_mass_t))
+            masses.append((node_id, lower_block_mass_t))
         return masses
 
     def idle_hook_mass_node_forces(self) -> dict[str, tuple[float, float]]:
@@ -661,10 +661,10 @@ class _LoadBuilder:
         """
         gx, gz = self._gravity_kN_per_t()
         node_forces: dict[str, list[float]] = {}
-        for node_id, hook_mass_t in self._idle_hook_masses():
+        for node_id, lower_block_mass_t in self._idle_hook_masses():
             current = node_forces.setdefault(node_id, [0.0, 0.0])
-            current[0] += hook_mass_t * gx
-            current[1] += hook_mass_t * gz
+            current[0] += lower_block_mass_t * gx
+            current[1] += lower_block_mass_t * gz
         return {node_id: (values[0], values[1]) for node_id, values in node_forces.items()}
 
     def idle_hook_mass(self) -> tuple[LoadVector, ...]:

@@ -24,7 +24,7 @@ EXAMPLE = ROOT / "examples" / "crane_input_GT283.yaml"
 G = 9.81
 SPLIT_SUFFIXES = ("_left", "_right")
 OUT_OF_PLANE_PLATFORM = {"Fy", "Mx"}
-NO_IDLE_HOOKS = {"AH": {"hook_mass_t": 0.0}, "trolley": {"hook_mass_t": 0.0}}
+NO_IDLE_HOOKS = {"AH": {"lower_block_mass_t": 0.0}, "trolley": {"lower_block_mass_t": 0.0}}
 
 
 @pytest.fixture(scope="module")
@@ -415,7 +415,7 @@ def _rear_leg_rope_load(calc, accel_x, accel_z):
         accel_x,
         accel_z,
         boom_angle_deg=45.0,
-        hoist_runtime_overrides={"trolley": {"hook_mass_t": 0.0}},
+        hoist_runtime_overrides={"trolley": {"lower_block_mass_t": 0.0}},
     )
     return ld["rear_leg"]
 

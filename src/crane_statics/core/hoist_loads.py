@@ -66,11 +66,11 @@ def split_support_mass_t(hoist: Mapping[str, Any], *, split_mode_active: bool) -
         return None
     if not bool(hoist.get("splitable_block", False)):
         return None
-    hook_mass_t = _nonnegative_float(hoist.get("hook_mass_t"))
-    split_hook_mass_t = _nonnegative_float(hoist.get("split_hook_mass_t"))
-    if hook_mass_t is None or split_hook_mass_t is None:
+    lower_block_mass_t = _nonnegative_float(hoist.get("lower_block_mass_t"))
+    split_lower_block_mass_t = _nonnegative_float(hoist.get("split_lower_block_mass_t"))
+    if lower_block_mass_t is None or split_lower_block_mass_t is None:
         return None
-    support_mass_t = max(0.0, hook_mass_t - split_hook_mass_t)
+    support_mass_t = max(0.0, lower_block_mass_t - split_lower_block_mass_t)
     if support_mass_t <= 1e-9:
         return None
     return support_mass_t

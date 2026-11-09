@@ -83,7 +83,7 @@ def find_demand_scale(
 def scaled_live_factor(
     scale: DemandScale,
     hook_daf: DynamicFactorLike,
-    hook_mass_t: float,
+    lower_block_mass_t: float,
     gravity_m_s2: float,
 ) -> Callable[[float], float]:
     """``H -> scale.live(LL(H))``, LL as ``DemandScale.live_load_kN`` describes."""
@@ -93,8 +93,8 @@ def scaled_live_factor(
         factor = as_dynamic_factor(hook_daf)
 
         def to_ll(hook_kN: float) -> float:
-            payload = max(0.0, factor.payload_t(hook_kN, hook_mass_t, gravity_m_s2))
-            return (payload + hook_mass_t) * gravity_m_s2
+            payload = max(0.0, factor.payload_t(hook_kN, lower_block_mass_t, gravity_m_s2))
+            return (payload + lower_block_mass_t) * gravity_m_s2
 
     return lambda hook_kN: float(scale.live(to_ll(hook_kN)))
 
@@ -221,7 +221,7 @@ def allowable_hook_load(
     resolve_limit_target: Callable[[str, str], tuple[str, str]],
     tolerance: float,
     hook_daf: DynamicFactorLike = 1.0,
-    hook_mass_t: float = 0.0,
+    lower_block_mass_t: float = 0.0,
     demand_scale: Optional[Mapping[str, DemandScale]] = None,
 ) -> AllowableCapacity:
     """Invert Q(H) = Q0 + s*H <= Q_max  →  H_max = (Q_max - Q0) / s.
@@ -259,7 +259,7 @@ def allowable_hook_load(
                     float(limit_kN),
                     tolerance,
                     float(scale.dead),
-                    scaled_live_factor(scale, hook_daf, hook_mass_t, gravity),
+                    scaled_live_factor(scale, hook_daf, lower_block_mass_t, gravity),
                 )
                 if scaled_h is not None and 0.0 <= scaled_h < h_max_kN:
                     h_max_kN = scaled_h
@@ -299,7 +299,7 @@ def allowable_hook_load(
     # Convert hook force to payload with the dynamic factor (removes the factor, converts
     # force to mass and subtracts the hook mass).
     h_max_kN = max(0.0, h_max_kN)
-    h_net_payload_t = as_dynamic_factor(hook_daf).payload_t(h_max_kN, hook_mass_t, gravity)
+    h_net_payload_t = as_dynamic_factor(hook_daf).payload_t(h_max_kN, lower_block_mass_t, gravity)
     h_net_payload_t = max(0.0, h_net_payload_t)
     # Metric domain semantics:
     #   h_max_kN = hook-force domain (includes DAF & hook mass effects)

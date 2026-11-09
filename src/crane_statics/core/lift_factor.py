@@ -122,7 +122,7 @@ def hook_lateral(
 def live_load_kN(
     factor: DynamicFactor,
     hook_force_kN: float,
-    hook_mass_t: float,
+    lower_block_mass_t: float,
     rope_mass_t: float,
     gravity_m_s2: float,
 ) -> float:
@@ -131,8 +131,8 @@ def live_load_kN(
     Payload (``factor``'s inverse, floored at 0) plus hook block plus the suspended rope
     the factor amplifies, times gravity: what ABS PF and the DNV SF1 band take.
     """
-    payload_t = max(0.0, float(factor.payload_t(hook_force_kN, hook_mass_t, gravity_m_s2)))
-    return (payload_t + float(hook_mass_t) + float(rope_mass_t)) * float(gravity_m_s2)
+    payload_t = max(0.0, float(factor.payload_t(hook_force_kN, lower_block_mass_t, gravity_m_s2)))
+    return (payload_t + float(lower_block_mass_t) + float(rope_mass_t)) * float(gravity_m_s2)
 
 
 def demand_scales(
@@ -171,7 +171,7 @@ def factored_point(
     entity_id: str,
     *,
     hook_daf: DynamicFactorLike,
-    hook_mass_t: float,
+    lower_block_mass_t: float,
     gravity_m_s2: float,
 ) -> AnalysisPoint:
     """``point`` with ``entity_id``'s reactions under ``scale`` at ``hook_force_kN``.
@@ -181,10 +181,12 @@ def factored_point(
     at that hook force's LL, so any demand extractor reading the base entity at
     ``hook_force_kN`` gets the factored demand ``dead * Q0 + live(LL) * s * H``, the one
     ``compute_allowable_load`` inverts: LL as ``allowable.scaled_live_factor`` takes it
-    from ``hook_daf`` and ``hook_mass_t`` (the one default for ``scale.live_load_kN``
+    from ``hook_daf`` and ``lower_block_mass_t`` (the one default for ``scale.live_load_kN``
     None).
     """
-    live = scaled_live_factor(scale, hook_daf, hook_mass_t, gravity_m_s2)(float(hook_force_kN))
+    live = scaled_live_factor(scale, hook_daf, lower_block_mass_t, gravity_m_s2)(
+        float(hook_force_kN)
+    )
     source = base_entity_id(entity_id)
     base = point.baseline_reactions.get(source, {})
     sens = point.sensitivity_reactions.get(source, {})
@@ -508,7 +510,7 @@ class LiftFactors:
             return None
         rope_t = self.suspended_rope_mass_t(hoist_id, mode, angle, tackle_length_m)
         gravity = abs(float(self._doc.environment.gravity_m_s2))
-        factor, hook_t = setup.factor, float(mode.hook_mass_t)
+        factor, hook_t = setup.factor, float(mode.lower_block_mass_t)
         return demand_scales(
             setup, lambda hook_kN: live_load_kN(factor, hook_kN, hook_t, rope_t, gravity)
         )

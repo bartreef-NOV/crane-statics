@@ -51,7 +51,7 @@ def _envelope(
         offlead_deg=hoist.offlead_deg,
         sidelead_deg=hoist.sidelead_deg,
         hook_daf=hoist.hook_daf,
-        hook_mass_t=hoist.hook_mass_t,
+        lower_block_mass_t=hoist.lower_block_mass_t,
     )
 
 
@@ -80,7 +80,7 @@ def _scene_capacity(
     )
     assert point is not None
     return calc.compute_allowable_load(
-        point, limits, hook_daf=hoist.hook_daf, hook_mass_t=hoist.hook_mass_t
+        point, limits, hook_daf=hoist.hook_daf, lower_block_mass_t=hoist.lower_block_mass_t
     )
 
 
@@ -158,7 +158,7 @@ def test_no_wind_gives_no_wind_axis() -> None:
             offlead_deg=hoist.offlead_deg,
             sidelead_deg=hoist.sidelead_deg,
             hook_daf=hoist.hook_daf,
-            hook_mass_t=hoist.hook_mass_t,
+            lower_block_mass_t=hoist.lower_block_mass_t,
         )
         assert case is not None and case.wind_axis == ""
 
@@ -182,7 +182,7 @@ def test_envelope_capacity_is_the_first_element() -> None:
         offlead_deg=hoist.offlead_deg,
         sidelead_deg=hoist.sidelead_deg,
         hook_daf=hoist.hook_daf,
-        hook_mass_t=hoist.hook_mass_t,
+        lower_block_mass_t=hoist.lower_block_mass_t,
     )
     for limits in [*ENVELOPE_LIMITS, _MAGNITUDE[0][1]]:
         cap, _ = envelope_capacity_case(calc, probes, limits, **kwargs)

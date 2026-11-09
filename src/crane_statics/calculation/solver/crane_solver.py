@@ -28,7 +28,7 @@ from .rope_metadata import (  # noqa: F401 -- re-exported for callers and tests
     _active_rope_metadata,
     _inactive_rope_mass_per_part,
     effective_parts,
-    hook_mass_t,
+    lower_block_mass_t,
 )
 from .static_context import build_solver_static_context  # noqa: F401
 
@@ -191,7 +191,7 @@ def lumped_point_masses(
         if hbody < 0:
             continue
         idle_override = overrides.get(str(hoist_item.get("id", "") or ""), {})
-        idle_mass_t = hook_mass_t(hoist_item, idle_override)
+        idle_mass_t = lower_block_mass_t(hoist_item, idle_override)
         if idle_mass_t > 0:
             hx, hz = node_pos[node_id]
             out.append((hbody, idle_mass_t, float(hx), float(hz)))
@@ -348,7 +348,9 @@ def _accumulate_loads(
                 # m*(g + accel_z)/n (accel_z is the crane-frame value); it does not
                 # include the pitch-lever term at the hook node.
                 tension_kN = (
-                    hook_mass_t(idle_hoist, idle_override) * (gravity + accel_z_m_s2) / n_parts_idle
+                    lower_block_mass_t(idle_hoist, idle_override)
+                    * (gravity + accel_z_m_s2)
+                    / n_parts_idle
                 )
             else:
                 tension_kN = 0.0
@@ -415,9 +417,9 @@ def _accumulate_loads(
                 ld_fx[sbody] += offlead_lateral_force_kN
                 ld_m[sbody] += -sz * offlead_lateral_force_kN
 
-            normal_hook_mass_t = float(hoist_data.get("hook_mass_t", 0.0) or 0.0)
+            normal_hook_mass_t = float(hoist_data.get("lower_block_mass_t", 0.0) or 0.0)
             effective_hook_mass_t = float(
-                active_override.get("hook_mass_t", normal_hook_mass_t) or 0.0
+                active_override.get("lower_block_mass_t", normal_hook_mass_t) or 0.0
             )
             comp_mass_t = active_override.get("support_comp_mass_t")
             if comp_mass_t is None:

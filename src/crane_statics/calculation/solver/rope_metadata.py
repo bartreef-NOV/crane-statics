@@ -18,9 +18,9 @@ def effective_parts(base: int, override: Dict[str, Any]) -> int:
     return max(1, int(base))
 
 
-def hook_mass_t(hoist: Dict[str, Any], override: Dict[str, Any]) -> float:
+def lower_block_mass_t(hoist: Dict[str, Any], override: Dict[str, Any]) -> float:
     """Hook block mass (t) of ``hoist``, with the runtime override applied."""
-    return float(override.get("hook_mass_t", hoist.get("hook_mass_t", 0.0)) or 0.0)
+    return float(override.get("lower_block_mass_t", hoist.get("lower_block_mass_t", 0.0)) or 0.0)
 
 
 def _active_rope_metadata(
@@ -55,5 +55,7 @@ def _inactive_rope_mass_per_part(
         override = (hoist_runtime_overrides or {}).get(hoist_runtime_id, {})
         load_node_id = str(hoist.get("load_node_id", "") or "")
         parts = solver_ctx.get("parts_count_map", {}).get((rope_id, load_node_id), 1)
-        baseline_by_rope[rope_id] = hook_mass_t(hoist, override) / effective_parts(parts, override)
+        baseline_by_rope[rope_id] = lower_block_mass_t(hoist, override) / effective_parts(
+            parts, override
+        )
     return baseline_by_rope

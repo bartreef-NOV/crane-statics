@@ -405,9 +405,9 @@ class CraneCalculator:
                     )
 
                 override = (hoist_runtime_overrides or {}).get(hoist_id, {})
-                normal_hook_mass_t = float(hoist.hook_mass_t)
+                normal_hook_mass_t = float(hoist.lower_block_mass_t)
                 effective_hook_mass_t = float(
-                    override.get("hook_mass_t", normal_hook_mass_t) or 0.0
+                    override.get("lower_block_mass_t", normal_hook_mass_t) or 0.0
                 )
                 comp_mass_t = override.get("support_comp_mass_t")
                 if comp_mass_t is None:
@@ -762,7 +762,7 @@ class CraneCalculator:
         point: AnalysisPoint,
         design_limits: dict[str, dict],  # entity_id -> {component -> max_kN}
         hook_daf: DynamicFactorLike = 1.0,
-        hook_mass_t: float = 0.0,
+        lower_block_mass_t: float = 0.0,
         demand_scale: Optional[Mapping[str, DemandScale]] = None,
     ) -> AllowableCapacity:
         """The most restrictive design limit's hook-force and payload capacity.
@@ -778,7 +778,7 @@ class CraneCalculator:
             resolve_limit_target=self.resolve_limit_target,
             tolerance=self.TOLERANCE,
             hook_daf=hook_daf,
-            hook_mass_t=hook_mass_t,
+            lower_block_mass_t=lower_block_mass_t,
             demand_scale=demand_scale,
         )
 
@@ -788,7 +788,7 @@ class CraneCalculator:
         hoist_id: str,
         design_limits: dict[str, dict],
         hook_daf: DynamicFactorLike = 1.0,
-        hook_mass_t: float = 0.0,
+        lower_block_mass_t: float = 0.0,
         *,
         wind_speed_m_s: Optional[float] = None,
         accel_x_m_s2: Optional[float] = None,
@@ -847,7 +847,7 @@ class CraneCalculator:
                 point,
                 design_limits,
                 hook_daf=hook_daf,
-                hook_mass_t=hook_mass_t,
+                lower_block_mass_t=lower_block_mass_t,
                 demand_scale=demand_scale,
             )
             capacity.governing_wind_direction = (

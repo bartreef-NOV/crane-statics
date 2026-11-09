@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/schemas/crane-statics-v11.schema.json",
+  "$id": "https://example.com/schemas/crane-statics-v12.schema.json",
   "title": "AuthoredDocument",
   "$defs": {
     "AuthoredBoomBody": {
@@ -672,13 +672,13 @@
         {
           "daf": 1.1,
           "falls": 20,
-          "hook_mass_t": 50.0,
           "load_chart": [
             {
               "load_t": 1000.0,
               "outreach_m": 16.0
             }
           ],
+          "lower_block_mass_t": 50.0,
           "offlead_deg": 1.0,
           "reeving": [
             {
@@ -727,10 +727,10 @@
           "description": "Reeving node the hook hangs from. Omit to use the last reeving entry.",
           "title": "Support Node"
         },
-        "hook_mass_t": {
+        "lower_block_mass_t": {
           "description": "Hook block mass.",
           "minimum": 0,
-          "title": "Hook Mass T",
+          "title": "Lower Block Mass T",
           "type": "number"
         },
         "falls": {
@@ -805,7 +805,7 @@
       },
       "required": [
         "reeving",
-        "hook_mass_t",
+        "lower_block_mass_t",
         "falls",
         "daf",
         "offlead_deg",
@@ -1051,7 +1051,7 @@
           "type": "string"
         },
         "version": {
-          "pattern": "^11\\.\\d+\\.\\d+$",
+          "pattern": "^12\\.\\d+\\.\\d+$",
           "title": "Version",
           "type": "string"
         }
@@ -1067,10 +1067,10 @@
       "additionalProperties": false,
       "description": "Optional split-block operating mode with its own hook mass, falls and load chart.",
       "properties": {
-        "hook_mass_t": {
+        "lower_block_mass_t": {
           "description": "Hook block mass in split mode.",
           "minimum": 0,
-          "title": "Hook Mass T",
+          "title": "Lower Block Mass T",
           "type": "number"
         },
         "falls": {
@@ -1089,7 +1089,7 @@
         }
       },
       "required": [
-        "hook_mass_t",
+        "lower_block_mass_t",
         "falls",
         "load_chart"
       ],
@@ -1331,13 +1331,13 @@
           "MH": {
             "daf": 1.0,
             "falls": 1,
-            "hook_mass_t": 0.0,
             "load_chart": [
               {
                 "load_t": 0.0,
                 "outreach_m": 0.0
               }
             ],
+            "lower_block_mass_t": 0.0,
             "offlead_deg": 0.0,
             "reeving": [
               {
@@ -1375,7 +1375,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "11.1.0"
+        "version": "12.0.0"
       }
     }
   ],

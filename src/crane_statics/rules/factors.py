@@ -20,12 +20,16 @@ _ABS_INTERCEPT = 1.373
 _ABS_LL_SCALE_KN = 5220.0
 
 
-def _amplified_kN(payload_t: float, hook_mass_t: float, extra_mass_t: float, g: float) -> float:
-    return (payload_t + hook_mass_t + extra_mass_t) * g
+def _amplified_kN(
+    payload_t: float, lower_block_mass_t: float, extra_mass_t: float, g: float
+) -> float:
+    return (payload_t + lower_block_mass_t + extra_mass_t) * g
 
 
-def _payload_from_load(load_kN: float, hook_mass_t: float, extra_mass_t: float, g: float) -> float:
-    return max(0.0, load_kN / g - hook_mass_t - extra_mass_t)
+def _payload_from_load(
+    load_kN: float, lower_block_mass_t: float, extra_mass_t: float, g: float
+) -> float:
+    return max(0.0, load_kN / g - lower_block_mass_t - extra_mass_t)
 
 
 @dataclass(frozen=True)
@@ -35,12 +39,18 @@ class LinearFactor:
     value: float
     extra_mass_t: float = 0.0
 
-    def hook_force_kN(self, payload_t: float, hook_mass_t: float, gravity_m_s2: float) -> float:
-        return self.value * _amplified_kN(payload_t, hook_mass_t, self.extra_mass_t, gravity_m_s2)
+    def hook_force_kN(
+        self, payload_t: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
+        return self.value * _amplified_kN(
+            payload_t, lower_block_mass_t, self.extra_mass_t, gravity_m_s2
+        )
 
-    def payload_t(self, hook_force_kN: float, hook_mass_t: float, gravity_m_s2: float) -> float:
+    def payload_t(
+        self, hook_force_kN: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
         return _payload_from_load(
-            hook_force_kN / self.value, hook_mass_t, self.extra_mass_t, gravity_m_s2
+            hook_force_kN / self.value, lower_block_mass_t, self.extra_mass_t, gravity_m_s2
         )
 
 
@@ -57,8 +67,10 @@ class AbsOnboardFactor:
         raw = _ABS_INTERCEPT - load_kN / _ABS_LL_SCALE_KN + self.a_v_g
         return min(max(raw, self.lower + self.a_v_g), self.upper + self.a_v_g)
 
-    def hook_force_kN(self, payload_t: float, hook_mass_t: float, gravity_m_s2: float) -> float:
-        load = _amplified_kN(payload_t, hook_mass_t, self.extra_mass_t, gravity_m_s2)
+    def hook_force_kN(
+        self, payload_t: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
+        load = _amplified_kN(payload_t, lower_block_mass_t, self.extra_mass_t, gravity_m_s2)
         return self.factor(load) * load
 
     def _load_from_force(self, force_kN: float) -> float:
@@ -76,9 +88,11 @@ class AbsOnboardFactor:
         s = _ABS_LL_SCALE_KN
         return 0.5 * s * (c - math.sqrt(max(0.0, c * c - 4.0 * force_kN / s)))
 
-    def payload_t(self, hook_force_kN: float, hook_mass_t: float, gravity_m_s2: float) -> float:
+    def payload_t(
+        self, hook_force_kN: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
         load = self._load_from_force(max(0.0, hook_force_kN))
-        return _payload_from_load(load, hook_mass_t, self.extra_mass_t, gravity_m_s2)
+        return _payload_from_load(load, lower_block_mass_t, self.extra_mass_t, gravity_m_s2)
 
 
 @dataclass(frozen=True)
@@ -98,15 +112,19 @@ class RelativeVelocityFactor:
     def _b(self, gravity_m_s2: float) -> float:
         return self.v_r_m_s * math.sqrt(self.stiffness_kN_m / gravity_m_s2)
 
-    def hook_force_kN(self, payload_t: float, hook_mass_t: float, gravity_m_s2: float) -> float:
-        load = _amplified_kN(payload_t, hook_mass_t, self.extra_mass_t, gravity_m_s2)
+    def hook_force_kN(
+        self, payload_t: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
+        load = _amplified_kN(payload_t, lower_block_mass_t, self.extra_mass_t, gravity_m_s2)
         load = max(0.0, load)
         return load + self._b(gravity_m_s2) * math.sqrt(load)
 
-    def payload_t(self, hook_force_kN: float, hook_mass_t: float, gravity_m_s2: float) -> float:
+    def payload_t(
+        self, hook_force_kN: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
         b = self._b(gravity_m_s2)
         root = 0.5 * (-b + math.sqrt(b * b + 4.0 * max(0.0, hook_force_kN)))
-        return _payload_from_load(root * root, hook_mass_t, self.extra_mass_t, gravity_m_s2)
+        return _payload_from_load(root * root, lower_block_mass_t, self.extra_mass_t, gravity_m_s2)
 
 
 @dataclass(frozen=True)
@@ -123,8 +141,12 @@ class MaxFactor:
         if not self.parts:
             raise ValueError("MaxFactor needs at least one part")
 
-    def hook_force_kN(self, payload_t: float, hook_mass_t: float, gravity_m_s2: float) -> float:
-        return max(p.hook_force_kN(payload_t, hook_mass_t, gravity_m_s2) for p in self.parts)
+    def hook_force_kN(
+        self, payload_t: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
+        return max(p.hook_force_kN(payload_t, lower_block_mass_t, gravity_m_s2) for p in self.parts)
 
-    def payload_t(self, hook_force_kN: float, hook_mass_t: float, gravity_m_s2: float) -> float:
-        return min(p.payload_t(hook_force_kN, hook_mass_t, gravity_m_s2) for p in self.parts)
+    def payload_t(
+        self, hook_force_kN: float, lower_block_mass_t: float, gravity_m_s2: float
+    ) -> float:
+        return min(p.payload_t(hook_force_kN, lower_block_mass_t, gravity_m_s2) for p in self.parts)

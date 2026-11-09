@@ -228,7 +228,7 @@ def test_envelope_takes_the_lateral_direction_of_largest_demand(
         offlead_deg=0.0,
         sidelead_deg=0.0,
         hook_daf=1.0,
-        hook_mass_t=50.0,
+        lower_block_mass_t=50.0,
         hook_lateral=lateral,
     )
     plain, _ = envelope_capacity_case(
@@ -239,7 +239,7 @@ def test_envelope_takes_the_lateral_direction_of_largest_demand(
         offlead_deg=0.0,
         sidelead_deg=0.0,
         hook_daf=1.0,
-        hook_mass_t=50.0,
+        lower_block_mass_t=50.0,
     )
     assert case is not None
     assert cap.max_allowable_load_kN < plain.max_allowable_load_kN
@@ -275,7 +275,7 @@ def test_envelope_without_hook_lateral_is_unchanged(calc: CraneCalculator) -> No
         offlead_deg=1.0,
         sidelead_deg=2.5,
         hook_daf=1.0,
-        hook_mass_t=50.0,
+        lower_block_mass_t=50.0,
     )
     a = envelope_capacity_case(calc, probes, limits, **kwargs)
     b = envelope_capacity_case(calc, probes, limits, hook_lateral=None, **kwargs)
@@ -294,7 +294,7 @@ def test_abs_default_load_area_is_applied_at_the_chart_maximum_live_load() -> No
     setup = AbsProfile().lift_setup(
         doc, doc.conditions["c"], HOIST, mode, 0.0, rope_t, chart_t, support_x_m=0.0
     )
-    ll_kN = (chart_t + mode.hook_mass_t + rope_t) * G
+    ll_kN = (chart_t + mode.lower_block_mass_t + rope_t) * G
     area = ref.abs_live_load_wind_area(ll_kN)
     assert setup.lateral.wind_area_m2 == pytest.approx(area, rel=1e-12)
     pressure = ref.abs_wind_pressure(10.3, 1.0)
@@ -394,7 +394,11 @@ def test_load_wind_takes_the_worst_direction_at_full_force(calc: CraneCalculator
     probes = _probes(calc)
     limits = {"heel_left": {"Fx": 4000.0}}
     kwargs: dict[str, Any] = dict(
-        vessel=VesselMotion(), offlead_deg=0.0, sidelead_deg=0.0, hook_daf=1.0, hook_mass_t=50.0
+        vessel=VesselMotion(),
+        offlead_deg=0.0,
+        sidelead_deg=0.0,
+        hook_daf=1.0,
+        lower_block_mass_t=50.0,
     )
     force = 40.0
     plain, _ = envelope_capacity_case(calc, probes, limits, **kwargs)
@@ -454,7 +458,7 @@ def test_envelope_lateral_matches_brute_force_with_leads_wind_and_motion(limits:
     assert probes is not None
     r, force = 0.05, 30.0
     kwargs: dict[str, Any] = dict(
-        vessel=MOVING, offlead_deg=1.0, sidelead_deg=2.5, hook_daf=1.0, hook_mass_t=50.0
+        vessel=MOVING, offlead_deg=1.0, sidelead_deg=2.5, hook_daf=1.0, lower_block_mass_t=50.0
     )
     cap, _ = envelope_capacity_case(
         calc, probes, limits, hook_lateral=HookLateral(r, 0.0, force, 0.0, 0.02), **kwargs
@@ -534,9 +538,9 @@ def test_abs_sweep_capacity_drops_by_the_hand_derived_lateral(
         s_hook = pt.sensitivity_rope_tensions["boom_hoist"]
         r_x = abs(pt.offlead_lateral_unit_rope_tensions["boom_hoist"])
         s_lead = s_hook + math.sin(math.radians(hoist.offlead_deg)) * r_x
-        h0 = DAF * (payload_t + hoist.hook_mass_t) * G
+        h0 = DAF * (payload_t + hoist.lower_block_mass_t) * G
         expected_h = h0 * s_lead / (s_lead + r * r_x)
-        expected_t = expected_h / (DAF * G) - hoist.hook_mass_t
+        expected_t = expected_h / (DAF * G) - hoist.lower_block_mass_t
         assert with_lateral[outreach] == pytest.approx(expected_t, rel=1e-9)
         assert with_lateral[outreach] < payload_t
         checked += 1
@@ -622,7 +626,7 @@ def test_dnv_case_ii_incline_and_load_wind_reach_the_sweep(monkeypatch) -> None:
                 offlead_deg=hoist.offlead_deg,
                 sidelead_deg=hoist.sidelead_deg,
                 hook_daf=factor,
-                hook_mass_t=hoist.hook_mass_t,
+                lower_block_mass_t=hoist.lower_block_mass_t,
             ).max_allowable_load_kN
             baseline = limit - h0 * s_lead
             lateral = expected_lateral[condition.case.name]
@@ -630,7 +634,7 @@ def test_dnv_case_ii_incline_and_load_wind_reach_the_sweep(monkeypatch) -> None:
             by_case[name] = (limit - baseline - lateral.constant_x_kN) / (
                 s_lead + lateral.fraction_x
             )
-            payload_by_case[name] = factor.payload_t(by_case[name], hoist.hook_mass_t, G)
+            payload_by_case[name] = factor.payload_t(by_case[name], hoist.lower_block_mass_t, G)
         # Case II's 1.5x incline and wind govern.
         assert by_case["Case II"] < by_case["Case I"]
         assert payload_t == pytest.approx(min(payload_by_case.values()), rel=1e-9)
@@ -789,8 +793,8 @@ def _abs_setup(
 
 
 def _vaf(setup, mode, ll_kN: float) -> float:
-    payload = ll_kN / G - mode.hook_mass_t
-    return float(setup.factor.hook_force_kN(payload, mode.hook_mass_t, G) / ll_kN)
+    payload = ll_kN / G - mode.lower_block_mass_t
+    return float(setup.factor.hook_force_kN(payload, mode.lower_block_mass_t, G) / ll_kN)
 
 
 def test_abs_a_v_is_taken_at_the_boom_tip() -> None:

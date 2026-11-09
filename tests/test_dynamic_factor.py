@@ -40,10 +40,10 @@ def test_plain_numbers_become_constant_factors():
 def test_factor_objects_pass_through_unchanged():
     @dataclass(frozen=True)
     class LoadDependent:
-        def hook_force_kN(self, payload_t: float, hook_mass_t: float, gravity_m_s2: float):
-            return (payload_t + hook_mass_t) * (1.0 + 0.01 * payload_t) * gravity_m_s2
+        def hook_force_kN(self, payload_t: float, lower_block_mass_t: float, gravity_m_s2: float):
+            return (payload_t + lower_block_mass_t) * (1.0 + 0.01 * payload_t) * gravity_m_s2
 
-        def payload_t(self, hook_force_kN: float, hook_mass_t: float, gravity_m_s2: float):
+        def payload_t(self, hook_force_kN: float, lower_block_mass_t: float, gravity_m_s2: float):
             raise NotImplementedError
 
     factor = LoadDependent()

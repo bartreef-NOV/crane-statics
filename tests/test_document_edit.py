@@ -139,7 +139,7 @@ class TestBodyCollectionEditing:
 class TestHoistEditing:
     def test_add_hoist_creates_rope_and_managed_hook(self, editor, document):
         support = editor.visible_nodes_for_body("boom")[0].id
-        editor.add_hoist(build_payload_hoist("QA", support, falls=2, hook_mass_t=3.0))
+        editor.add_hoist(build_payload_hoist("QA", support, falls=2, lower_block_mass_t=3.0))
 
         hoist = next(h for h in document.hoists if h.id == "QA")
         assert any(r.id == hoist.rope_id for r in document.ropes)
@@ -155,7 +155,12 @@ class TestHoistEditing:
     def test_split_falls_must_not_exceed_normal_falls(self):
         with pytest.raises(DocumentEditError, match="Split falls"):
             build_payload_hoist(
-                "QA", "n1", falls=2, splitable_block=True, split_falls=4, split_hook_mass_t=1.0
+                "QA",
+                "n1",
+                falls=2,
+                splitable_block=True,
+                split_falls=4,
+                split_lower_block_mass_t=1.0,
             )
 
     def test_split_hook_mass_must_not_exceed_normal(self):
@@ -164,10 +169,10 @@ class TestHoistEditing:
                 "QA",
                 "n1",
                 falls=4,
-                hook_mass_t=2.0,
+                lower_block_mass_t=2.0,
                 splitable_block=True,
                 split_falls=2,
-                split_hook_mass_t=9.0,
+                split_lower_block_mass_t=9.0,
             )
 
     def test_delete_hoist_removes_rope_and_managed_hook(self, editor, document):
@@ -207,12 +212,12 @@ class TestHoistEditing:
         editor.update_hoist(
             payload.id,
             build_payload_hoist(
-                payload.id, editor.resolved_support_node_id(payload), hook_mass_t=42.0
+                payload.id, editor.resolved_support_node_id(payload), lower_block_mass_t=42.0
             ),
         )
 
         updated = next(h for h in document.hoists if h.id == payload.id)
-        assert updated.hook_mass_t == 42.0
+        assert updated.lower_block_mass_t == 42.0
         assert [(cp.outreach_m, cp.load_t) for cp in updated.contractual_points] == original
 
     def test_solve_hoist_cannot_be_deleted(self, editor, document):
@@ -316,7 +321,7 @@ class TestModelViewModelEditing:
         fields = model_vm.hoistFields(0)
 
         assert fields["id"] == model_vm.hoistsModel.record_at(0).id
-        assert "hook_mass_t" in fields
+        assert "lower_block_mass_t" in fields
         assert fields["linear_mass_kg_m"] == pytest.approx(
             model_vm.hoistsModel.record_at(0).linear_mass_kg_m
         )
@@ -347,10 +352,10 @@ class TestModelViewModelEditing:
         for payload_header in (
             "Support Node",
             "Falls",
-            "Hook Mass (t)",
+            "Lower block mass (t)",
             "Splittable",
             "Split Falls",
-            "Split Hook Mass (t)",
+            "Split lower block mass (t)",
             "DAF",
             "Offlead (deg)",
             "Sidelead (deg)",
@@ -485,15 +490,15 @@ class TestInlineCellEditing:
         assert self._cell(hoists, row, self._column(hoists, "Splittable"), b"editorKind") == "bool"
         assert self._cell(hoists, row, self._column(hoists, "Falls"), b"editorKind") == "int"
         assert (
-            self._cell(hoists, row, self._column(hoists, "Hook Mass (t)"), b"editorKind")
+            self._cell(hoists, row, self._column(hoists, "Lower block mass (t)"), b"editorKind")
             == "number"
         )
         # A check box is seeded with the value, a text field with what the cell shows.
         assert self._cell(hoists, row, self._column(hoists, "Splittable"), b"edit") is True
         hoist = hoists.record_at(row)
         assert self._cell(hoists, row, self._column(hoists, "Falls"), b"edit") == hoist.falls
-        assert self._cell(hoists, row, self._column(hoists, "Hook Mass (t)"), b"edit") == (
-            f"{hoist.hook_mass_t:.3f}"
+        assert self._cell(hoists, row, self._column(hoists, "Lower block mass (t)"), b"edit") == (
+            f"{hoist.lower_block_mass_t:.3f}"
         )
 
     def test_toggling_splittable_writes_the_boolean(self, model_vm, document):

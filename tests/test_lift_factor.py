@@ -366,7 +366,7 @@ def test_split_mode_warns_that_the_stiffness_ignores_the_split_block() -> None:
                 update={
                     "splitable_block": True,
                     "split_falls": 10,
-                    "split_hook_mass_t": 30.0,
+                    "split_lower_block_mass_t": 30.0,
                     "split_contractual_points": h.contractual_points,
                 }
             )

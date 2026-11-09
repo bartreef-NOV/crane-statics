@@ -584,7 +584,7 @@ class _LimitContext:
     basis: _UnitBasis
     harmonics: _SlewHarmonics
     hook_daf: DynamicFactor
-    hook_mass_t: float
+    lower_block_mass_t: float
     # VesselInputs fields (no slew) of each sign case, in the harmonics' case order.
     vessel_cases: tuple[dict[str, float], ...]
     demand_scale: Optional[Mapping[str, DemandScale]] = None
@@ -594,7 +594,7 @@ class _LimitContext:
             point,
             single_limit,
             hook_daf=self.hook_daf,
-            hook_mass_t=self.hook_mass_t,
+            lower_block_mass_t=self.lower_block_mass_t,
             demand_scale=self.demand_scale,
         )
 
@@ -744,7 +744,7 @@ def _magnitude_capacity(
     rank_live = 1.0
     if scale is not None:
         gravity = abs(float(ctx.calc.doc.environment.gravity_m_s2))
-        live_at = scaled_live_factor(scale, ctx.hook_daf, ctx.hook_mass_t, gravity)
+        live_at = scaled_live_factor(scale, ctx.hook_daf, ctx.lower_block_mass_t, gravity)
         rank_live = live_at(0.0)
 
     def _rank(sens: list[float], values: np.ndarray) -> np.ndarray:
@@ -902,7 +902,7 @@ def envelope_capacity(
     offlead_deg: float,
     sidelead_deg: float,
     hook_daf: DynamicFactorLike,
-    hook_mass_t: float,
+    lower_block_mass_t: float,
     hook_lateral: Optional[HookLateral] = None,
     demand_scale: Optional[Mapping[str, DemandScale]] = None,
 ) -> AllowableCapacity:
@@ -915,7 +915,7 @@ def envelope_capacity(
         offlead_deg=offlead_deg,
         sidelead_deg=sidelead_deg,
         hook_daf=hook_daf,
-        hook_mass_t=hook_mass_t,
+        lower_block_mass_t=lower_block_mass_t,
         hook_lateral=hook_lateral,
         demand_scale=demand_scale,
     )
@@ -931,7 +931,7 @@ def envelope_capacity_case(
     offlead_deg: float,
     sidelead_deg: float,
     hook_daf: DynamicFactorLike,
-    hook_mass_t: float,
+    lower_block_mass_t: float,
     hook_lateral: Optional[HookLateral] = None,
     demand_scale: Optional[Mapping[str, DemandScale]] = None,
 ) -> tuple[AllowableCapacity, Optional[EnvelopeCase]]:
@@ -984,7 +984,7 @@ def envelope_capacity_case(
         basis=_unit_basis(probes),
         harmonics=harmonics,
         hook_daf=as_dynamic_factor(hook_daf),
-        hook_mass_t=float(hook_mass_t),
+        lower_block_mass_t=float(lower_block_mass_t),
         vessel_cases=tuple(
             {VESSEL_INPUT_FIELDS[key]: float(value) for key, value in case.items()}
             for case in vessel_motion_cases(vessel)

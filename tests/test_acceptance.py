@@ -238,7 +238,7 @@ class TestA3HoistOutreachDefaults:
                     "id": "TEST",
                     "rope_id": "test_rope",
                     "load_node_id": "test_hook",
-                    "hook_mass_t": 0.0,
+                    "lower_block_mass_t": 0.0,
                     "hook_daf": 1.0,
                     # Omit outreach_min_m and outreach_max_m
                     "contractual_points": [
@@ -415,7 +415,7 @@ class TestA8WindDirectionContract:
                 pt,
                 enabled_limits,
                 hook_daf=hoist.hook_daf,
-                hook_mass_t=hoist.hook_mass_t,
+                lower_block_mass_t=hoist.lower_block_mass_t,
             )
             by_direction.append((wind_direction, cap.max_allowable_load_kN))
 
@@ -425,7 +425,7 @@ class TestA8WindDirectionContract:
             hoist_id,
             enabled_limits,
             hook_daf=hoist.hook_daf,
-            hook_mass_t=hoist.hook_mass_t,
+            lower_block_mass_t=hoist.lower_block_mass_t,
             wind_speed_m_s=wind_speed,
         )
 
@@ -472,7 +472,7 @@ class TestA8WindDirectionContract:
             pt,
             enabled_limits,
             hook_daf=hoist.hook_daf,
-            hook_mass_t=hoist.hook_mass_t,
+            lower_block_mass_t=hoist.lower_block_mass_t,
         )
         assert cap is not None
 
@@ -481,15 +481,15 @@ class TestA8WindDirectionContract:
         payload_t = cap.max_allowable_load_t
         gravity = abs(float(doc.environment.gravity_m_s2))
         hook_daf = hoist.hook_daf
-        hook_mass_t = hoist.hook_mass_t
+        lower_block_mass_t = hoist.lower_block_mass_t
 
-        expected_hook_force_kN = (payload_t + hook_mass_t) * gravity * hook_daf
+        expected_hook_force_kN = (payload_t + lower_block_mass_t) * gravity * hook_daf
         assert cap.max_allowable_load_kN == pytest.approx(expected_hook_force_kN, rel=1e-6)
 
         # Test 2: Reverse conversion (hook_force → payload)
         # Verify that converting back gives us the original payload (within tolerance)
         recovered_net_kN = cap.max_allowable_load_kN / hook_daf
-        recovered_payload_t = recovered_net_kN / gravity - hook_mass_t
+        recovered_payload_t = recovered_net_kN / gravity - lower_block_mass_t
         recovered_payload_t = max(0.0, recovered_payload_t)
 
         assert recovered_payload_t == pytest.approx(payload_t, rel=1e-6)
@@ -555,7 +555,7 @@ class TestA9InactiveHoistRopeRows:
         inactive_payload_hoists = [
             h
             for h in doc.hoists
-            if h.id != active_hoist_id and float(getattr(h, "hook_mass_t", 0.0)) > 1e-9
+            if h.id != active_hoist_id and float(getattr(h, "lower_block_mass_t", 0.0)) > 1e-9
         ]
         if not inactive_payload_hoists:
             pytest.skip("No inactive payload hoists with non-zero hook mass in example")
@@ -578,7 +578,7 @@ class TestA9InactiveHoistRopeRows:
             (
                 h
                 for h in doc.hoists
-                if float(getattr(h, "hook_mass_t", 0.0)) > 1e-9
+                if float(getattr(h, "lower_block_mass_t", 0.0)) > 1e-9
                 and rope_by_id.get(h.rope_id) is not None
                 and rope_by_id[h.rope_id].tension_mode != "solve"
             ),
@@ -586,7 +586,7 @@ class TestA9InactiveHoistRopeRows:
         )
         if target is None:
             pytest.skip("No suitable inactive payload hoist found in example")
-        target.hook_mass_t = 0.0
+        target.lower_block_mass_t = 0.0
 
         _active_hoist_id, _pt, row_map = self._scene_rope_rows(doc)
 
@@ -599,7 +599,7 @@ class TestAuthoredSchemaPolicy:
 
     def _minimal_v6(self) -> dict:
         return {
-            "schema": {"name": "crane-statics", "version": "11.0.0"},
+            "schema": {"name": "crane-statics", "version": "12.0.0"},
             "metadata": {"name": "V6 Minimal"},
             "model_definition": {
                 "environment": {
@@ -668,7 +668,7 @@ class TestAuthoredSchemaPolicy:
                                 "parts": 2,
                             },
                         ],
-                        "hook_mass_t": 0.0,
+                        "lower_block_mass_t": 0.0,
                         "falls": 2,
                         "daf": 1.0,
                         "offlead_deg": 0.0,
@@ -682,13 +682,13 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "3.2.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 11 is supported"
+            ValueError, match="Only crane-statics schema major version 12 is supported"
         ):
             normalize_document(data)
 
     def test_v6_minor_version_bump_is_accepted_by_normalizer(self):
         data = self._minimal_v6()
-        data["schema"]["version"] = "11.1.0"
+        data["schema"]["version"] = "12.0.0"
         doc = normalize_document(data)
         assert doc is not None
 
@@ -696,7 +696,7 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "5.13.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 11 is supported"
+            ValueError, match="Only crane-statics schema major version 12 is supported"
         ):
             normalize_document(data)
 
@@ -720,7 +720,7 @@ class TestAuthoredSchemaPolicy:
 
         bh = next(h for h in doc.hoists if h.id == "BH")
         assert bh.contractual_points == []
-        assert bh.hook_mass_t == 0.0
+        assert bh.lower_block_mass_t == 0.0
         assert bh.hook_daf == 1.0
 
     def test_v6_component_mass_points_and_wind_areas_can_be_omitted(self):
@@ -1023,7 +1023,7 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         mh = data["model_definition"]["hoists"]["MH"]
         mh["split"] = {
-            "hook_mass_t": 0.0,
+            "lower_block_mass_t": 0.0,
             "falls": 1,
             "load_chart": [{"outreach_m": 50.0, "load_t": 80.0}],
         }
@@ -1032,7 +1032,7 @@ class TestAuthoredSchemaPolicy:
         runtime_mh = next(h for h in doc.hoists if h.id == "MH")
         assert runtime_mh.splitable_block is True
         assert runtime_mh.split_falls == 1
-        assert runtime_mh.split_hook_mass_t == pytest.approx(0.0)
+        assert runtime_mh.split_lower_block_mass_t == pytest.approx(0.0)
         assert len(runtime_mh.split_contractual_points) == 1
         assert runtime_mh.split_contractual_points[0].outreach_m == pytest.approx(50.0)
         assert runtime_mh.split_contractual_points[0].load_t == pytest.approx(80.0)
@@ -1042,7 +1042,7 @@ class TestAuthoredSchemaPolicy:
         hoist = data["model_definition"]["hoists"]["MH"]
         hoist["modes"] = {
             "normal": {
-                "hook_mass_t": hoist.pop("hook_mass_t"),
+                "lower_block_mass_t": hoist.pop("lower_block_mass_t"),
                 "falls": hoist.pop("falls"),
                 "load_chart": hoist.pop("load_chart"),
             }
@@ -1056,7 +1056,7 @@ class TestAuthoredSchemaPolicy:
     def test_v6_rejects_split_values_above_normal_values(self):
         data = self._minimal_v6()
         data["model_definition"]["hoists"]["MH"]["split"] = {
-            "hook_mass_t": 1.0,
+            "lower_block_mass_t": 1.0,
             "falls": 3,
             "load_chart": [{"outreach_m": 50.0, "load_t": 80.0}],
         }
@@ -1065,7 +1065,9 @@ class TestAuthoredSchemaPolicy:
             normalize_document(data)
 
         data["model_definition"]["hoists"]["MH"]["split"]["falls"] = 1
-        with pytest.raises(ValueError, match="split.hook_mass_t must be <= hook_mass_t"):
+        with pytest.raises(
+            ValueError, match="split.lower_block_mass_t must be <= lower_block_mass_t"
+        ):
             normalize_document(data)
 
     def test_v6_rejects_missing_solve_hoist(self, tmp_path):
@@ -1187,7 +1189,7 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["model_definition"]["hoists"]["AH"] = {
             "reeving": [{"node": "boom_heel"}, {"node": "front_base", "parts": 2}],
-            "hook_mass_t": 0.0,
+            "lower_block_mass_t": 0.0,
             "falls": 2,
             "daf": 1.0,
             "offlead_deg": 0.0,
@@ -1232,7 +1234,7 @@ class TestAuthoredSchemaPolicy:
 
         saved = yaml.safe_load(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "11.1.0"
+        assert saved["schema"]["version"] == "12.0.0"
         assert "model_definition" in saved
         assert "ropes" not in saved["model_definition"]
         assert "nodes" not in saved["model_definition"]
@@ -1244,7 +1246,7 @@ class TestAuthoredSchemaPolicy:
         mh = md["hoists"]["MH"]
         assert set(mh) == {
             "reeving",
-            "hook_mass_t",
+            "lower_block_mass_t",
             "falls",
             "daf",
             "offlead_deg",
@@ -1269,7 +1271,7 @@ class TestAuthoredSchemaPolicy:
         assert "split" in mh
         assert "splitable_block" not in mh
         assert mh["split"]["falls"] == 12
-        assert mh["split"]["hook_mass_t"] == pytest.approx(91.51)
+        assert mh["split"]["lower_block_mass_t"] == pytest.approx(91.51)
 
 
 class TestSplitModeAutosetAndChart:

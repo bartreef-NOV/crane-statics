@@ -244,7 +244,7 @@ def test_vessel_limits_skip_probes_of_unused_channels() -> None:
                 offlead_deg=hoist.offlead_deg,
                 sidelead_deg=hoist.sidelead_deg,
                 hook_daf=hoist.hook_daf,
-                hook_mass_t=hoist.hook_mass_t,
+                lower_block_mass_t=hoist.lower_block_mass_t,
             )
             for probes in (full, lean)
         ]
@@ -273,7 +273,7 @@ def test_probes_for_other_vessel_limits_are_rejected() -> None:
             offlead_deg=hoist.offlead_deg,
             sidelead_deg=hoist.sidelead_deg,
             hook_daf=hoist.hook_daf,
-            hook_mass_t=hoist.hook_mass_t,
+            lower_block_mass_t=hoist.lower_block_mass_t,
         )
 
 
@@ -324,7 +324,7 @@ def _fast(
     limits: dict[str, dict],
     *,
     overrides: dict[str, dict[str, Any]] | None = None,
-    hook_mass_t: float | None = None,
+    lower_block_mass_t: float | None = None,
 ) -> AllowableCapacity:
     hoist = _hoist(doc)
     probes = build_probes(calc, HOIST, angle, float(doc.environment.max_wind_speed_m_s), overrides)
@@ -337,7 +337,9 @@ def _fast(
         offlead_deg=hoist.offlead_deg,
         sidelead_deg=hoist.sidelead_deg,
         hook_daf=hoist.hook_daf,
-        hook_mass_t=hoist.hook_mass_t if hook_mass_t is None else hook_mass_t,
+        lower_block_mass_t=(
+            hoist.lower_block_mass_t if lower_block_mass_t is None else lower_block_mass_t
+        ),
     )
 
 
@@ -357,11 +359,11 @@ def _compare_with_reference(
     slew_step_deg: float,
     wind_step_deg: float,
     overrides: dict[str, dict[str, Any]] | None = None,
-    hook_mass_t: float | None = None,
+    lower_block_mass_t: float | None = None,
 ) -> None:
     calc = CraneCalculator(doc)
     hoist = _hoist(doc)
-    mass = float(hoist.hook_mass_t if hook_mass_t is None else hook_mass_t)
+    mass = float(hoist.lower_block_mass_t if lower_block_mass_t is None else lower_block_mass_t)
     refs = reference_capacities(
         calc,
         doc,
@@ -369,13 +371,13 @@ def _compare_with_reference(
         angle,
         ENVELOPE_LIMITS,
         hook_daf=hoist.hook_daf,
-        hook_mass_t=mass,
+        lower_block_mass_t=mass,
         overrides=overrides,
         slew_step_deg=slew_step_deg,
         wind_step_deg=wind_step_deg,
     )
     for limit_id, limits, ref in zip(LIMIT_IDS, ENVELOPE_LIMITS, refs):
-        fast = _fast(calc, doc, angle, limits, overrides=overrides, hook_mass_t=mass)
+        fast = _fast(calc, doc, angle, limits, overrides=overrides, lower_block_mass_t=mass)
         _assert_within_band(fast, ref, f"{limit_id} @ {angle} deg")
 
 
@@ -408,7 +410,7 @@ def test_envelope_matches_a_fine_reference(offset_boom_mass: bool) -> None:
 def test_envelope_with_split_mode_overrides() -> None:
     doc = _envelope_document(vessel_limits={"accel_x_m_s2": 0.8, "pitch_deg": 2.5})
     split = _hoist(doc).model_copy(
-        update={"splitable_block": True, "split_falls": 10, "split_hook_mass_t": 30.0}
+        update={"splitable_block": True, "split_falls": 10, "split_lower_block_mass_t": 30.0}
     )
     mode = analysis_mode_by_name(split, "split")
     assert mode.name == "split" and mode.runtime_overrides
@@ -418,7 +420,7 @@ def test_envelope_with_split_mode_overrides() -> None:
         slew_step_deg=5.0,
         wind_step_deg=5.0,
         overrides=mode.runtime_overrides,
-        hook_mass_t=mode.hook_mass_t,
+        lower_block_mass_t=mode.lower_block_mass_t,
     )
 
 
@@ -446,7 +448,7 @@ def test_zero_limits_and_no_wind_equal_the_single_solve() -> None:
                     compose_lead_channel_point(pt, off, side),
                     limits,
                     hook_daf=hoist.hook_daf,
-                    hook_mass_t=hoist.hook_mass_t,
+                    lower_block_mass_t=hoist.lower_block_mass_t,
                 )
                 for off, side in _lead_cases(hoist)
             ),
@@ -482,7 +484,7 @@ def test_zero_leads_collapse_to_one_case(monkeypatch: pytest.MonkeyPatch) -> Non
         offlead_deg=0.0,
         sidelead_deg=0.0,
         hook_daf=1.1,
-        hook_mass_t=50.0,
+        lower_block_mass_t=50.0,
     )
     assert calls == [(0.0, 0.0)]
 
@@ -567,6 +569,6 @@ def test_envelope_leaves_the_probe_lead_channels_unchanged() -> None:
             offlead_deg=1.0,
             sidelead_deg=2.5,
             hook_daf=1.1,
-            hook_mass_t=50.0,
+            lower_block_mass_t=50.0,
         )
     assert _lead_state(probes.zero) == before

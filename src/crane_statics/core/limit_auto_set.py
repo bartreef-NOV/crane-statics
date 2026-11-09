@@ -95,11 +95,11 @@ class ConnectionAutoSetResult:
 
 
 def _required_hook_force_kN(
-    load_t: float, hook_mass_t: float, hook_daf: DynamicFactorLike, gravity_m_s2: float
+    load_t: float, lower_block_mass_t: float, hook_daf: DynamicFactorLike, gravity_m_s2: float
 ) -> float:
     """Required hook force at contractual point, including hook mass and DAF."""
     return as_dynamic_factor(hook_daf).hook_force_kN(
-        float(load_t), float(hook_mass_t), abs(float(gravity_m_s2))
+        float(load_t), float(lower_block_mass_t), abs(float(gravity_m_s2))
     )
 
 
@@ -191,7 +191,7 @@ def _evaluate_condition(
 
                 setup = lift.setup(condition, hoist.id, mode, float(angle))
                 hook_kN = _required_hook_force_kN(
-                    cp.load_t, mode.hook_mass_t, setup.factor, gravity
+                    cp.load_t, mode.lower_block_mass_t, setup.factor, gravity
                 )
                 amplified = amplified_rope_hoist_id(condition, hoist.id)
                 scales = (
@@ -275,7 +275,7 @@ def _evaluate_condition(
                                 hook_kN,
                                 factored_entity,
                                 hook_daf=setup.factor,
-                                hook_mass_t=mode.hook_mass_t,
+                                lower_block_mass_t=mode.lower_block_mass_t,
                                 gravity_m_s2=gravity,
                             )
                         demand = demand_extractor(demand_point, hook_kN, case)

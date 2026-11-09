@@ -86,7 +86,7 @@ decisions that should not be re-litigated are in [docs/adr/](docs/adr/).
 
 ## Document Lifecycle
 
-Authored input (YAML) is strict `crane-statics` schema version `11.1.0` (`src/crane_statics/schemas/crane-statics-v11.schema.json`).
+Authored input (YAML) is strict `crane-statics` schema version `12.0.0` (`src/crane_statics/schemas/crane-statics-v12.schema.json`).
 
 Each hoist is self-contained: its `reeving` lists the rope path from the winch outwards, and an entry with `body` and coordinates defines a sheave or winch that belongs to that hoist (`boom` nodes use `u_m`/`w_m`, the others `x_m`/`z_m`). A hoist-local node `winch` in hoist `MH` becomes runtime node `mh_winch`. The last reeving entry is the support node the hook hangs from. Entries without coordinates pass through a node already defined (`boom_heel`, or a shared node under a body's `nodes`). Delete a hoist block to remove the hoist and its sheaves; copy one and rename its key to add a hoist.
 
@@ -103,7 +103,7 @@ model_definition:
       reeving: [{node: boom_heel}, {node: rear_top, parts: 4}]
       rope: {ea_kN: 90000.0}
     MH:
-      # reeving, hook_mass_t, falls, load_chart ... as usual
+      # reeving, lower_block_mass_t, falls, load_chart ... as usual
       daf: 1.1                        # a manual override of the computed factor
       rope: {ea_kN: 40000.0}
       max_hoisting_speed_m_s: 0.25
@@ -177,7 +177,7 @@ Keep QML declarative and route state changes through the owning view model. Add 
 
 ## References
 
-- `src/crane_statics/schemas/crane-statics-v11.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
+- `src/crane_statics/schemas/crane-statics-v12.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
 - ABS, *Requirements for Certification of Lifting Appliances*, January 2026. Part 2-2: 9.3 (p.52-54), 5.15 (p.46), 5.13.5(c) (p.46), 5.17 (p.47-48), 5.19 (p.49-50), 5.21 (p.50-51), 11 (p.56-57)
 - DNV-ST-0378, *Offshore and platform lifting appliances*, July 2019, amended October 2021: 4.1.3.2 (p.54), 4.2.2.1 (p.57), 4.2.3.2 and 4.2.3.3 (p.58), 8.2.2.1 (p.90), 8.2.2.2 (p.91), 8.2.2.4 (p.91)
 

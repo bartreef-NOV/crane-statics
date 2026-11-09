@@ -148,7 +148,7 @@ def governing_case(
                 offlead_deg=offlead_deg,
                 sidelead_deg=sidelead_deg,
                 hook_daf=factor,
-                hook_mass_t=mode.hook_mass_t,
+                lower_block_mass_t=mode.lower_block_mass_t,
                 hook_lateral=lateral,
                 demand_scale=scales,
             )

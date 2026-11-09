@@ -13,7 +13,7 @@ class HoistAnalysisMode:
     """Effective hook configuration and contractual points for one mode."""
 
     name: str
-    hook_mass_t: float
+    lower_block_mass_t: float
     runtime_overrides: dict[str, dict[str, float | int | str]]
     contractual_points: list[Any]
 
@@ -48,11 +48,13 @@ def iter_wind_lead_directional_cases(
 
 
 def _split_mode_overrides(hoist: Any) -> dict[str, dict[str, float | int | str]]:
-    split_hook_mass_t = float(getattr(hoist, "split_hook_mass_t", hoist.hook_mass_t))
-    normal_hook_mass_t = float(hoist.hook_mass_t)
+    split_lower_block_mass_t = float(
+        getattr(hoist, "split_lower_block_mass_t", hoist.lower_block_mass_t)
+    )
+    normal_hook_mass_t = float(hoist.lower_block_mass_t)
     payload: dict[str, float | int | str] = {
-        "hook_mass_t": split_hook_mass_t,
-        "support_comp_mass_t": max(0.0, normal_hook_mass_t - split_hook_mass_t),
+        "lower_block_mass_t": split_lower_block_mass_t,
+        "support_comp_mass_t": max(0.0, normal_hook_mass_t - split_lower_block_mass_t),
     }
     split_falls = getattr(hoist, "split_falls", None)
     if split_falls is not None:
@@ -77,19 +79,19 @@ def iter_hoist_analysis_modes(hoist: Any) -> tuple[HoistAnalysisMode, ...]:
     modes = [
         HoistAnalysisMode(
             name="normal",
-            hook_mass_t=float(hoist.hook_mass_t),
+            lower_block_mass_t=float(hoist.lower_block_mass_t),
             runtime_overrides={},
             contractual_points=_contractual_points(hoist, "normal"),
         )
     ]
     if bool(getattr(hoist, "splitable_block", False)):
-        split_hook_mass = getattr(hoist, "split_hook_mass_t", None)
+        split_hook_mass = getattr(hoist, "split_lower_block_mass_t", None)
         split_falls = getattr(hoist, "split_falls", None)
         if split_hook_mass is not None and split_falls is not None:
             modes.append(
                 HoistAnalysisMode(
                     name="split",
-                    hook_mass_t=float(split_hook_mass),
+                    lower_block_mass_t=float(split_hook_mass),
                     runtime_overrides=_split_mode_overrides(hoist),
                     contractual_points=_contractual_points(hoist, "split"),
                 )

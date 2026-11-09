@@ -93,10 +93,13 @@ def _validate_authored_schema(data: dict[str, Any]) -> None:
         raise DocumentIOError("Only crane-statics authored input is supported")
     version = schema_obj.get("version")
     if authored_schema_major(version) != AUTHORED_SCHEMA_MAJOR_VERSION:
-        raise DocumentIOError(
+        message = (
             f"Unsupported authored schema version {version!r}; expected major version "
             f"{AUTHORED_SCHEMA_MAJOR_VERSION}"
         )
+        if authored_schema_major(version) == 11:
+            message += "; hook_mass_t was renamed lower_block_mass_t in 12.0.0"
+        raise DocumentIOError(message)
     try:
         AuthoredDocument.model_validate(data)
     except ValidationError as e:

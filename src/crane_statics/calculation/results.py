@@ -90,7 +90,7 @@ class AllowableCapacity:
 
     METRIC CONVERSION (hook_force → payload), see ``dynamic_factor.DynamicFactor``; for a
     constant factor:
-        max_allowable_load_t = (max_allowable_load_kN / hook_daf / gravity) - hook_mass_t
+        max_allowable_load_t = (max_allowable_load_kN / hook_daf / gravity) - lower_block_mass_t
 
     USAGE RULES:
     - Chart curves, contractual points, and payload displays MUST use max_allowable_load_t

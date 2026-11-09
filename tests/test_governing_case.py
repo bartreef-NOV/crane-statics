@@ -118,7 +118,7 @@ def _scene_load_kN(doc: CraneDocument, case: GoverningCase) -> float:
         point,
         {case.limit_id: LIMITS[case.limit_id]},
         hook_daf=hoist.hook_daf,
-        hook_mass_t=mode.hook_mass_t,
+        lower_block_mass_t=mode.lower_block_mass_t,
     )
     return float(cap.max_allowable_load_kN)
 

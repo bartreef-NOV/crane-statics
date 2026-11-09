@@ -177,14 +177,14 @@ def _rope_row(lay: Layout, i: int) -> dict[str, str]:
             f'{me("hoist_row")})&"","")'
         ),
         "n_parts": f'=IF({on},MAX(1,INT(IF({hook}="",0,{parts}))),0)',
-        "hook_mass_t": (
-            f"=IF({me('hoist_row')}>0,INDEX({lay.col_range('hoists', 'hook_mass_t')},"
+        "lower_block_mass_t": (
+            f"=IF({me('hoist_row')}>0,INDEX({lay.col_range('hoists', 'lower_block_mass_t')},"
             f"{me('hoist_row')})+0,0)"
         ),
         "tension_kN": (
             f"=IF(OR({me('active')}<>1,{me('is_solve')}=1),0,IF({me('is_scene')}=1,"
             f"{s('hook_kN')}/{me('n_parts')},IF({me('hoist_row')}>0,"
-            f"{me('hook_mass_t')}*{s('idle_accel')}/{me('n_parts')},0)))"
+            f"{me('lower_block_mass_t')}*{s('idle_accel')}/{me('n_parts')},0)))"
         ),
     }
 
@@ -228,8 +228,8 @@ def _hoist_row(lay: Layout, i: int) -> dict[str, str]:
         ),
         "spooled_t": f"={me('spooled_m')}*{me('linear_mass_kg_m')}/1000",
         "idle_mass_t": (
-            f"=IF(AND({on},{me('is_scene')}=0,{me('hook_row')}>0,{inp('hook_mass_t')}>0),"
-            f"{inp('hook_mass_t')}+0,0)"
+            f"=IF(AND({on},{me('is_scene')}=0,{me('hook_row')}>0,{inp('lower_block_mass_t')}>0),"
+            f"{inp('lower_block_mass_t')}+0,0)"
         ),
     }
 

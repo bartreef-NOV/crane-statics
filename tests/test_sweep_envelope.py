@@ -86,7 +86,7 @@ def test_sweep_matches_reference_curve() -> None:
             angle,
             ORACLE_LIMITS,
             hook_daf=hoist.hook_daf,
-            hook_mass_t=hoist.hook_mass_t,
+            lower_block_mass_t=hoist.lower_block_mass_t,
             overrides=None,
             slew_step_deg=15.0,
             wind_step_deg=45.0,
@@ -132,7 +132,7 @@ def test_zero_limits_and_wind_give_the_single_solve_curve() -> None:
         pt = calc.compute_analysis_point(angle, 0.0, HOIST, wind_speed_m_s=0.0)
         assert pt is not None
         expected = calc.compute_allowable_load(
-            pt, LIMITS, hook_daf=hoist.hook_daf, hook_mass_t=hoist.hook_mass_t
+            pt, LIMITS, hook_daf=hoist.hook_daf, lower_block_mass_t=hoist.lower_block_mass_t
         )
         assert load_t == pytest.approx(expected.max_allowable_load_t, rel=1e-9)
 
@@ -162,7 +162,7 @@ def _envelope_t(doc: CraneDocument, outreach: float, mode_name: str) -> float:
         offlead_deg=hoist.offlead_deg,
         sidelead_deg=hoist.sidelead_deg,
         hook_daf=hoist.hook_daf,
-        hook_mass_t=mode.hook_mass_t,
+        lower_block_mass_t=mode.lower_block_mass_t,
     )
     return float(cap.max_allowable_load_t)
 
