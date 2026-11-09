@@ -1,0 +1,4238 @@
+# DNV-ST-0378 Offshore and platform lifting appliances
+
+> Structured text extracted from the supplied HTML archive. Section numbers and tables are retained; figure captions are retained where available. Consult the HTML archive for the original graphics and layout.
+
+
+## Revision history
+
+This document supersedes the May 2016 edition of DNVGL-ST-0378.
+
+
+## Amendments October 2021
+
+| Topic | Reference | Description |
+| --- | --- | --- |
+| Accidental drop of hoisted load | Table 2-1 | Added documentation requirement for risk analysis for offshore cranes. |
+| [8.4.2.19] | Modified text in order to align with DNV-RU-SHIP Pt.5 Ch.10 Sec.2 [3.1.3]. |  |
+| [10.4.2] | Added text related to accessories design and certification. |  |
+| [14.2.3.4] | Modified text to limit structural elements categorisation. |  |
+| Rebranding to DNV | All | This document has been revised due to the rebranding of DNV GL to DNV. The following have been updated: the company name, material and certificate designations, and references to other documents in the DNV portfolio. Some of the documents referred to may not yet have been rebranded. If so, please see the relevant DNV GL document. |
+
+
+## Amendments October 2020
+
+| Topic | Reference | Description |
+| --- | --- | --- |
+| Accidental drop of hoisted load | [8.4.2.2] | Added accidental drop of hoisted load to generic risk contributor list. |
+| [8.4.2.19] | New subsection requiring that vessel and crane interactions, due to accidental drop of hoisted load, shall be taken into consideration. |  |
+
+
+## Amendments September 2019
+
+The following change descriptions were left out in the July 2019 publication. No changes have been made to the content of the document, except for [14.6.1].
+
+| Topic | Reference | Description |
+| --- | --- | --- |
+| Alarms for subsea operations | [9.4.4] | Added a relaxation on the 90% SWL audible alarm. |
+| Certification for control and monitoring | [5.5.4] and [8.3.4.1] | Removed certification requirement for control and monitoring. |
+| Cold forming of materials | [3.11.4.2] | Clarified approach and acceptance criteria for manufacturers. Clarified distinction between lifting appliances vs rig structures. |
+| General feedback and experiences | Sec.2 | DNVGL LA4 introduced as acceptable certificate form. |
+| Load combinations due to vessel motions | App.C | Specific load combinations in the text are replaced with reference to DNVGL-RU-SHIP Pt.3 Ch.4 Sec.3 [3.3.4]. |
+| Personnel lifting | Sec.11 | Prohibition of wireless control removed, added a new requirement for lifting gear and added acceptance of special motion compensation system. |
+| Reference to new DNVGL documents | [1.1.1.1] and [3.1.3.2] | Added reference to DNVGL-RP-0232 Pipeline and cable laying equipment and Sec.3 [1.3.2] in DNVGL-CG-0197 Additive manufacturing - qualification and certification process for materials and components. |
+| Steel wire rope anchorage | [8.3.3.1] and [8.4.2.5] | For cranes with radius dependent load curves the end stop shall be duplicated based on different technologies (electric/mechanical) or an alarm shall be provided to crane operator in case of failure. |
+| Rope monitoring systems for subsea operations | [9.4.2] | New requirement. |
+| Safety system: Auto stop | Table 7-1 and Table 8-1 | Table 7-1 added for emergency stop. Table 8-1 removed for fire/gas detection. |
+| Sheaves and spooling devices for subsea operations | [9.3.4] | Additional requirements addressing sheaves and spooling devices. |
+| Skid requirements | [E.1.3] | Specific requirements in the text removed, and replaced with reference to DNVGL-ST-E273. |
+| Software testing with use of simulators | [14.6.1] | Requirement for simulator testing clarified. |
+| Launch and recovery systems for diving | Sec.12 | Specific requirements in the text replaced with references to DNVGL-OS-E402. |
+
+
+## Changes July 2019
+
+| Topic | Reference | Description |
+| --- | --- | --- |
+| General feedback and experiences | Sec.1 | All references to OLA 101 certificate form are replaced with correct form number OLA 201. |
+| Software testing with use of simulators | [14.6] | New subsection introduced defining criteria and methods for use of simulators in software testing. |
+
+
+## 1.1 Introduction
+
+
+### 1.1.1 Objective
+
+1.1.1.1 This standard provides requirements for certification and verification of cranes intended for load handling outside vessel while at sea (offshore cranes), load handling onboard offshore units/installations (platform cranes) and pipeline and cable laying equipment (see DNV-RP-0232 for criteria and guidance for certification and verification of the design, materials, safety system and testing of the pipeline and cable laying equipment).
+
+Cranes for load handling within and outside ships while in harbour and in sheltered waters and within ships at sea, please see DNV-ST-0377 Shipboard lifting appliances.
+
+
+### 1.1.2 Scope
+
+1.1.2.1 This standard covers the design, materials, fabrication, installation, testing and commissioning of offshore cranes, platform cranes and pipe/cable laying systems.
+
+The categorization of lifting appliances is based on installation and intended function for the lifting appliance:
+
+1. Offshore cranes:
+  - lifting appliances on board vessels (including wind turbine installations) intended for load handling outside vessels while at open sea.
+2. Platform cranes:
+  - lifting appliances onboard offshore units/installations intended for load handling within and outside the unit/installation while in harbour and sheltered waters and within the unit/installation while at sea.
+3. Pipeline and cable laying equipment:
+  - equipment onboard vessels intended for pipeline (rigid pipe and flexible pipe) and cable (cable and umbilicals) laying, retrieving and maintenance operations while at open sea.
+
+Cranes intended for operating from an offshore unit/installation in jacked up condition to other fixed installation are categorized as platform crane.
+
+1.1.2.2 Each lifting appliance has its separate intended functions. Examples of intended functions are, but not limited to:
+
+- cargo handling within deck area on board offshore units/installations
+- loading and discharging of offshore supply vessels
+- launch and recovery of diving systems
+- launch and recovery of ROV
+- loading and discharging from sea or sea bed
+- personnel handling
+- pipeline and cable laying, retrieving and maintenance operations.
+
+1.1.2.3 Requirements presented herein are minimum requirements to be satisfied, although subject to acceptance by the Society, other minimum requirements may be agreed e.g. based on new technology available at the time of application for certification.
+
+1.1.2.4 The requirements of this standard may be supplemented with additional requirements where installation of specific design or assessment shows that standards that provides equivalent or higher level of integrity and safety are more appropriate.
+
+1.1.2.5 The standard consists of a three-level hierarchy of documents.
+
+1. General principles (This section and section 2)
+2. Technical provisions (Sec.3-Sec.14)
+3. Examples and sound engineering practice (App.A-App.G)
+
+
+### 1.1.3 Application
+
+1.1.3.1 This standard shall be applied for certification of offshore cranes and platform cranes for vessels with class notations Crane vessel, Crane, Crane-offshore or Crane-offshore(N). This standard may also be applied as voluntary basis for verification and certification of lifting appliances that are not classed with the Society.
+
+This standard shall be applied for certification of cranes onboard ships and offshore units carrying out offshore crane operations, also with respect to additional functionality related to internal handling and harbour operations in accordance with Sec.7.
+
+For cranes solely carrying out shipboard crane operations onboard ships, certification shall be in accordance with DNV-ST-0377.
+
+Pipe and cable laying equipment and systems are also included in the lifting appliances concept. The notation Pipe laying vessel and Cable laying vessel may be granted to a vessel specially intended for pipeline and cable laying operations and for that purpose fitted with laying systems certified by the Society as specified in DNV-RU-SHIP Pt.5 Ch.10.
+
+The standard may also be applied to mobile cranes, i.e. crane that are transported by vehicle or other means from one location to another, and cranes that can move long distances by road by means of their own machinery and wheel arrangement. In the latter case the moving machinery and its arrangement as well as the overturning stability of the mobile crane are not covered by the certification.
+
+1.1.3.2 The requirements presented herein should be applied consequently from concept design through the final construction, including major modifications.
+
+1.1.3.3 Specifications of the services provided by this standard are given in [1.2] and [1.4].
+
+1.1.3.4 The standard does not apply to cable cranes, personnel lifts (elevators), jacks, overhead drilling equipment, fork lifts, portable hoisting gear etc.
+
+1.1.3.5 Personnel lifting with cranes otherwise designed for lifting of loads/cargo may be covered upon agreement.
+
+Lifting appliances rated to a safe working load of less than 10 kN will be especially considered.
+
+1.1.3.6 Without prejudice to [1.1.2.4], deviations from the requirements given in this standard may only be substituted where shown to provide an equivalent or higher level of integrity or safer than under this standard.
+
+1.1.3.7 At the Society’s discretion equivalent solutions and exemptions from the requirements given in this standard may be accepted.
+
+1.1.3.8 In case of conflict between requirements given in this standard and a reference document, the requirements given in this standard shall prevail.
+
+1.1.3.9 Where reference is made to codes other than the Society's documents, the valid revision shall be taken as the revision which was current at the date of issue of this standard, unless otherwise noted.
+
+
+### 1.1.4 Relation to the Society's other documents
+
+1.1.4.1 For lifting appliances covered by the class notation Crane vessel, see DNV-RU-SHIP Pt.5 Ch.10 Sec.2
+
+1.1.4.2 For lifting appliances covered by the class notation Crane, see DNV-RU-SHIP Pt.6 Ch.5 Sec.3
+
+
+#### 1.1.4.3
+
+For lifting appliances covered by class notation Crane-offshore, see DNV-RU-OU-0101 Ch.2 Sec.7 [10]
+
+1.1.4.4 For lifting appliances covered by the class notation Crane-offshore(N), see DNV-SI-0166 Ch.2 Sec.11
+
+1.1.4.5 For lifting appliances covered by class notation Cable laying vessel, see DNV-RU-SHIP Pt.5 Ch.10 Sec.3
+
+1.1.4.6 For lifting appliances covered by class notation Pipe laying vessel, see DNV-RU-SHIP Pt.5 Ch.10 Sec.4
+
+1.1.4.7 For lifting appliances covered by service notation Crane unit, see DNV-RU-OU-0101 Ch.2 Sec.5.
+
+
+### 1.1.5 Definitions, abbreviations, symbols and references
+
+
+#### 1.1.5.1 Accessories
+
+Load-bearing, not rigidly attached, interchangeable parts which may be integral components of lifting appliances and loose gear as well as employed individually, such as: hooks, blocks, shackles, swivels, rings, chains, claws, clamps, pliers, load fastening ropes (slings/strops), lifting straps, etc.
+
+
+#### 1.1.5.2 Active cable tensioning system (ACT)
+
+System keeping the tension of the hoisting wire to a given set point value.
+
+A supply of external energy is required.
+
+
+#### 1.1.5.3 Active heave compensation system (AHC)
+
+System that maintains the position of the load to a given set point value.
+
+A supply of external energy is required.
+
+
+#### 1.1.5.4 Actual hook load
+
+The static weight of the load attached to the hook; includes the useful load lifted plus any loose gear and rigging used, such as slings, lifting beams, etc.
+
+
+#### 1.1.5.5 Additional class notations
+
+Code used by the classification societies to confirm that a vessel possesses certain systems, equipment or features covered by the classification. (Examples are HELDK, Crane, E0 and F(A, M, C)).
+
+E0 means that the vessel complies with requirements for having unattended machinery space and F(A, M, C) means that the vessel complies with requirements for additional fire protection, in this case both for accommodation, machinery space and cargo space.
+
+
+#### 1.1.5.6 Ship type notations
+
+Code used by the classification societies to define a type of vessel related to its most typical service. (Tanker for oil, Passenger ship, Crane vessel and Cable laying vessel are typical examples).
+
+
+#### 1.1.5.7 Automatic overload protection system (AOPS)
+
+A system that automatically safeguards and protects the crane against overload and 'over-moment' during operation by allowing the hook to be pulled away from the crane in order to avoid significant damage.
+
+
+#### 1.1.5.8 Certificate of conformity
+
+A document attesting that a product or service is in conformity with specific standards or technical specifications. (ISO “Certification - Principles and practice.”, 1980). Issued by manufacturer or vendor.
+
+
+#### 1.1.5.9 Competent person/body
+
+Person or body possessing knowledge and experience required for performing thorough examination and test of lifting appliances and loose gear, and who is acceptable to the competent authority.
+
+
+#### 1.1.5.10 Crane stiffness
+
+Coefficient defined as the weight attached to the hook necessary to obtain a unit deflection at the hook level.
+
+
+#### 1.1.5.11 Customer
+
+Agreement (contract) holder with the Society. Signifies the party who has requested the Society’s service.
+
+
+#### 1.1.5.12 Dead loads
+
+Dead loads are the weights of all the fixed and mobile components of lifting appliances and loose gear permanently present during operation.
+
+For the purpose of marking, the dead loads of loose gear are designated as weight by the ILO. The unit is specified in tonnes (t) or kilograms (kg).
+
+
+#### 1.1.5.13 Designer
+
+Signifies a party who creates documentation submitted to the Society for approval or information.
+
+
+#### 1.1.5.14 Design approval
+
+Verifying that a design, represented by a drawing or set of drawings, is found to comply with all requirement given in a specified DNV standard or DNV regulation.
+
+In the Society's business procedures design approvals are valid for one order only. One order, however, may include a specified number of units for specified locations/vessels.
+
+
+#### 1.1.5.15 Design approval letter
+
+Written confirmation of a design approval.
+
+
+#### 1.1.5.16 Design assessment for type approval
+
+Examination and acceptance of a design for type approval. The type approval will be assigned first after a prototype test also has been successfully carried out.
+
+
+#### 1.1.5.17 Design dynamic factor
+
+The dynamic factor applied to the working load for a specific SWL
+
+For an offshore crane the design dynamic factor is normally referred to the still water condition for determining the SWL at still water. The design dynamic factor may, however, be defined also to refer to a specified significant wave height.
+
+
+#### 1.1.5.18 Design verification report (DVR)
+
+Formalized report confirming the result of a completed design verification assignment.
+
+
+#### 1.1.5.19 Dynamic factor/dynamic coefficient
+
+A variable factor representing the dynamic effects that the working load is exposed to.
+
+
+#### 1.1.5.20 Dynamic load
+
+The working load when subjected to (multiplied with) a dynamic factor.
+
+
+#### 1.1.5.21 Dynamic load chart
+
+Diagram or table showing rated capacity depending on sea state and on radius or boom angle.
+
+
+#### 1.1.5.22 Engineered lift
+
+Safe lift planned by qualified engineers with basis in thorough information with respect to crane capacity, crane functions and performance, rigging, crane support as well as weather window and sea conditions.
+
+
+#### 1.1.5.23 Heavy lift crane
+
+Crane with SWL above 2500 kN.
+
+
+#### 1.1.5.24 HMI
+
+Human-machine interface.
+
+
+#### 1.1.5.25 ILO
+
+International Labour Organization.
+
+
+#### 1.1.5.26 Inertia forces
+
+The forces induced by change of velocity.
+
+
+#### 1.1.5.27 Inspection certificate 3.1
+
+A document issued by the manufacturer which contains the results of all the required tests. It shall certify that the tests have been carried out by the manufacturer on samples taken from the delivered products direct. See EN 10204 and ISO 10474.
+
+
+#### 1.1.5.28 Inspection certificate 3.2
+
+A document prepared by both the manufacturer's authorized inspection representative, independent of the manufacturing department, and either the purchaser's authorized representative or the inspector designated by the official regulations, and in which they declare that the products supplied are in compliance with the requirements of the order and in which test results are supplied. See EN 10204 and ISO 10474.
+
+
+#### 1.1.5.29 Lifting appliance
+
+Machine or appliance used for the purpose of lifting goods and materials, or in special modes, personnel.
+
+
+#### 1.1.5.30 Lifting equipment
+
+General expression including lifting appliances, lifting gear, loose gear and other lifting attachments; used separately or in combination.
+
+
+#### 1.1.5.31 Lifting gear
+
+See also ([1.1.5.1] Accessories) and ([1.1.5.32] Loose gear).
+
+Load carrying accessories used in combination with a lifting appliance, however, that are not necessarily a part of the permanent arrangement of the lifting appliance, such as:
+
+- attachment rings, shackles, swivels, balls, pins
+- sheaves, hook-blocks, hooks, load cells
+- loose gear.
+
+Lifting gear, considered as separate components, shall be designed and tested in accordance with the provisions for loose gear.
+
+
+#### 1.1.5.32 Load chart
+
+Diagram or table showing rated capacity depending on radius or boom angle.
+
+
+#### 1.1.5.33 Loose gear
+
+Means by which loads can be attached to lifting appliances but which do not form part either of the lifting appliance or of the load. They include devices and steel structures such as, but not limited to: grabs, spreaders, lifting magnets, traverses, etc, as well as Accessories (see [1.1.5.1]) which are integral components of the loose gear.
+
+
+#### 1.1.5.34 Machinery components
+
+Rotating components transferring torque for driving/braking purpose. Examples are gearboxes, wheels and shafts.
+
+
+#### 1.1.5.35 Man riding winch
+
+Device specially designed for hoisting/lowering of a person. Not covered by this standard.
+
+
+#### 1.1.5.36 Manual overload protection system (MOPS)
+
+System, activated by the crane operator, protecting the crane against overload and over-moment by reducing the load-carrying capacity and allowing the hook to be pulled away from the crane.
+
+
+#### 1.1.5.37 May
+
+Verbal form used to indicate a course of action permissible within the limits of the document.
+
+
+#### 1.1.5.38 Mean time to failure (MTTF)
+
+The mean value of service time until failure occurs.
+
+
+#### 1.1.5.39 Mechanism
+
+Devices needed to cause or to stop a relative motion between two rigid parts of a crane, between the crane and its foundation, or between the crane and the lifted load. Thus, motors brakes, transmission systems and similar components are defined as mechanisms.
+
+
+#### 1.1.5.40 Mobile deck crane
+
+A mobile deck crane is a cable-controlled crane on crawlers or rubber-tired carriers or a hydraulic-powered crane with a boom mounted on truck-type carriers or as self-propelled types.
+
+
+#### 1.1.5.41 MRU
+
+Motion response unit.
+
+
+#### 1.1.5.42 Nominal load
+
+Nominal load is the designation for the maximum permissible useful load of lifting appliances and loose gear.
+
+Lifting appliances and loose gear can have different nominal loads depending on varying equipment condition or operational conditions, cable tackle systems or load radii.
+
+
+#### 1.1.5.43 Overload
+
+Load which exceeds the safe working load (SWL).
+
+
+#### 1.1.5.44 Over-moment
+
+Load moment which exceeds the maximum load moment (safe working load (SWL) multiplied by radius).
+
+
+#### 1.1.5.45 Passive cable tensioning system (PCT)
+
+System keeping the tension of the hoisting wire between predefined limits, using stored energy.
+
+
+#### 1.1.5.46 Passive heave compensation system (PHC)
+
+System that maintains the position of the load between predefined limits, using stored energy.
+
+
+#### 1.1.5.47 Pipeline and cable laying equipment
+
+Structural and mechanical assemblies with functionality during pipeline and cable laying and/or maintenance operations. Structural/mechanical assemblies (individual equipment) with functionality during pipeline and cable laying and/or retrieving and or handling maintenance and/or handling repair operations.
+
+
+#### 1.1.5.48 Pipeline and cable laying system (installation spread)
+
+All equipment necessary to perform the pipeline and cable laying and/or retrieving and/or handling maintenance and/ or handling repair operations.
+
+
+#### 1.1.5.49 PLC
+
+Programmable logic controller.
+
+
+#### 1.1.5.50 Probability of failure on demand (PFD)
+
+Probability of failure on demand.
+
+
+#### 1.1.5.51 Product certificate (general)
+
+A compliance document validated and signed by the issuing organization:
+
+- identifying the product that the certificate applies to
+- conforming compliance with the referred requirements.
+
+It is required that:
+
+- the tests and inspections have been performed on the certified product itself, or, on samples taken from the certified product itself
+- the tests were witnessed by a qualified representative of the organization issuing the certificate, or, his authorized representative.
+
+
+#### 1.1.5.52 Product certificate (the Society’s)
+
+The Society's product certificate is a compliance document validated and signed by the issuing organization and the Society's representative:
+
+- identifying the product that the certificate applies to
+- confirming compliance with referred requirements.
+
+It is required that:
+
+- the tests and inspections have been performed on the certified product itself, or, on samples taken from the certified product itself
+- that the tests were witnessed by a qualified representative of the organization issuing the certificate and the Society's representative, or, in accordance with special agreements.
+
+
+#### 1.1.5.53 Purchaser
+
+Company or person who orders the lifting equipment from a manufacturer.
+
+
+#### 1.1.5.54 Rated capacity
+
+Actual hook load that the crane is designed to lift for a given operating condition (e.g. boom configuration, reeving arrangement, off lead/side lead, heel/trim, radius, wave height, etc.)
+
+
+#### 1.1.5.55 REP
+
+Rope exit point. Location on the lifting appliance where the rope is suspended - typically found at the outer sheave in the crane boom tip.
+
+
+#### 1.1.5.56 Risk
+
+Combination of the probability of occurrence (frequency) of harm and the severity (consequence) of the harm.
+
+
+#### 1.1.5.57 Risk control measure (RCM)
+
+A means of controlling a single element of risk; typically, risk control is achieved by reducing either the consequence or the frequencies.
+
+
+#### 1.1.5.58 ROV
+
+Remote operated vehicle (ROV).
+
+
+#### 1.1.5.59 Running rigging
+
+Wire ropes passing over rope sheaves of guide rollers, or wound on winches, irrespective of whether or not the ropes are moved under load.
+
+
+#### 1.1.5.60 Reference SWL
+
+A theoretically increased SWL used for determining of overload for load tests and rating of loose gear. Used when the design dynamic factor (see above) exceeds 1.33.
+
+
+#### 1.1.5.61 Safe working load (SWL)
+
+Safe working load is the international designation for the nominal load by ILO. The abbreviation SWL is used for marking the lifting appliance, loose gear and accessories. For subsea handling cranes, SWL is applied for the static load at the REP.
+
+
+#### 1.1.5.62 Service temperature
+
+Lowest service temperature is in this standard same as the design temperature and denotes the lowest operational temperature.
+
+
+#### 1.1.5.63 Shall
+
+verbal form used to indicate requirements strictly to be followed in order to conform to the document.
+
+
+#### 1.1.5.64 Should
+
+Verbal form used to indicate that among several possibilities one is recommended as particularly suitable, without mentioning or excluding others, or that a certain course of action is preferred but not necessarily required.
+
+
+#### 1.1.5.65 Significant wave height Hs
+
+Average height of the highest one third of the individual wave heights in a short-term constant sea state, typically 3 hours.
+
+
+#### 1.1.5.66 The Society
+
+The Society signifies DNV.
+
+
+#### 1.1.5.67 Standing rigging
+
+Ropes that are not turned around or wound on to winches (e.g. guided wires, pendants, stays).
+
+
+#### 1.1.5.68 Subsea cranes
+
+Cranes intended for handling of unmanned submersibles, for lowering to and retrieval from below sea level.
+
+
+#### 1.1.5.69 Test report
+
+A document signed by the manufacturer stating:
+
+- conformity with requirements given by a relevant standard
+- that tests are carried out on samples from the current production.
+
+
+#### 1.1.5.70 Type approval
+
+Approval of conformity with specified requirements on the basis of systematic examination of one or more specimens of a product representative of the production.
+
+
+#### 1.1.5.71 Type approval certificate (TAC)
+
+A compliance document validated and signed by the issuing organization: identifying the product type that the certificate applies toconfirming compliance with referred requirements.
+
+The scope shall cover:
+
+- design assessment
+- production assessment
+- survey of at least one sample from production.
+
+
+#### 1.1.5.72 Useful load
+
+Useful load is the load which may be directly lifted by the supporting component (e.g. cargo hook or grab) of the lifting appliance, by the lift car of a lift, by the platform of a lifting platform or by loose gear.
+
+The useful load consists of the load to be transported and, where applicable, also of the dead load of the loose gear.
+
+
+#### 1.1.5.73 Verification
+
+A service that signifies a confirmation through the provision of objective evidence (analysis, observation, measurement, test, records or other evidence) that specified requirements have been met.
+
+
+#### 1.1.5.74 Vessel
+
+A common term for ships, craft, offshore units and offshore installations.
+
+
+#### 1.1.5.75 Working load (suspended load/hoist load)
+
+The static weight of the useful load lifted, plus the weight of the lifting gear. The working load is subjected to inertia forces.
+
+
+#### 1.1.5.76 Works certificate
+
+See DNV-CG-0550 Sec.3. A document signed by the manufacturer stating:
+
+- conformity with rule requirements
+- that tests are carried out on the certified product itself
+- that tests are made on samples taken from the certified product itself
+- that tests are witnessed and signed by a qualified department of the manufacturers.
+
+
+### 1.1.6 Crane design types
+
+1.1.6.1 Winch luffing crane: a crane where the boom is controlled by wire ropes through a winch.
+
+1.1.6.2 Cylinder luffing crane: a crane where the boom is controlled by hydraulic cylinder(s).
+
+1.1.6.3 Knuckle boom crane: a crane where the boom is hinged, and the boom and knuckle angles are controlled by a set of hydraulic cylinders.
+
+1.1.6.4 Derrick crane: a simple crane consisting of a vertical mast and a hinged jib. The derrick crane is provided with devices for raising and lowering a load, luffing the jib and slewing the jib about the mast.
+
+1.1.6.5 Overhead travelling crane: a crane which lifts the object by a trolley which normally moves horizontally along the crane beam. The crane beam ends have wheels running on rails at high level.
+
+1.1.6.6 Gantry crane: a crane which lifts the object by a trolley which normally moves horizontally along the crane beam. The crane beam is supported by vertical legs having wheels running on rails at ground level.
+
+1.1.6.7 A-frame crane: a hinged frame intended for lifting. Hydraulic cylinders control the movement of the A-frame while a winch is fitted for hoisting and lowering the load.
+
+
+### 1.1.7 Design temperature
+
+1.1.7.1 Design temperature is a reference temperature used as a criterion for the selection of steel grades.
+
+1.1.7.2 The design temperature TD for lifting appliances is defined as the lowest acceptable service temperature for the crane.
+
+
+#### 1.1.7.3
+
+Unless otherwise specified in this standard, systems and equipment shall be designed for operation under ambient temperature between the design temperature and +45°C. For engine rooms and other similar spaces, between the design temperature and +55°C.
+
+1.1.7.4 For lifting appliances installed on vessels classed with the Society, the design temperatures of the appliances shall be compatible with the design temperature specified for the vessel/unit.
+
+1.1.7.5 If not otherwise specified design temperature according to Table 1-1 shall be applied.
+
+| Type of lifting appliance | Design temperature |
+| --- | --- |
+| Offshore cranes and platform cranes | –20°C |
+| Engine rooms and other similar spaces with controlled temp. | +10°C |
+
+The design temperature for the lifting appliance is the lowest operational temperature for the lifting appliance. Unless otherwise agreed with the yard or the end user, the design temperature for the lifting appliance and the design temperature for the vessel shall be the same.
+
+
+## 1.2 Services
+
+
+### 1.2.1 Introduction
+
+1.2.1.1 This sub-section describes possible combinations of the different services offered. Furthermore, various alternatives are described for the Society's confirmation of the various services. See also Table 1-2.
+
+1.2.1.2 Figure 1-1 describes the services offered and the associated documents issued by the Society as proof compliance.
+
+[Figure: Figure 1-1 Alternatives for documentation that may be issued to customers depending on type and combination of services requested.]
+
+
+### 1.2.2 Regulatory basis
+
+1.2.2.1 This standard is based on the Society’s understanding and interpretation of the ILO Convention No.152 of 1979.
+
+
+### 1.2.3 Acceptance by national authorities
+
+1.2.3.1 Regulatory bodies, such as port authorities, flag administrations, shelf authorities and municipal or governmental health and safety authorities require that lifting appliances and loose gear shall be certified. Normally, the Society's certification in accordance with this standard will satisfy the authorities’ requirements.
+
+1.2.3.2 In cases where requirements laid down by the pertinent body exceeds the Society's requirements described in Sec.3 through Sec.14, the Society may, as a voluntary service, include the additional requirements in the examination and confirm whether or not they are found to be fulfilled.
+
+1.2.3.3 The conditions for review in accordance with other bodies’ requirements are as set out in [1.4.5].
+
+
+## 1.3 Certification procedure
+
+
+### 1.3.1 General
+
+1.3.1.1 The following parts, components and systems are covered by this standard:
+
+- all load-carrying structural members and components of the lifting appliance
+- cargo hooks, chains, rings, blocks, sheaves, shackles, lifting beams, swivels and ropes
+- cylinders, accumulators, pressure vessels
+- structural integrity of hydraulic dampers or other load transferring components
+- structural integrity of active heave compensation systems (AHC) and active cable tensioning systems (ACT)
+- rope drums
+- slewing bearing including fasteners
+- power systems (for hoisting, derricking, slewing and travelling)
+- brakes and braking systems
+- safety equipment
+- protection against fire
+- seating and fasteners for prime movers, winches and for bearings of power transmitting components
+- control and monitoring systems
+- electrical installation.
+
+1.3.1.2 The following activities are covered by this standard:
+
+- design review
+- survey during fabrication and installation
+- witness testing and marking.
+
+
+### 1.3.2 Design review
+
+1.3.2.1 Load-carrying and other important components of a lifting appliance are subject to design review with respect to strength and suitability for its purpose. A design approval is granted when the design review has been concluded without detection of non-compliances.
+
+The design review may be substituted, partly or completely, by enhanced manufacturing survey and/or testing. In cases where the substitutions are applied for by the customer, agreements shall be made between the customer and the Society regarding possible reductions of documentation to be submitted for approval/information.
+
+Upon special agreement, the design review may be substituted by a strength evaluation based upon testing until failure.
+
+Strength review of components related to power supply and safety equipment is normally not carried out by the Society.
+
+The Society’s splitting of the certification process in the sequences design approval, manufacturing survey (including installation survey) and testing, shall be considered as a part of the Society’s internal scheme to organize its work.
+
+The Society’s reports covering the separate phases is considered internal documents, and information enabling the progress of the certification project.
+
+The Society’s formal documentation of the certification to the customer will be the product certificate form CMC 201 issued after completion of manufacturing process and full testing at the manufacturer and CG2 issued after installation and full testing onboard in accordance with ILO152 requirements. For lifting appliances not subject to ILO 152, test certificate in accordance with form OLA 201 may be issued after installation and full testing onboard.
+
+1.3.2.2 Each lifting appliance is normally given a separate design approval.
+
+1.3.2.3 The design approval may be obtained either on a case-by-case basis or as a type approval.
+
+The type approval means that the design as approved can be applied for identical units to be fabricated, i.e. requested documents need not be submitted for each unit.
+
+The type approval shall be based on certain conditions and its period of validity is limited.
+
+See the Society's document DNV-CP-0338 Type approval scheme.
+
+
+### 1.3.3 Survey during fabrication and installation
+
+1.3.3.1 A survey during manufacture of each separate lifting appliance shall be carried out by the Society's surveyor in order to ascertain compliance with the approved drawings, other requirements given in this standard as well as general good workmanship.
+
+1.3.3.2 As an alternative to survey during manufacture of each separate lifting appliance, modified survey procedures and survey arrangements may be accepted provided the manufacturer operates a quality-assurance system approved and certified by the Society. Acceptance shall be clearly formalized.
+
+1.3.3.3 After a lifting appliance has been installed on its permanent foundation, and before testing can take place, it shall be subjected to a survey by the Society.
+
+
+### 1.3.4 Testing and marking
+
+1.3.4.1 Components and each completed lifting appliance shall be subjected to functional testing and load-testing as specified in Sec.14.
+
+
+### 1.3.5 Extension of scope of work
+
+1.3.5.1 Upon request from the customer, the scope of work may be extended beyond the subjects and aspects covered in this standard.
+
+1.3.5.2 Extensions shall be agreed in writing. The Society may, if found necessary, require that the customer presents reference documents for the extended scope of work, such as authority regulations, norms and standards.
+
+1.3.5.3 In case of disputes regarding interpretations of requirements on which extended work is based, the customer shall contact the publisher/owner of the requirements and obtain their written interpretation.
+
+If the publisher/owner is not willing to interpret the disputed requirement, or an interpretation for other reasons cannot be acquired, the respective extension of the scope of work shall be omitted.
+
+
+### 1.3.6 Safe means of access and personnel safety devices
+
+1.3.6.1 Personnel safety protection devices such as guard rails, shielding, safety of ladders, etc. are not covered by this standard and the scope of work. If the customer requests that such aspects shall be covered, the provisions set out in [1.3.5] shall be followed.
+
+
+### 1.3.7 Reduced scope of work
+
+1.3.7.1 Upon request from and in agreement with the customer, parts of the scope of work, components, systems or specific aspects or requirements may be excluded from the scope of work specified in the standard. This will be annotated in the documentary evidence of the completed assignment (certificate).
+
+1.3.7.2 The Society will not agree to limit the scope of work or parts of the suggested services if they are of the opinion that this may lead to hazards or unacceptable lowering of the safety standard.
+
+
+## 1.4 Type of services
+
+
+### 1.4.1 Basic certification
+
+1.4.1.1 The basic requirements presented in Sec.3 through Sec.14 are considered to cover the requirements given in the ILO Convention No.152 of 1979 specified in [1.2.2.1]. Lifting appliance and loose gear found to comply with these basic requirements are qualified for the Society's product certification, whereupon the product certificate form CMC 201 may be issued based on FAT (factory acceptance test) and survey. Following successful testing and survey after installation onboard, a DNV CG2 certificate will be issued for cranes covered by the ILO regime (cargo cranes). For cranes not covered by the ILO regime, a test certificate form OLA 201 will be issued by the Society following successful onboard testing. The cargo gear register (CG1 if published by the Society) may be endorsed accordingly, either as ILO crane or as 'other lifting appliances'.
+
+
+### 1.4.2 Cranes and pipeline and cable laying systems included in class scope
+
+1.4.2.1 On a voluntary basis, cranes installed on board vessels and offshore units classed with the Society may be included in the scope of work covered by classification. In such cases the vessel/offshore unit will be assigned the additional class notation Crane, Crane-offshore or Crane-offshore(N).
+
+In order to obtain one of these notations at least the main crane onboard shall be certified in accordance with the basic requirements given in Sec.3 through Sec.14 as well as having a product certificate CG2 or test certificate form OLA 201.
+
+On a voluntary basis, pipeline and cable laying system installed on board vessels and offshore units classed with the Society may be included in the scope of work covered by classification. In such cases the vessel/offshore unit will be assigned the additional class notation Pipe laying vessel or Cable laying vessel.
+
+In order to obtain this one of these notations the pipeline and cable laying system see [1.1.5.49] onboard shall be certified in accordance with the basic requirements given in this standard and the criteria and guidance provided in DNV-RP-0232 as well as having a DNV product certificate.
+
+1.4.2.2 Vessels whose main purpose is to support a crane, may be assigned the ship type notation Crane vessel if the crane is certified in accordance with the basic requirements given in Sec.3 through Sec.14 and as well as a product certificate CG2 or test certificate Form OLA 201.
+
+A crane certified by the Society and installed on a vessel that fulfil the requirements given in [1.1.4] may be given the class notation 1A Crane vessel
+
+Crane vessels classed with the Society and where the crane (major crane) is not certified by the Society may be given the main class notation 1A.
+
+For further information with respect to the difference between class notations, see DNV-RU-SHIP Pt.1 Ch.2
+
+In addition to the requirements given in Sec.3 through Sec.14 for cranes that are certified by the Society, vessels or offshore units having cranes installed, shall fulfil a number of basic class requirements. These requirements apply whether or not the cranes are certified by the Society. The requirements cover topics such as deck support, foundations (pedestals), boom rests (cradles), electrical and hydraulic power supply, earthing as well as trim, stability and ballasting conditioned by the cranes or their lifting operations.
+
+
+### 1.4.3 Testing and certification completed before final installation
+
+1.4.3.1 Extent of testing and certification at the manufacturers’ premises may be agreed. Such activities shall be completed with monitoring of tests at the manufacturer, (FAT-tests). Applicable reports or certificates may be issued. See also [1.4.3.2].
+
+1.4.3.2 The scope of such activities may e.g. be:
+
+- completed certification of loose gear or components. The Society will normally issue the product certificate CG3 after completion of the tests
+- provisional certification after FAT-test. For instance, if final destination is not decided, or if the manufacturer is producing for stock. Or the customer has requested FAT-tests and a documentary confirmation of the Society’s service rendered until a certain point. A manufacturing survey report, certificate of conformity may be issued.
+
+See also Figure 1-1.
+
+
+### 1.4.4 Verifications
+
+Verification activities are expected to identify errors or failures in the work and to contribute to reducing the risks to the operation of the product and to the health and safety of personnel associated with it or in its vicinity or other unwanted situations.
+
+Verification shall be complementary to routine design, construction and operations activities and not a substitute for the work, and the assurance of that work, carried out by the customer and its contractors.
+
+The Society’s verification may be based on risk evaluation. This is founded on the premise that the risk of failure may be assessed in relation to a level that is acceptable and that the verification process may be used to manage that risk. The verification process is therefore a tool to maintain the risk below the acceptance limit. Verification based on risk aims to be developed and implemented in such a way as to minimise additional work, and cost, but to maximise its effectiveness. The Society’s verification level will be chosen based on experience combined with engineering judgement and the findings from the examination of documents and production activities.
+
+1.4.4.1 The Society may upon request carry out verification or certification, or combination of the two, referring to the requirements given in Sec.3 through Sec.14 or the related standards.
+
+1.4.4.2 The depth, thoroughness and completeness of the examinations shall be agreed upon for each specific verification assignment and shall be unambiguously described in the contract and in the documentation of the verification service.
+
+The Society is flexible in agreeing on type of documentation of verification services performed. Normally, the Society’s proposal will be to issue a verification report. For instance, for a completed design examination the Society will suggest issuance of a design verification report.
+
+The Society endeavours to find the best solution for issuance of required verification documentation.
+
+1.4.4.3 The scope, standards and acceptance criteria forming the basis for a verification assignment may, if requested, be adapted to the needs and desires of the customer. However, the Society will decline to carry out a commission that may be used, intentionally or unintentionally, to mislead a third party with regard to the safety of the object.
+
+1.4.4.4 A verification report may be edited in accordance with the customer’s needs and requests. The verification report shall contain non-conformities and observations from examination.
+
+
+### 1.4.5 Review in accordance with other standards
+
+1.4.5.1 Upon request, additional requirements, other than the Society's own as laid down in this document may be included in the examination work.
+
+Examples of additional standards:
+
+- EN 13852 Offshore Cranes
+- EU Machinery Directive
+- EU Machinery Directive Annex IV
+- PSA Guidelines
+- API 2C.
+
+Applicable combinations of certification/verification assignments and review of additional requirements are illustrated in Table 1-2.
+
+1.4.5.2 Commissions such as described in [1.2.3.2] and [1.4.5.1] will normally be limited to the topics and aspects covered in this standard. Upon request, and accept of the Society, the commissions may be extended to cover also additional topics.
+
+Such extensions and amendments of scope of work shall be reflected in written agreements.
+
+1.4.5.3 If additional requirements are included in the certification work and an additional requirement is not complied with, this shall be reported to the customer in writing.
+
+1.4.5.4 Covering of additional requirements may be limited to; design examination, manufacturing survey, installation survey and testing, or to any combinations of these phases.
+
+1.4.5.5 The measures applied to demonstrate compliance with the additional requirements dealt with in [1.2.3.2] and [1.4.5.1] shall be documented by the customer.
+
+
+### 1.4.6 Certification, verification and classification requests
+
+1.4.6.1 Above-mentioned services may be requested by persons/bodies/institutions/companies possessing legitimate access to the documentation forming the basis for the requested verification.
+
+1.4.6.2 Request for services shall be made in writing as specified in [1.4.7].
+
+
+### 1.4.7 Written requests
+
+1.4.7.1 The following should be included in the written request:
+
+- category of lifting appliance, see [1.2]
+- for offshore crane or platform crane it shall also be specified whether the crane shall lift loads from decks of other vessels or only from the sea/seabed
+- whether the assignment shall be extended to include requirements for lifting of personnel
+- whether the assignment shall be extended to include requirements for qualifying the lifting appliance for additional class notations Crane vessel, Crane, Crane-offshore or Crane-offshore(N)
+- whether the assignment shall be extended to cover any additional standard or regulation.
+
+
+### 1.4.8 Certificate annotations
+
+1.4.8.1 Unless otherwise requested by the customer, compliance with the requirements pertaining to the additional requirements review as described in [1.2.3.2] or [1.4.5.1] shall be confirmed in writing in the relevant documents.
+
+Applicable combinations of the Society's certification and verification and additional standards assumed especially relevant are listed in Table 1-2.
+
+|  | Loose gear | Platform cranes | Offshore cranes |
+| --- | --- | --- | --- |
+| Basic certification (ILO) | X | X | X |
+| Certification extended to cover class (Crane, Crane vessel, Crane unit, Crane-offshore or Crane-offshore(N)) |  | X not Crane-offshore(N) | X |
+| EN 13852 (verification) |  |  | X |
+| EU Mach. Dir. (verification) | X | X | X |
+| EU Mach. Dir. Annex 4 (verification) |  | X | X |
+| PSA Guidelines (verification) | X | X | X |
+| MODU code | X | X | X |
+| API 2C (verification) |  |  | X |
+
+
+## 2.1 Documentation
+
+
+### 2.1.1 General
+
+2.1.1.1 The documentation necessary for verification assignments will depend on the scope of work agreed. The documentation requirements stated below are necessary for design approval and ensuing certification.
+
+
+### 2.1.2 Documentation requirements
+
+2.1.2.1 Documentation shall be submitted as required by Table 2-1, as applicable for the lifting appliance. The submitted documentation shall use SI-units (International System of Units) unless otherwise agreed.
+
+| Object | Document type | Additional description | Offshore cranes info | Platform cranes info |
+| --- | --- | --- | --- | --- |
+| General | C010 - Design criteria | Load charts and/or load tables (derating tables shall be approved if Crane notations) Dynamic factors Environment conditions Category of crane, see definitions [1.1.2] Particulars of brake spring performance | FI | FI |
+| C020 - Assembly or arrangement drawing |  | FI | FI |  |
+| C030 - Detailed drawing | Crane structure and components for slewing, luffing and hoisting, slewing gears, slewing rings, etc. Gears and brakes for platform cranes are normally not subject to approval. Drawings of gears transmitting braking forces should contain relevant parameters including torque capacity. Foundations/pedestals welded to the hull - with exception of the upper pedestal flange - are categorized as part of the vessel's hull and are thereby not handled by the crane approval | AP | AP |  |
+| C040 - Design analysis |  | FI | FI |  |
+| G010 - Risk analysis | Document describing risks and mitigating measures associated with an accidental drop of hoisted load. See [8.4.2.19] for further details. | FI |  |  |
+| M150 - Non-destructive testing (NDT) plan | This may be structural weld drawings detailing weld category (special, primary or secondary), including notes detailing the required NDT extent, or, such drawings in combination with fabrication specification stating the same. | AP | FI |  |
+| Z060 - Functional description | Including a filled in verification template, see App.G, for offshore cranes | FI | FI |  |
+| Z252 - Test procedure at manufacturer |  | AP | FI |  |
+| Z253 - Test procedure for quay and sea trial |  | AP | FI |  |
+| Z161 - Operation manual |  | FI | FI |  |
+| Power supply | Z030 - System arrangement plan | Type and maker of prime mover or specification of other main and emergency power supply Including mechanical components. | FI | FI |
+| Electric power system | E170 - Electrical schematic drawing | Including cable list. | AP | FI |
+| Z090 - Equipment list |  | FI | FI |  |
+| Hydraulic power system | S011 - System diagram (P&ID) |  | AP | FI |
+| S042 - Hydraulic control diagram |  | AP | FI |  |
+| Z060 - Functional description |  | FI | FI |  |
+| Z090 - Equipment list |  | FI | FI |  |
+| Control and monitoring | I200 - Control and monitoring system documentation | Functional description of safety system and the safety equipment shall be included | AP | FI |
+| Fire safety | G090 Area safety chart or fire protection data sheet |  | FI | FI |
+| Simulator test package (applicable if simulator-based testing is required, see [14.6]) | Z161 - Operation manual |  | FI | FI |
+| I110 - List of controlled and monitored points (I/O list) | A list or index identifying all input and output signals to the system containing at least: tag number service descriptiontype of signal (e.g. analogue/digital and input/output) system allocation to hardware units for all signals (control, safety, alarm, indication). | FI | FI |  |
+| Test setup block diagram (topology) | A drawing showing PLCs, HMIs, network switches, simulators, communication lines and interfaces, including hardware serial numbers. | FI | FI |  |
+| Simulator user manual | A document describing the simulator architecture, the simulator functionality (how to introduce failures, how to trend signals etc.) and the different graphical user interfaces (GUI). | FI | FI |  |
+| Test setup validation test program | A document listing the validation tests to be performed, proving that the simulator functionality is adequate for the testing scope, i.e. all the modes and functions shall be included. | AP | AP |  |
+| Simulator test program | A document based on the functional description and FMEA/failure mode description listing functions and failure modes to be tested specifying for each test: test case reference/ID numberinitial condition how to perform the test, what to observe during the test and acceptance criteria for each test. | AP | AP |  |
+| Simulator test report | A document including recorded results for each of the test cases as included in the simulator test program. Findings identified shall be described in the report including at least the following information: test case reference/ID numberdescription of the finding, including an explanation of why it is a finding recommended action or follow-upresponsible party for following-up corrective action deadline for completion of the action. The document shall also include details / information about the system and simulator setup for the simulator testing, such as: software version numbers for system under test software version numbers for simulator used for testing. | AP | AP |  |
+| AP = For approval; FI = For information |  |  |  |  |
+
+For general requirements for documentation, including definition of the info codes, see DNV-CG-0550 Sec.6.
+
+For a full definition of the documentation types, see DNV-CG-0550 Sec.5.
+
+
+### 2.1.3 Design analysis
+
+2.1.3.1 For structural parts and components specified in [2.1.2], the drawings shall be supplemented with calculations demonstrating that the structural strength complies with the requirements.
+
+2.1.3.2 A complete listing of structural components and parts subjected to strength calculations shall be submitted. The list shall include information of:
+
+- types of failures considered (excessive yielding, buckling, fatigue fracture)
+- elastic or plastic analysis performed
+- permissible stress or limit state method used.
+
+See also [4.3].
+
+2.1.3.3 For vessels with the following class notation, Crane, the calculations of the dynamic factors shall cover:
+
+1. The still-water dynamic factor or specification of a possible increased figure chosen as dynamic factor for design purposes. See definition in [1.1.5].
+2. Calculations of the dynamic factors for all combinations of boom angles and Hs.
+3. The crane-supporting vessel’s heave- and roll velocities used in the calculations referred to in b) above, as well as a description of the geometrical location of the crane on board the vessel.
+4. As an alternative to the figures required in c) above, the vertical velocity components at the boom tip caused by the crane-supporting vessel’s heave and roll.
+5. For lifts of submerged loads, the maximum acceptable dynamic factors contribution caused by hydrodynamic effects shall be specified. This includes also hydrodynamic effects occurring when the load is lifted through the sea surface.
+
+2.1.3.4 The design calculations for hydraulic cylinders shall be carried out as specified in [5.5.1.16].
+
+
+## 2.2 Certification
+
+
+### 2.2.1 Certificate requirements
+
+2.2.1.1 Certificates shall be issued as required by Table 2-2 for platform cranes and as required by Table 2-3 for offshore cranes.
+
+For certificate definitions, see [1.1.5]
+
+| Object | Certificate type | Issued by | Certification standard* | Additional description |
+| --- | --- | --- | --- | --- |
+| Slewing bearing | PC | The Society |  |  |
+| Hydraulic cylinders | PC | The Society | DNV-ST-0194 | See [D.2]. |
+| Accumulators | PC | The Society | DNV-RU-SHIP Pt.4 Ch.7 or DNV-OS-D101 |  |
+| Sheaves | PC | The Society |  | Works product certificate is satisfactory for unwelded metallic sheaves. Composite sheaves to be delivered with the Society's PC |
+| Hoisting blocks | PC | The Society |  | Certificate of test and thorough examination of loose gear (CG3). Alternatively ILO form No. 3. |
+| Hooks | PC | The Society |  | Certificate of test and thorough examination of loose gear (CG3). Alternatively ILO form No. 3. |
+| Chains | PC | The Society |  | Certificate of test and thorough examination of loose gear (CG3). Alternatively ILO form No. 3. |
+| Swivels | PC | The Society |  | Certificate of test and thorough examination of loose gear (CG3). Alternatively ILO form No. 3. |
+| Shackles | PC | The Society |  | Certificate of test and thorough examination of loose gear (CG3). Alternatively ILO form No. 3. |
+| Wire ropes | PC | The Society |  | Certificate of test and thorough examination of Wire Rope (CG4). Alternatively ILO form No. 4, or DNV LA4 (for non ILO Lifting Appliances) |
+| Fibre ropes | PC | The Society | DNV-OS-E303 |  |
+| Winches | PC | The Society |  |  |
+| Slewing gears | PC | Manufacturer |  | Works product certificate. Also other transmission gears for non-critical applications. |
+| Transmission gears and brakes | PC | Manufacturer |  | Works product certificate. Applicable when transmitting braking forces for hoisting and luffing. For personnel handling, it is required that the product certificate is issued by the Society. |
+| Hydraulic components | PTR | Manufacturer |  |  |
+| Flexible hose assembly | TAC | The Society | DNV-CP-0183 | Alternatively MED (EU Marine Equipment Directive) relevant certificates from Notified Bodies. |
+| *Unless otherwise specified the certification standard is this standard. PC = Product certificate, PTR = Product test report, TAC = Type approval certificate |  |  |  |  |
+
+| Object | Certificate type | Issued by | Certification standard* | Additional description |
+| --- | --- | --- | --- | --- |
+| Slewing bearing | PC | The Society |  |  |
+| Hydraulic cylinders | PC | The Society | DNV-ST-0194 | See [D.2]. |
+| Accumulators | PC | The Society | DNV-RU-SHIP Pt.4 Ch.7 or DNV-OS-D101 |  |
+| Winches | PC | The Society |  |  |
+| Sheaves | PC | The Society |  | Works product certificate is accepted for unwelded metallic sheaves. Composite sheaves shall be delivered with the Society's PC. |
+| Hoisting blocks | PC | The Society |  | Certificate of test and thorough examination of loose gear (CG3). Alternatively ILO form No. 3. |
+| Hooks | PC | The Society |  | Certificate of test and thorough examination of loose gear (CG3) Alternatively ILO form No. 3. |
+| Chains | PC | The Society |  | Certificate of test and thorough examination of loose gear (CG3). Alternatively ILO form No. 3. |
+| Swivels | PC | The Society |  | Certificate of test and thorough examination of loose gear (CG3). Alternatively ILO form No. 3. |
+| Shackles | PC | The Society |  | Certificate of test and thorough examination of loose gear (CG3). Alternatively ILO form No. 3. |
+| Wire ropes | PC | The Society |  | Certificate of test and thorough examination of Wire Rope (CG4). Alternatively ILO form No. 4, or DNV LA4 (for non ILO Lifting Appliances). |
+| Fibre ropes | PC | The Society | DNV-OS-E303 |  |
+| Tensioners transmission (track chains and sprockets) | PC | Manufacturer |  | Works product certificate and DNV design examination |
+| Transmission gears and brakes | PC | Manufacturer |  | Works product certificate. Applicable when transmitting braking forces for hoisting and luffing. . For personnel handling, it is required that the product certificate is issued by the Society |
+| Slewing gears | PC | Manufacturer |  | Works product certificate. Also other transmission gears for non-critical applications. |
+| Hydraulic components | PTR | Manufacturer |  |  |
+| Flexible hose assembly | TAC | The Society | DNV-CP-0183 | Alternatively MED (EU Marine Equipment Directive) relevant certificates from Notified Bodies. |
+| Control system components | PC | Recognized certification body |  | Documenting suitability for intended application in a marine environment |
+| *Unless otherwise specified the certification standard is this standard. PC = Product certificate, PTR = Product test report, TAC = Type approval certificate |  |  |  |  |
+
+| Object | Certificate type | Issued by | Certification standard* | Additional description |
+| --- | --- | --- | --- | --- |
+| EL.motors with rating 100 kW and above | PC, TAC | The Society | DNV-RU-SHIP Pt.4 Ch.8 | The Society's product certificates or the Society's type approval certificate. Motors above 300 kW requires PC |
+| Motor starters and frequency converters with rating 100 kW and above | PC, TAC | The Society | DNV-RU-SHIP Pt.4 Ch.8 | The Society's product certificates or the Society's type approval certificate |
+| Slip rings, 100 kW and above | PC | The Society | DNV-RU-SHIP Pt.4 Ch.8 |  |
+| *Unless otherwise specified the certification standard is this standard. PC = Product certificate, TAC = Type approval certificate |  |  |  |  |
+
+For general certification requirements, see DNV-CG-0550 Sec.4.
+
+For a definition of the certification types, see DNV-RU-SHIP Pt.1 Ch.1 Sec.4 and DNV-CG-0550 Sec.3.
+
+
+## 3.1 General
+
+
+### 3.1.1 Scope
+
+3.1.1.1 This section gives requirements for materials for structural members and equipment for lifting appliances with design temperature TD down to -30°C.
+
+Materials for lifting appliances with design temperature below -30°C shall be especially considered. Design temperature is defined in [1.1.7].
+
+3.1.1.2 Materials with properties deviating from the requirements in this section may be accepted upon special consideration by the Society. See also DNV-RU-SHIP Pt.2 Ch.1 Sec.1 [3.4].
+
+3.1.1.3 For materials where no specific requirements are given, generally recognised standards and engineering principles may be applied.
+
+3.1.1.4 A traceability system that ensures correct installation and documentation of the material grades or strength classes shall be established by the customer throughout the prefabrication and installation process. Proper care shall be exercised during handling and storage to preserve identification of such material.
+
+
+### 3.1.2 Structural category
+
+3.1.2.1 The following categorisation shall be used for structural members:
+
+- Special: highly stressed areas where no redundancy for total collapse exists.
+- Primary: structures carrying main load as well as components with highly stressed areas.
+- Secondary: structures other than primary and special members.
+
+Slewing bearings with flanges are normally categorised as special. Other structure transmitting principle loads are normally categorised as primary.
+
+The categories shall be agreed with the Society in each case.
+
+See also detailed categorisation for bolt connections in [3.4.4.1].
+
+Highly stressed areas are considered to be areas utilised more than 85% of the allowable yield capacity.
+
+
+### 3.1.3 Steel manufacturing process
+
+3.1.3.1 Steel shall be made by the basic oxygen process, electric furnace process, or by other process especially approved by the Society.
+
+3.1.3.2 The use of materials, products and components made by additive manufacturing technologies (defined as manufacturing processes involving sequential layer material addition throughout a 3D work envelope under automated control) shall be subject to approval and qualification according DNV-CG-0197 on a case by case basis. Designer shall superfluous inform the Society about the intended use of additive manufacturing components during the production/assembly process.
+
+
+### 3.1.4 Material manufacture survey, certification and testing procedures
+
+3.1.4.1 Certificates covering specification of the chemical composition and mechanical properties shall be presented for all materials for all load-carrying structures and mechanical components. The test values shall show conformity with the approved specification. Test specimens shall be taken from the products delivered.
+
+Requirements as per DNV-RU-SHIP Pt.2 Ch.1 shall be complied with.
+
+Approval of manufacturer is not required.
+
+Material certificates type 3.1 is sufficient for special and primary structures, except for slewing rings and slewing ring fasteners for offshore cranes in which case certificate type 3.2 is required. The material certificates for the offshore crane slewing rings shall be signed by the Society's representative.
+
+The document type designation 3.1 and 3.2 are in accordance with ISO 10474.
+
+3.1.4.2 The materials shall be adequately marked for identification. The marking shall at least comprise name or trade mark of the manufacturer, material grade, heat number, and when referred to 3.2 certificates, the stamp of the purchaser’s authorized representative.
+
+3.1.4.3 Marking and identification of smaller items, e.g. bolts and nuts, shall be especially agreed upon between manufacturer and the Society, but shall at least comply with fastener product standard.
+
+3.1.4.4 Materials without proper identification shall be rejected unless renewed testing verifies compliance with approved specifications. The number and type of tests will be decided in each case.
+
+
+### 3.1.5 Retesting
+
+3.1.5.1 Materials that prove unsatisfactory during delivery testing may be retested. If the standard for which the materials shall comply, gives no directive for retesting, the retesting shall be carried out as given in DNV-RU-SHIP Pt.2 Ch.1 Sec.2 [3.8] Provided the new test results are found to satisfy the prescribed specification, the material may be accepted.
+
+
+## 3.2 Rolled structural steel for welding
+
+
+### 3.2.1 General
+
+3.2.1.1 In addition to the requirements for structural steels set out in the following subsections, further requirements may be stipulated in special cases depending on the material application. Thus, testing for fracture mechanics analysis and through thickness ductility properties may be required. Fracture mechanics testing in accordance with an approved procedure are required for materials and welded joints when the crane manufacturer cannot document satisfactory experience from previous similar material application.
+
+3.2.1.2 Rolled structural steel for welded constructions may be carbon steel or carbon-manganese steel. The steels are divided into three groups dependent on the specified yield strength as follows:
+
+- normal strength steels, with specified minimum yield stress 235 N/mm2
+- high strength steels, with specified minimum yield stress of 265 N/mm2 and up to and including 420 N/mm2
+- extra high strength steels with specified minimum yield stress of 420 N/mm2 and up to and including 750 N/mm2.
+
+3.2.1.3 Application of steel with specified minimum yield strength above 750 N/mm2 shall be especially agreed.
+
+3.2.1.4 Steels having through thickness ductility ('Z-steel') may be required for primary members which are significantly strained in the thickness direction.
+
+3.2.1.5 The requirements for chemical composition, mechanical properties etc., are given in DNV-RU-SHIP Pt.2 Ch.2 Sec.2 [3] for normal strength steels, DNV-RU-SHIP Pt.2 Ch.2 Sec.2 [4] for high-strength steels, and DNV-RU-SHIP Pt.2 Ch.2 Sec.2 [5] for extra high strength steels.
+
+3.2.1.6 As an alternative to [3.2.1.5], materials that comply with national or proprietary specifications may be accepted provided such specifications give reasonable equivalence to the requirements given in this section or are approved for a specific application. See also DNV-RU-SHIP Pt.2 Ch.1 Sec.1 [3.4].
+
+
+### 3.2.2 Impact test temperatures
+
+3.2.2.1 Required impact test temperatures are dependent on design temperature TD and the material thickness. Impact test temperatures are given in Table 3-1 for structural steel for special, primary and secondary applications. For definition of design temperature see [1.1.7].
+
+For structural members subjected to compressive and/or low tensile stresses, modified requirements may be considered, i.e. greater material thicknesses for the test temperatures specified.
+
+3.2.2.2 Impact test temperature for flanges for slewing bearings shall be as for special and primary members given in Table 3-1 based on actual thickness.
+
+3.2.2.3 When welding a thinner plate to a thicker plate, e.g. connecting a flange to the supporting structure for the flange, inserted reinforcement rings etc., the following apply provided the thicker plate does not contain butt welds:
+
+The impact test temperature shall be the lower of the temperatures according to Table 3-1, based on t = t1 or t = 0.25·t2 where:
+
+thickness of the thinner supporting plate
+
+thickness of the flange.
+
+However, the impact test temperature for the flange (thicker plate) shall not be higher than the required test temperature, based on t2 according to Table 3-1, plus 30° C.
+
+| Material thickness t in mm | Impact test temperature in °C 1) |  |  |  |
+| --- | --- | --- | --- | --- |
+| Structural steel for special and primary members 2) | Structural steel for secondary members 2) |  |  |  |
+| Offshore lifting appliances | Platform lifting appliances | Offshore lifting appliances | Platform lifting appliances |  |
+| 6 ≤ t ≤ 12 3) | TD + 10 | TD + 20 | Test not required | Test not required |
+| 12 < t ≤ 25 | TD | TD + 10 | Test not required | Test not required |
+| 25 < t ≤ 50 | TD - 20 | TD - 10 | TD | TD + 10 |
+| t > 50 | TD - 40 | TD - 30 | TD - 10 | TD |
+| For steel with yield stress below 500 MPa, the test temperature need not be taken lower than -40°C. For steel with yield stress above 500 MPa, the test temperature shall not be taken higher than 0°C and not lower than -60°C. See [3.1.2.1] for definitions. For plate thickness less than 6 mm, Charpy V testing will not be required. |  |  |  |  |
+
+
+### 3.2.3 Testing
+
+
+#### 3.2.3.1 Test samples
+
+Unless otherwise required the test samples shall be taken for positions as specified in DNV-RU-SHIP Pt.2 Ch.2 or other recognised standards. The sample of material from which test specimens are cut shall be treated together with and in the same way as the material presented. The samples shall be suitably marked for identification.
+
+
+#### 3.2.3.2 Test specimens
+
+Test specimens shall be as specified in the approved standards. The following additional requirements shall apply:
+
+- for impact testing of thin materials where the thickness makes it impossible to use an impact test specimen of 10 × 10 mm the largest practicable of the following specimens shall be used: 10 × 7.5 mm or 10 × 5 mm.
+
+By this procedure the required impact values are reduced to 5/6 and 2/3, respectively, of the value of the standard 10 × 10 mm test specimen.
+
+
+## 3.3 Rolled steel not for welding
+
+
+### 3.3.1 General
+
+3.3.1.1 Rolled steel for special and primary components other than those mentioned in [3.3.2] and [3.3.3] (e.g. mechanisms) shall be specified with reference to a recognised standard, see [3.2.1.5] and [3.2.1.6]. The material shall be delivered in the following conditions:
+
+- carbon and carbon/manganese steel in normalized condition
+- alloy steel in quenched and tempered condition
+- as rolled (AR) condition, when subjected to special consideration.
+
+For all materials, impact toughness shall be documented by Charpy V-notch impact tests. Test temperatures shall be as required by Table 3-2 but, in the case of low calculated stresses, e.g. not exceeding 50 N/mm2, a test temperature of 20°C will be accepted. Required minimum impact energy shall be as required for welded parts, see [3.2.1.5].
+
+
+### 3.3.2 Bolts and nuts
+
+Materials for bolts and nuts considered as important for the structural and operational safety of the assembly in question, shall comply with the requirements given in [3.4.4] for bolts and nuts. This includes requirements for chemical composition and mechanical properties.
+
+
+### 3.3.3 Rolled rings
+
+3.3.3.1 Rolled rings for important components such as slewing rings, toothed wheel rims etc. shall comply with the requirements for steel forgings, see [3.4.5].
+
+
+## 3.4 Steel forgings
+
+
+### 3.4.1 General
+
+3.4.1.1 Forgings shall generally be manufactured in accordance with the requirements given in DNV-RU-SHIP Pt.2 Ch.2 Sec.6
+
+3.4.1.2 As an alternative to [3.4.1.1], materials that comply with national or proprietary specifications may be accepted provided such specifications show reasonable equivalence to the requirements given in [3.4.1.1] or are especially approved. As a minimum the following particulars shall be specified: manufacturing process, chemical composition, heat treatment, mechanical properties and non-destructive testing. See also DNV-RU-SHIP Pt.2 Ch.1 Sec.1 [3.4]. For machinery components, see DNV-RU-SHIP Pt.4 Ch.2 Sec.1 [3].
+
+
+### 3.4.2 Forgings for general application
+
+3.4.2.1 Forgings shall be specified with reference to DNV-RU-SHIP Pt.2 Ch.2 Sec.6 or other national or proprietary specification, see [3.4.1.2]. As a minimum the standard shall require impact testing according to Table 3-5. Other mechanical properties shall minimum be according DNV-RU-SHIP Pt.2 Ch.2 Sec.6 Table 8 for unwelded forgings and according to DNV-RU-SHIP Pt.2 Ch.2 Sec.6 Table 6 for welded forgings. For thicknesses over 100 mm, smaller deviations from the specified mechanical properties may be accepted based on specific approval by the Society. For forged shackles, cargo hooks, swivels, sockets, chains, bolts/nuts and slewing bearings, the special requirements given in [3.4.3] to [3.4.5] apply.
+
+
+### 3.4.3 Forged shackles, cargo hooks, swivels, sockets and chains
+
+3.4.3.1 Carbon and carbon-manganese steel forgings shall be made from killed and fine-grain treated non-ageing steel. It may be required that the non-ageing properties are verified by tests. The chemical composition and mechanical properties of the material, with the exception of the impact test temperature, shall be as given in [3.4.2.1]. It may be required that the non-ageing properties are verified by tests, see DNV-RU-SHIP Pt.2 Ch.1 Sec.3 [3.9].
+
+Chemical composition and mechanical properties for alloy steels shall be specified with reference to recognised standard and are subject to individual consideration and approval by the Society. The chemical composition shall be suitable for the thickness in question. Alloy steels shall be delivered in quenched and tempered condition.
+
+Requirements for impact test temperatures are specified in Table 3-2.
+
+| Material thickness t (mm) | Impact test temperature |
+| --- | --- |
+| t ≤ 10 | Impact test not required |
+| 10 < t ≤ 50 | TD + 20 ºC |
+| 50 < t ≤ 100 | TD + 10 ºC |
+| t > 100 | TD |
+
+design temperature
+
+
+### 3.4.4 Bolts and nuts
+
+3.4.4.1 Bolt connections are normally considered to be in the following groups:
+
+Special
+
+- where it is part of a slewing ring connection.
+
+Primary
+
+- where the bolts or nuts are transferring principle loads
+
+Secondary
+
+- where the bolts or nuts are transferring load, not belonging in the category special or primary. Examples are bolt connections in driver’s cabin, platforms, stairs and ladders.
+
+3.4.4.2 Bolts and nuts for use in connections categorised as special or primary shall conform with and be tested in accordance with a recognised standard, e.g. pertinent parts of ISO 898 or another recognised standard. Charpy testing will generally not be required for nuts.
+
+Additional requirements for testing and inspection of slewing ring bolts are given in Table 3-3.
+
+Bolt connections considered as secondary shall be made from suitable materials.
+
+3.4.4.3 Nuts may be accepted to be in one strength class lower than the bolts of bolt/nut assemblies.
+
+3.4.4.4 Bolts and nuts shall be delivered with the following certificates as per ISO 10474, verifying compliance with the material requirements and other test requirements:
+
+- inspection certificate type 3.2 for slewing ring bolts and nuts for offshore cranes
+- works certificate type 3.1 for slewing ring bolts and nuts for platform cranes
+- 2.2 test report for bolts and nuts in primary and secondary connections.
+
+3.4.4.5 Slewing ring bolts for offshore cranes shall have rolled threads, and the rolling shall be performed after final quenching and tempering of the bolts. 12.9 bolts are not accepted as slewing ring bolts for offshore cranes.
+
+3.4.4.6 Fasteners (bolts, nuts and washers) in marine environment shall normally be hot-dipped galvanized or sherardized with coating thickness min. 50 micrometer. If special thread profiles or narrow tolerances prohibit such coating thickness, bolts/-nuts may be supplied electro-plated or black provided properly coated/painted after installation. Pickling and electro-plating operations shall be followed by immediate hydrogen-relief (degassing) treatment to eliminate embrittling effects.
+
+3.4.4.7 Galvanizing of bolts and nuts are acceptable provided additional loss of bolt load (pretension) of at least 4% is compensated for.
+
+Unless specific measures are taken against absorption of hydrogen, galvanizing is not accepted for 12.9 bolts.
+
+
+### 3.4.5 Forged rings for slewing bearings
+
+3.4.5.1 Specifications of slewing rings essential for the structural and operational safety of the crane are subject to individual approval by the Society. All relevant details shall be specified such as chemical composition, mechanical properties, heat treatment, depth and hardness of surface hardened layer and surface finish of fillets. Position of test specimens shall be indicated. Method and extent of non-destructive testing shall be specified, and the testing procedures shall be stated. Detailed information about method of manufacture shall be submitted.
+
+3.4.5.2 For each new material of which the manufacturer has no previous experience and for any change in heat treatment of a material previously used, a principal material examination shall be carried out. This means that the Society may impose additional requirements not specified in this standard. The results shall be submitted to the Society for consideration. The programme for such examination shall be agreed with the Society.
+
+3.4.5.3 All test results shall comply with the approved specifications.
+
+3.4.5.4 Steel for slewing rings shall satisfy the requirements given in Table 3-4.
+
+| Strength class, ISO 898, or equivalent | Diameter d in mm | Ultimate strength N/mm2 | Yield strength. Minimum. N/mm2 | Elongation A5 | Required Charpy V energy1) at test temp. TD | Fracture mechanics testing (CTOD) | Surface inspection4) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 8.8 | d < 25 | 800 - 1000 | 640 | 14 | — | — | Visual |
+| d ≥ 25 | Offshore cranes: 42 J Platform cranes: 25 J | — | Visual and magnetic particle (MPI) |  |  |  |  |
+| 10.9 | d < 25 | 1000 - 1200 | 940 | 12 | — | — | Visual |
+| d ≥ 25 | Offshore cranes: 42 J Platform cranes: 25 J | — | Visual and magnetic particle (MPI) |  |  |  |  |
+| 12.9 (not allowed for off-shore cranes) | d < 25 | 1200 - 1400 | 1080 | 12 (10) 2) | Platform cranes: 25 J | To be documented 3) | Visual and magnetic particle (MPI |
+| d ≥ 25 | Platform cranes: 25 J | To be tested 3) |  |  |  |  |  |
+| Average value of three specimens. One single value may be max 30% lower. May be accepted on case-by-case basis. Alternatively, a Charpy-V notch energy of minimum 55 J at TD may be accepted. For all the d ≥ 25 bolts (100 %), magnetic particle testing shall be carried out at least 48 hours after completion of quenching and tempering for bolts with yield strength above 355 N/mm2. Inspection shall be in accordance with ASTM E 709. Depth of longitudinal discontinuities shall not exceed 0.03 of the nominal diameter. Transverse cracks will not be acceptable irrespective of crack depth and location. Other surface irregularities shall considered in each case. |  |  |  |  |  |  |  |
+
+| Heat treatment | Offshore cranes | Platform cranes |  |
+| --- | --- | --- | --- |
+| According to approved specification |  |  |  |
+| Charpy V notch test temperature | TD |  |  |
+|  | Average | 42 | 25 |
+| Charpy V notch value, J | Single min. value | 27 | 20 |
+| Elongation A5 | 14% | 14% |  |
+| Fatigue properties | Documentation may be required by type tests on specimen of ring section |  |  |
+| Fracture toughness | Documentation may be required by type tests on specimen of ring section in question |  |  |
+
+| Design temperature TD | Test temperature | Minimum charpy value |
+| --- | --- | --- |
+| TD ≥ -20°C | 0°C | 27 J |
+| -20°C > TD > -30°C | -20°C or (0°C) | 27 J (48 J) |
+
+
+## 3.5 Steel castings
+
+
+### 3.5.1 General
+
+3.5.1.1 Steel castings shall generally be manufactured in accordance with DNV-RU-SHIP Pt.2 Ch.2 Sec.8
+
+3.5.1.2 As an alternative to [3.5.1.1], materials which comply with national or proprietary specifications may be accepted provided such specifications give reasonable equivalence to the requirements given in [3.5.1.1] or are approved for each specific application. As a minimum the following particulars shall be specified: manufacturing process, chemical composition, heat treatment, mechanical properties and non-destructive testing. See also DNV-RU-SHIP Pt.2 Ch.1 Sec.1 [3.4].
+
+
+### 3.5.2 Castings for general application
+
+3.5.2.1 Steel castings shall generally be manufactured in accordance with DNV-RU-SHIP Pt.2 Ch.2 Sec.8 or other national or proprietary specification. As a minimum the standard shall require impact testing and mechanical properties according to Table 3-5. Other mechanical properties shall minimum be according DNV-RU-SHIP Pt.2 Ch.2 Sec.8 Table 5 for welded castings and according to DNV-RU-SHIP Pt.2 Ch.2 Sec.8 Table 7 for unwelded castings.
+
+
+## 3.6 Iron castings
+
+
+### 3.6.1 General
+
+3.6.1.1 Iron castings shall generally be manufactured in accordance with the DNV-RU-SHIP Pt.2 Ch.2 Sec.9
+
+3.6.1.2 As an alternative to [3.6.1.1], materials that comply with national or proprietary specifications may be accepted provided such specifications give reasonable equivalence to the requirements given in [3.6.1.1] or are approved for each specific application. See also DNV-RU-SHIP Pt.2 Ch.1 Sec.1 [3.4].
+
+
+## 3.7 Steel tubes, pipes and fittings
+
+
+### 3.7.1 General
+
+3.7.1.1 See DNV-RU-SHIP Pt.2 Ch.2 Sec.5 or other recognised standard/code. Recognition of other standards shall be evaluated by the Society.
+
+
+## 3.8 Aluminium alloy structures
+
+
+### 3.8.1 General
+
+3.8.1.1 See DNV-RU-SHIP Pt.2 Ch.2 Sec.10.
+
+
+## 3.9 Composite materials
+
+
+### 3.9.1 General
+
+
+#### 3.9.1.1
+
+Requirements to be specially developed for the intended use applying the technology qualification process required by DNV-RP-A203.
+
+
+## 3.10 Steel wire ropes
+
+
+### 3.10.1 General
+
+3.10.1.1 Steel wire ropes and wire locks for cranes shall generally be manufactured and tested in compliance with the requirements stipulated in the following, as well as EN 12385-1 Steel wire ropes - Safety, EN 13414-1 Steel wire rope slings – Safety and EN 13411 Terminations for steel wire ropes.
+
+For sockets and socketing specially, the socket shall be designed and the socketing procedure performed according to an internationally recognized standard (e.g. ISO 3189 Sockets for wire ropes for general purposes parts 1, 2 and 3; EN 13411-4 Terminations for steel wire ropes - Metal and resin socketing; ISO 17558 Steel wire ropes - Socketing procedures).
+
+
+#### 3.10.1.2
+
+For wire ropes delivered with socket, the socket shall have been load tested together with the wire rope (load test criteria as for the wire rope).
+
+For wires with sockets fitted after the steel wire rope has been reeved, the load testing will only be during the load testing of the crane (load test criteria as for the crane); socket design and socketing procedure to be in accordance with an internationally recognized standard or approved by a competent person.
+
+For sockets delivered as separate parts/individual components by the manufacturer, product certificates shall be provided. The product certificate shall contain the following information:
+
+- manufacturer's name, type designation, serial number, type of marking
+
+- method of manufacture (forged, cast, machined)
+
+- applied standard
+
+- wire dimension(s)
+
+- proof test force applied (for the prototype when serial production)
+
+- a statement that the sockets are of the same design, material and method of manufacture which has passed the prototype tests
+
+- the specific methods of socketing for which the socket is suitable and a statement that these methods of socketing have passed the prototype tests
+
+- any design limitations.
+
+For sockets to be used in lifting appliances to be certified by DNV, product certificates issued by manufacturers will be accepted. If, however, DNV is requested to certify sockets, they must be based on DNV approved drawings and the following requirements, in addition to those specified in section [3.10.1.1]:
+
+- The socket, pin and associated components shall be designed for a load not less than the MBL of the wire
+
+- Load and fatigue testing (for prototype and serial production) according to ISO 3189/1, or, otherwise agreed with DNV. The reference force shall be based on the 90% of the MBL of the rope/socket.
+
+The reference test force should be based on the rope with the highest tensile grade expected to be used together with the socket
+
+- NDT requirements as per DNV-OS-E304 Ch.2 Sec.5 [2.2] or DNV approved manufacturer's specification.
+
+
+### 3.10.2 Materials
+
+3.10.2.1 Wire for steel wire ropes shall be made by LD process, or by other processes especially approved by the Society or an other classification society.
+
+Normally, the minimum tensile grade of the wires shall be 1570 N/mm2, 1770 N/mm2, 1960 N/mm2 or 2160 N/mm2.
+
+
+### 3.10.3 Construction
+
+3.10.3.1 The strands shall be made in equal lay construction (stranded in one operation).
+
+3.10.3.2 All wire ropes shall be lubricated and impregnated in the manufacturing process with a suitable compound to thoroughly protect ropes both internally and externally to minimize corrosion until the rope is taken into use.
+
+3.10.3.3 The rope lubricant selected shall have no detrimental effect on the steel wires or any fibres (in the core) and shall reduce the friction in the rope.
+
+3.10.3.4 Certain wire-lay types shall be avoided (for example 4 × 29). Selection of wire type shall be based on manufacturer’s recommendations (or catalogue specifications).
+
+
+### 3.10.4 Testing
+
+3.10.4.1 Steel wire ropes shall be tested by pulling a portion of the individual wires to destruction. Alternatively, the whole rope shall be pulled to destruction (no requirement for tensile testing on the individual wires).
+
+The breaking load shall be according to ISO 2408, EN 12385-1 or other internationally recognized standard.
+
+The testing of wire with/without end terminations shall be carried out according to EN 12385-1 and EN 13411.
+
+3.10.4.2 If facilities are not available for pulling the whole rope to destruction, the breaking load may be determined by testing separately 5% of all wires from each strand. The breaking strength of the rope is then considered to be:
+
+f · t · k [kN]
+
+average breaking strength of one wire in kN
+
+total number of wires
+
+lay factor as given in Table 3-6 or according to special agreement.
+
+| Rope construction | Rope with FC | Rope with IWRC |
+| --- | --- | --- |
+| 6 × 19 group 6 × 36 group | 0.860 0.835 | 0.801 0.775 |
+| Non-rotating ropes 17/18 × 7 35/36 × 7 | 0.780 0.750 | 0.758 0.743 |
+
+fibre core
+
+independent wire rope core.
+
+3.10.4.3 Individual wire tests shall be performed for every wire dimension represented in the strands. The number of tests for each wire dimension shall be the same as the number of strands in the rope. The tests may be performed before or after rope manufacture. In the case of compacted ropes, wire tests shall be carried out before rope manufacture.
+
+3.10.4.4 The following individual wire tests shall be performed:
+
+- tensile test
+- torsion test
+- weight and uniformity of zinc coating.
+
+These tests shall be made in accordance with ISO 6892, ISO 7800 and ISO 7801. If tested before rope manufacture, the tests shall comply with ISO 2232 else the tests shall comply with ISO 2408 App.E or ISO 10425 App.I.
+
+3.10.4.5 For issuance of DNV form 4, the wire testing shall be witnessed by DNV, unless the manufacturer is approved by the Society. If approved manufacturer, the surveyor shall, as a minimum, review and accept the test results.
+
+
+## 3.11 Manufacturing and construction
+
+
+### 3.11.1 General
+
+3.11.1.1 The manufacturer shall organize a system for quality control involving competent personnel with defined responsibilities that shall cover all aspects of quality control. For qualification of welders, see DNV-RU-SHIP Pt.2 Ch.4 Sec.3. The materials shall be identifiable during all stages of manufacturing and construction.
+
+3.11.1.2 Manufacturing and construction shall be in accordance with the approved drawings and specifications. The specification shall refer to a recognised code, standards or rules relevant for the structure in question. Supplementary requirements amending the reference documents may be stipulated.
+
+3.11.1.3 Dimensional tolerances specified in the design analysis of the crane structures shall be complied with during manufacturing and construction.
+
+3.11.1.4 All defects and deficiencies shall be corrected before the structural parts and equipment are painted, coated or made inaccessible.
+
+3.11.1.5 Alternative methods for making joints may be considered by the Society and shall be subject to consideration in each case.
+
+
+### 3.11.2 Welding procedure specifications
+
+3.11.2.1 See DNV-RU-SHIP Pt.2 Ch.4
+
+3.11.2.2 As alternatives to the requirements given in [3.11.2.1], the following standards will also be accepted:
+
+- AWS D.1.1, or
+- EN ISO 15614 -1 for steel
+- EN ISO 15614 -2 for aluminium.
+
+
+### 3.11.3 Welding consumables
+
+3.11.3.1 Welding consumables type approved by the Society or accepted based on welding procedure tests shall be used.
+
+Welding consumables type approved by the Society are recommended. The type approved welding consumables are listed on the intranet. On internet: https://approvalfinder.dnv.com/.
+
+3.11.3.2 Welding consumables shall be selected such as to produce a weld with mechanical properties at least equal to that specified for the structural steel type in question. The weld metal shall be compatible with the base material regarding heat treatment and corrosion. Only welding consumables specified in the qualified welding procedure shall be used, or same grading of different brand.
+
+3.11.3.3 Manual welding of high-strength and extra high-strength steels shall be performed with low hydrogen welding processes.
+
+3.11.3.4 Welding consumables shall be supplied in sealed moisture-proof containers or packages. Routines for storage, handling and rebaking of consumables as advised by the manufacturer shall be established and followed.
+
+Consumables that have been contaminated by moisture, rust, oil, grease, dirt etc. shall be discarded.
+
+
+### 3.11.4 Forming of materials
+
+3.11.4.1 Forming of plates, structural shapes, tubes etc. shall be carried out according to a specification outlining the successive and controlled steps. Forming of steels at high temperatures shall be effectuated with due regard to adverse effects of the material’s properties. Forming of steels above 650°C shall be subject to agreement.
+
+
+#### 3.11.4.2 Cold forming
+
+Where plates of normal and high strength steels are formed at ambient temperatures (bending, flanging, beading) the inner bending radius ri shall not be less than 4.5 times the plate thickness for carbon-manganese steels and 2 times the plate thickness for austenitic steel and duplex (ferritic-austenitic) stainless steel, corresponding to 10% and 20% theoretical deformation, respectively. Subject to approval and based on qualification testing, higher cold forming of carbon-manganese steels may be evaluated for acceptance, but in no case to a bending radius ri of less than 2 times the plate thickness. For qualification testing, see DNV-RU-SHIP Pt.2 Ch.1 Sec.3 [3.9]. These values only apply if there is no welding in the cold formed areas.
+
+Repair by welding is not permitted.
+
+The customer shall prepare a procedure for cold forming before the production starts, and the procedure shall be agreed upon with DNV.
+
+
+##### 3.11.4.2.1 Cold forming of extra high strength steel
+
+For extra high strength steels, the cold deformation shall be less than 5%, corresponding to an ri of not less than 10 times the plate thickness. Subject to approval and based on qualification testing, higher cold forming may be evaluated for acceptance. For qualification testing, see DNV-RU-SHIP Pt.2 Ch.1 Sec.3 [3.9].
+
+
+##### 3.11.4.2.2 Welding in cold-formed areas
+
+Welding is permitted at and close to cold-formed structural areas, provided that the following maximum degrees of cold deformation are not exceeded. The degree of cold deformation of special and primary structural elements shall be less than 5% (ri ≥ 9.5∙t) for carbon-manganese steel and less than 20% (ri ≥ 2∙t) for austenitic and ferritic-austenitic steel (t = plate thickness). For carbon-manganese steels the allowable inside bending radius may be reduced below the above values. For additional requirements see DNV-RU-SHIP Pt.3 Ch.3 Sec.1 [2.7.3].
+
+Welding of cold formed hollow sections made of normal and high strength steel with increased degree of cold deformation may be permitted, providing acceptance of the respective profile standard. Special consideration shall be taken for the risk of cold cracking in the welded zone, e.g. reduce level of diffusible hydrogen in the weld material, preheating. In general, hot formed hollow sections are recommended.
+
+
+### 3.11.5 Welding preparation
+
+3.11.5.1 Mill scale, rust etc. shall be removed prior to welding, and the grooves shall be dry and clean. The fit-up shall be checked before welding. Deviation of cut edges shall generally be within the standard specified by IACS REC No.47 Shipbuilding and Repair Quality Standard Part 4. Where materials of different thickness are butt welded, material tapering shall be in accordance with recognised codes or standards.
+
+
+### 3.11.6 Welding performance
+
+Unless welding performance according to alternative standards as referred in [3.11.2.2] is applied, the following applies. The qualification shall in addition to primary and special steel structures include structural category secondary steel welded towards primary or special steel.
+
+3.11.6.1 All welding operations, including tack and seal welding, shall be carried out in accordance with an approved welding procedure specification WPS. The WPS shall be supported by a welding procedure qualification test, WPQT, see DNV-RU-SHIP Pt.2 Ch.4 Sec.5.
+
+3.11.6.2 Preheating may be required for materials of certain thicknesses and chemical compositions. For welding of extra high-strength steel the preheating and interpass temperature shall be as advised by the steel manufacturer.
+
+3.11.6.3 The weld reinforcement shall have a regular finish and shall merge smoothly into the base material without significant undercutting. The height of weld reinforcement shall not exceed 3 mm for material thickness t ≤ 12.5 mm and max. 4 mm for greater thickness.
+
+3.11.6.4 Welds which are essentially perpendicular to the direction of applied fluctuating stresses in members important to the structural integrity, shall normally be full penetration type and, if possible, welded from both sides. Dressing of welds by grinding may be required. Joint members subjected to high stress in the thickness direction shall be of Z-quality, alternatively ultrasonically tested for lamellar tearing after welding.
+
+3.11.6.5 The use of permanent steel backing strips may be accepted when properly accounted for in the design analysis. Ceramic and other neutral backing strips may be used. A test weld for the intended application shall be produced and subjected to mechanical testing agreed upon in each case.
+
+3.11.6.6 Temporary cut-outs shall be made of sufficient size allowing sound replacement. Corners of cut-outs shall be given appropriate radius minimizing the local stress concentration.
+
+3.11.6.7 When difference in plate thickness of butt welds exceeding 4 mm, the thicker plate shall be tapered not steeper than 1 : 3 generally. Butt joints, which are prone to fatigue loading, shall be tapered not steeper than 1 : 4.
+
+
+### 3.11.7 Repair of welds
+
+3.11.7.1 For every type of repair, a repair welding procedure specification shall be prepared. In addition to the details mentioned in [3.10.2] the method for removal of defects, preparation of weld area and subsequent non-destructive testing as well as minimum and maximum repair length/depth shall be specified.
+
+3.11.7.2 Repairs by welding of special and primary structural members and connections of primary to secondary members, shall be carried out in accordance with approved WPS. Documentation shall be presented prior to commencement of repair welding.
+
+3.11.7.3 Weld defects may be rectified by grinding, machining or welding. Welds of insufficient strength, ductility or notch toughness shall be completely removed prior to repair. The mechanical properties of repair welds shall satisfy the minimum specified properties of the steel in question. Repair with arc-air gouging shall be followed by subsequent grinding.
+
+Repair welding in the same area may be carried out twice. Further repairs are subject to the Society's consent.
+
+3.11.7.4 Repair welding shall be carried out with extra low hydrogen welding consumables applying an appropriate pre-heating and working/interpass temperature. Generally, the preheating and working temperature when making shallow and local repairs shall be raised 50°C above level used for production welding, but shall not be less than 100°C. The working temperature shall be maintained until the repair has been completed ensure sound repair welds. The single repair length shall not be shorter than approx. 100 mm.
+
+3.11.7.5 When repair welding is carried out on heat-treated steel, reheat treatment may be required. When post heat-treated parts need repair by welding, the post heat treatment (PWHT) shall normally be repeated.
+
+3.11.7.6 Minor discontinuities may be removed by grinding or machining, making a smooth transition into the surrounding material. The thickness shall not be reduced to less than 93% of the nominal thickness, but in no case by more than 3 mm. The extent of such repair shall be agreed upon.
+
+
+### 3.11.8 Heat-treatment after forming and welding
+
+3.11.8.1 If heat treatment after forming or welding is specified in procedures or on drawings, a detailed heat treatment procedure shall be submitted to the Society for approval.
+
+3.11.8.2 Thermal stress relieving of cold-worked material, if found necessary, shall be carried out in accordance with the conditions stated below for post-weld heat treatment.
+
+3.11.8.3 Post-weld heat-treatment of C-steels and C-Mn-steels shall be performed with a soaking temperature in the range 550°C to 620°C, for a time of 2 minutes per mm thickness. Soaking temperature for low-alloyed steel shall be decided in each case.
+
+3.11.8.4 Post-weld heat-treatment shall, wherever possible, be carried out in an enclosing furnace. Where it is not practical to heat-treat the whole structure in a closed furnace, local heat-treatment may be adopted subject to the Society's consent.
+
+3.11.8.5 The heat-treatment cycle shall be recorded using thermocouples equally spaced externally, and whenever possible internally, throughout the heated region. Heat-treatment records shall be submitted to the Society for consideration.
+
+
+### 3.11.9 Production weld tests
+
+3.11.9.1 Welding production test (WPT) may be required to be carried out during the production welding under identical condition as that of the production welding in order to verify the properties of the welds. Number and type of tests shall be specified in each case.
+
+3.11.9.2 When a WPT fails to meet the requirements, retesting may be carried out in accordance with the following.
+
+If the impact test (3 specimens) fails to meet the requirements, 3 additional impact test specimens may be prepared and tested provided that only one of the below mentioned cases occurred in the first test:
+
+- the average value was below the requirement, one value was below the average requirement but not below the minimum requirement for a single value
+- the average value met the requirement. Two values were below the average requirement but not below the requirement for a single value
+- the average met the requirement. Two values were above or equal to the average requirement and one value was below the requirement for a single value.
+
+The initial 3 impact values and the additional 3 values shall form a new average of six values. If this new average complies with the requirement and no more than two individual results of all six specimens are lower than the required average and no more than one result is lower than the required value for a single specimen, the test may be accepted.
+
+3.11.9.3 Upon special request and at the discretion of the Society, welding production tests may replace welding procedure qualification tests.
+
+
+### 3.11.10 Inspection and testing of welds
+
+3.11.10.1 Completed welds shall be subjected to visual inspection and non-destructive testing as manufacturing and construction proceeds. For material grade NV 420 and higher, NDT shall not be carried out before 48 hours after completion. When post weld heat treatment is performed, the final non-destructive testing shall normally be carried out after the heat-treatment has been completed.
+
+3.11.10.2 All welds shall be visually inspected over their full length.
+
+3.11.10.3 Methods for non-destructive testing (NDT) shall be chosen with due regard to the conditions influencing the sensitivity of the methods. Unless otherwise agreed, structural welds shall be subjected to non-destructive testing to the extent stipulated in Table 3-7. The specified percentages refer to the total length of weld for each structural assembly in question. The categories of the structural members shall be agreed with the Society in each case, see [3.1.2.1].
+
+3.11.10.4 The non-destructive testing shall include intersection of butt-welds, cruciform joints and other areas where the stress level is high, as well as start and stop-points of automatically welded seams.
+
+3.11.10.5 If non-destructive testing reveals defects which indicate unacceptable weld quality, the Society's surveyor may require increased extent of testing until the specified overall quality level has been re-established. If serious defects (i.e. cracks and other planar defects, excessive slag lines and cluster porosities) occur repeatedly, all welds made with the same welding procedure during the period in question shall be tested over their full length.
+
+3.11.10.6 The Society's surveyor shall be the final judge when assessing the weld quality.
+
+3.11.10.7 All non-destructive testing shall be properly documented and identified in such a way that the tested areas may be easily retraced at a later stage.
+
+
+### 3.11.11 NDT-procedures and NDT-operators
+
+3.11.11.1 NDT shall be performed in accordance with agreed written procedures that, as a minimum are in accordance with the Society's document DNV-CG-0051 and give detailed information on the following aspects:
+
+- materials, dimensions and temperature of tested material
+- periodically verification of equipment requirements
+- joint configuration and dimensions
+- technique (sketches/ figures to be referenced in the NDT report)
+- equipment and consumables
+- sensitivity, and light conditions for MT and PT
+- calibration techniques and calibration references
+- testing parameters and variables
+- assessment of imperfections and the surfaces from which the examination has been performed
+- reporting and documentation of results. The reporting system shall ensure that there is no doubt what is examined, where it is examined and give a clear and exact description of reportable defect location
+- reference to applicable welding procedure(s)
+- personnel qualification
+- acceptance criteria.
+
+
+#### 3.11.11.2
+
+In case thicknesses are below the applicable limit in DNV-CG-0051, the NDT procedures shall be approved in accordance with internationally recognised standards.
+
+3.11.11.3 All testing shall be carried out by qualified and certified personnel accepted by the attending surveyor. The NDT operators and the supervisors shall be certified according to a 3rd party certification scheme accepted by the Society based on EN ISO 9712 or ASNT Central Certification Program (ACCP). SNT-TC-1A may be accepted if the NDT company's written practice is reviewed and accepted by the Society. The supplier's written practice shall as a minimum, except for the impartiality requirements of a certification body and/or authorised body, comply with EN ISO 9712. The certificate shall clearly state the qualifications as to which testing method and within witch category the operator is certified. NDT operators shall be certified at minimum Level 2 in the testing method and industrial sector concerned. Supervisors shall, unless otherwise agreed, be certified Level 3 in the testing method and industrial sector concerned.
+
+3.11.11.4 The NDT-operators shall issue reports describing the weld quality. The reports shall clearly distinguish between accepted and rejected welds, and the number of repairs carried out to meet the specified acceptance standard shall be stated. The inspection reports shall specify the NDT-methods and procedures used including all NDT-parameters necessary for a proper assessment.
+
+
+### 3.11.12 Weld acceptance criteria
+
+3.11.12.1 All welds shall show evidence of good workmanship. For visual inspection and NDT, the acceptance level shall normally comply with ISO 5817 quality level C, intermediate ('primary' and 'secondary'). For critical areas more stringent requirements, such as ISO 5817 level B, stringent ('special'), may be applied.
+
+Welds in aluminium shall comply with ISO 10042 level B (applies for category special) or level C (applies for category primary/ secondary).
+
+Level B and level C of ISO 5817 / ISO 10042 are equal to, respectively, acceptance level 2 and level 3 of EN-ISO 11666 Non-destructive testing of welds. Ultrasonic testing, acceptance levels.
+
+See correlation given in EN-ISO 11666, EN 126062 and EN 17635.
+
+Regarding ultrasonic examination EN-ISO 11666 level 2 or level 3 applies. with the following amendment: All imperfections from which the reflected echo amplitude exceeds the evaluation level shall be characterised, and all that are characterised as planar (e.g. cracks, lack of fusion, incomplete penetration) shall be rejected.
+
+| Category of member | Type of connection | Test method |  |  |  |
+| --- | --- | --- | --- | --- | --- |
+| Visual inspection | Magnetic particle 3) | Radio-graphy 1) | Ultrasonic |  |  |
+| Special | Butt weld | 100% | 100% | 100% |  |
+| Cross- and T-joints, full penetration welds | 100% | 100% | - | 100% |  |
+| Cross- and T-joints, partly penetration and fillet welds | 100% | 100% | - | - |  |
+| Primary | Butt weld | 100% | 20% | 20% |  |
+| Cross- and T-joints, full penetration welds | 100% | 20% | - | 20% |  |
+| Cross- and T-joints, partly penetration and fillet welds | 100% | 20% | - | - |  |
+| Secondary | Butt weld | 100% | spot 2) | spot 2) |  |
+| Cross- and T-joints, full penetration welds | 100% | spot 2) | - | spot 2) |  |
+| Cross- and T-joints, partly penetration and fillet welds | 100% | spot 2) | - | - |  |
+| May be partly or wholly replaced by ultrasonic testing upon agreement. Approximately 2-5%. Liquid-penetrant testing to be adopted for non-ferromagnetic materials. Ultrasonic testing shall not be used for thickness less than 10 mm. |  |  |  |  |  |
+
+
+### 3.11.13 NDT acceptance criteria for components machined after forged/cast
+
+3.11.13.1 Unless otherwise specified in this standard or approved manufacturer's specification, acceptance criteria from the following documents can be used for NDT of machined components:
+
+For forged components:
+
+- IACS Recommendation no.68, inspection zone 1
+
+For cast components:
+
+- IACS Recommendation no.69, quality level 1
+
+NDT testing shall be focused on critical areas. Extent shall be specified by the manufacturer and shall be according to recognised standards.
+
+The objective and scope of quality control for materials, material testing and documentation thereof is to verify that the relevant properties as specified by the designer and accepted by the Society are obtained.
+
+
+### 3.11.14 Material protection against corrosion
+
+3.11.14.1 Manufacturer is to provide protection of steel surfaces exposed to marine atmospheric conditions either by means of coating or by oiling, greasing, grouting etc. following commonly accepted industry practice and/or according specific proprietary procedures and instructions.
+
+3.11.14.2 Bolts, nuts and associated elements shall be protected by hot-dip galvanizing according to relevant standards, i.e. BS 729 or ASTM A 153-82. Alternatively, they may be fully encapsulated and the open space be filled with inhibited oil, grease etc.
+
+Other protection methods may be accepted upon special consideration by the Society.
+
+
+## 4.1 Design loads
+
+
+### 4.1.1 General
+
+4.1.1.1 The loads to be considered in the analysis of structures are divided into:
+
+1. principal loads (see [4.1.2])
+2. vertical loads due to operational motions (see [4.1.3])
+3. horizontal loads due to operational motions (see [4.1.4])
+4. loads due to motion of the vessel on which the crane is mounted (see [4.1.5])
+5. loads due to climatic effects (see [4.1.6])
+6. miscellaneous loads (see [4.1.7]).
+
+4.1.1.2 The loads to be considered in the analysis of mechanisms are divided into:
+
+1. loads which are directly dependent upon the action of motors or brakes
+2. loads which are not directly dependent upon motor or brake action, and which in fact are responses to the loads a) through f) in [4.1.1.1].
+
+Furthermore, the loads may be considered belonging into two other groups; those initially specified by the Customer, and those determined by the designer.
+
+The determination of the loads specified by the designer shall be documented with enclosed calculations, references to standards, or other justification.
+
+The loads mentioned in [4.1.1.1] and [4.1.1.2] shall be determined and applied in accordance with [4.1.2] through [4.1.8]. Clearly, for many cranes and components some of the defined loads will never be present. Note that in the following there is not always a clear distinction between loads and responses to loads. A 'load' acting on a component may well be an internal 'response' in the crane as a whole. Accordingly, terms like 'load due to weight' may be used instead of 'weight'.
+
+
+### 4.1.2 Principal loads
+
+4.1.2.1 The principal loads are:
+
+- the loads due to dead weight of the components (SG)
+- the loads due to working load (SL)
+- the loads due to prestressing.
+
+Working load (suspended load) is the load due to the static weight of the useful load lifted, plus the load due to the weight of the accessories (sheave blocks, hooks, lifting beams, grab, etc.).
+
+Safe working load is the load due to the static weight of the load lifted (working load exclusive the weight of accessories plus any lifting beam).
+
+Loads due to prestressing are loads imposed on structural items due to prestressing of bolts, wire ropes, etc.
+
+4.1.2.2 Except for prestressing, all the principal loads are due to weight which always acts vertically (in the normal sense). This means that if the crane is mounted on an object which can obtain inclination (heel and/or trim) in any direction, the principal loads may have horizontal components when referred to a practical coordinate system of the crane. These components shall be taken into account, and shall be considered as principal loads, also if the angles are due to motions such as rolling and pitching of a vessel. Note that the simultaneous inertia forces are not considered as principal loads, see [4.1.1.1], item d) and [4.1.5].
+
+4.1.2.3 For cranes mounted on floating vessels the horizontal components of SG and SL shall be taken into account as explained in [4.1.2.2]. The angles to be considered are the maximum angles expected during lifting operation with no wind and waves acting. Minimum values to be used, when decisive, are given in Table 4-1. These values are considered as minimum but may be especially considered provided statistically evidence or separate means/-operational conditions proving that list and trim could be assessed smaller.
+
+| Type of vessel | Heel | Trim |
+| --- | --- | --- |
+| Ships and vessels having ship-shape hull properties | Min. 5° | Min 2° |
+| Barges of length less than 4 times breadth, and catamarans | Min. 3° | Min. 2° |
+| Semi-submersibles | Min. 3° | Min. 3° |
+| Submersibles and jack-ups | Min. 1° | Min. 1° |
+
+
+### 4.1.3 Vertical loads due to operational motions
+
+4.1.3.1 Vertical refers to the coordinate system of the crane. For a crane onboard a floating unit it is assumed that vertical state is so defined that it corresponds to physical vertical state in the ideal position with zero heel and trim of the unit on which the crane is mounted.
+
+The vertical loads due to operational motions shall be taken into account by multiplying the working load by a dynamic factor, ψ.
+
+The dynamic factor covers inertia forces and shock.
+
+4.1.3.2 The dynamic factor can be assessed by
+
+| C | = | geometric stiffness coefficient referred to hook position (also called 'spring constant' defined as force at hook to produce unit deflection at hook (kN/m)) |
+| --- | --- | --- |
+| g | = | standard acceleration of gravity |
+|  | = | 9.81 m/s2 |
+| W | = | working load (see [4.1.2.1]) (kN) |
+| VR | = | relative velocity (m/s) between load and hook at the time of pick-up, see also [8.2.2.1]. |
+
+For the purpose of assessing the C-value, the modulus of elasticity of steel wire ropes shall be as specified by the wire manufacturer for an un-used wire rope. The crane stiffness (C-value) shall be calculated taking into account all elements from the hook to the pedestal support structure.
+
+4.1.3.3 For grab duty the dynamic factor shall be increased by 20% for use of self-closing grabs (closed by lifting wire pull) and with 30% for use of grabs with motor closing.
+
+4.1.3.4 For cranes located on the barges or the bulk carriers from where the load is lifted (picked up), the cranes may be considered as shipboard crane, see DNV-ST-0377.
+
+
+### 4.1.4 Horizontal loads due to operational motions
+
+4.1.4.1 Horizontal refers to the coordinate system of the crane. It is assumed that horizontal is so defined that it corresponds to physical horizontal in the ideal position with zero heel and trim on which the crane is mounted.
+
+The horizontal loads (SH) due to operational motions are:
+
+- inertia forces due to acceleration or deceleration of horizontal motions (see [4.1.4.2])
+- centrifugal forces (see [7.2.3] and [8.2.3])
+- forces transverse to rail resulting from reeling and skew motion (see [4.1.4.3])
+- buffer loads (ST) (see [4.1.4.4]).
+
+It should be noted that these horizontal forces act in addition to possible simultaneously acting horizontal components of the principal loads, see [4.1.2.2].
+
+4.1.4.2 The inertia forces stated in [4.1.4.1] shall be determined on the basis of the maximum possible acceleration with the given machinery, and on the basis of the maximum possible deceleration with the given brakes. Typically, forces of this type occur by starting and stopping of travelling-, traversing- and slewing motions. The inertia due to angular acceleration (deceleration) of rotating machinery components shall be taken into account when this effect is significant.
+
+For travelling cranes (and trolleys) it will normally be sufficient to consider horizontal forces corresponding to 15% of maximum vertical load on each wheel with brakes, or on each driven wheel.
+
+4.1.4.3 Horizontal forces transverse to rail due to travelling motion occur in two ways, of which the more unfavourable one shall be considered:
+
+- Horizontal inertia forces - to be taken as 10% of the weight of the travelling unit - balanced by lateral wheel reactions (Reeling).
+- A lateral force acting on one of the 'forward' wheels (or bogies) - to be taken as λ times the wheel load - balanced by other physically possible horizontal wheel reactions (skew motion). λ shall be taken according to Figure 4-1.
+
+[Figure: Figure 4-1 Lateral wheel force]
+
+4.1.4.4 The following requirements for determination of buffer effects are based on the assumption that the buffers are capable of absorbing the kinetic energy of the crane (or trolley) at a travelling (or traversing) speed of 0.7 times rated speed. If the suspended load can swing, the kinetic energy of it need not be taken into account.
+
+Buffer effects need not be taken into account for speeds below 0.7 m/sec.
+
+For speeds in excess of 0.7 m/s the resulting loads set up in the structure shall be calculated on the basis of the deceleration, which in turn shall be based upon the buff characteristics.
+
+If automatic decelerating devices are used, the speed of the crane after deceleration upon approach to the end of the track may be used, instead of the rated speed, in the determination of buffer effects. Thus, if the speed is reduced, by the decelerating device, to a value of 0.7 m/sec or less, buffer effects need not be considered
+
+
+### 4.1.5 Loads due to motion of vessel on which the crane is mounted
+
+4.1.5.1 Inertia forces due to ship motion shall be calculated in accordance with DNV-RU-SHIP Pt.3 Ch.4 Sec.3. The forces shall be combined to 10-8 probability level to correspond with safety factors as specified for load case III. See also App.C.
+
+Horizontal inertia forces due to motion of the mobile offshore unit (semi-submersibles, self-elevating units in transit, etc.) should be calculated, but need normally not be taken larger than 0.5g [m/s2]
+
+
+### 4.1.6 Loads due to climatic effects
+
+4.1.6.1 The possible loads due to climatic effects are:
+
+- loads due to wind
+- loads due to snow and ice
+- loads due to temperature variations.
+
+4.1.6.2 Loads due to wind shall be calculated in accordance with App.A or a recognised code or standard.
+
+4.1.6.3 Snow and ice loads may be neglected in the design calculations except for cranes working under exceptional conditions, or for cranes of special designs being particularly sensitive to such effects.
+
+4.1.6.4 Loads due to temperature variations shall be considered only in special cases, such as when members are not free to expand. In such cases the maximum temperature fluctuation for outdoor cranes shall normally not be taken less than 65°C. For indoor cranes possible special sources of heat shall be considered. (Note that the maximum and minimum temperatures shall always be taken into account when selecting the materials).
+
+
+### 4.1.7 Miscellaneous loads
+
+4.1.7.1 Access gangways, driver's cabins and platforms shall be designed to carry the following concentrated loads in arbitrary (most unfavourable) position:
+
+- 3000 N for maintenance gangways and platforms where materials may be placed
+- 300 N as the horizontal lateral force which may act outwards or inwards on handrails and toe-boards.
+
+4.1.7.2 The loads given in [4.1.7.1] need not be taken into account in the strength evaluation of the main structural system of the crane, except as far as necessary for the connection between this system and the structures mentioned in [4.1.7.1]. The dead weight of the latter structures however, shall be included in the principal loads, see [4.1.2.1].
+
+
+### 4.1.8 Loads for strength analysis of mechanisms
+
+4.1.8.1 A mechanism always transmit forces when it is in motion, i.e. it shall be considered for the most unfavourable motor or brake action ([4.1.1.2], a). The loads of this type are those associated with:
+
+- vertical displacement of centres of gravity of load and parts moved by the mechanism
+- friction between moving parts
+- acceleration (or braking) of the motion
+- effect of wind acting on the parts moved by the mechanism.
+
+4.1.8.2 A mechanism may transmit forces even when it is stationary. In such a case the function of the mechanism is similar to that of a structural component. Consequently, the loads to be considered are the same as those to be considered in the analyses of structures.
+
+
+## 4.2 Cases of loading
+
+
+### 4.2.1 General
+
+4.2.1.1 For the purpose of making the nominal safety dependent upon the probability of occurrence of the loading, three general cases of loading are defined, for which the required safety margins are different:
+
+| Case I: | crane working without wind. (See [4.2.2]). |
+| --- | --- |
+| Case II: | crane working with wind. (See [4.2.3]). |
+| Case III: | crane subjected to exceptional loadings. (See [4.2.4]). |
+
+4.2.1.2 For the various types of cranes the detailed loading to be considered for each case may be different. For instance, case III may include different conditions for stationary cranes, mobile cranes and ship-mounted cranes.
+
+
+### 4.2.2 Case I: Crane working without wind
+
+4.2.2.1 Case I is the main case of loading and includes the loads that necessarily will occur under normal operation:
+
+- The principal loads (SG and SL) according to [4.1.2].
+- The vertical loads due to operational motions according to [4.1.3].
+- The horizontal loads due to operational motions (SH), according to [4.1.4]. The two most unfavourable effects are used, excluding buffer loads.
+
+By use of symbols case I may be defined as follows:
+
+SG + ψ · SL + SH
+
+4.2.2.2 For cranes mounted on floating vessels horizontal components of SG and SL shall be taken into account as explained in [4.1.2.2] and [4.1.2.3].
+
+4.2.2.3 With regard to SH the following should be noted: Maximum two of the effects mentioned in [4.1.4.1] (excluding buffer loads) need be considered simultaneously. Further, in cases where travel motion takes place only for positioning the crane and is not used for moving loads, the effect of this motion shall not be combined with the effect of other motions.
+
+
+### 4.2.3 Case II: Crane working with wind
+
+4.2.3.1 Principally, case II includes the same loads as case I, with the addition of loads (SW) due to 'working' wind:
+
+SG + ψ · SL + SH + SW
+
+SW shall be determined in accordance with [4.1.6]. The meaning of the other symbols is as given in [4.2.2.1], with the exceptions given in [4.2.3.2].
+
+4.2.3.2 The actual difference between case I and case II will depend on type and use of the crane. For indoor cranes there will be no difference, meaning the case II need not be considered. For outdoor, stationary, land cranes the difference is normally SW only. For cranes mounted on floating vessels the horizontal components of SG and SL shall be based on increased angles compared with case I. Minimum angles shall be 1.5 times the values given in [4.1.2.3].
+
+4.2.3.3 Working wind acting on the suspended load shall be taken into account if the effect is significant. The wind force shall be determined by taking into account the largest area which can face the wind, taking C = 1.2 for containers and similar shapes, and C = 1 for more arbitrary shapes.
+
+
+### 4.2.4 Case III: Crane subjected to exceptional loadings
+
+4.2.4.1 Any loading condition where one or more exceptional loads are included belongs to Case III. The following loads are defined as exceptional loads:
+
+- buffer loads, according to [4.1.4.4] (Symbol ST)
+- inertia forces due to motion of the vessel on which the crane is mounted, according to [4.1.5] (Symbol SM). For the vessel’s transit condition special attention shall be given to how the crane is secured. See App.C which presents an example on how this may be dealt with
+- loads due to out of service wind according to [4.1.6] (symbol SW).
+
+Other forces which necessarily must act together with the above exceptional loads are included in case III.
+
+4.2.4.2 Defined by symbols, the following load combinations shall be considered in case III:
+
+| IIIa: | SG + SL + ST |
+| --- | --- |
+| IIIb: | SG + SM + SWmax |
+
+For land cranes SM will be zero. For indoor cranes combination IIIb is not considered. For cranes mounted on floating vessels the horizontal components of SG and SL shall be considered for estimated maximum rolling and pitching angles, including possible initial heel and trim.
+
+
+## 4.3 Strength calculations
+
+
+### 4.3.1 General
+
+4.3.1.1 It shall be shown that structures and components have the required safety against the following types of failure:
+
+- excessive yielding (see [4.3.2])
+- buckling (see [4.3.3])
+- fatigue fracture (see [4.3.4]).
+
+4.3.1.2 The safety shall be evaluated for the three cases of loading defined in [4.2]. For each of these cases and for each member or cross section to be checked, the most unfavourable position and direction of the forces shall be considered.
+
+4.3.1.3 The strength calculations shall be based on accepted principles of structural strength and strength of materials. When applicable, plastic analysis may be used. If elastic methods are not suitable to verify safety, for instance due to pre-stressing, plastic analysis may be required.
+
+4.3.1.4 The verification of safety may be based on the permissible stresses' method or the limit state method. The relation is
+
+safety factor = load factor times material factor.
+
+SF = γf · γm
+
+For structures with nonlinear behaviour, however, significant differences may occur. In such cases the limit state method shall be used, or the safety factor shall refer to load and not to stresses.
+
+
+### 4.3.2 Checking with respect to excessive yielding
+
+4.3.2.1 For members made of structural steel the requirements for the various cases of loading are given. With reference to method of analysis and method of verification of safety given in Table 4-2, σy is the guaranteed minimum yield strength (or 0.2% proof stress). If σy is higher than 0.8 times the ultimate strength σu use in this connection 0.8·σu instead of σy.
+
+4.3.2.2 When using elastic analysis, the permissible stresses (or the required safety factors) given in Table 4-2 refer in cases of combined stresses to the equivalent stress according to von Mises. Local peak stresses in areas with pronounced geometrical changes may be accepted by case by case evaluation.
+
+4.3.2.3 For components made of other materials than structural steel, and for other special components, refer to [4.4]
+
+4.3.2.4 Joints shall not be weaker than the minimum required strength of the members to be connected. For riveted joints, bolted joints, friction-grip joints, and welded joints refer to F.E.M. 1.001 3rd edition Rev.1998.10.01 or other recognised codes.
+
+
+### 4.3.3 Checking with respect to buckling
+
+4.3.3.1 The guiding principle is that the safety against buckling shall be the same as the required safety against the yield limit load being exceeded. This principle indicates that the factors given in Table 4-2 (Plastic (ult. str.) analysis) should represent the normal requirement. However, other values may be required or allowed, for instance due to uncertainty in the determination of the critical stresses (or load) or due to the post-buckling behaviour. Required factors are given for various types of buckling in Table 4-3.
+
+4.3.3.2 The safety factors given in Table 4-3 are based on the assumption that the critical stresses (or loads) are determined by recognised methods, taking possible effects of geometrical imperfections and initial stresses into account. Elastic buckling in Table 4-3 means that elastic buckling stress does not exceed the yield strength.
+
+4.3.3.3 Calculation methods and corresponding required safety factors as specified by other crane standards/codes or other specialized literature may also be used.
+
+| Method of verification | Load case I | Load case II | Load case III |  |
+| --- | --- | --- | --- | --- |
+| Safety factor | Elastic analysis | 1.50 | 1.33 | 1.10 |
+| Plastic (ult. str.) analysis | 1.69 | 1.51 | 1.25 |  |
+| Permissible stresses | Elastic analysis | σy/1.50 | σy/1.33 | σy/1.10 |
+| Limit state method | Load factor | 1.30 | 1.16 | 0.96 |
+| Material factor | Elastic analysis | 1.15 | 1.15 | 1.15 |
+| Plastic analysis | 1.30 | 1.30 | 1.30 |  |
+
+| Type of buckling | S F or γ f · γ m |  |  |
+| --- | --- | --- | --- |
+| Load case I | Load case II | Load case III |  |
+| Elastic buckling | 1.86 | 1.66 | 1.38 |
+| Elastic-plastic buckling | 1.69 | 1.51 | 1.25 |
+
+
+### 4.3.4 Checking with respect to fatigue
+
+4.3.4.1 For fatigue calculations normally the latest edition of F.E.M. standard (Federation Europeenne de la Manutention), EN 13001-3-1, DNV-RP-C203 or equivalent national or international standards for cranes may be referred to.
+
+If F.E.M. 1.001 3rd edition Rev.1998.10.01. is used, and if not otherwise documented by statistical evidence and/or limitation with respect to operational performance Table 4-4 applies as guidance. (terminology as in F.E.M. 1.001 3rd edition Rev.1998.10.01.)
+
+| Definition of crane | Particulars concerning nature of use 1) | Appliance group 2) |
+| --- | --- | --- |
+| Cranes for exceptionally low service time, e.g. BOP cranes |  | A2 |
+| Workshop and similar industrial cranes with hook |  | A4 |
+| Overhead travelling cranes for maintenance purpose |  | A3 |
+| Pipe rack cranes | hook | A3 |
+| Pipe rack cranes | magnet | A6-A8 |
+| Store room cranes |  | A4 |
+| Jib or gantry cranes for container service |  | A5 |
+| Dock side and ship-yard jib cranes | hook | A5 |
+| Dock side and ship-yard jib cranes | grab or magnet | A6-A8 |
+| Shipboard cranes for cargo-, provision- or hose handling | hook | A4 |
+| Platform cranes | hook | A4 |
+| Offshore cranes, whip hoist |  | A5 |
+| Offshore cranes, main hoist |  | A3 |
+| For cranes with safe working load more than 250 tonnes, the group-classification can normally be set at the lower alternative or one group lower, but at least group A2. Only a few typical cases of use are shown, by way of guidance, in this column. See F.E.M. 1.001 3rd edition Rev.1998.10.01. Item 2.1.2.4. |  |  |
+
+4.3.4.2 The method of fatigue calculation, for example by using group classification in accordance with F.E.M. 1.001 3rd edition Rev.1998.10.01. on one side and calculation procedure and the specific requirements on the other, shall be consistent.
+
+The crane group chosen for the calculation shall also be specified in the crane manual.
+
+4.3.4.3 The fatigue strength, expressed as the critical amplitude of a fluctuating or alternating stress, shall be determined on the basis of the following information:
+
+- component group according to Table 4-4
+- the material used and the notch effect at the point being considered
+- the fluctuation factor = σmin/σmax
+- whether the maximum stress is tension or compression.
+
+With the above data given, the critical amplitude is defined as that which corresponds to 90% probability of survival. Regarding detailed procedure for the determination of the critical stress amplitude, see F.E.M. 1.001 3rd edition Rev.1998.10.01 or other specialized literature.
+
+4.3.4.4 Fatigue considerations shall be made for case I for all types of cranes. In addition, for ship mounted cranes where the transit condition may be of considerable duration, it may be required to consider fatigue effect on certain components in case III. The effect of wind need not be taken into account.
+
+
+## 4.4 Design and strength of particular components
+
+
+### 4.4.1 General
+
+4.4.1.1 This standard does not attempt to make a clear distinction between structural and mechanical components. A mechanism, as defined in [1.1.5.38] may well contain components which could be defined as structural components. Such components shall be evaluated according to [4.3]. The only difference from an ordinary structural component is that cases I and II shall include forces acting on the component when the mechanism to which it belongs is in motion, see [4.1.8.1]. The term particular components may mean structural as well as mechanical components.
+
+4.4.1.2 Components that transmit forces, whether structural or mechanical, and that are not directly or completely covered by this standard shall be designed and calculated in accordance with applicable recognised codes or standards. To the extent applicable, FEM/I is advised.
+
+
+### 4.4.2 Buckling stability of jibs
+
+4.4.2.1 The buckling problems of a jib may be solved by determining slenderness ratios and by considering the permissible stress as a function of these ratios. Hence the determination of effective lengths with respect to the possible buckling modes may become a key problem.
+
+4.4.2.2 The effective length of the jib depends on its support and of whether the jib is of latticed design or battened design.
+
+4.4.2.3 The effective length of the jib, considering support effect at jib head, may e.g. be estimated in accordance with British Standard BS 2573:Part l:1983.
+
+For a rope supported jib the effective length may, with reference to Figure 4-2, be taken as
+
+leff=L(2−BA) for⁢ lateral⁢ buckling
+
+[Figure: Figure 4-2 Effective length of jib]
+
+4.4.2.4 For jibs having solid webs in the considered plane of buckling, the above values of leff may be used without correction. Jibs that are latticed or battened in the considered plane of buckling leff (or the slenderness ratio) according to [4.4.2.3] shall be increased due to shear deformation of the jib. Recognised, simplified methods for this correction may be accepted.
+
+The following correction factor may be used for latticed jibs:
+
+1+300(leff⁢ / i)2⁢ for⁢ leffi>40
+
+1.1⁢ for⁢ leffi≤40
+
+radius of gyration, see [4.4.2.5].
+
+4.4.2.5 The overall slenderness ratio leff/i of the jib in each plane may be obtained by dividing the effective length of the jib by the smallest radius of gyration of the complete cross section of the jib. Correction shall be made for tapering off cross section towards jib ends.
+
+4.4.2.6 Stresses arising from axial compression and bending shall comply with the requirements for recognised combination formulae.
+
+
+### 4.4.3 Slewing bearing for jib cranes
+
+4.4.3.1 For slewing bearings of the ball and roller type the following aspects shall be examined:
+
+1. plastic deformation of rolling elements and raceways (raceway capacities)
+2. bolt capacity
+3. ultimate carrying capacity of the slewing ring as a whole, based on the capacities of the bolts and cross sections – with due regard to the rigidity of the structures supporting the (fixed and revolving) rings
+4. fatigue of critical sections of the outer and inner rings, i.e. the 'nose' for multi-row bearings.
+
+The slewing bearings are specialized components, and the design criteria for a given type shall as far as practicable be based on tests carried out for the particular type. Item 2), 3) and 4), however, will normally be required to be checked by calculations as indicated/specified in the following.
+
+For design loads note special requirements given in [8.2.2.4] (offshore cranes).
+
+4.4.3.2 The vertical component of rolling element forces on the raceway (roller element track) is assumed to vary linearly across the diameter of the raceway, i.e. a sinuous distribution with reference to the raceway circumference.
+
+The maximum vertical force per unit length (bolt segment) is then
+
+qA=4MkπD2±FaπD
+
+respectively at the front (+) and rear (-) bolt segment of the crane (front is regarded the side on which the boom is fitted).
+
+| M k | = | overturning design moment on the slewing bearing. Dynamic factor is included |
+| --- | --- | --- |
+| F a | = | axial design force on the slewing bearing. Dynamic factor is included |
+| D | = | raceway (track) diameter. |
+
+4.4.3.3 Slewing ring fasteners (bolts) shall have a yield capacity per bolt (i.e. stress area of bolt, As, times the material yield stress, fy) not less than
+
+| pr | = | degree of permanent pre-stressing related to yield (100% = 1.0) |
+| --- | --- | --- |
+| F A | = | maximum vertical raceway load per bolt sector at the rear of the ring |
+| χ | = | FR/FA |
+| F R | = | maximum horizontal (radial) load per bolt sector. |
+
+(FB)0.2≥0.75pr⋅FA(a+χ⋅b+cc)
+
+a, b and c as per Figure 4-3.
+
+[Figure: Figure 4-3 Slewing ring measures]
+
+4.4.3.4 The effective bolt length shall be at least 4.5 times the bolt diameter. Alternatively, fatigue analysis according to recognized standard to be provided and accepted.
+
+The effective bolt length can be reached by use of extension sleeves. Effective bolt length is the part of the bolt that may be free to be elongated at tension. In other words, it does not include the part of the bolt being constrained by the treads.
+
+4.4.3.5 Slewing ring fasteners shall be pre-stressed according to a written procedure. The degree of permanent prestressing shall be as high as possible without producing permanent elongation in bolt during prestressing. The degree of permanent prestressing shall at least be 65% but normally not more than 80% of bolt material yield strength. If documented by testing, procedures claiming a degree of permanent prestressing up to 90% of bolt material yield strength may be credited.
+
+4.4.3.6 The holding-down bolts shall as far as practical be equally spaced over the 360° circumference.
+
+With equally spaced bolts, FA and FR in [4.4.3.3] becomes
+
+FA=(4MkD−Fa)1m
+
+Normally, the following formula applies to the rear 'element' of all the bearing.
+
+FR=1m[4Fr+(4MkD+Fa)tg⁢ β]
+
+where:
+
+| β | = | 0° for 'multi-row' roller bearings and multi-row ball bearings with balls fully supported in vertical direction |
+| --- | --- | --- |
+| β | = | 30° for single-row ball bearings and multi-row ball bearings with balls partly supported in vertical direction |
+| β | = | 45° for cross roll bearings |
+| m | = | is number of bolts |
+| F r | = | radial force on the slewing bearing. |
+
+(Note that Fr is here assumed to act horizontally in the direction of the jib).
+
+4.4.3.7 Yield limit load (capacity) of the slewing bearing shall be evaluated considering equilibrium between rolling element forces and the following reactions acting on an element of the ring:
+
+- Bolt forces acting on the considered element possible shear included.
+- Possible interface pressure between the considered element and the structure supporting the ring.
+- Forces acting in the cross section of the ring (i.e. the end surfaces of the considered element.
+
+4.4.3.8 The ratio between the ultimate carrying capacity (ring and bolt simultaneously) and calculated load on the slewing bearing shall not be less than 1.5 for case I and 1.33 for case II. The calculations shall be carried out for one bolt segment (the rear bolt segment) of the inner ring, the outer ring and the retaining ring (if provided) separately.
+
+For finite element calculations, see DNV document P261.1C-J-70107, Rev. 01 FE Modeling and Analysis Accepted Procedure for Crane Slewing Bearings.
+
+4.4.3.9 Penetration of aggressive materials into the raceways shall be prevented. For bearings that are often exposed to splash and surge water, the use of an adequate seal is recommended.
+
+4.4.3.10 The vertical support in the bearings companion structure should preferably be in the vicinity of the track diameter in the heaviest loaded areas (main tension/compression zones). If this is not the case, the Society will normally require use of bracket plates. The Society may, upon evaluation of each actual bearing and companion structure design, ask for detailed calculations of any deflection of the support surfaces under maximum operating load together with documentation of the permissible limits as specified by the bearing manufacturer.
+
+See also comments on desired avoidance of brackets in [4.4.4.2].
+
+Slewing bearings of the ball or roller type are required to be opened up periodically for inspection.
+
+However, for cranes on which a retention device (with minimum capacity equivalent to the slewing bearing) is arranged, or the slewing bearing has been specially adapted and approved for non-destructive crack detection, or a procedure for regular clearance measurements, grease sampling and fatigue evaluations are adopted in agreement with the crane and slewing bearing manufacturer, the requirement for opening up may be waived.
+
+
+### 4.4.4 Flanges
+
+4.4.4.1 For rounded shaped crane columns, the thickness of connecting flanges shall be checked locally according to
+
+tmin⁡=6⋅SF⋅(2Mkrx−Fa)⋅(|rb−rx|−12dh)m⋅(s−12dh)fy
+
+where
+
+| S F | = | required safety factor, given in Table 4-2 |
+| --- | --- | --- |
+| r b | = | bolt circle radius for the flange in question |
+| r x | = | pedestal radius or kingpost radius measured to middle of plate |
+| d h | = | bolt hole diameter |
+| s | = | centre /centre spacing for bolt holes |
+| f y | = | yield strength flange material. |
+
+4.4.4.2 Normally there shall be a full penetration weld between the pedestal/kingpost shell and the flanges.
+
+4.4.4.3 Flatness of the connecting flange mating surface to the slewing bearing shall comply with the slewing bearing manufacturer's specification.
+
+No surface levelling compound shall be used in order to obtain required flatness.
+
+
+### 4.4.5 Pedestal and pedestal adapter for jib cranes
+
+4.4.5.1 Pedestals and pedestal adapters shall be designed for the same crane group as that of the crane.
+
+4.4.5.2 Fatigue evaluation of pedestal/pedestal adapter shall be carried out in accordance with FEM or another acceptable crane standard.
+
+
+## 5.1 Basic requirement
+
+
+### 5.1.1 Design conditions (environmental, operational) for machinery and systems
+
+5.1.1.1 Machinery and systems for lifting appliances shall be designed to operate under the following environmental conditions if not otherwise specified in the detail requirements for the component or system:
+
+- ambient air temperature between the design temperature and 35°C
+- ambient air temperature inside machinery housing or other compartments containing equipment between 5°C and 55°C
+- relative humidity of air up to 96%.
+
+5.1.1.2 Where the certification standard stipulates requirements for capacity or effect of machinery, these shall normally be determined on the basis of the following:
+
+- ambient air temperature: 40°C
+- relative humidity of air: 50%.
+
+These values shall be reconsidered if the crane is designed to operate in tropical or sub-tropical areas.
+
+Consideration should be taken to the heat generated by machinery or other equipment and also to the heat caused by sun radiation on surrounding bulkheads.
+
+5.1.1.3 The effect of ice on an appliance installed in cold weather areas shall be considered for the parked/stowed position.
+
+
+### 5.1.2 Materials
+
+5.1.2.1 The applied material standards shall be in compliance with Sec.3 or other relevant recognised code or standard.
+
+5.1.2.2 Materials with high heat resistance shall be applied where a fire may cause unacceptable consequences of damage, such as collapse, outflow of flammable fluids etc.
+
+Non-metallic materials shall be flame-retardant in accordance with recognised standard.
+
+
+### 5.1.3 Arrangement and general design of components and equipment
+
+5.1.3.1 All components in a system shall be adequately matched with regard to strength, capacity and functional performance.
+
+5.1.3.2 Relative movements due to load variations, thermal expansion, misalignment, vibration and interaction from foundations shall be allowed to avoid detrimental effects.
+
+5.1.3.3 Bolts and nuts exposed to dynamic forces and vibrations shall be properly secured or pre-stressed.
+
+5.1.3.4 All operational equipment shall be arranged for easy access. Components and equipment normally subject to inspection and maintenance shall be installed so as to provide easy access.
+
+5.1.3.5 Arrangement for adequate lubrication of bearings and gears shall be provided.
+
+5.1.3.6 All means of access shall be of a permanent nature and shall be considered in each case with due respect to type of crane and its intended service.
+
+5.1.3.7 Protection against rain, sea-spray, snow, ice and sand shall be provided (essential for brakes, clutches etc.). Provisions shall be made to prevent accumulation of water in any construction. Rapid drainage shall be ensured.
+
+5.1.3.8 Crane seatings and their supporting structures shall be of rigid design. As far as relevant tolerances of travelling cranes and gantry cranes and their tracks shall at least comply with FEM/I regulations. Tolerances of mating surfaces of seatings shall meet the standard required by the manufacturer of the slewing ring and general engineering standards.
+
+5.1.3.9 Cranes shall be arranged with emergency escape in addition to the main access. Portable escape equipment may be accepted.
+
+
+### 5.1.4 Ventilation
+
+5.1.4.1 Forced ventilation (heating/cooling) shall be provided - when necessary - to ensure inside temperatures within the range required by [5.1.1.1].
+
+5.1.4.2 Higher temperatures inside cubicles, desks etc. are accepted provided installed equipment is regarded as suitable for such higher temperature.
+
+5.1.4.3 Verification of temperature and final acceptance shall be based on loads and operational sequence relevant to the lifting appliance.
+
+
+### 5.1.5 Strength
+
+5.1.5.1 The strength of components and equipment shall generally be in compliance with [4.3] and [4.4] of Sec.4. Specific requirements for some important components are given in the following. Recognised codes and standards may be applied as a supplement to this standard.
+
+5.1.5.2 If acceptable accuracy cannot be obtained by strength calculations, special tests may be required for determination of the strength of a design.
+
+
+## 5.2 Components
+
+
+### 5.2.1 Winches
+
+5.2.1.1 For design of the support of the winch to its foundation, relevant forces from crane operations are understood to having been evaluated at their maximum.
+
+5.2.1.2 Winches shall be fitted with an operational brake and a parking brake. The operational brake is used to brake normal operating movements, while the parking brake is used to hold the load when the movements are stopped. The operational brake may be implemented by means of the winch' power system (energy absorption), or, by means of a mechanical brake. The parking brake shall be implemented by means of a mechanical brake. Capacity and strength for the power based operational brake shall be documented through testing. Mechanical brakes shall comply with the requirements given in [5.2.3].
+
+5.2.1.3 The direction of motion of the operating devices shall be such that the load is raised by clockwise movement of a hand-wheel or crank handle, or alternatively movement of a hand-lever towards the operator.
+
+5.2.1.4 The operating device shall be arranged to return automatically to the braking position when the operator releases the control. However, for cranes operating in constant tension or active heave compensation modus – the brake shall remain off when the operator releases the control.
+
+
+### 5.2.2 Drums
+
+5.2.2.1 Drum diameters shall be determined with due respect to:
+
+- type of reeving
+- state of loading
+- daily operating time
+
+and shall be suitable for the selected steel wire rope, as directed by the rope manufacturer.
+
+The ratio Dp/d shall normally not be less than 18 where:
+
+| Dp | = | pitch diameter of drum |
+| --- | --- | --- |
+| d | = | nominal diameter of steel wire rope. |
+
+For fibre rope drums, the required diameters of rope drums shall be agreed with the Society in each case.
+
+5.2.2.2 As far as practicable and suitable for the arrangement, drums shall be designed with a length sufficient to reel up the rope in not more than 3 layers.
+
+More than 3 layers (reel up) may be accepted if the wire rope has an independent wire rope core (IWRC) and one of the following conditions is complied with:
+
+- spooling device is provided
+- drum is grooved
+- fleet angle is restricted to 2°
+- split drum is arranged
+- separate traction drum is fitted.
+
+However, when the number of layers exceeds 7, special consideration and approval are required.
+
+[Figure: Figure 5-1 Wire rope fleet angles]
+
+5.2.2.3 For all operating conditions, the distance between the centre of the top layer of the wire rope on the drum and the outer edge of the drum flanges shall be at least 2.5 times the diameter of the wire rope, except in the cases where wire rope guards are fitted to prevent over spilling of the wire.
+
+It is advised that the drums have grooves to accept the rope. Where a grooved rope drum is used the drum diameter shall be measured to the bottom of the rope groove. To avoid climbing of the rope on the grooves the angles α1 and α2 shall not exceed 4°, see Figure 5-1. The groove shall be smooth. Advised radius of groove is 0.53 d (d = nominal rope diameter) and should be between 0.52d < r < 0.57d.
+
+5.2.2.4 Drums shall either be fabricated from steel plates or be castings.
+
+Ferritic nodular cast iron with minimum elongation (A5) 10% may be accepted. By special consideration a lower elongation may be acceptable. Impact testing of ferritic nodular cast iron will for this application be waived.
+
+5.2.2.5 Drums shall be checked with respect to their overall equilibrium situation and beam action, with the maximum rope tension acting in the most unfavourable position. The effect of support forces, overall bending, shear and torsion shall be considered. The rope tension shall in this case include any amplifying coefficient and the dynamic factor ψ. If more unfavourable however, the situation with forces directly dependent upon motor or brake action shall be considered.
+
+5.2.2.6 The drum barrel shall be designed to withstand the surface pressure acting on it due to maximum number of windings. The rope is assumed to be spooled under maximum uniform rope tension. Maximum uniform rope tension means the tension due to safe working load without taken into account the amplification factors and dynamic factor. If the rope tension varies systematically, such as when an object is lifted from bottom and out of water, this variation shall be taken into account.
+
+5.2.2.7 Unless comprehensive tests justify a lower value, the hoop stress in the barrel shall not be taken less than
+
+σh=C⋅Sp⋅tav
+
+| σh | = | hoop stress in drum barrel |
+| --- | --- | --- |
+| S | = | maximum rope tension under spooling |
+| p | = | pitch of rope grooving (the distance between ropes, centre to centre, within one layer) |
+| tav | = | average wall thickness of drum barrel |
+| C | = | 1 for one layer |
+|  | = | 1.75 for two layers |
+|  | = | special consideration, for more than two layers (thorough documentation or special testing may be required). |
+
+The value of the C-factor depends on variables such as drum design, rope characteristics, type of operations, load characteristics and spooling. For 5 layers and above, a C-factor of 3 will normally be accepted for subsea retrieval operations with the full load from the first layer, applying 'stiff' wire ropes. However, in some cases, and special for winches with constant layer pull, the C-factor may be even higher. Between two and 5 layers, linear interpolation may be applied.
+
+The calculated hoop stress σh shall not exceed 85% of the material yield stress.
+
+5.2.2.8 The drum flanges shall be designed for an outward pressure corresponding to the necessary lateral support of the windings near the drum ends. Unless a lower pressure is justified by tests (special tests may be required), the pressure is assumed to be linearly increasing from zero at the top layer to a maximum value of pf=2⋅tav3⋅D⋅σh
+
+near the barrel surface. (The pressure acting on the barrel surface is assumed to be three times this value. D is the outer diameter of the barrel.)
+
+The calculated flange stress shall not exceed 85% of the material yield stress.
+
+It is assumed proper spooling and low flange deflections, avoiding cutting/burying of the wire rope into the underlying layers. Further, wire rope crushing is not covered.
+
+
+### 5.2.3 Brakes
+
+5.2.3.1 The requirements in this subsection are developed with basis in ordinary load handling cranes. Thus, when applying the requirements for anything other than ordinary load handling cranes, the original intention shall kept in mind and every requirement shall carefully considered to see if it is reasonable for the actual application.
+
+5.2.3.2 Unless a crane operates in constant tension or active heave modus, automatic braking systems shall be arranged and shall be activated when the operating device is brought to zero or braking position.
+
+5.2.3.3 Mechanical brakes shall be so designed that the brakes are activated, i.e. stop and hold the load, upon failure of the power drive or the control system. The inertia due to angular acceleration of rotating components shall be evaluated.
+
+Means shall, however, be provided for overriding such systems at any time.
+
+5.2.3.4 Braking systems shall be such as not to introduce shock loads. Mechanisms such as ratchets and pawls shall not be used as brakes.
+
+5.2.3.5 Mechanical brakes shall preferably act directly on the drum. Where a brake is positioned such that the loads due to braking are transferred through a transmission, the components in the transmission subjected to loads due to braking shall be designed to comply with the requirements for strength of the brake itself.
+
+5.2.3.6 Mechanical brakes for hoisting and luffing shall normally exert a brake torque not less than 80% in excess of the maximum torque on the brake caused by the loads being regarded as static loads (i.e. the braking capacity). For heavy lift cranes with a lifting capacity 5000 kN and above, the brake capacity requirement is lowered to 60 % in excess of the static load, with linear interpolation between 80% and 60% for heavy lift cranes with lifting capacity between 2500 kN and 5000 kN. However, for subsea handling winches and other special applications this requirement will be subjected to special consideration, with due evaluation of necessary maximum braking capacity. Braking capacity for slewing drives shall be minimum 30 % above max static load. The forces introduced on the accompanying structure by the maximum braking capacity (when the brakes slip) shall not lead to any structural damage. The lowest expected coefficient of friction for the brake lining with due consideration to service conditions (humidity, grease, etc.) shall be applied in the design calculation of braking torque capacity, but this coefficient of friction shall not be taken higher than 0.3.
+
+5.2.3.7 Automatic braking for the mechanical brakes is assumed to be obtained by a spring force (or equivalent) and that the brake is released by hydraulic, pneumatic or electric means. The spring force shall be such that the braking torque capacity required by [5.2.3.5] is obtained.
+
+5.2.3.8 Components of mechanical brakes shall be designed to fulfil strength requirements as given in Sec.4 with safety factor as required for LCIII (see Table 4-2), based on the braking capacity given in [5.2.3.5].
+
+5.2.3.9 Mechanical brakes shall be designed with due regard to inspection, adjustments and maintenance. Brake surface (e.g. on drum) should not be recessed.
+
+
+### 5.2.4 Gear transmissions
+
+5.2.4.1 Gears transmitting braking forces for mechanical brakes shall be considered with respect to excessive yielding according to actual loads, see [5.2.3.7], and with respect to fatigue based on a recognised code and according to a relevant load spectrum (i.e. load-time characteristics).
+
+5.2.4.2 When the Society's document DNV-CG-0036 are used for dimensioning of the gears, safety factors as specified in the Table 5-1 should be used.
+
+| Type of stress | Safety factor |
+| --- | --- |
+| Tooth root stresses | 1.4 |
+| Contact stresses | 1.0 |
+| Scuffing | 1.0 |
+
+
+### 5.2.5 Steel wire rope with fittings and anchorages
+
+5.2.5.1 For wire and rope materials and construction of steel wire ropes, see Sec.3.
+
+For testing of steel wire ropes, see Sec.14.
+
+5.2.5.2 Length of wire rope for a lifting appliance shall be such that there is not less than 3 turns of wire rope on the drum with the hook at the lowest position and the boom in the most adverse position. Normally the ropes for hoisting and derricking shall be in one length.
+
+5.2.5.3 Steel wire rope safety factor for running application shall be the greater of:
+
+- not less than the greater of 3 and SF=1040.885⋅SWL+1910 but need not exceed 5.
+- SF = 2.3 ψ
+
+| ψ | = | dynamic factor for the crane |
+| --- | --- | --- |
+| SWL | = | safe working load (kN). |
+
+For cranes with wire rope suspended jibs, the required safety factor shall be calculated with basis in the static and dynamic load the boom will be subjected to, leading to a separate boom ψ to be applied in the calculations.
+
+5.2.5.4 For safety factor of wire ropes used for lifting people or manned objects see [11.5.2.1].
+
+5.2.5.5 The minimum breaking load B of steel wire ropes shall not be less than
+
+B = SF · S
+
+where S is the maximum load in the rope resulting from the effect of the working load (suspended load) and loads due to any applicable dead weights. The number of parts and friction in sheaves shall be considered.
+
+5.2.5.6 Where not otherwise demonstrated by testing, a combined allowance for friction and bending of the wire ropes, taken as
+
+- 1.5% for each sheave with ball or roller bearings
+- 5% for each sheave with plain bearings
+
+shall be applied for calculation purpose of S in [5.2.5.5]. However, reduction due to wrap angle may be applied.
+
+5.2.5.7 In wire ropes for running application the number of wires shall not be less than 114 (6 strands with 19 wires each).
+
+In the case of one part hoist line (whip hoist) non-rotation wire shall be used or ball bearing swivel shall be provided for preventing accumulation of twist.
+
+A swivel should always be fitted between the hoist rope and the hook or other lifting attachment, and, except in the case of a ship's derrick, the swivel should be fitted with ball- or roller bearings that can be lubricated regularly
+
+5.2.5.8 For rope anchorage properly designed rope sockets like spelter sockets, ferrule secured-eyes (with thimble only) or self-locking wedge sockets shall preferably be used.
+
+Socketing of wire ropes shall be carried out in accordance with a recognised standard and the socket manufacturer’s instruction.
+
+5.2.5.9 Where wire rope clamps are used, the free length of rope end shall be prevented from fraying. Only properly designed wire rope clamps with two gripping areas shall be used (the U-bolt type is not acceptable). The number of clamps depends on the diameter of the wire rope and shall comply with maker's specification. The number of clamps shall in no case be less than 3.
+
+5.2.5.10 A thimble or loop splice shall have at least five tucks, three tucks with the whole strand of the rope, and two tucks with one-half of the wires cut out of each strand. The tucks shall be under and over against the lay of the rope. Splices shall be tightly drawn and neatly made. These requirements will not prevent the use of another form of splice that can be shown to be as efficient.
+
+5.2.5.11 Where other connections are fitted, the method of splicing shall be according to recognised codes and standards.
+
+5.2.5.12 Where wire ropes are wound around design elements with a small diameter (e.g. shackles bolts, crane hooks, load connecting elements, etc.), the permissible breaking load shall be reduced.
+
+5.2.5.13 The efficiency of the applicable wire rope termination shall comply with an EN-or ISO standard or be documented by the test certificate/report covering the actual wire rope being used. If the efficiency of the end termination is below 80%, the loss shall be compensated for up to minimum 80% efficiency.
+
+5.2.5.14 The rope anchorage of the boom rope to the drum shall not be taken less than the maximum design rope pull. Anchorage including friction of the remaining turns on the drum when the boom is in the lowest allowed position shall withstand the breaking load of the boom wire rope. The friction force shall be based on a coefficient of friction of 0.1.
+
+5.2.5.15 All wire rope anchorages shall be accessible for inspection. Exception may be granted, assuming redundant end stop at 3 safety turns of wire on the drum.
+
+
+### 5.2.6 Fibre ropes
+
+
+#### 5.2.6.1 General requirements
+
+5.2.6.1.1 Fibre ropes for running rigging or standing rigging as well as 'loose gear' shall comply with DNV-OS-E303. The rope design is subject to approval. The approach as specified in DNV-ST-E407 shall be applied.
+
+5.2.6.1.2 Synthetic fibre ropes shall be stabilized with respect to light and heat.
+
+5.2.6.1.3 Free rope ends shall be yarn-wound to prevent disintegration of the rope structure. Synthetic fibre ropes may be partially melted.
+
+
+#### 5.2.6.2 Definitions
+
+5.2.6.2.1 The terms running rigging and standing rigging are defined in [1.1.5].
+
+
+#### 5.2.6.3 Dimensioning
+
+5.2.6.3.1 For fibre ropes intended for running rigging the approach as specified in DNV-ST-E407 shall be applied.
+
+In the case of fibre ropes intended for loose gear not in accordance with DNV-OS-E303 but in accordance with recognized standard, the breaking load B shall not be less than the product of the static rope tension S and one of the safety factors SF given in Table 5-2:
+
+B = SF · S
+
+where S is the maximum load in the rope resulting from the effect of the working load and loads due to any applicable dead weights. The number of parts and friction in sheaves shall be considered. Further, reduction in breaking load due to small diameter attachments - such as shackle bolts, crane hooks, etc. - shall be considered.
+
+| Nominal diameter of rope [mm] | Safety factor SF |
+| --- | --- |
+| 10 – 13 | 12 |
+| 14 – 17 | 10 |
+| 18 – 23 | 8 |
+| 24 – 39 | 7 |
+| 40 and over | 6 |
+
+
+### 5.2.7 Sheaves
+
+
+#### 5.2.7.1 Sheaves for steel wire ropes
+
+Sheaves shall comply with a recognised code or standard. Normally, the sheave diameter for steel wire ropes shall not be less than correspond to a ratio Dp/d = 18, where Dp is the pitch diameter of the sheave (distance centre - centre of the wire rope when wrapped around a sheave) and d is the wire rope diameter. Further, the sheave groove shall comply with the corresponding guidance for grooves in drums as specified in [5.2.2.3].
+
+For non-rotating sheaves and similar arrangements where the wire is not moving the ratio Dp/d shall be at least 10.
+
+
+#### 5.2.7.2 Sheaves for fibre ropes
+
+For fibre rope applications as running rigging and standing rigging, the requirements for the rope sheave diameter and to the groove shall be established in accordance with DNV-ST-E407. For non-rotating sheaves in loose gear and similar arrangements where the rope is not moving and where the fibre rope is in accordance with recognized standard, but not DNV-OS-E303, the ratio Dp/ds shall be adequate and at least as shown in Table 5-3. For non-standardized fibre ropes, the rope sheave diameter shall be agreed with the Society.
+
+| Rope material | Rope-sheave diameter, minimum |
+| --- | --- |
+| manila, hemp | 5.5ds |
+| polyamide | 4ds |
+| polypropylene | 6ds |
+| polyester | 6ds |
+| carbon-fibre | 14ds |
+
+where ds is the fibre rope diameter.
+
+5.2.7.3 Sheaves shall either be castings, forgings, welded or be gas cut and machined from steel plate. Nodular cast iron with minimum elongation (A5) 10% may be accepted. However, sheaves made from nylon castings or other composite material may be accepted after special considerations, provided thorough documentation of the applied design criteria as well as material properties (confirmed by independent testing).
+
+5.2.7.4 Castings and plates for sheaves shall comply with Sec.3. However, for non-welded sheaves the required impact testing of the material may be waived.
+
+5.2.7.5 All sheaves and blocks shall be so arranged that the wire rope cannot run off the sheave.
+
+
+### 5.2.8 Anti-breakdown device for slewing mechanism
+
+5.2.8.1 Slewing mechanism shall be so designed that it will not be damaged by heavy braking or reversal of the motion.
+
+This may be achieved either by designing the drive mechanism to resist the torque imposed by the above conditions or by the insertion of a torque limiting device (e.g. a slipping clutch) which will protect the mechanism from excessive shock loading. The torque limiting device should also allow the brake to slip if the horizontal load on the boom exceeds the load for which the boom has been designed.
+
+
+### 5.2.9 Lifting gear, including loose gear and grabs
+
+5.2.9.1 For definition of lifting gear, including loose gear, see [1.1.5].
+
+5.2.9.2 Material requirements shall be as specified in the applied codes or standards. If the codes or standards used do not cover applicable material requirements, or a design is not covered by code or standard, the material requirements given in Sec.3 shall be complied with. Where certification by other competent persons (for example the manufacturer) is accepted, the material certificates shall be filed by the competent person and shall be presented upon the Society's request.
+
+In general, cargo hooks, shackles, swivels and rings shall be forged. Exceptions to this require the consent of the Society.
+
+5.2.9.3 Design and strength of lifting gear shall comply with recognised codes or standards. For pad eyes and skids, see App.E.
+
+5.2.9.4 Where applicable codes or standards for lifting gear are not followed, the safety factor for chain as given in [5.2.10.1] will normally be acceptable.
+
+5.2.9.5 Design load for lifting gear shall be the greater of:
+
+- 0.75 × ψ × SWL, and
+- SWL.
+
+ψ is the dynamic factor for which the crane is designed.
+
+
+#### 5.2.9.6
+
+For lifting- and spreader beams/frames, based on control of magnitude of load or overload protection in the crane, acceptance shall be based on calculations as outlined in Sec.4 with stress level as required for load case II and with dynamic factor not less than the overload test factor as given in Sec.14. In addition, load case I based on applied ψ shall be fulfilled.
+
+5.2.9.7 The main and auxiliary hook (whip hoist) for offshore cranes shall at least meet the requirements given in DIN 15400 machinery group 1 AM and 2M respectively. However, in cases where the design hook load corresponds to that caused by the dynamic response for significant wave heights exceeding 3 metres, machinery group 1 AM may also be accepted for the auxiliary hook.
+
+5.2.9.8 Hooks shall be fitted with a safety latch or be so designed that the ring or sling cannot fall out.
+
+Irrespective of design, hooks for offshore cranes shall be fitted with a safety latch.
+
+5.2.9.9 Hook blocks shall have protective plates and shall be easy to handle from any side.
+
+5.2.9.10 In cases where, upon special agreement see [1.3.5], the damping effect of a hydraulic damper shall be included in the approval, the damping effect shall be documented by both calculations submitted and practical tests. The test program shall be submitted by the customer, accepted by the Society’s approval unit, and monitored by the certifying surveyor to the extent agreed before the tests are initiated.
+
+5.2.9.11 Lifting gear and grabs shall be marked with the safe working load. The crane manual shall contain information of necessary specifications for ordering replacements.
+
+
+### 5.2.10 Chains
+
+5.2.10.1 The safety factor for chains, measured against the minimum specified breaking strength, shall not be less than 4 with respect to the design load as specified in [5.2.9.6].
+
+5.2.10.2 The material of the chains and/or the grade shall be documented with a certificate, for example an inspection certificate of type 3.1, referring to a recognised standard.
+
+5.2.10.3 Before being taken into use for the first time the chains shall be load tested as for loose gear, and the tests shall be documented by CG3, alternatively ILO form 3, certificate.
+
+
+### 5.2.11 Skids
+
+5.2.11.1 Skids designed for lifting of varying loads as well as skids designed for a specific load and/or a specific transport assignment may be certified in accordance with the requirements given in [5.2.9], however with observation of the conditions outlined in [E.1.3].
+
+
+## 5.3 Power systems
+
+
+### 5.3.1 Prime movers
+
+5.3.1.1 Prime movers shall be designed to accept normal load conditions such as running at load levels characteristic for the expected use of the crane, and to accept frequent and large load variations. Max dynamic load shall not lead to stalling.
+
+5.3.1.2 The crane prime mover shall be such that the full power demands of any loading and speed combinations associated with the various motions are compatible with the operations that the crane is designed for.
+
+5.3.1.3 For operation within hazardous (gas-dangerous) areas, prime movers and their installation shall meet additional pertinent requirements.
+
+5.3.1.4 Adequate insulation and shielding shall be provided for the protection of personnel during performance of their normal duties and to prevent ignition of flammable fluids.
+
+5.3.1.5 The internal combustion engines shall normally not be located in hazardous areas. The exhaust gas outlet of the engines shall have an effective spark arrestor. The outlet shall be led to the atmosphere at a safe distance from any hazardous area.
+
+
+### 5.3.2 Power independency
+
+5.3.2.1 Hoisting and derricking functions shall be independent of travelling and slewing functions.
+
+5.3.2.2 The crane and its load shall be able to remain in unchanged position in the event of power failure, see also [5.2.3.2].
+
+
+## 5.4 Electrical installations, equipment and systems
+
+
+### 5.4.1 General
+
+5.4.1.1 Electrical installation shall comply with relevant and recognised codes or standards pertinent to the location of the crane.
+
+5.4.1.2 Electrical installations of lifting appliances certified by the Society and installed onboard vessels classed with the Society, shall comply with DNV-RU-SHIP Pt.4 Ch.8 However, the documentation requirements shall still be taken from [2.1.2.1]. Further, the certification requirements shall be taken from [2.2.1.1].
+
+5.4.1.3 For cranes covered by class notations Crane, Crane vessel, Crane unit, Crane-offshore or Crane-offshore(N) and pipeline and cable laying systems covered by class notation Pipe laying vessel or Cable laying vessel, the electrical equipment and systems supporting the crane or pipeline and cable laying equipment main functions shall comply with DNV-RU-SHIP Pt.4 Ch.8 and will generally be defined as essential or important. Specifically, equipment and systems having impact on the risk contributors listed in [8.4.2.2] shall fulfil requirements with respect to essential or important installations.
+
+
+## 5.5 Hydraulic, pneumatic, instrumentation, automation and wireless remote-control systems
+
+
+### 5.5.1 Hydraulic systems
+
+5.5.1.1 Hydraulic systems and their lay-out shall be in accordance with DNV-RU-SHIP Pt.4 Ch.6. Use of other international recognized standards shall be agreed and accepted on a case by case basis during design review.
+
+5.5.1.2 When designing hydraulic circuits, all aspects of possible methods of failure (including control supply failure) shall be considered. In each case, components shall be selected, applied, mounted and adjusted so that in the event of a failure, maximum safety to personnel shall be the prime consideration, and damage to equipment minimized (fail-safe concept)
+
+5.5.1.3 All parts of the system shall be designed or otherwise protected against pressures exceeding the maximum working pressure of a system or any part of the system or the rated pressure of any specific component.
+
+5.5.1.4 Systems shall be designed, constructed and adjusted to minimize surge pressures and intensification pressures. Surge pressure and intensified pressure shall cause no hazards.
+
+5.5.1.5 Loss of pressure or critical drops in pressure as well as missing hydraulic refilling shall not cause a hazard.
+
+5.5.1.6 Leakage (internal or external) shall not cause a hazard.
+
+5.5.1.7 Whatever type of control or power supply used (e.g., electrical, hydraulic, etc.), the following actions or occurrences (unexpected or by intention) shall create no hazard:
+
+- switching the supply on or off
+- supply reduction
+- supply cut-off or re-establishment.
+
+5.5.1.8 Hydraulic systems and other machinery in connection with the hydraulic system shall be designed to protect personnel from surface temperatures that exceed touchable limits by either insulating or guarding.
+
+5.5.1.9 To facilitate maintenance, means shall be provided or components so fitted that their removal from the system for maintenance:
+
+- shall minimize the loss of fluid
+- shall not require draining of the reservoir
+- shall not necessitate extensive disassembly of adjacent parts
+- drip trays shall be provided.
+
+5.5.1.10 The fluid reservoir shall be designed with respect to:
+
+- dissipation of heat from the oil
+- separation of air
+- settling of contamination in the oil
+- maintenance work.
+
+Indicators showing the fluid level shall be permanently marked with system high and low levels.
+
+Air breathers on vented reservoirs should be provided which filter air entering the reservoir to a cleanliness level compatible with the system requirements, taking into consideration the environmental conditions in which the system shall be installed.
+
+5.5.1.11 Effective means for filtration and cooling of the fluid shall be incorporated in the system.
+
+A means of obtaining a representative fluid sample shall be provided to allow for checking fluid cleanliness condition.
+
+Valves for fluid sampling shall be provided with sealing and with warning signs marked 'System under pressure'.
+
+5.5.1.12 Flexible hoses shall only be used
+
+- between moving elements
+- to facilitate the interchange of alternative equipment
+- to reduce mechanical vibration and/or noise.
+
+5.5.1.13 Flexible hoses shall be located or protected to minimize abrasive rubbing of the hose cover.
+
+5.5.1.14 Accumulators shall be separately approved. See DNV-RU-SHIP Pt.4 Ch.7 Sec.1 or DNV-OS-D101.
+
+5.5.1.15 Load carrying hydraulic cylinders (luffing cylinders and boom telescoping cylinders) shall be separately approved in accordance with DNV-ST-0194. Materials for hydraulic cylinders shall specially fulfil the requirements given in DNV-ST-0194.
+
+5.5.1.16 The design calculations for hydraulic cylinders shall be based on the maximum obtainable pressure (safety valve setting). Alternatively, if the maximum dynamic force applied on the crane is known, this may be used as basis for the design calculations. In both cases different outreach positions shall be evaluated.
+
+Buckling shall be calculated in accordance with DNV-ST-0194. The safety factors required by that standard correspond to Case I, see [4.2]. For Case II, the safety factor requirement may be reduced by multiplying it by 0.89.
+
+
+### 5.5.2 Testing of hydraulic systems
+
+5.5.2.1 Each component shall be pressure tested to 1.5 times the design pressure, though not more than 70 bars above the design pressure.
+
+Testing of hydraulic cylinders shall be in accordance with DNV-ST-0194.
+
+5.5.2.2 Hydraulic testing of the assembly shall be performed in the presence of a surveyor, unless otherwise agreed. The pressure from the overload testing is deemed sufficient and shall be maintained for a time sufficient for check of leakage. The assembly shall exhibit no sign of defects or leakage.
+
+
+### 5.5.3 Pneumatic systems
+
+5.5.3.1 Air intakes for compressors shall be so located as to minimize the intake of oil- or water-contaminated air.
+
+5.5.3.2 When designing pneumatic circuits, fail-safe concept shall be applied. All aspects of possible methods of failure (including control supply failure) shall be considered. In each case, components shall be selected, applied, mounted and adjusted so that in the event of a failure, maximum safety to personnel shall be the prime consideration, and damage to equipment minimized.
+
+5.5.3.3 Loss of pressure or critical drops in pressure shall cause no hazard.
+
+5.5.3.4 Leakage (internal or external) shall create no hazard.
+
+5.5.3.5 Whatever type of control or power supply used, the following actions or occurrences (unexpected or by intention) shall not create a hazard:
+
+- switching the supply on or off
+- supply reduction
+- supply cut-off or re-establishment.
+
+5.5.3.6 Air supply to instrumentation equipment shall be free from oil, moisture and other contaminants. The dew point shall be below 5°C for air in pipes located in crane engine room. In pipes outside the engine room the air shall have a dew point below (TD–5)°C.
+
+5.5.3.7 Components requiring extremely clean air shall not be used.
+
+5.5.3.8 Main pipes shall be inclined relative to the horizontal, and drainages shall be arranged.
+
+5.5.3.9 Piping and pressure vessels shall comply with relevant recognised codes and shall generally comply with the Society's rules.
+
+
+### 5.5.4 Control and monitoring systems
+
+
+#### 5.5.4.1 General
+
+Control and monitoring systems shall be designed based on the generic principles specified in DNV-RU-SHIP Pt.4 Ch.9 and shall be categorized as important. However, if the emergency stop function, see [8.4.2.7], and/or the MOPS, see [8.4.2.4], are implemented as part of the control system (not hard wired or part of a separate emergency control system), the control system shall be categorized as essential and redundancy requirements shall be applied. The main components for control, monitoring and safety systems shall hold certificates of conformity in accordance with an internationally recognized certification body, documenting suitability for the intended application in a marine environment.
+
+Control systems covered by HIL certificates in accordance with DNV-ST-0373 may be accepted. SWIL/PIL (Software in the loop/Processor in the loop) certificates shall also be part of the evaluation, when submitted. Subsequent testing scope for such systems, see [14.1.6], may be reduces following a case-by-case evaluation by the Society.
+
+The requirement normally applies to the following components: controllers, PLC's, I/O cards, communication cards, operator stations, computers, network switches, routers, firewalls, and other components that may be essential to the control system functionality.
+
+Important control and monitoring system: a system which does not need to be continuously available for ensuring that the crane's safety system is operational.
+
+Essential control and monitoring system; a system which needs to be continuously available for ensuring that the crane's safety system is operational.
+
+
+#### 5.5.4.2 Wireless remote-control systems
+
+1. The principles for wireless remote-control should be: Safe state for the crane and for the wireless remote control operation should be defined. In general, all over systems have a defined fail-safe mode. This means that all outputs return to normal mode (normally open/normally closed depending of type of output) in case of an emergency stop situation, communication error, loss of power-supply or other defined failure modes. Wiring diagram and test-reports for all inputs/outputs are delivered with each system. Normally we will assume that safe state is immediate stop of all crane movements. The crane brake capacities should be sufficient to hold the crane and the cargo at any position within a given response time. (Some cranes are equipped with heave compensation, automatic overload protection, emergency operation, etc. In such cases safe state may not be complete stop). The reaction of the complete system (crane) related to a stop-situation will depend of the functionality of the connection of the remote-control system, and is the responsibility of the crane-builder. Furthermore:
+  - the system should prevent operation if the operator leaves the normal operating area for the crane. Prevention of this shall be implemented by the crane-builder
+  - the data sent to/from the remote-control unit should be subjected to error detection and/or error correction
+  - transmitting of radio data should also be made possible by 'handshaking'.
+2. The wireless communication with the crane should not be disturbed by any other external communication signals, and it should be designed in accordance with accepted standards for emission. Radio solutions shall be tested in accordance to ETSI EN 301 489 Electromagnetic compatibility and radio spectrum matters (ERM); ElectroMagnetic Compatibility (EMC) standard for radio equipment and services.
+3. If it cannot be proven that the frequencies allocated for the wireless communication for a specific crane are unique in all areas where the crane will be operated, and that such communication will never be interrupted by external communication signals, some kind of unique encryption or ID of the wireless communication or similar is strongly recommended.
+4. The main concern is that such arrangements should prevent other signals from controlling the crane movements.
+5. Loss of communication with the unique remote control should cause the crane to go into a safe state as outlined in item 1 above.
+6. Additionally, an easily accessible hardwired emergency stop (and MOPS if offshore crane, see [8.4.2.4]) independent of the wireless remote-control shall be installed. Responsibility of the crane-builder.
+7. Furthermore:
+  - by starting of the remote-control unit, a self-check shall be conducted in order to prevent movements if the control has been left in such mode
+  - the remote-control unit should be provided with a key switch for closing when not in use. This issue is depending of customer requirement (order). In those cases where a key switch is not ordered, The customer is responsible for solution
+  - when used for lifting of persons, the remote-control unit should also be provided with a dead man button. This issue is depending of customer requirement (order). In those cases where a key switch is not ordered, the customer is responsible for solution.
+8. The planned operation should be subjected to an analysis where special hazards and risks should be identified. For high-risk operations caused by mal-operation or equipment failure, the risk and the safety measures should be documented in a detailed analysis. Responsibility of the crane-builder.
+9. The operator shall be located within a clearly marked area, where the view of the lifted load is ensured at all times and blind zones are avoided.
+
+
+## 6.1 Safety
+
+
+### 6.1.1 Operator's cabin
+
+6.1.1.1 On deck cranes an operator's cabin will normally be installed. National authorities may consider it mandatory to install a cabin on cranes for the protection of the operator against noise and weather.
+
+6.1.1.2 When fitted, the cabin shall satisfy the following overall requirements:
+
+- be of adequate size and give adequate protection against weather and other environmental exposure
+- give the operator an adequate view of the area of operation including hook and hook position
+- have windows capable of being readily and safely cleaned inside and outside and to have defrosting and defogging means. Outdoor cranes shall have windscreen wipers fitted to all windows necessary for the crane operator’s free view when operating the crane
+- be adequately tempered (heated, cooled) and ventilated according to local conditions
+- be of fireproof construction, have doors that can be readily opened from both inside and outside
+- in the case of a derrick crane access/exit shall not be obstructed by any boom elevation
+- noise and vibration shall remain within acceptable limits
+- have a comfortable and purpose-designed seat from which all operations can easily be controlled. Foot rests shall be arranged where necessary
+- have the crane controls marked and lit to show their respective function.
+
+It is recommended that the design of the operator's cabin complies with international recognized standard/code (i.e. EN 13557).
+
+6.1.1.3 Where the operator's cabin is attached to and travels with the crane, the cabin suspension gear shall be so designed that the cabin cannot fall if the cabin or the crane is accidentally displaced from its rails.
+
+6.1.1.4 Cranes shall be arranged with emergency escape in addition to the main access. Portable escape equipment may be accepted.
+
+
+### 6.1.2 Platforms, access gangways and operator’s cabins
+
+6.1.2.1 For documentation of satisfactory structural strength, see [4.1.7].
+
+It is recommended that the design complies with international recognized standard/code (i.e. EN 13586).
+
+
+### 6.1.3 Parking and precautions against wind loads
+
+6.1.3.1 Lifting appliances shall be provided with means to secure the appliance in the out of service condition in a safe manner. The effect of wind and wind gusts and any roll, list and trim shall be considered.
+
+
+### 6.1.4 Protection and precautions against fire
+
+6.1.4.1 Necessary protection and precautions against fires and explosions shall be considered in each case.
+
+The number, capacity and location of fire extinguishers shall be adequate for the type of crane and its intended service. However, at least one fire extinguisher shall be provided in the operator's cabin and accessible crane housings.
+
+6.1.4.2 Air pipes from fuel tanks shall be led to open air.
+
+6.1.4.3 Drip trays shall be arranged at fuel filling pipe.
+
+6.1.4.4 It shall be possible to stop/close the following components from a central place outside the crane engine room:
+
+- valves on tanks for flammable fluids
+- pumps for flammable fluids
+- flaps (shutters) in air ducts to engine room
+- fans for ventilation
+- engines.
+
+6.1.4.5 See DNV-RU-SHIP Pt.4 Ch.3 Sec.1 for fire protection of diesel engines and other combustion engines.
+
+
+## 7.1 Material and fabrication
+
+
+### 7.1.1 General
+
+7.1.1.1 Material and fabrication requirements are given in Sec.3.
+
+
+## 7.2 Structural strength
+
+
+### 7.2.1 General
+
+7.2.1.1 General description of structural strength is given in Sec.4. This section specifies supplementary information for structural strength valid for platform cranes.
+
+
+### 7.2.2 Loads due to operational motions
+
+7.2.2.1 The dynamic factor shall not be taken less than:
+
+1.15 for 10 kN < W ≤ 2 500 kN
+
+7.2.2.2 For cranes used for internal load handling in open sea, due considerations shall be taken to ensure that the resultant impact on the crane due to wave introduced motions is within the crane’s design limitations.
+
+
+### 7.2.3 Horizontal loads due to operational motions
+
+7.2.3.1 For revolving cranes a lateral force of
+
+(W/100) · [2.5 + 0.1 · r · n]
+
+may be assumed at the jib head where:
+
+| r | = | load radius (m) |
+| --- | --- | --- |
+|  |  | (distance from revolving axis to load W) |
+| n | = | revolution per minute (RPM) |
+
+7.2.3.2 Radial force on revolving cranes may be determined on the basis of maximum angular velocity and radius to the considered mass. Radial force equal to (W/1 000) n2 · r may be assumed at the jib head.
+
+
+## 7.3 Machinery and equipment
+
+
+### 7.3.1 General
+
+7.3.1.1 General requirements are given in Sec.5. This section specifies supplementary requirements valid for platform cranes.
+
+
+### 7.3.2 Steel wire rope anchorage
+
+7.3.2.1 The strength of the anchorage of the hoist rope to the drum shall have strength not less than the smallest of 80% of the breaking load of the hoist wire rope or 2.5 times the maximum design tensile force in the rope. The force may include the friction of the turns remaining on the drum, based on coefficient of friction of 0.1.
+
+
+## 7.4 Safety and safety equipment
+
+
+### 7.4.1 General
+
+7.4.1.1 Basic requirements are given in Sec.6.
+
+7.4.1.2 For protection and precautions against fire, the following applies:
+
+For cranes installed onboard offshore units/installations with hydrocarbon contact (production- and drilling units), DNV-OS-A101 Ch.2 Sec.4 [2.1.4], applies. The crane manufacturer shall ensure proper fire safety accordingly.
+
+
+### 7.4.2 Specific requirements
+
+
+#### 7.4.2.1 General
+
+As an alternative to document safety as outlined for offshore cranes, platform cranes will be accepted based on fulfilment of the prescriptive requirements as set out below.
+
+Monitoring of safety equipment shall be as required in Table 7-1.
+
+
+#### 7.4.2.2 List of required functionality
+
+Lifting appliances/cranes shall generally be provided with:
+
+- safety brakes on all movements (see [5.2.3])
+- overload protection (see [7.4.2.3])
+- load indicator or load moment indicator (see [7.4.2.4])
+- limit switches (see [7.4.2.5])
+- safety valves on all main circuits of the hydraulic system (see [5.5.1])
+- emergency stop system (see [7.4.2.6])
+- boom stopper on derrick cranes (see [7.4.2.6])
+- end stoppers for travelling cranes (see [7.4.2.7])
+- audible warning alarm (see [7.4.2.8])
+- slack wire rope detection (see [7.4.2.9])
+- means for emergency lowering of load (see [7.4.2.10]).
+
+
+#### 7.4.2.3 Overload protection
+
+All cranes/lifting appliances shall be provided with automatic overload protection, arresting the hoisting movement if overload is detected.
+
+The overload protection shall be activated if the response of the load being raised or lowered exceeds a predetermined amount which shall not be greater than the effect of a static load equal to the safe working load times the dynamic factor for which the lifting appliance has been designed.
+
+When activated, the overload protection shall not prevent the load or crane to be moved to a better position (e.g. lower the load or hoist the boom) when the load is airborne. Lifting an overload from deck position ('lift-off') by means of hoisting the boom shall not be possible.
+
+
+#### 7.4.2.4 Load/load moment indicator
+
+A rated capacity indicator giving continuous information shall be provided when the working load is 50 kN or greater except for cranes where the allowed maximum rated load is constant (i.e. independent of load radius).
+
+Further, cranes with a variable rated capacity dependent on the radius shall be provided with a radius indicator clearly visible from the control station. Indication in the control station screen is sufficient.
+
+
+#### 7.4.2.5 Limit switches
+
+As specified for limit switches in [8.4.2.5]. For cranes with SWL not exceeding 20 tonnes, without cabin, the requirement for indication may be omitted.
+
+
+#### 7.4.2.6 Emergency stop system
+
+As specified for emergency stop in [8.4.2.7].
+
+
+#### 7.4.2.7 End stops
+
+End stoppers shall be fitted to prevent over-running where movements are restricted. Shut-down of the power shall be arranged before the end stoppers are activated. The end stoppers or the moving parts shall be fitted with buffers made of timber, rubber, etc. If the nominal speed exceeds 1 m/s, the buffers shall be of spring type or similar energy absorbing type. If practicable, the buffers shall be fitted on the main sill and not on the bogies.
+
+
+#### 7.4.2.8 Audible warning alarm
+
+Gantry cranes and similar cranes shall be provided with a horn or other audible warning device operated by the crane operator to warn or attract the attention of any personnel within the operational area.
+
+In case of travelling cranes moving at ground level, a continuous audible warning shall automatically be given when the crane is to move/is moving along the track/rails. The warning signal shall be distinctly different from other audio signals on the installation.
+
+
+#### 7.4.2.9 Slack wire rope detection
+
+As specified for slack wire rope detection in [8.4.2.10]. However, auto stop for arresting the slack wire rope is not required.
+
+
+#### 7.4.2.10 Emergency lowering
+
+Means shall be provided for safe lowering of hanging load to a safe position in the event of power failure. In addition, emergency slewing will be required where slewing is necessary to obtain a safe position.
+
+If the emergency lowering is achieved by external means, this means shall be readily available or easily retrievable in any area where the crane is intended to be operated.
+
+If it is satisfactorily documented in a risk evaluation that the risk is acceptable without any means for emergency operating, the requirements in this paragraph will not apply.
+
+|  | Platform cranes |  |  |
+| --- | --- | --- | --- |
+| Event | Indication | Alarm | Auto stop |
+| Load high or over-turning moment high (see [7.4.2.3]) |  |  | x |
+| Hook position, upper and lower (see [7.4.2.5]) Boom/jib position, upper and lower | x |  | x x |
+| Travelling motion, end stops Warning |  | x | x |
+| Slack wire rope (see [7.4.2.9]) Remote control: Power failure to safety system | x x | x |  |
+| Emergency stop (see [7.4.2.6]) | x | x | x |
+
+
+## 8.1 Material and fabrication
+
+
+### 8.1.1 General
+
+8.1.1.1 Material and fabrication requirements are given in Sec.3. This section specifies supplementary information.
+
+
+### 8.1.2 Bolts for main slewing ring
+
+8.1.2.1 Yield strength exceeding 1050 MPa for bolt material of ISO strength class 10.9 will not be accepted.
+
+
+## 8.2 Structural strength
+
+
+### 8.2.1 General
+
+8.2.1.1 General description of structural strength is given in Sec.4. This section specifies supplementary information.
+
+
+### 8.2.2 Loads due to operational motions
+
+8.2.2.1 The dynamic factor ψ for design purposes shall not be taken less than:
+
+1.3 for 10 kN < W ≤ 2 500 kN
+
+1.5 – W/12500 for 2500 kN < W < 5 000 kN
+
+1.1 for W > 5 000 kN,
+
+where W is the maximum working load for the load curve in question.
+
+When the dynamic factor ψ is calculated by the formula given in [4.1.3.2], the following shall be taken into account when assessing the relative velocity between load and hook at the time of lift-off, VR:
+
+VR=0.5⋅VL+Vin2+Vt2
+
+Where the value 0.5·VL above is less than VH, as given in [8.2.2.2], then VH shall be used instead of 0.5·VL.
+
+| VL | = | maximum steady hoisting speed (m/s) for the rated capacity to be lifted |
+| --- | --- | --- |
+| Vin | = | downward velocity (m/s) of the load at the time of lift off (due to movement of the deck of a supply vessel from which the load is lifted |
+| Vt | = | velocity (m/s) from motion of the crane jib tip if the crane is located on a mobile offshore unit or other floating unit. |
+
+Vin shall be determined as a function of sea state and motion parameters (roll, pitch and heave response) of the vessel/offshore unit or hydrodynamic response of an underwater object to be handled.
+
+As a simplified approach for determination of Vt, 0.25·Hs (for semi submersibles) and 0.50·Hs (for other floating units) may be applied.
+
+8.2.2.2 The hoisting and lowering speed shall normally not be less than
+
+VH=0.1⋅(Hs+1)
+
+for cranes used for cargo operations towards supply boats.
+
+where:
+
+Hs = significant wave height (m).
+
+The VL used for calculation of dynamic factors for derating shall be the actual maximum available hook speed attainable, and shall normally be equal to or larger than VH. For significant wave heights where the hoisting speed VL is less than VH, the derating chart shall be shaded and giving information that it is dependent upon the crane driver’s skill to avoid re-entry of the next wave.
+
+8.2.2.3 For cranes located on semi submersibles units and bottom supported platforms the following values for VL may be used for the calculation of the dynamic factor when lifting off loads from a supply vessel.
+
+available hoisting speed or 0.6 Hs
+
+whichever is the smaller.
+
+For Vin the following values can be applied for cranes located on crane vessels, semi submersibles units and bottom supported platforms when lifting off from a supply vessel:
+
+0.6 Hs (m/s) for 0 < Hs ≤ 3 (m)
+
+or
+
+[1.8 + 0.3 (Hs – 3)] (m/s) for Hs > 3 (m)
+
+8.2.2.4 Where the operator cabin is attached above the slewing bearing, the design loads for the crane foundation including pedestal and slewing bearing with fasteners, shall, for structural strength calculations (fatigue excepted), be taken as the design loads as applied for the crane members multiplied with an additional offshore safety factor SF1. For mast cranes, this requirement is valid for the mast up to and including the lower bearing support.
+
+- for cranes with lifting capacity up to 2500 kN, minimum required SF1= 1.3
+- for cranes with lifting capacity of 2500 kN and more, minimum required SF1= 1.1.
+
+8.2.2.5 For cranes located on barge or bulk carrier, the dynamic factor ψ may be calculated as in [4.1.3.2]. The hoisting speed VL may be taken as given in [8.2.2.3].
+
+The relative velocity VR may be calculated in accordance with the formula in [8.2.2.1], where:
+
+downward velocity (m/s) of the barge or bulk carrier from which the load is unloaded at the moment of pickup. (It is foreseen that the crane is located on the other vessel involved.)
+
+velocity (m/s) of the jib tip of the crane located on the barge or bulk carrier to which the load is brought at the moment of pickup from the other vessel.
+
+Vin shall be documented by calculations, or 1 may be taken as 1/10 · k · Hs
+
+Vt shall be documented by calculations, or 1 may be taken as
+
+1/6 · k · Hs
+
+κ=5.5−DWT20000
+
+the deadweight tonnage in metric tonnes of the barges or bulk carriers used in the operation.
+
+
+### 8.2.3 Horizontal loads due to operational motions
+
+8.2.3.1 The following horizontal force at jib head shall be assumed.
+
+Lateral force (side lead):
+
+(W/100) · [2.5 + 0.1 · r · n + Hs]
+
+Radial force (off lead):
+
+(W/1 000) n2 · r (when the load is airborne)
+
+or
+
+ψ⋅W⋅2.5+1.5HsHW+Lvert⁢ at⁢ lift−off
+
+whichever is the greater.
+
+| Lvert | = | vertical distance from jib heel bearing to outer jib sheave |
+| --- | --- | --- |
+| Hw | = | distance from jib heel bearing to supply boat deck |
+| θ | = | jib angle to the horizontal. |
+
+
+### 8.2.4 Load chart or table
+
+8.2.4.1 A load chart or table shall be available at operating stand, and where applicable the load chart or table shall give the safe working load for boom angles or load radii for the various wave heights. For cranes subjected to Crane notations, the load charts shall be approved.
+
+Load charts for various wave heights should be based on the specified lifting capacity and design dynamic factor at Hs = 0 m. However, in cases where the maximum lifting capacity for the crane at Hs = 0 m is larger than specified by the Hs = 0 m load curve (for the crane in general, or, for specific boom angles/radius), the load charts may be calculated with basis in maximum lifting capacity. In such cases, the maximum lifting capacity should be specified and documented. Due consideration to loose gear capacity should be taken.
+
+
+## 8.3 Machinery and equipment
+
+
+### 8.3.1 General
+
+8.3.1.1 General requirements are given in Sec.5. This section specifies supplementary requirements valid for offshore cranes.
+
+
+### 8.3.2 Brakes for hoisting and luffing
+
+8.3.2.1 The mechanical brake should preferably not be arranged in front of same gear transmission as the operational brake. For brake requirements, see [5.2.1.2] and [5.2.3].
+
+
+### 8.3.3 Steel wire rope anchorage
+
+8.3.3.1 The load carrying capacity of the fixed hoist rope anchorage to the drum shall approximately equal the dynamic wire rope line pull. Further, including the frictional force being applied through the turns of rope always to remain on the drum, the total capacity of anchorage shall be equal to the breaking load of the rope. In order to achieve this frictional force, it may be necessary to increase the minimum remaining turns on the drum to more than 3.
+
+For cranes with radius dependent load chart, the fixed anchorage shall be designed for the lowest line pull as caused by the load chart (number of wire rope parts to be taken into consideration). The end stop for the remaining turns shall in such cases be duplicated, i.e. have minimum two limit/proximity switches based on different technologies (electric/mechanical) or an alarm shall be provided to crane operator in case of failure/malfunction of the single switch. Other means of duplicating the stop function may be accepted on a case by case evaluation.
+
+
+### 8.3.4 Control and monitoring systems
+
+8.3.4.1 The requirements in [5.5.4.1] shall be applied on the equipment and systems having impact on the risk contributors listed in [8.4.2.2].
+
+8.3.4.2 For offshore cranes onboard mobile offshore units (semi submersibles, jack-ups, etc.), additional requirements as specified by the governing DNV offshore standards shall be applied as far as relevant.
+
+
+### 8.3.5 Power systems
+
+8.3.5.1 Hoisting, slewing and luffing shall have such response to the controls that minimum required speed from stand still shall be obtained within 2 seconds from activation of the control lever. The control levers shall have predictable smooth motions proportional to their position.
+
+8.3.5.2 Cranes intended for supply boat/barge operations shall have enough power to satisfy the following speed requirements:
+
+- minimum hoisting speed, see [8.2.2.2]
+- minimum steady slewing speed at ¾ of maximum radius, empty hook: 2 m/s
+- minimum steady radial speed at ¾ of maximum radius, empty hook: 0.16 m/s for Hs = 2 m, 0.28 m/s for Hs = 4 m and 0.4 m/s for Hs = 6 m.
+
+
+### 8.3.6 Electrical equipment and systems
+
+8.3.6.1 The electrical equipment and systems supporting the crane main functions shall comply with DNV-RU-SHIP Pt.4 Ch.8 and will generally be defined as essential or important. Specifically, equipment and systems having impact on the risk contributors listed in [8.4.2.2] shall fulfil requirements with respect to essential installations.
+
+8.3.6.2 Electrical motors for hoisting and luffing shall be fitted with alarms for high temperature and shut-down for high-high temperatures.
+
+8.3.6.3 For cranes onboard mobile offshore units (semi submersibles, jack-ups, etc.), additional requirements as specified by the governing DNV offshore standards shall be applied as far as relevant.
+
+The following codes and standards are recognised:
+
+- Norwegian Standard NS 5513 - Cranes and Lifting Appliances.
+- DNV-RU-SHIP Pt.4 Ch.8 Electrical Installations.
+- British Standard BS 5345 - Selection, Installation Maintenance of Electrical Apparatus for use in Potentially Explosive Atmospheres.
+- NEK 420.
+
+Other codes and standards may after special consideration be recognised by the Society.
+
+
+## 8.4 Safety and safety equipment
+
+
+### 8.4.1 General
+
+8.4.1.1 Requirements in Sec.6 shall be applied. This section specifies supplementary requirements.
+
+
+### 8.4.2 Specific requirements
+
+
+#### 8.4.2.1 General
+
+All lifting appliances categorised as offshore cranes shall be provided with safety functions, reducing the risk connected to crane operations. The subsequent safety function requirements are founded on a risk-based approach. It is up to the customer to select the technological platform for the safety functions.
+
+In the following, the safety function requirements are organised as follows:
+
+- listing of generic (i.e. standard) risk contributors, see [8.4.2.2]
+- description of the generic risk contributors and corresponding required generic safety functions, see [8.4.2.4] to [8.4.2.18]
+- monitoring of the safety functions, see Table 8-1
+- ranking of the safety functions, see [8.4.2.20]
+- verification, see [8.4.2.21]
+- handling of deviations and extended risk, see [8.4.2.22].
+
+The corresponding documentation- and verification requirements are specified in App.G.
+
+
+#### 8.4.2.2 Generic risk contributors
+
+The following hazards are identified as generic risk contributors for offshore cranes:
+
+- over-loading (see [8.4.2.4])
+- crane movements outside operational limitations (over travel) (see [8.4.2.5])
+- dangerous lifting gear/cargo movements (see [8.4.2.6])
+- dangerous crane movements (see [8.4.2.7])
+- lack of visibility (see [8.4.2.8])
+- lack of communication (see [8.4.2.9])
+- slack wire rope at drum (see [8.4.2.10])
+- failure in control systems (see [8.4.2.11])
+- failure in safety components/systems (see [8.4.2.12])
+- lack of load holding capacity (see [8.4.2.13])
+- blackout/shutdown of power (see [8.4.2.14])
+- unintended activation of safety functions (see [8.4.2.15])
+- spurious trip of safety functions (see [8.4.2.16])
+- hazards due to activation of safety functions (see [8.4.2.17])
+- fire/fire ignition (see [8.4.2.18])
+- accidental drop of hoisted load (see [8.4.2.19]).
+
+The maximum consequence assumed for each of the above listed generic risk contributors is one fatality, with the exception of fire/fire ignition (see [8.4.2.18]). For lifting appliances where the specific risk exceeds one fatality (not including fire/fire ignition), or where the specific risk contributors deviates from the above, see [8.4.2.22].
+
+
+#### 8.4.2.3 Description of risk contributors and corresponding required generic safety functions
+
+The following description of the generic risk contributors and corresponding required generic safety functions applies.
+
+For lifting appliances with specific safety functions that deviates from the following generic safety functions, see [8.4.2.22].
+
+
+#### 8.4.2.4 Over-loading
+
+Generic risk contributors
+
+Over-loading due to crane hook entangled to the supply boat or other moving objects, due to load sucked to the seabed, due to heave compensation not working properly, or other overload situations, may lead to crane structure collapse.
+
+Generic risk control measures
+
+Cranes shall therefore be provided with overload protection. The safety functions for overload protection shall be implemented by means of the following automatic protection systems: A boom overload protection system, see [8.4.2.4], and an optional (depending on wave characteristics) automatic overload protection system (AOPS), see [8.4.2.4]. In addition, a manual overload protection system (MOPS), see [8.4.2.4], shall be provided.
+
+1. For cranes intended for supply boat/barge operations and for subsea handling cranes, an overload limiting device, stopping the boom from being luffed further out, is required. The overload limiting device shall automatically be activated when the crane is subject to an over-load response close to the crane’s design load (given by the safe working load times the dynamic factor). When activated, any movement reducing the overturning moment shall stay intact.
+2. MOPS will generally be required for all offshore cranes, including subsea operating cranes. The MOPS shall operate under all conditions, including failure in the main power supply and shall override all other functions when activated. The system shall be arranged for manual activation for all reeving configurations. The activation switch or handle (one only) shall be located for rapid access at the control station, permanently marked with yellow colour, and protected against inadvertent use. MOPS at wireless control station will not be accepted. At any time, the system shall be able to be reset by the crane operator, without causing significant damage to the crane. The system, when activated, shall maintain a retaining force in the hoisting system of minimum 10% of the maximum rated capacity for internal lift. The capacity of the system shall be sufficient for activating/reset for at least 3 times in succession, and for continuous activation for at least 5 minutes. A detailed assessment of the control system, including hydraulic, electric/electronic or pneumatic engine drive components or other relevant components for the design, should be performed at component level, documenting the behaviour of the system in terms of a single failure of individual components and cable damages. The purpose of this assessment is to prove reliability of MOPS and other safety functions in the event of single failures. It is recommended that FMECA in accordance with IEC 60812 or equivalent standard presenting same level of safety is performed.
+3. The requirement for provision of AOPS for supply boat and barge handling operations shall be based on due consideration to which nautical zone, with corresponding wave parameters, the crane will operate. Provision of AOPS is required for operations in nautical zones with a short wave characteristic, for instance the North Sea, whereas operations in nautical zones with a long wave characteristic will not require AOPS. Operational limitations for use in nautical zones with long wave characteristics only shall be stated in the crane certificate as well as in the crane's operational manual. Short wave characteristics is a term used for nautical zones with mainly wind induced waves, while 'long wave characteristics' is used for nautical zones with swell dominated waves. Categorization will be based on customer specified nautical zones.
+4. AOPS will generally not be required for subsea handling cranes. The AOPS, when installed, shall be operational for all reeving configurations. The trigger load shall not be less than rated capacity for internal lift, giving an appropriate response time to avoid significant damage to the crane. Automatic overload protection for lateral boom loads exceeding the design limits for the slew system shall also be provided (not required for heavy lift cranes). The lateral overload protection shall be independent of the AOPS. The AOPS - with the exception of the lateral overload system - shall include sector limitation and height limitation, preventing system activation when the load is positioned above the platform. The requirement for automatic application of the brakes when the motion control lever is returned to neutral position may be omitted when the hook is within the AOPS sector. Manual overriding of the AOPS shall not be possible unless for the purpose of lifting of personnel. The AOPS shall be designed with respect to response time and retaining force in the hoisting rope, protecting the crane from any structural damage. When the system is activated, the crane shall maintain a retaining force at the hook sufficient to suspend a load corresponding to the rated capacity for internal lift. If the hook load increases beyond this value, the minimum payout hook speed due to the increased actual hook load shall not be less than the velocity given in the expression (Vin2 + Vt2)0.5, see [8.2.2.1] (the velocities as indicated in EN 13852-1 Annex B may be used as a simplified method). When the overload/-moment situation no longer exists, the system shall automatically deactivate. However, due to possible oscillation, delayed deactivation of the AOPS shall be considered.
+5. When subjected to an overload response equal to the activation load for the shut-down device or the trigger load for the AOPS, an alarm warning all the personnel within the working area, including all personnel onboard the attending supply vessel, shall automatically be activated.
+6. When the AOPS or the MOPS is activated, the end stop at the winch drum (limiting the residual windings to minimum 3) shall be overridden, allowing the wire rope to be spooled completely off the drum.
+7. Both the AOPS and MOPS shall have control indicators in the cabin, i.e. a continuous visual signal to indicate whether the system is operational or not. A continuous visual and acoustic signal shall be given when the system is activated. In addition, an external audible alarm (110 dB (A) measured at 1 m from the alarm) shall be provided when the MOPS is activated.
+8. A load indicator, a rated capacity indicator and a crane inclinometer (if the crane is installed on a floating unit) to display the pedestal inclination in the longitudinal and traverse direction of the crane, giving continuous information to the operator, shall be provided. The rated capacity indicator shall include a display of the selected crane configuration and the significant wave height. Further, cranes with a variable rated capacity dependent on the radius shall be provided with a radius indicator clearly visible from the control station. An audible and visual warning/alarm, giving a continuous warning to the crane operator when the load response exceeds 90% of the crane’s rated capacity/overturning moment for the offshore rated load curve for Hs = 0 m, or, for the rated capacity for the selected Hs, shall be fitted. The audible warning/alarm at 90 % may, though, be temporarily disconnected or replaced by non-continuous signals for subsea operations continuously subjected to loads at 90 % and more.
+
+
+#### 8.4.2.5 Crane movements outside operational limitations
+
+Generic risk contributors
+
+Crane movements outside operational limits may lead to stress beyond the crane’s structural strength and to operational hazards.
+
+Generic risk control measures
+
+All crane movements are therefore to be kept within safe operational limitations, normally by means of limit switches/alarms. The hoisting and luffing winches shall be equipped with upper and lower limiters, stopping the winch movements within safe margins to avoid collision with other parts of the crane and keeping safe number of retaining wire rope turns on the drum - usually minimum 3. Special consideration shall be paid to the crane boom’s upper limit protection for wire rope suspended booms, where the end stop function for the remaining turns shall be duplicated i.e. have two limit/proximity switches based on different technologies (electric/mechanical) or an alarm shall be provided to crane operator in case of failure/malfunction of the single switch. Other means of duplicating the stop function may be accepted on a case by case basis.
+
+Limit switches shall be positively activated and be of failsafe type, i.e. the crane shall go to a defined safe condition in case of failure (power failure, cable defect, etc.). Activation of limit switches shall lead to indication in the crane cabin. After activation of a limiting device, movement in the reverse direction - to a safer position - shall not be prevented. Where more than one movement cause over-travel, all limit switches limiting such over-travel shall be activated simultaneously (e.g. hoist block over-travel at boom top may be caused either by hoisting or luffing). A manually operated 'over-ride' system, provided positive and maintained action combined with indication and alarm, may be fitted.
+
+
+#### 8.4.2.6 Dangerous lifting gear/cargo movements
+
+Generic risk contributors
+
+Unintended lifting gear/cargo movements may lead to hazardous situations for personnel involved in crane operations.
+
+Generic risk control measures
+
+1. Means for keeping constant tension in the hoisting wire rope (constant tension) when carrying out supply boat operations, compensating for the relative movement between the lifting gear/cargo and the supply boat, may be provided (optional). The constant tension system shall, when installed, be designed with due consideration to the retaining force (usually in the area of 2 – 3 tonnes), response time and unintentional activation. It shall not be possible to activate the system outside a defined zone close to the supply boat - neither horizontal nor vertical, and shall not be possible to activate when the crane is loaded. The winch shall automatically return with soft characteristic to normal hoisting, braking or holding condition when the constant tension is disengaged. An indication, informing when the constant tension system is active, shall be present in the cabin.
+2. Special consideration shall also be paid to dangerous lifting gear movements when lifting or lowering the boom/lifting gear to or from the boom rest/cradle. Only slow motions of the boom shall be possible.
+3. An audible warning (horn or similar device) to warn or attract the attention of any person within the operational area of the crane, operated by the crane operator, shall be provided.
+
+
+#### 8.4.2.7 Dangerous crane movements
+
+Generic risk contributors
+
+Dangerous crane movements or unintentional crane movements due to malfunction in the crane’s control system may lead to operational risks.
+
+Generic risk control measure
+
+A manually operated emergency stop function, leading to shut-down and stop of the crane movements, shall therefore be fitted. Simultaneously, the brakes shall be engaged in a progressive and safe manner. The emergency stop shall retain its function regardless of any malfunction in the crane’s control system. Emergency stop actuators shall be located at convenient locations at control station for immediate use by personnel in the event of a hazardous situation occurring.
+
+The emergency stop shall function as, or stopping by:
+
+- immediate removal of power to the machine actuators, or
+- mechanical disconnection (declutching) between the hazardous elements and their machine actuators.
+
+The emergency stop shall be so designed that deciding to actuate the emergency stop actuator shall not require the operator to consider the resultant effects (stopping zone, deceleration rate, etc.). The emergency stop command shall over-ride all other commands except the MOPS (see [8.4.2.20]). The emergency stop function shall not impair the effectiveness of the safety devices or devices with safety related functions. Resetting the control device shall only be possible as the result of a manual action on the control device itself. Resetting the control device shall not cause a restart command.
+
+The emergency stop actuators shall be designed for easy actuation. Types of actuators that may be used include:
+
+- mushroom type push button.
+- wires, ropes, bars.
+- handles.
+- in specific applications, foot pedals without protective cover.
+
+Measures against inadvertent operation shall not impair the accessibility of the emergency stop actuator. The emergency stop actuator shall be coloured red. The background shall be coloured yellow, as far as practicable. If the emergency stop actuator is not located directly on the machine, labels shall be provided addressing the actuator to the machine. A warning/alarm and an indication in the crane cabin shall inform the crane operator that the emergency stop has been activated.
+
+
+#### 8.4.2.8 Lack of visibility
+
+Generic risk contributors
+
+Lack of visibility due to poor sight or due to crane operations in the crane driver’s blind zone may lead to operational hazards.
+
+Generic risk control measure
+
+Consequently, a boom tip camera is normally required for all offshore cranes intended for supply boat or barge handling. The camera and camera installation shall be designed with due consideration to environmental factors (wind, salt, moisture, vibrations, etc.) and operational suitability.
+
+
+#### 8.4.2.9 Lack of communication
+
+Generic risk contributor
+
+Lack of communication between the crane operator and the other participants in the crane operation may lead to operational hazards.
+
+Generic risk control measure
+
+Two-way communication equipment, enabling the crane operator to communicate with the participants in the crane operation in a safe way, shall be provided. The crane operator shall be able to operate the communication system without moving his hands from the main control levers.
+
+
+#### 8.4.2.10 Slack wire rope at drum
+
+Generic risk contributor
+
+Slack wire rope at the drum may lead to improper spooling and entangled wire rope.
+
+Generic risk control measure
+
+The drums - both for the hoisting winch and the luffing winch - shall therefore be equipped with a slack wire rope detection device which that shall activated automatically if the wire rope becomes slack during lowering. The device shall stop the winch lowering motion until the wire rope is re-tightened, before automatically returning to normal operation. When activated, a visual and acoustic signal/indication shall be given in the crane cabin. Where the crane driver has a full view of the drums from his normal position, the slack wire rope detection device may be omitted.
+
+
+#### 8.4.2.11 Failure in control systems
+
+Generic risk contributor
+
+Failure in the crane’s control system may result in unintentional crane response and movements.
+
+Generic risk control measures
+
+Control system design and components shall therefore be selected, applied, mounted and adjusted so that in the event of a failure, maximum safety shall be the prime consideration (fail-safe concept). All aspects of possible methods of failure – including power supply failure - shall be considered. If any failure occurs, the control system shall always return to the safest condition with respect to stabilising the crane and the load. Special consideration shall be paid to the below points if subjected to failure in the control system:
+
+- unintended start of machinery shall not be possible
+- safety devices or devices with safety related functions shall be impaired to a minimum degree.
+
+An alarm and an indicator revealing any detectable failure in the control system affecting the operation shall be present in the crane cabin.
+
+
+#### 8.4.2.12 Failure in safety components/system
+
+Generic risk contributors
+
+Failure in safety components and the safety system may result in hazardous situations due to override of safety limits.
+
+Generic risk control measures
+
+The safety components/system shall therefore be so designed that all aspects of failure – including power supply failure – shall lead to indication and alarm in the crane cabin (monitoring), or – alternatively – safeguarded by redundancy design.
+
+
+#### 8.4.2.13 Lack of load holding capacity
+
+Generic risk contributors
+
+Lack of load holding capacity due to missing hydraulic refilling or loss/drop of hydraulic pressure, may lead to falling load or boom.
+
+Generic risk control measures
+
+The crane’s hydraulic system shall therefore be designed such a way that missing hydraulic refilling shall not occur. Further, the hydraulic system shall be fitted with safety or load holding valves on all main circuits protecting against unintended movements in case of hose rupture.
+
+
+#### 8.4.2.14 Blackout/shutdown of power
+
+Generic risk contributor
+
+Blackout/shutdown may lead to crane stop with the crane and the load in unfavourable and unsafe position.
+
+Generic risk control measures
+
+1. Power failure/blackout or unintended shut-down shall lead to automatic application of the brakes and an alarm at the operator’s stand.
+2. Facilities for emergency operation, bringing the load to safe condition, shall be provided by means of connection to an independent emergency power supply, rated to handle full SWL under all conditions. Slewing speed shall be minimum 15 % of max speed for normal operation. The emergency power supply may be a redundant main power supply or an emergency power supply from the installation, or a stand-alone emergency power supply in the crane rated for minimum 30 min capacity. The activation switches or handles for emergency operation shall be of hold to run type and clearly and permanently marked for their purpose.
+3. A mobilization time of maximum 120 seconds is recommended.
+4. For cranes installed onboard vessels with DYNPOS (AUTRO) class notation, the slip ring units for transfer of redundant power supplies shall be divided and separated by a flame-retardant partition such that a short-circuit in a compartment for one supply will not damage the other.
+
+
+#### 8.4.2.15 Unintended activation of safety functions
+
+Generic risk contributors
+
+Unintended activation of safety functions may lead to crane response giving unintentional hazards/risks.
+
+Generic risk control measures
+
+Handling devices for safety functions shall be protected against inadvertent use and positioned away from ordinary operating handles. Interlock devices, preventing inadvertent activation in dangerous zones (water zone only, etc.) shall be fitted when possible.
+
+
+#### 8.4.2.16 Spurious trip of safety functions
+
+Generic risk contributors
+
+Initiation of a safety functions in no-hazardous situations and where there is no true demand for safety activation due to safety- or control system failure, may cause other types of hazards/risks.
+
+Generic risk control measures
+
+Consideration to spurious trip shall be taken in the design of the safety- and control systems. A risk assessment may be required for identification and possible elimination/reduction of spurious trip and corresponding hazards/risks.
+
+
+#### 8.4.2.17 Hazards due to activation of safety functions
+
+Generic risk contributors
+
+Activation of safety functions may lead to secondary effects that may be harmful to the crane and/or the load.
+
+Generic risk control measures
+
+Design of safety systems and components shall be done with consideration to dangerous secondary effects, even if the crane/load movements are stopped from full speed and/or full load. Sector limitations for some safety functions shall be considered.
+
+
+#### 8.4.2.18 Fire/fire ignition
+
+Generic risk contributors
+
+Fire/fire ignition may arise from the crane itself or from the ship/installation, and thereby lead to disaster.
+
+Generic risk control measures
+
+Generally, necessary protection and precautions against fires and explosions shall be separately considered in each case, with consideration to the hazardous area classification in which the crane or parts of the crane will operate and to the requirements for the crane’s emergency preparedness. The application of fire extinguishers and/or automatic fire fighting system shall be considered in each case.
+
+For cranes installed onboard offshore units/installations with hydrocarbon contact (production- and drilling units), DNV-OS-A101 Ch.2 Sec.4 [2.1.4] applies. The crane manufacturer shall ensure proper fire safety accordingly.
+
+| Event | Reference | Indication | Alarm | Auto stop |
+| --- | --- | --- | --- | --- |
+| Load high | [8.4.2.4] | × | × |  |
+| Overturning moment high | [8.4.2.4] | × | × | × |
+| Hook position (upper, lower) | [8.4.2.5] | × |  | × |
+| Boom/jib position (upper, lower) | [8.4.2.5] | × |  | × |
+| Constant tension | [8.4.2.6] | × |  |  |
+| Emergency stop | [8.4.2.7] | × | × | × |
+| Slack wire rope detection | [8.4.2.10] | × |  | × |
+| Failure in control system | [8.4.2.11] | × | × |  |
+| Failure in safety system | [8.4.2.12] | × | × |  |
+| Blackout/shut-down | [8.4.2.14] |  | × | × |
+| Fire/gas | [8.4.2.18] |  | × |  |
+| High temperature, el. motors | [8.3.6.2] |  | x |  |
+| High-high temperature, el.motors | [8.3.6.2] |  |  | x |
+
+
+#### 8.4.2.19 Accidental drop of hoisted load
+
+The main lifting appliance(s) shall be designed and built with due consideration to the risks caused by an accidental drop of hoisted load. A high-level risk analysis shall be carried out according to recognized methods, see DNV-CG-0550 Sec.5 [2.4.1] for further guidance, by a team including relevant expert parties (see guidance note), where one party shall have the overall coordinating responsibility.
+
+The risk analysis shall as a minimum address the following:
+
+- identification of potential hazard scenarios caused by accidental drop of hoisted load, including:
+  - load dropped on vessel
+  - dynamic motions of vessel
+  - cranes or part of it flipping back, e.g. boom
+- probability and consequences of the identified hazard scenarios for vessel and personnel
+- preventive and mitigating actions implemented to keep the risks as low as reasonably practicable.
+
+A consolidated report, containing a summary of the evaluations, conclusions, preventive and mitigating actions to be implemented, shall be submitted to the Society and will be handled in accordance with Table 2-1. If the desired safety level cannot be demonstrated by design, operational procedures mitigating the relevant risks shall be implemented.
+
+The team carrying out the risk analysis should include representatives from the vessel designer, crane manufacturer and prospective owner.
+
+The aim of the risk analysis is to address possible hazards as early as possible, giving the possibility for implementing preventive and mitigating actions at the design stage and to obtain an early overview of any necessary compensating operational procedures. The overall goal is to keep the risks as low as reasonably practicable for the vessel and the personnel onboard. In order to have the analysis available as early as possible, only a qualitative risk analysis is expected.
+
+
+#### 8.4.2.20 Ranking of the safety functions
+
+The manual overload protection (MOPS) and the emergency stop function shall be the preferred safety functions and have equal priority, before other safety devices/limiters.
+
+
+#### 8.4.2.21 Verification
+
+The verification will be carried out according to App.G.
+
+
+#### 8.4.2.22 Handling of deviations and extended risks
+
+In cases where the risk deviates from the generic by means of:
+
+- assumed maximum consequence for one hazard/risk contributor that will exceeds one fatality (with the exception of fire/fire ignition), or where the specific risk contributors deviate from the specification in [8.4.2.2]
+
+identification of the specific risk and risk contributors is the customer’s responsibility and shall be shown in the verification templates and submitted documentation.
+
+Further, when the specific safety functions deviates from the generic as specified in [8.4.2.4]–[8.4.2.19] this shall appear from the verification templates, and customer’s proposal to functional and technical requirements for the safety functions shall be submitted for review and agreement.
+
+8.4.2.23 Handling of deviations is also described in App.G.
+
+
+## 9.1 General
+
+
+### 9.1.1 Basic requirements
+
+9.1.1.1 Generally the requirements given in Sec.8 for offshore cranes are valid for subsea cranes. This section specifies additional requirements and it points out requirements that deviate from Sec.8.
+
+DNV-RP-N201 Lifting appliances used in subsea operations may be used as additional guidance.
+
+9.1.1.2 This section is valid for handling of unmanned submersibles or for lowering to and retrieval from below sea level.
+
+9.1.1.3 Subsea handling operation are normally to be handled as an engineered lift. However, for smaller cranes, the approach as specified in [9.2.2.1] below may be applied in lieu of engineered lifts.
+
+
+## 9.2 Structural strength
+
+
+### 9.2.1 Principal loads
+
+9.2.1.1 Working load, measured at the crane’s rope exit point (REP), shall be taken as maximum static load in the lifting rope.
+
+
+### 9.2.2 Loads due to operational motions
+
+9.2.2.1 As a simplified approach for operations up to a significant wave height of 2 m, a dynamic factor of not less than 1.7 shall be applied. The requirement for load charts or table (see [9.2.4.1]) may then be omitted.
+
+
+### 9.2.3 Horizontal loads due to operational motions
+
+9.2.3.1 The only horizontal loads (SH) due to operational motions for subsea operations are regarded caused by relative horizontal movement between load and vessel in the sea. These forces are assumed to be 9% of working load acting both as off lead and as side lead.
+
+
+### 9.2.4 Load charts or table
+
+9.2.4.1 Load charts or tables, reflecting the crane’s derated allowable working load for various wave heights shall be presented at the operator’s stand. The load charts shall normally be calculated with basis in the vessel’s accelerations and roll/pitch angles, see DNV-RP-N201. It is assumed that the imposed loading on the crane when carrying out subsea lifts will not exceed the crane’s derated working load for the specified maximum wave height.
+
+
+## 9.3 Machinery and equipment
+
+
+### 9.3.1 Drums
+
+9.3.1.1 Documentation of drum and flange strength as given in [5.2.2.8] will normally be accepted also when the number of layers exceed 7.
+
+9.3.1.2 The factor C given in equation in [5.2.2.7] is normally not to be taken higher than 3.
+
+
+### 9.3.2 Steel wire rope
+
+9.3.2.1 Where the static submersed load measured at the crane tip (Fsub) exceeds SWL, SWL shall be substituted by Fsub in equation for SF given in [5.2.5.3]. Galvanized steel wire ropes are recommended.
+
+See also DNV-ST-E407.
+
+
+### 9.3.3 Fibre rope
+
+9.3.3.1 For fibre rope applications, see DNV-ST-E407 and the qualification scheme herein.
+
+9.3.3.2 In lieu of DNV-ST-E407, as a conservative approach, the following requirements may be applied, assuming [9.4.2] also is adhered to:
+
+- for new and unused fibre ropes, minimum requirements to safety factors are given in [5.2.5.3]
+
+- for the total operational period, remaining fibre rope capacity shall not be lower than the extreme load capacity of the crane structure.
+
+
+### 9.3.4 Sheaves and spooling devices
+
+9.3.4.1 The sheave diameter for steel wire ropes intended to work in heave compensation mode shall at least correspond to a ratio Dp/d = 20.
+
+9.3.4.2 The sheaves for fibre ropes shall be in accordance with [5.2.7.2], and sheave diameters at least correspond to the specified Dp/d ratio applied in the identification of overheating and load cycle effects, see [9.4.2.1].
+
+9.3.4.3 Winch and rope spooling devices shall be designed to prevent coils and/or intrusion through underlaying rope layers. Special attention shall be paid to fibre rope spooling devices due to the light weight of the fibre ropes, leading to less spooling tension due to gravity.
+
+
+## 9.4 Systems
+
+
+### 9.4.1 Power systems
+
+9.4.1.1 Requirements to hoisting, slewing and luffing speeds given in [8.3.5.2] are not applicable.
+
+
+### 9.4.2 Rope monitoring systems
+
+9.4.2.1 For fibre rope applications, due consideration to temperature, tension and time shall be adhered to. A fibre rope heat and load (load size, load duration and number of load cycles) monitoring system shall be implemented for more accurate information. Information regarding system design, i.e. sensors, parameter settings/limits, alarms, safety functions, logging and recording routines and inspection regime (inspection and periodical survey scheme as well as organizational management) shall be provided for approval. Operational limitations and rope replacement criteria from overheating and load cycle effects shall be identified and adhered to.
+
+Information about behaviour of fibre ropes which is important for design can be found in recommended practice DNV-RP-E305.
+
+9.4.2.2 To ensure sufficient monitoring of fibre rope integrity, rope monitoring systems shall be designed and built to meet the following main functions:
+
+- Recording and processing of main operational parameters required to continuously conclude in-operation status of the fibre rope, i.e. temperature, rope tension, number of load cycles and similar.
+- Possibility to screen and log what each section of the fibre rope are exposed to regarding load cycles, temperature and elongation. The system shall be able to divide the rope into sections equal to the lowest sheave diameter in the load path.
+- Alarms to notify the crane operator when operational temperature of fibre rope is exceeding pre-defined limit.
+- Alarms to notify the crane operator when certain rope sections are approaching defined lifetime limit.
+
+
+### 9.4.3 AHC/PHC systems
+
+9.4.3.1 AHC/PHC systems shall be designed with due consideration to DNV-RP-N201
+
+9.4.3.2 Overheating effects on ropes during AHC operations shall be considered. Operational limitations from this effect shall be identified.
+
+
+### 9.4.4 Alarms
+
+9.4.4.1 The audible warning/alarm at 90% SWL may, for subsea operations, be temporarily disconnected or replaced by non-continuous signals.
+
+
+### 9.4.5 Safe state
+
+9.4.5.1 Safe state in connection with stop execution and landing on seabed shall be specially considered with due attention to effects such as rope elongation, AHC dependence and characteristics, etc.
+
+
+## 9.5 Testing
+
+
+### 9.5.1 Load testing
+
+9.5.1.1 The winch strength shall normally be tested through a retrieval of max working load from full retrieval depth. If not tested to full depth, the actual test depth may be specified in the crane certificate as an operational limitation. Prototype testing, winch to winch testing, or other methods ensuring sufficient design may suffice.
+
+
+### 9.5.2 AHC/PHC testing
+
+9.5.2.1 Normally, AHC/PHC testing is carried out by means of simulation. Additional sea testing may be agreed.
+
+
+## 10.1 General
+
+
+### 10.1.1 Definition
+
+10.1.1.1 Cranes with lifting capacity of 2500 kN and more are considered as heavy lift crane However, for cranes designed for multiple operations, the requirements to the specific crane category for each type of operation - for instance subsea operations - to be adhered to. Heavy lift cranes are generally categorised as platform cranes or offshore cranes.
+
+
+### 10.1.2 Basic requirements
+
+10.1.2.1 Generally the requirements given in Sec.7 for platform cranes and in Sec.8 for offshore cranes are valid for heavy lift cranes. This section specifies additional requirements for heavy lift cranes and includes requirements which normally deviate from Sec.7 and Sec.8.
+
+10.1.2.2 All operations are assumed to be engineered lifts.
+
+
+## 10.2 Structural Strength
+
+
+### 10.2.1 Loads due to operational motions
+
+10.2.1.1 When categorized as offshore crane, the dynamic factor ψ for design purposes shall not be taken less than:
+
+1.3 for W = 2 500 kN
+
+1.5 – W/12500 for 2500 kN < W < 5 000 kN
+
+1.1 for W ≥ 5 000 kN,
+
+where W is the maximum working load for the load curve in question.
+
+When categorized as platform crane, the dynamic factor ψ for design purposes shall not be taken less than 1.1.
+
+
+### 10.2.2 Strength
+
+10.2.2.1 Offlead/sidelead shall be specially considered.
+
+
+### 10.2.3 Horizontal loads due to operational motions
+
+10.2.3.1 Forces due to rotation of the crane shall be specially considered.
+
+
+### 10.2.4 Load chart or table
+
+10.2.4.1 Load charts tables shall give the safe working load for boom angles or load radii for various dynamic amplifications.
+
+
+## 10.3 Safety and safety equipment
+
+
+### 10.3.1 Overload
+
+10.3.1.1 Overload protection as described in [7.4.2.3] is sufficient.
+
+
+## 10.4 Machinery and equipment
+
+
+### 10.4.1 Power systems
+
+10.4.1.1 Requirements to hoisting, slewing and luffing speeds given in [8.3.5] are not applicable.
+
+
+### 10.4.2 Dedicated accessories
+
+10.4.2.1 Built-in sheaves, dedicated hook blocks and other items permanently attached to a heavy lifting appliance are not considered loose gear. The test of the lifting appliance as rigged is accepted as the load test of these items. Hooks are always considered as loose gear and shall be designed and manufactured as such. Hooks shall be tested separately before the final test of heavy lifting appliances as rigged.
+
+Heavy lift cranes are not certified in accordance with the ILO regime. CG3 certificate will normally not be issued for the hook block. It will be covered by the DNV product certificate form OLA 201 that is issued following successful onboard testing of the complete lifting appliance. ILO compliance of heavy lift cranes may be verified upon request.
+
+
+## 11.1 General
+
+
+### 11.1.1 Basic requirements
+
+11.1.1.1 Lifting of personnel may be done by all crane types. General requirements for the crane type are given in previous sections. This section specifies additional requirements for cranes used for lifting of personnel.
+
+11.1.1.2 Attention is drawn to the fact that many national shelf authorities, as well as maritime authorities, have their own requirements pertaining to lifting of persons.
+
+11.1.1.3 The requirements specified below are aiming at lifting persons with ordinary crane arrangements and are not intended for man riding winches (lifting/lowering of one person) and other specialised equipment.
+
+
+## 11.2 Documentation
+
+
+### 11.2.1 Documentation requirements
+
+Documentation requirements to follow Table 2-1 for offshore cranes, independently from the crane categorisation.
+
+
+## 11.3 Certification
+
+
+### 11.3.1 Certification requirements
+
+11.3.1.1 Offlead/sidelead shall be specially considered and shall be specified by the designer.
+
+11.3.1.2 The Society's product certificate is required for the following items:
+
+- winches for hoisting and luffing
+- transmission gears and brakes (applicable when transmitting braking forces for hoisting and luffing).
+
+
+## 11.4 Loads
+
+
+### 11.4.1 Rated capacity
+
+11.4.1.1 The rated capacity shall not exceed 50% of the rated capacity for lifting of loads at the actual radius and wave height. This information shall be given in the instructions, load chart and by the safe load indicator whenever the mode for lifting of persons is selected.
+
+
+## 11.5 Machinery and equipment
+
+
+### 11.5.1 Brakes
+
+11.5.1.1 Hoisting and luffing winches shall be equipped with two mechanically and functionally independent brakes, primary brake and back-up brake, acting simultaneously.
+
+11.5.1.2 Means shall be provided for separate testing of each brake.
+
+11.5.1.3 Mechanical brakes shall fulfil the requirements for brakes as given in [5.2.3] based on SWL for the actual load cases. For the back-up brake, SWL shall be replaced by rated capacity for personnel handling provided the brake is used in personnel handling mode only.
+
+
+#### 11.5.1.4
+
+Brakes/gears for lifting appliances to be used for personnel handling only shall be based on the rated capacity for personnel handling.
+
+11.5.1.5 Hydraulic restriction may be considered as one of the required two brakes, provided the rated capacity does not exceed 50% of the rated capacity for lifting of loads, see [11.4.1.1].
+
+11.5.1.6 Where hydraulic restriction is used as a brake, the following applies:
+
+- mechanically and functionally fully independent of the mechanical brake (separate load path to the winch drum)
+- the hydraulic motor shall have a closing valve directly at the high-pressure (load) connection (no pipe or hose connection in between)
+- the closing valve shall close as a result of pressure loss at the low-pressure connection (inlet connection during lowering). This function shall be accomplished by direct bore or piping between the closing valve and the low-pressure connection
+- the hydraulic motor shall always be ensured sufficient working fluid, also in the event of power failure, i.e. gravity feeding.
+
+11.5.1.7 Where cylinders are used for luffing, folding or telescopic, they shall be provided with a hydraulic shut-off valve directly connected to the cylinder. Alternatively, each motion shall have two independent cylinders where each cylinder is capable of holding the rated capacity for lifting of persons.
+
+
+### 11.5.2 Steel wire ropes
+
+11.5.2.1 Steel wire ropes for hoisting shall have a minimum safety factor of 8 and chains shall have a minimum safety factor of 6, related to the rated capacity for the lifting of persons.
+
+
+### 11.5.3 Lifting gear
+
+Lifting gear shall have a minimum safety factor of 2 times the safety factor for lifting of loads.
+
+
+### 11.5.4 Shock absorbers
+
+11.5.4.1 Where a shock absorber is installed it shall be fail-safe and automatic in operation.
+
+
+### 11.5.5 Baskets
+
+11.5.5.1 Lifting of personnel shall only be performed using equipment specially designed for the purpose. Baskets shall be designed in accordance with EN 14502-1 or other recognized standard/code for baskets of equivalent safety level.
+
+
+## 11.6 Safety
+
+
+### 11.6.1 Mode selection for lifting of persons
+
+11.6.1.1 The control station shall be equipped with a manual key selection switch for the purpose of lifting persons. The switch shall be lockable in both positions with a removable key and have an adjacent warning light which continuously shall indicate when it is activated. The light shall not illuminate unless selection for personnel lifting is made. When the mode for personnel lift is selected, the following functions shall be maintained:
+
+- all brakes shall automatically be activated when the controls are in neutral position and in cases where the emergency stop has been activated
+- where fitted, automatic overload protection system (AOPS) shall be overridden; i.e. it shall not be possible that this system is activated
+- where fitted, motion compensators; i.e. cable tensioning systems and heave compensator systems shall be overridden. However, special motion compensator systems for personnel lifting may be accepted case-by-case
+- where fitted, emergency release systems shall be overridden; i.e. it shall not be activated regardless of the position of the emergency release switch or handle
+- where fitted, the slipring shall be of double/redundant type, or, means for bypassing the slipring shall be fitted, in case of short-circuiting or fire
+- manual overload protection system (MOPS) shall be overridden; i.e. shall not be possible to activate.
+
+
+#### 11.6.1.2 Emergency lowering
+
+For personnel handling cranes which may be subjected to enforced shutdown (ESD) due to fire, gas, etc., a hand pump or similar shall be provided to lower the personnel in case of ESD.
+
+
+### 11.6.2 Operational limitation
+
+11.6.2.1 Operational procedures including any conditions, precautions and limitations for the lifting of personnel shall be stated in the instructions for use. The following shall particularly be taken into account:
+
+Except for emergency operations, the operational limitations for lifting of personnel shall be as follows, unless otherwise stated in the instructions for use.
+
+- mean wind velocity: 10 m/s
+- significant wave height: 2 m
+- visibility: daylight or equivalent.
+
+
+## 12.1 General
+
+
+### 12.1.1 Basic requirements
+
+12.1.1.1 Generally the requirements given in Sec.8 (offshore cranes) and Sec.11 (personnel lifting) are valid for launch and recovery systems for diving. This section specifies additional requirements for launch and recovery systems for diving and include requirements which normally deviate from Sec.8 and Sec.11.
+
+
+### 12.1.2 Design principles - Function
+
+12.1.2.1 For launch and recovery systems specific for surface diving systems, the design principles requirements given in DNV-OS-E402 Ch.2 Sec.6 [2.3] shall apply.
+
+12.1.2.2 For launch and recovery systems specific for saturation diving systems, the design principles requirements given in DNV-OS-E402 Ch.3 Sec.6 [2.1] shall apply.
+
+
+### 12.1.3 Power
+
+12.1.3.1 For launch and recovery systems specific for surface diving systems, the design principles requirements given in DNV-OS-E402 Ch.2 Sec.6 [2.5] shall apply.
+
+12.1.3.2 For launch and recovery systems specific for saturation diving systems, the design principles requirements given in DNV-OS-E402 Ch.3 Sec.6 [2.4] shall apply.
+
+
+## 12.2 Structural strength
+
+
+### 12.2.1 Design loads
+
+12.2.1.1 This section replaces [11.4] and gives specific requirements for design loads for launch and recovery for diving systems.
+
+12.2.1.2 For launch and recovery systems specific for surface diving systems, the design loads requirements given in DNV-OS-E402 Ch.2 Sec.6 [3] shall apply.
+
+12.2.1.3 For launch and recovery systems specific for saturation diving systems, the design loads requirements given in DNV-OS-E402 Ch.3 Sec.6 [3] shall apply.
+
+
+### 12.2.2 Strength calculations
+
+12.2.2.1 The structural strength to be checked for case I of loading defined in [4.3] using design load as specified in [12.2.1].
+
+
+## 12.3 Machinery and equipment
+
+
+### 12.3.1 Steel wire rope
+
+12.3.1.1 Steel wire rope safety factor shall be according to DNV-OS-E402 Ch.2 Sec.6 [3.2.1] and DNV-OS-E402 Ch.3 Sec.6 [3.2.1], for launch and recovery systems specific for surface diving systems and saturation diving systems respectively.
+
+Ropes shall be of a type that minimises rotation.
+
+
+### 12.3.2 Cross hauling
+
+12.3.2.1 In the case of cross hauling, such equipment shall fulfil the same requirements for strength as the rest of the handling system.
+
+
+### 12.3.3 Testing after completed installation
+
+12.3.3.1 The design loads requirements given in DNV-OS-E402 Ch.3 Sec.1 [9.3.4] shall apply.
+
+
+## 13.1 General
+
+
+### 13.1.1 Basic requirements
+
+13.1.1.1 Generally the requirements given in Sec.8 for offshore cranes are valid for launch and recovery arrangement for ROV. This section specifies additional requirements for launch and recovery arrangement for ROV and it points out requirements which normally deviate from Sec.8.
+
+
+## 13.2 Documentation
+
+
+### 13.2.1 Documentation requirements
+
+13.2.1.1 Documentation requirements to follow Table 2-1 for platform cranes.
+
+
+## 13.3 Machinery and equipment
+
+
+### 13.3.1 Brakes
+
+Requirements for brakes as specified in [8.3.2.1] are applicable.
+
+
+## 13.4 Safety and safety equipment
+
+
+### 13.4.1 General
+
+13.4.1.1 Requirements given in [8.4.2] (offshore cranes) are not applicable. Specific requirements as defined for platform cranes in [7.4.2] are valid.
+
+
+## 14.1 Functional testing of completed lifting appliances
+
+
+### 14.1.1 General
+
+14.1.1.1 Each completed crane shall be thoroughly tested to confirm that all the safety, power and control functions are correctly implemented onboard.
+
+If complete functional testing has been documented to have been carried out at the test bed at manufacturers’ location, limited functional testing may be carried out after final installation.
+
+In such case, the proposed test plan shall specify the extent of the limited functional testing to be done after final installation.
+
+14.1.1.2 The functional testing shall be carried out in accordance with a detailed programme, which shall be submitted well in advance of the actual testing. The programme shall specify in detail how the respective functions shall be tested and how observations during the test can be ensured. The tests specified below shall be included in the test programme.
+
+14.1.1.3 A copy of the approved test programme shall be kept in the crane manual. It shall be completed with final results and endorsed by the competent person.
+
+14.1.1.4 The significant characteristics of power and braking systems as well as the safety equipment shall be considered. Braking systems and safety equipment shall be checked by function testing. Pressure testing of hydraulic components is normally not required to be witnessed by the surveyor. The tightness of the systems shall be checked after the installation of the components and during functional testing.
+
+
+#### 14.1.1.5
+
+Slewing functionality, including brake testing, shall be demonstrated as per approved heel and trim values by uphill and downhill slewing after trimming the vessel. In case of ballast limitations, other methods to demonstrate slewing functionality may be considered.
+
+
+### 14.1.2 Prime movers and fluid power systems
+
+14.1.2.1 Relevant parameters such as power, ambient temperature and pressure, exhaust gas temperature etc. shall be measured and recorded.
+
+14.1.2.2 Automatic control, remote control and alarm systems connected with power systems shall be tested.
+
+14.1.2.3 After the test, the lubricating and/or hydraulic oil filters shall be checked for solid particles. Other components of machinery may be required opened up by the surveyor.
+
+
+### 14.1.3 Governing and monitoring systems
+
+14.1.3.1 It shall be verified that control systems function satisfactorily during normal load changes.
+
+14.1.3.2 Failure conditions or boundary conditions shall be simulated as realistically as possible, preferably letting the monitored parameters pass the alarm safety limits.
+
+
+### 14.1.4 Electrical installations
+
+14.1.4.1 Insulation-resistance test shall be carried out for all outgoing circuits between all insulated poles and earth and, where practicable, between poles. Under normal conditions a minimum value of 1 mega ohm shall be obtained. This also applies to instrumentation and communication circuits with voltages above 30 V A.C. or 50 V D.C.
+
+The insulation resistance of a motor shall not be less than:
+
+3⋅rated voltagerated kVA+1000megaohms
+
+tested on a clean and dry motor when hot.
+
+14.1.4.2 When found necessary by the surveyor, switchgear shall be tested on load to verify its suitability and that operating of over-current release and other protective measures are satisfactory. Short circuit tests in order to verify the selectivity may also be required.
+
+
+### 14.1.5 Brakes
+
+14.1.5.1 Brakes shall be tested with safe working load applied on crane by braking each motion to full stop by releasing the joystick/handle. In addition, each brake for the hoisting and derricking motions shall be tested for three such stops in quick succession during lowering motion.
+
+14.1.5.2 If the winch design incorporates an exposed brake, the testing shall be carried out with the brake wetted.
+
+14.1.5.3 The emergency stop system shall be tested. The test may be carried out at reduced speed and with reduced load.
+
+
+### 14.1.6 Safety equipment
+
+14.1.6.1 Safety functions as presented in Table 7-1 in Sec.7 and Table 8-1 in Sec.8 as well as the specific safety function requirements as given in the respective discipline sections shall be tested.
+
+
+## 14.2 Load testing
+
+
+### 14.2.1 General
+
+14.2.1.1 Lifting appliance shall be load tested as part of FAT and after it has been installed at its operational location:
+
+- before being taken into use the first time
+- after any substantial alteration or renewal, or after repair of any stress bearing part
+- at least once in every five years (preferably at regular five-yearly intervals after the date on which the appliance was first taken into use).
+
+Above requirements are in compliance with international and national regulations.
+
+14.2.1.2 Every item of loose gear shall be load tested:
+
+- before being taken into use first time
+- after substantial alteration or renewal
+- after repair of any stress bearing part.
+
+
+### 14.2.2 Test weights
+
+14.2.2.1 Movable, certified weights shall be used by initial load-testing and by all load-testing where SWL exceeds 15 tonnes.
+
+14.2.2.2 A mechanical or hydraulic precision dynamometer may be used:
+
+- in cases of periodical retesting and after repair/renewal of mechanical parts of lifting appliances with SWL ≤ 15 tonnes
+- in cases where a test that follows repair/renewal of a structural part is carried out.
+
+The accuracy of the dynamometer shall be within +/- 2 per cent and the indicated load of such dynamometers under test load shall remain constant for approximately 5 minutes.
+
+14.2.2.3 Test equipment used for the testing of loose gear, either assembled units or components of loose gear, shall have been checked for accuracy (calibrated) at least once during the 12 months preceding the test.
+
+
+### 14.2.3 Test loads
+
+14.2.3.1 The test load applied to a lifting appliance shall exceed the safe working load (SWL) of the appliance in accordance with Table 14-1:
+
+| Safe working load | Test load |
+| --- | --- |
+| Up to 20 tonnes | 25% in excess of the SWL |
+| Exceeding 20, but not exceeding 50 tonnes | 5 tonnes in excess of the SWL |
+| Above 50 tonnes | 10% in excess of the SWL |
+| Note: Where the dynamic factor ψ exceeds 1.33, the reference SWL in the table shall be taken as 0.75 × ψ × SWL |  |
+
+14.2.3.2 For hydraulic cranes where, due to limitation of hydraulic oil pressure by the safety valve, it is not possible to lift a test load in accordance with Table 14-1, it will suffice to lift the greatest possible load. Generally this should not be less than 10 per cent in excess of the SWL. It is then, however, assumed that the structure is load tested with a load reflecting the overload based on the reference SWL by means of other methods.
+
+14.2.3.3 The test load applied to a cargo or pulley block and to loose gear shall exceed the safe working load (SWL) of the block and gear in accordance with Table 14-2:
+
+| Item | Test load, in tonnes 4) |
+| --- | --- |
+| Chains, hooks, shackles, swivels, etc.: |  |
+| SWL ≤ 25 t | 2 · SWL |
+| SWL > 25 t | (1.22 · SWL) + 20 |
+| Multi-sheave blocks: 2) |  |
+| SWL ≤ 25 t | 2 · SWL |
+| 25 t < SWL ≤ 160 t | (0.933 · SWL) + 27 |
+| SWL > 160 t | 1.1 · SWL |
+| Single-sheave blocks: 1) 3) | 4 · SWL |
+| Lifting beams, etc.: 5) |  |
+| SWL ≤ 10 t | 2 · SWL |
+| 10 t < SWL ≤ 160 t | (1.04 · SWL) + 9.6 |
+| SWL > 160 t | 1.1 · SWL |
+| Notes: For single sheave blocks with or without beckets the SWL shall be taken as one half of the resultant load on the head fitting. See also App.B. The SWL of a multiple sheave block shall be taken as the resultant load on the head fitting. For single sheave blocks with a permissible load at the head fitting exceeding 25 tonnes, the test load may be reduced as permitted for the chains, hooks, shackles, swivels, etc. in the table. In this case, the SWL notation shall be the resultant load on the head fitting. Where the dynamic factor ψ exceeds 1.33: See Note to Table 14-1. The fittings to a lifting beam or frame such as hooks, rings and chain shall be tested independently before they are fitted to the beam. |  |
+
+14.2.3.4 Built-in sheaves are not considered loose gear. The test of the lifting appliance as rigged is accepted as the load test of these items.
+
+14.2.3.5 Where hand-operated blocks are used with pitched chains and permanently attached rings, hooks, shackles or swivels, the hand-operated blocks, the pitched chains and the permanently attached rings, hooks, shackles and swivels shall be tested with a test load 50% in excess of the safe working load.
+
+
+### 14.2.4 Examination after testing
+
+14.2.4.1 After testing, the lifting appliance including gear accessories shall be examined thoroughly to observe whether any part has been damaged or permanently deformed by the test. Dismantling and/or non-destructive testing may be required if deemed necessary by the surveyor.
+
+The above also applies to blocks and loose gear.
+
+14.2.4.2 Any overload protection system and automatic safe load indicators that may have been disconnected during load testing shall be reconnected. Accordingly, safety valves and/or electrical circuit-breakers shall be adjusted. Set points shall be verified and sealed by the surveyor.
+
+
+### 14.2.5 Certificates
+
+14.2.5.1 When a lifting appliance or component to a lifting appliance after testing and examination have been found satisfactory the following certificates/reports shall be issued (as far as applicable and relevant):
+
+| Form CMC 201 : | certificate of test and thorough examination of lifting appliances (FAT-testing) |
+| --- | --- |
+| Form No. CG2 : | certificate of test and thorough examination of lifting appliances (on-board testing, ILO152) |
+| Form OLA 201 : | certificate of test and thorough examination of lifting appliances (on-board testing, non-ILO152) |
+| Form No. CG3 : | certificate of test and thorough examination of loose gear |
+| Form No. CG4 : | certificate of test and thorough examination of wire rope. |
+
+14.2.5.2 As final documentation for a lifting appliance installed and to be taken into use for the first time, form no. CG1 Register of lifting appliances and i loose gear shall be presented. See also App.F.
+
+The forms nos. CMC 201, CG2, OLA201, CG3 and CG4 should be attached to form no. CG 1 in completed order.
+
+
+### 14.2.6 Procedure for load testing of a lifting appliance
+
+14.2.6.1 Before load testing, the surveyor shall ensure that:
+
+- support of the lifting appliance is acceptable
+- for a ship or other vessel, necessary precautions with respect to stability, ballasting or similar conditions have been taken
+- for a mobile crane, the crane has a sufficient margin of stability against overturning
+- required test certificates for blocks and loose gear are available and acceptable
+- for a new installation, design approval and survey during fabrication of the lifting appliance are documented.
+
+14.2.6.2 A written test programme acceptable to the surveyor should be available.
+
+14.2.6.3 The test weights shall be lifted by the lifting machinery used for the regular handling of loads. Testing a lifting appliance driven by electrical motor(s) the regular electrical supply shall be used. For ships, electrical shore connection is acceptable when the power is distributed through the ship's main switchboard and distribution panels.
+
+14.2.6.4 For cranes, the test load shall be hoisted, slewed and luffed at slow speed. Gantry and travelling cranes together with their trolleys, where appropriate, shall be traversed and travelled over the full length of their track.
+
+14.2.6.5 For variable load-radius cranes, the tests shall generally to carried out at three points on the load curve, with the appropriate test load at maximum, minimum and at an intermediate radius.
+
+14.2.6.6 Additional winch testing for subsea cranes, see [9.4].
+
+
+## 14.3 Periodical surveys
+
+ILO Convention No.152 require that cargo related lifting appliances shall be subjected to a thorough examination by a competent person at least every 12 months (annual survey), and in addition be subjected to an overload test of the appliance as a whole in connection with a thorough examination every 5th year. Some national authorities have extended this requirement to cover all lifting appliances onboard. Note that some countries still base their legislation on ILO Convention No.32 and require special survey every 4th year.
+
+Special requirements applicable for specific flags to be considered as additional to what is described in this subsection.
+
+
+### 14.3.1 Annual Survey
+
+
+#### 14.3.1.1 Time window
+
+The annual survey is in the ILO Convention No.152 and the MODU code stipulated to be conducted at least once every 12 months prior or on the anniversary date without time window.
+
+The annual survey of the lifting appliances not concurrently subject to ILO or MODU code may be performed concurrently with the vessel's annual survey and a time window of +/- 3 months.
+
+
+#### 14.3.1.2 Items to be considered for annual survey
+
+The following items shall be surveyed during annual survey:
+
+- Structural condition (cracks, distortions, corrosion). NDT shall be applied when deemed necessary.
+
+- Support structure.
+
+- Excessive clearance in sheave bearings and eye-bolt connections.
+
+- Wire rope, including end attachments, with respect to wear, broken wires and corrosion.
+
+- Hooks, including rings and chains.
+
+- Shackles.
+
+- Operational condition of slewing system (slewing bearing and hook rollers). Check lubrication, ensure tightness of bolts and check that there is no detrimental noise, wear or movement.
+
+- Functional operation and testing of brakes.
+
+- Safety devices (compliance and relevant regulations).
+
+- Emergency stop function.
+
+- Leakages in hydraulic system and correct safety valve adjustment.
+
+- Proper arrangement and condition of electrical systems.
+
+- Marking (crane and loose gear marking as per certificates).
+
+- Component and loose/lifting gear certificates available and in order.
+
+- Load charts (if relevant).
+
+- Provisions for securing the crane during open sea conditions.
+
+- Fire extinguishers (if relevant).
+
+
+### 14.3.2 5 yearly Survey
+
+
+#### 14.3.2.1 Time window
+
+See [14.3.1.1].
+
+
+#### 14.3.2.2 Additionally for 5-yearly survey
+
+In addition to the examinations listed for annual survey, the following additional surveys and load test shall be carried out (possible modified scope shall be agreed upon in advance with the Society):
+
+- Load testing as required for initial certification.
+- Loose gear is generally not required to be overload tested at 5-yearly survey.
+- Boom heel bearings, hydraulic cylinder hinge shafts, fixed sheaves, blocks, axle pins and housings shall be confirmed documented as dismantled (opened up), examined and found in order, unless this was done within two years prior to the 5-yearly survey.
+- Slewing bearings shall be opened up and internal fillets, raceway and bolts shall be subjected to MPI. Exemption to opening up may be granted provided:
+
+For single ball slewing bearings, opening up may be waived unless required upon detection of unacceptable clearances, excessive noise, etc.
+
+Holding-down bolts:
+
+- For platform cranes, minimum 50 % of the holding down bolts shall be documented as being dismantled, examined and found in order once during the last 3 years, or, 20 % opened now.
+- For offshore cranes, 20 % of the bolts shall be removed and examined. The initial 20 % shall be taken in the most loaded sector of the crane. If any significant defects are found during this examination another 20 % shall be drawn. If any of these second set is found to be defective, then all the bolts shall be drawn. If the first 20 % are found to be acceptable and the examination is stopped, a maintenance schedule shall be established for examining the remaining 80 % during the 5 years period.
+
+When refitting, all bolts shall be pre-stressed as stated in the crane manual as found on approved drawings.
+
+
+## 14.4 Testing of steel wire ropes
+
+
+### 14.4.1 Cross reference
+
+14.4.1.1 Steel wire ropes shall be tested as required by [3.10.4]. Quality control of every rope and end termination to be done in accordance with recognized standard.
+
+
+### 14.4.2 Certificates
+
+14.4.2.1 After testing of steel wire ropes certificates of type CG4 shall be issued.
+
+14.4.2.2 A manufacturer or supplier who has obtained a certificate for a coil of wire rope, shall, when he resells the coil or part of it, issue a certificate to the buyer. The certificate shall be a copy of the original certificate additionally dated and signed by the supplier.
+
+
+## 14.5 Marking and signboards
+
+
+### 14.5.1 General
+
+14.5.1.1 Cranes and all items of fixed and loose gear and accessories shall be marked with their safe working load (SWL) in a legible and durable way. To prevent effacement of the inscriptions, they shall normally be incised, punched or marked as specified below.
+
+14.5.1.2 All blocks and all items of loose gear and accessories shall be marked with an identification mark to enable them to be readily related to their appropriate test certificates, with the stamp of institution, society, body or manufacturer who carried out the load test.
+
+14.5.1.3 Cranes on board vessels shall be marked with a reference number to enable them to be related to their location onboard.
+
+
+### 14.5.2 Cranes
+
+14.5.2.1 The markings of SWL and allowed radii shall be painted in a conspicuous place on the crane.
+
+The identification numbers and stamp of the surveyor shall be punched or incised.
+
+14.5.2.2 Cranes with constant SWL for all radii shall be marked with possible crane reference number, SWL and minimum and maximum radii for this load. Example: No.5 SWL 5 t 4 - 14 m.
+
+14.5.2.3 Cranes with SWL depending on one variable only shall be marked with possible crane reference number and with SWL for two or more instances of the variable, including the ones giving extreme values of SWL. If possible, the variable shall be expressed as radius. Example: No.5 SWL 15 t 5 m, SWL 3 t 12 m.
+
+14.5.2.4 Cranes with SWL depending on two or more variables (e.g. knuckle boom crane) shall be marked with possible crane reference number and the maximum SWL within the range together with a reference to load chart.
+
+14.5.2.5 Reference numbers and SWL shall be marked in letters and figures of at least 80 mm height and the radii in letters and figures of at least 60 mm height.
+
+14.5.2.6 Cranes with dual function, e.g. hook duty and grab duty, shall be marked for both alternatives. Clear instructions/signboard shall be available for the crane driver. Self-weight of loose gear/grab shall be included in calculation of the total SWL before deciding suitability of lifting gear/grab.
+
+
+### 14.5.3 Launch and recovery systems for diving
+
+14.5.3.1 The handling system shall, in a visible place, be fitted with a nameplate giving the following particulars:
+
+- identification number
+- static test load
+- functional test load
+- working weight
+- surveyor's mark and identification.
+
+The above loads shall be specified for each transportation system involved.
+
+
+### 14.5.4 Blocks
+
+14.5.4.1 The SWL of blocks together with the identification numbers and the surveyor's/manufacturer's stamp shall be marked on one of the plates of the blocks.
+
+For definition of SWL of blocks, see notes to Table 14-2.
+
+
+### 14.5.5 Slings and lifting tackles
+
+14.5.5.1 Slings and lifting tackles are considered as loose gear and shall comply with [5.2.5] or [5.2.6].
+
+14.5.5.2 Slings and lifting tackles shall be marked with SWL, identification number and the certifying authorities' stamp on a legibly and durably fitted ring or plate.
+
+14.5.5.3 Where wire rope slings are fitted with pressure locks the markings shall be located on the locks.
+
+14.5.5.4 For wire rope slings the SWL by 0° shall be marked for single slings.
+
+The safe working load marked on a multi-legged sling shall be:
+
+- in the case of a two-legged sling, the safe working load of the sling when the included angle between the legs is 90°
+- in the case of a three-legged sling, the safe working load of the sling when the included angle between any two adjacent legs is 90°
+- in the case of a four-legged sling the safe working load of the sling when the included angle between any two diagonally opposite legs is 90° and the total load is carried by 3 of the four legs.
+
+14.5.5.5 Instead of marking of slings as stated in [14.5.5.3] above, displayed information on use of the slings may be accepted. The display shall be easily seen, and the slings shall be easily identified in accordance with the display.
+
+14.5.5.6 Lifting gear and grabs shall be marked with SWL, own weight, identification number and the certifying authority's stamp.
+
+
+## 14.6 Control and monitoring systems
+
+
+### 14.6.1 General
+
+It shall be verified that control systems function satisfactorily during normal, abnormal and degraded operational procedures.
+
+System testing shall be performed as simulator-based testing in accordance with [14.6.2], unless required system acceptance testing can be performed on the complete system, as built.
+
+The testing program shall verify the control system performance with regards to the crane functionality and safety. Typical crane functions, but not limited to, are listed below:
+
+1. basic movements (e.g. luffing, hoisting/lowering, telescoping, slewing)
+2. complex movements (e.g. motion compensation)
+3. safety functions (e.g. overload protection, movement limitations, alarm systems, etc., see Table 7-1 and Table 8-1)
+4. emergency functions (e.g. manual and/or automatic protection systems, emergency stop, etc.)
+5. other relevant functions.
+
+The failure modes associated with the above functions identified and addressed in the failure mode description document and/or FMEA (failure mode and effect analysis) shall also be included in the testing program. Normally, the test scope shall be focusing on single and common failure modes and common components.
+
+Typical failures, as applicable and not limited to, are listed below:
+
+1. sensors or input devices failure modes
+2. failure mode of actuators, drives, power system components or other electro-mechanical components
+3. feedback from sensors on actuator failure modes
+4. failure modes in computer networks
+5. failures affecting weighting and voting mechanisms
+6. failures affecting protective safety functions
+7. failures affecting alarms, monitoring, and analysis functions
+8. failures causing and/or otherwise affecting switch-over in redundant systems
+9. common mode failures affecting several components and/or signals
+10. other relevant failures.
+
+Simulator based testing is typically not expected for small and simple cranes.
+
+Full scale physical performance, functional and failure mode testing of the integrated control and monitoring system may not always be practical/possible to perform during test procedures (e.g. FAT).
+
+Consequently, the test scope may be split as follows:
+
+1. Testing of the control system and software by means of physical or simulator-based testing during manufacturing survey, (see [14.6.2])
+2. Factory acceptance testing of physical system (parts or complete) with reduced scope with reference to the simulator-based test scope.
+3. Site acceptance testing of (complete) physical system.
+
+Traceability shall be ensured by documenting actions performed during each stage of the testing process.
+
+
+### 14.6.2 Simulator-based testing
+
+
+#### 14.6.2.1 General
+
+Where simulator-based testing is applied, it shall provide objective evidence of suitable functionality according to specified functional requirements and safety functions/risk control measures, see [5.5.4], Table 7-1 and Table 8-1.
+
+
+#### 14.6.2.2 Test setup requirements
+
+Simulator based testing shall be executed on the actual control system hardware to be installed in the crane or on a replica control system, subject to the Society's approval.
+
+Testing by use of soft-PLC may also be accepted. Soft-PLC may be run on local PC or be cloud based.
+
+The simulator shall run on a unit separate from the control system, or alternatively run on same hardware if the software test would be cloud-based. Testing shall be performed on released software revisions for both simulator and control system(s) such that the software is uniquely identified. Testing shall be executed on the same test setup and software as validated through the test setup validation activity, see [14.6.2.4], and according to DNV approved test scope/program. Testing shall be performed, and test results shall be documented in the presence of the DNV surveyor.
+
+
+#### 14.6.2.3 Simulator framework
+
+All (relevant) I/O shall be interfaced between the control system and simulator. If any signals are ignored/not interfaced, this shall be documented and agreed upon in writing before testing is executed. It shall be possible to monitor and/or trend all I/O signals between simulator and control system. It shall be possible to introduce/simulate typical control system failures to the system, such as broken wire, value out of range, noise on signals, command errors (functions being executed without being commanded), execution errors (functions not being executed when commanded), etc. The simulator shall be adequate for the type of failures intended to be tested.
+
+Failures may be introduced by manipulating the command or sensor signal, while others may have dynamic and/or spread effects, requiring to be generated from the simulator to propagate correctly to all affected signals.
+
+
+#### 14.6.2.4 Simulator accuracy and test setup validation
+
+The simulator and control system shall run in a closed-loop and the simulator outputs shall render a real-life behaviour of the crane system.
+
+Simulator response should be in the correct range, e.g.:
+
+1. speed of winch and cylinder movements are in the correct range
+2. deadbands for hydraulic valves are correctly simulated end-of-guidance-note.
+
+It shall be possible to run all the functions in the control system (target system) without the need of manual manipulation of simulator signals. A simulator based test setup shall be validated by tests demonstrating adequacy/suitability for the purpose (test objective) and that the test setup does not mask errors in the target system. Before the validation testing is performed, it shall be verified that there are no active nor ignored/suppressed alarms in the system that may have impact on the testing. The validation tests may be performed before the surveyor arrive at test site. Results from the validation tests shall be made available for the surveyor for review, and the surveyor may request some of the validation tests to be repeated before testing starts.
+
+1. The key element for planning the validation activities is to analyse the test objective and identify possible critical factors/elements in the test setup which may invalidate the test results. A set of relevant validation activities for the test setup should be identified, and measures for limiting possible inaccuracies and uncertainties should be described.
+2. One possible cause of masking errors in the target system is that a parameter in the target system is just copied into the simulator configuration. If this parameter is wrong, it will be wrong in the simulator as well, making it difficult to identify the error when both the target system and the simulator are using the same (wrong) parameter value.
