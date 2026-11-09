@@ -50,6 +50,11 @@ the GT283 examples, with the same placeholder environment values, since the real
 for these cranes are not available. The new examples must load, validate against the schema and
 produce a chart; add them to whatever test enumerates `examples/`.
 Mark the invented condition values in a YAML comment as illustrative.
+**Found while planning:** neither base file has `rope.ea_kN` (needed by any rules run) or
+`max_hoisting_speed_m_s` (needed by `offboard` conditions); `validate_rules_document`
+rejects the file without them. Fill in only what validation demands, with values copied from
+the GT283 rules examples, also marked illustrative. The condition fields to edit in part 3
+also include `load_drag_coefficient` and `hook_height_override_m`.
 
 ## 3. Conditions editable in the UI
 
