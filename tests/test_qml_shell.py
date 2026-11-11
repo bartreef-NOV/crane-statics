@@ -182,6 +182,7 @@ def test_chart_legend_handles_long_labels_and_toggles_visibility(qml_engine):
         "CellEditor.qml",
         "NoDocumentPage.qml",
         "EnvironmentPanel.qml",
+        "ConditionsPanel.qml",
         "ModelWorkspace.qml",
         "SceneControlRail.qml",
         "SceneWorkspace.qml",
@@ -1054,4 +1055,122 @@ def test_scene_condition_label_shows_on_a_rules_document_only(qml_engine):
     QTest.qWait(50)
     assert label.property("text") == "Condition: onboard / Case II"
     assert label.property("visible") is True
+    assert warnings == []
+
+
+def _conditions_panel(qml_engine, tmp_path, *conditions, standard="DNV"):
+    """ConditionsPanel.qml on a rules document with ``conditions`` (default: one gale)."""
+    from crane_statics.core.io import save_document
+    from tests.rules_docs import gale, rules_doc
+
+    engine, app_vm, model_vm, warnings = qml_engine
+    path = tmp_path / "rules.yaml"
+    save_document(rules_doc(standard, *(conditions or (gale(),))), path)
+    app_vm.openPath(str(path))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "ConditionsPanel.qml")))
+    panel = component.create()
+    assert panel is not None, component.errorString()
+    return panel, model_vm, warnings
+
+
+def test_conditions_panel_lists_and_edits_a_condition(qml_engine, tmp_path):
+    from tests.rules_docs import gale
+
+    panel, model_vm, warnings = _conditions_panel(
+        qml_engine, tmp_path, gale(wind=30.0), gale("calm", wind=5.0)
+    )
+    conditions = panel.findChild(QObject, "conditionList")
+    assert conditions.property("count") == 2
+    assert model_vm.selectedCondition == "gale"
+
+    wind = panel.findChild(QObject, "conditionField_wind_speed_m_s")
+    assert wind.property("text") == "30.000"
+    wind.setProperty("text", "18.5")
+    _evaluate_in(wind, "editingFinished()")
+    assert model_vm.condition["wind_speed_m_s"] == 18.5
+
+    _evaluate_in(panel.findChild(QObject, "addConditionButton"), "clicked()")
+    assert conditions.property("count") == 3
+    _evaluate_in(panel.findChild(QObject, "deleteConditionButton"), "clicked()")
+    assert conditions.property("count") == 2
+    assert warnings == []
+
+
+def test_conditions_panel_has_a_field_for_every_condition_value(qml_engine, tmp_path):
+    from crane_statics.qml_app.models.document_forms import (
+        CONDITION_OPTIONAL_KEYS,
+        CONDITION_SCALAR_KEYS,
+        VESSEL_MOTION_KEYS,
+    )
+
+    panel, _model_vm, warnings = _conditions_panel(qml_engine, tmp_path)
+    for key in (*CONDITION_SCALAR_KEYS, *CONDITION_OPTIONAL_KEYS, *VESSEL_MOTION_KEYS):
+        assert panel.findChild(QObject, f"conditionField_{key}") is not None, key
+    # An unset optional value reads blank, not 0.
+    assert panel.findChild(QObject, "conditionField_v_in_m_s").property("text") == ""
+    assert panel.findChild(QObject, "conditionNameField").property("text") == "gale"
+    assert panel.findChild(QObject, "conditionLiftBox").property("currentText") == "onboard"
+    assert warnings == []
+
+
+def test_offboard_fields_show_only_for_offboard(qml_engine):
+    # The ABS example is valid offboard: its hoist rope has the stiffness an offboard
+    # lift needs, and offboard_supply carries the wave height and velocities.
+    engine, app_vm, model_vm, warnings = qml_engine
+    app_vm.openPath(str(RULES_EXAMPLE))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "ConditionsPanel.qml")))
+    panel = component.create()
+    assert panel is not None, component.errorString()
+    offboard = panel.findChild(QObject, "conditionOffboardGroup")
+    lift = panel.findChild(QObject, "conditionLiftBox")
+    assert model_vm.selectedCondition == "onboard_sea"
+    assert offboard.property("visible") is False
+
+    model_vm.selectCondition("offboard_supply")
+    assert offboard.property("visible") is True
+    model_vm.setConditionLift("onboard")
+    assert model_vm.condition["lift"] == "onboard"
+    assert offboard.property("visible") is False
+    assert lift.property("currentText") == "onboard"
+    # The hidden offboard values are kept, so switching back is valid again.
+    model_vm.setConditionLift("offboard")
+    assert model_vm.condition["lift"] == "offboard"
+    assert offboard.property("visible") is True
+    assert lift.property("currentText") == "offboard"
+    assert warnings == []
+
+
+def test_delete_button_disabled_for_the_last_condition(qml_engine, tmp_path):
+    panel, model_vm, warnings = _conditions_panel(qml_engine, tmp_path)
+    delete = panel.findChild(QObject, "deleteConditionButton")
+    assert delete.property("enabled") is False
+
+    model_vm.addCondition()
+    assert delete.property("enabled") is True
+    assert warnings == []
+
+
+def test_conditions_tab_only_for_rules_documents(qml_engine, tmp_path):
+    from crane_statics.core.io import save_document
+    from tests.rules_docs import gale, rules_doc
+
+    engine, app_vm, _model_vm, warnings = qml_engine
+    path = tmp_path / "rules.yaml"
+    save_document(rules_doc("DNV", gale()), path)
+    app_vm.openPath(str(path))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "ModelWorkspace.qml")))
+    workspace = component.create()
+    assert workspace is not None, component.errorString()
+    tab = workspace.findChild(QObject, "conditionsTabButton")
+    tabs = workspace.findChild(QObject, "sectionTabs")
+    assert tab.property("visible") is True
+    tabs.setProperty("currentIndex", 2)
+    # Another workspace shown hides this one: the Conditions tab stays selected.
+    workspace.setProperty("visible", False)
+    workspace.setProperty("visible", True)
+    assert tabs.property("currentIndex") == 2
+
+    app_vm.openPath(str(EXAMPLE))
+    assert tab.property("visible") is False
+    assert tabs.property("currentIndex") == 0
     assert warnings == []

@@ -53,6 +53,21 @@ Item {
 
                     TabButton { text: qsTr("Components"); Layout.fillWidth: true }
                     TabButton { text: qsTr("Hoists"); Layout.fillWidth: true }
+                    // Only a rules document has load conditions to edit.
+                    TabButton {
+                        // Not onVisibleChanged: hiding the whole workspace (another
+                        // workspace tab) clears visible too, and must keep the tab.
+                        readonly property bool offered: modelVm.environmentFromConditions
+
+                        objectName: "conditionsTabButton"
+                        text: qsTr("Conditions")
+                        Layout.fillWidth: true
+                        visible: offered
+                        onOfferedChanged: {
+                            if (!offered && sectionTabs.currentIndex === 2)
+                                sectionTabs.currentIndex = 0
+                        }
+                    }
                 }
 
                 Label {
@@ -142,6 +157,8 @@ Item {
                     onAddSegmentRequested: segmentDialog.openFor(-1, null)
                     onAddContractualPointRequested: contractualDialog.openFor(-1, null)
                 }
+
+                ConditionsPanel {}
             }
         }
     }

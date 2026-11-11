@@ -804,6 +804,15 @@ class TestConditionForms:
             with pytest.raises(ValueError):
                 with_condition_value(spec, key, value)
 
+    def test_a_bad_condition_value_fails_with_one_short_line(self):
+        from crane_statics.qml_app.models.document_forms import with_condition_value
+
+        with pytest.raises(ValueError) as caught:
+            with_condition_value(gale("a"), "load_drag_coefficient", 0)
+        message = str(caught.value)
+        assert message == "load_drag_coefficient: Input should be greater than 0"
+        assert "\n" not in message and "pydantic" not in message
+
 
 def _condition_vm(doc):
     session = SessionState()

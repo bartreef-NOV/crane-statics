@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from pydantic import ValidationError
+
 from crane_statics.data import CraneDocument
 from crane_statics.data.models import ConditionSpec
 from crane_statics.qml_app.contracts import EnvironmentSettings
@@ -147,15 +149,24 @@ def condition_fields(spec: ConditionSpec) -> dict:
 
 
 def _revalidated(spec: ConditionSpec, **changes: Any) -> ConditionSpec:
-    """A copy of ``spec`` with ``changes``, validated as a new ``ConditionSpec``."""
-    return ConditionSpec.model_validate({**spec.model_dump(), **changes})
+    """A copy of ``spec`` with ``changes``, validated as a new ``ConditionSpec``.
+
+    A rejected value raises a ``ValueError`` of one short line (``field: message``), not
+    pydantic's multi-line report, because the message is shown to the user as is.
+    """
+    try:
+        return ConditionSpec.model_validate({**spec.model_dump(), **changes})
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        field = first["loc"][-1] if first["loc"] else ""
+        raise ValueError(f"{field}: {first['msg']}" if field else first["msg"]) from None
 
 
 def with_condition_value(spec: ConditionSpec, key: str, value: Optional[float]) -> ConditionSpec:
     """A re-validated copy of ``spec`` with one value replaced.
 
     ``value=None`` clears an optional key; any other key needs a number. Raises
-    ``ValueError`` (pydantic's ``ValidationError`` included) for an unknown key or a bad value.
+    ``ValueError`` for an unknown key or a bad value.
     """
     if value is None and key not in CONDITION_OPTIONAL_KEYS:
         raise ValueError(f"{key} needs a value")

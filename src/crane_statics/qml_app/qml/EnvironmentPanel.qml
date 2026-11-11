@@ -163,7 +163,7 @@ ColumnLayout {
                 Layout.preferredWidth: 100
                 visible: modelVm.environmentFromConditions
                 wrapMode: Text.WordWrap
-                text: qsTr("Wind speed and vessel motion are set per load condition of the rules document.")
+                text: qsTr("Wind speed and vessel motion are set per load condition: edit them on the Conditions tab.")
             }
         }
     }
