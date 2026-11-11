@@ -769,3 +769,193 @@ class TestConditionEdits:
         doc = rules_doc("ABS", gale("a"))
         bad = ConditionSpec(name="a", lift="offboard", wind_speed_m_s=10.0)
         self._refused(doc, lambda e: e.update_condition("a", bad))
+
+
+class TestConditionForms:
+    def test_condition_fields_is_flat(self):
+        from crane_statics.qml_app.models.document_forms import (
+            CONDITION_OPTIONAL_KEYS,
+            CONDITION_SCALAR_KEYS,
+            VESSEL_MOTION_KEYS,
+            condition_fields,
+        )
+
+        fields = condition_fields(gale("a", wind=12.0))
+        assert set(fields) == {
+            "name",
+            "lift",
+            *CONDITION_SCALAR_KEYS,
+            *VESSEL_MOTION_KEYS,
+            *CONDITION_OPTIONAL_KEYS,
+        }
+        assert fields["name"] == "a" and fields["lift"] == "onboard"
+        assert fields["wind_speed_m_s"] == 12.0 and fields["roll_deg"] == 4.0
+        assert fields["v_in_m_s"] is None
+
+    def test_with_condition_value_returns_a_validated_copy(self):
+        from crane_statics.qml_app.models.document_forms import with_condition_value
+
+        spec = gale("a")
+        edited = with_condition_value(spec, "pitch_deg", 1.0)
+        assert edited.vessel_motion.pitch_deg == 1.0 and spec.vessel_motion.pitch_deg == 2.5
+        assert with_condition_value(spec, "v_t_m_s", 0.4).v_t_m_s == 0.4
+        assert with_condition_value(spec, "v_t_m_s", None).v_t_m_s is None
+        for key, value in [("nope", 1.0), ("wind_speed_m_s", None), ("load_drag_coefficient", 0)]:
+            with pytest.raises(ValueError):
+                with_condition_value(spec, key, value)
+
+
+def _condition_vm(doc):
+    session = SessionState()
+    vm = ModelViewModel(session)
+    session.model.set_document(doc)
+    return vm
+
+
+def _offboard_doc():
+    """ABS GT283 whose ``a`` is offboard (Hs 1.5, v_in 0.6, v_t 0.3) and ``b`` onboard."""
+    from tests.test_lift_factor import _rules
+
+    a = ConditionSpec(
+        name="a",
+        lift="offboard",
+        wind_speed_m_s=10.0,
+        significant_wave_height_m=1.5,
+        v_in_m_s=0.6,
+        v_t_m_s=0.3,
+    )
+    return _rules(rules_doc("ABS", a, gale("b")), daf=1.0)
+
+
+class TestConditionViewModel:
+    @pytest.fixture
+    def doc(self):
+        return rules_doc("DNV", gale("a", wind=25.0), gale("b"))
+
+    @pytest.fixture
+    def vm(self, doc):
+        return _condition_vm(doc)
+
+    @staticmethod
+    def _signals(vm):
+        edited: list[int] = []
+        failed: list[str] = []
+        vm.modelEdited.connect(lambda: edited.append(1))
+        vm.editFailed.connect(failed.append)
+        return edited, failed
+
+    def test_condition_properties_follow_the_document(self, vm, doc):
+        assert vm.conditionNames == ["a", "b"]
+        assert vm.selectedCondition == "a"
+        assert vm.condition["wind_speed_m_s"] == doc.conditions["a"].wind_speed_m_s
+        assert vm.condition["roll_deg"] == doc.conditions["a"].vessel_motion.roll_deg
+        assert vm.condition["hook_height_override_m"] is None
+
+    def test_set_condition_value_edits_the_document_and_marks_it_edited(self, vm):
+        edited, failed = self._signals(vm)
+        vm.setConditionValue("wind_speed_m_s", 31.0)
+        doc = vm._model.document
+        assert doc.conditions["a"].wind_speed_m_s == 31.0
+        assert vm.condition["wind_speed_m_s"] == 31.0
+        assert edited == [1] and failed == []
+        assert vm._model.dirty is True
+
+    def test_set_vessel_motion_value(self, vm):
+        vm.setConditionValue("roll_deg", 3.5)
+        assert vm._model.document.conditions["a"].vessel_motion.roll_deg == 3.5
+
+    def test_clear_optional_value(self, vm):
+        vm.setConditionValue("hook_height_override_m", 12.0)
+        assert vm._model.document.conditions["a"].hook_height_override_m == 12.0
+        vm.clearConditionValue("hook_height_override_m")
+        assert vm._model.document.conditions["a"].hook_height_override_m is None
+
+        edited, failed = self._signals(vm)
+        before = vm._model.document.conditions["a"].model_copy(deep=True)
+        vm.clearConditionValue("wind_speed_m_s")
+        assert failed and edited == []
+        assert vm._model.document.conditions["a"] == before
+
+    def test_unknown_or_invalid_condition_value_is_refused(self, vm):
+        edited, failed = self._signals(vm)
+        vm.setConditionValue("not_a_field", 1.0)
+        vm.setConditionValue("wind_speed_m_s", -1.0)
+        assert len(failed) == 2 and edited == []
+        assert vm._model.document.conditions["a"].wind_speed_m_s == 25.0
+
+    def test_lift_switch_keeps_hidden_offboard_fields(self):
+        vm = _condition_vm(_offboard_doc())
+        _edited, failed = self._signals(vm)
+        vm.setConditionLift("onboard")
+        assert vm._model.document.conditions["a"].lift == "onboard"
+        vm.setConditionLift("offboard")
+        a = vm._model.document.conditions["a"]
+        assert failed == []
+        assert a.lift == "offboard"
+        assert (a.significant_wave_height_m, a.v_in_m_s, a.v_t_m_s) == (1.5, 0.6, 0.3)
+
+    def test_switch_to_offboard_without_inputs_fails(self):
+        vm = _condition_vm(_offboard_doc())
+        vm.selectCondition("b")
+        _edited, failed = self._signals(vm)
+        vm.setConditionLift("offboard")
+        assert failed and "required for offboard lifts" in failed[0]
+        assert vm._model.document.conditions["b"].lift == "onboard"
+
+    def test_rename_updates_selection(self, vm):
+        vm.selectCondition("b")
+        vm.renameCondition("storm")
+        assert vm.conditionNames == ["a", "storm"]
+        assert vm.selectedCondition == "storm"
+
+        _edited, failed = self._signals(vm)
+        vm.renameCondition("a")  # taken
+        assert failed and vm.selectedCondition == "storm"
+        assert vm.conditionNames == ["a", "storm"]
+
+    def test_add_duplicate_delete_select_sensibly(self, vm):
+        vm.selectCondition("b")
+        vm.addCondition()
+        doc = vm._model.document
+        assert vm.conditionNames == ["a", "b", "condition_1"]
+        assert vm.selectedCondition == "condition_1"
+        added = doc.conditions["condition_1"]
+        assert added.lift == "onboard"
+        assert added.wind_speed_m_s == doc.conditions["b"].wind_speed_m_s
+        assert added.vessel_motion == ConditionSpec(name="x", wind_speed_m_s=0.0).vessel_motion
+        vm.addCondition()
+        assert vm.selectedCondition == "condition_2"
+
+        vm.selectCondition("a")
+        vm.duplicateCondition()
+        assert vm.selectedCondition == "a_copy"
+        assert vm.conditionNames == ["a", "a_copy", "b", "condition_1", "condition_2"]
+
+        vm.deleteCondition()
+        assert "a_copy" not in vm.conditionNames
+        assert vm.selectedCondition == "a"
+
+        vm.selectCondition("nope")  # unknown: ignored
+        assert vm.selectedCondition == "a"
+
+    def test_delete_last_is_refused_with_edit_failed(self):
+        vm = _condition_vm(rules_doc("DNV", gale("only")))
+        edited, failed = self._signals(vm)
+        vm.deleteCondition()
+        assert failed and edited == []
+        assert vm.conditionNames == ["only"]
+        assert vm.selectedCondition == "only"
+
+    def test_a_new_document_selects_its_first_condition(self, vm):
+        vm.selectCondition("b")
+        vm._model.set_document(rules_doc("DNV", gale("x"), gale("b")))
+        assert vm.selectedCondition == "x"
+
+    def test_condition_properties_are_empty_without_rules(self):
+        vm = _condition_vm(load_document(GT283))
+        assert vm.conditionNames == []
+        assert vm.condition == {}
+        assert vm.selectedCondition == ""
+        _edited, failed = self._signals(vm)
+        vm.addCondition()
+        assert failed

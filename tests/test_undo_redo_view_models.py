@@ -121,3 +121,19 @@ def test_opening_a_document_clears_history(vms):
     )
     app.openPath(str(EXAMPLE))
     assert not app.canUndo and not app.canRedo
+
+
+def test_condition_edit_is_undoable():
+    from tests.rules_docs import gale, rules_doc
+
+    session = SessionState()
+    model = ModelViewModel(session)
+    session.model.set_document(rules_doc("DNV", gale("a", wind=25.0), gale("b")))
+    session.model.history._window = 0.0
+    model.setConditionValue("wind_speed_m_s", 31.0)
+    assert session.model.document.conditions["a"].wind_speed_m_s == 31.0
+
+    assert session.model.undo()
+    assert session.model.document.conditions["a"].wind_speed_m_s == 25.0
+    assert model.condition["wind_speed_m_s"] == 25.0
+    assert model.selectedCondition == "a"

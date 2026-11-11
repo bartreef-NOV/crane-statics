@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from crane_statics.data import CraneDocument
+from crane_statics.data.models import ConditionSpec
 from crane_statics.qml_app.contracts import EnvironmentSettings
 
 ENVIRONMENT_KEYS = [
@@ -104,6 +105,85 @@ def clear_support_width(doc: CraneDocument, key: str) -> bool:
         return False
     setattr(doc.support_widths, key, None)
     return True
+
+
+# ----------------------------------------------------------------------
+# Load conditions (rules documents)
+# ----------------------------------------------------------------------
+
+CONDITION_SCALAR_KEYS: tuple[str, ...] = (
+    "wind_speed_m_s",
+    "load_wind_area_m2",
+    "load_drag_coefficient",
+)
+CONDITION_OPTIONAL_KEYS: tuple[str, ...] = (
+    "significant_wave_height_m",
+    "v_in_m_s",
+    "v_t_m_s",
+    "hook_height_override_m",
+)
+NEW_CONDITION_PREFIX = "condition_"
+
+
+def editable_conditions(doc: Optional[CraneDocument]) -> dict[str, ConditionSpec]:
+    """The load conditions a rules document carries, in order; none without rules."""
+    if doc is None or doc.rules is None:
+        return {}
+    return dict(doc.conditions)
+
+
+def condition_fields(spec: ConditionSpec) -> dict:
+    """One condition as a flat form dict; unset optional values stay ``None``."""
+    fields: dict[str, Any] = {"name": spec.name, "lift": spec.lift}
+    fields.update({key: float(getattr(spec, key)) for key in CONDITION_SCALAR_KEYS})
+    fields.update({key: float(getattr(spec.vessel_motion, key)) for key in VESSEL_MOTION_KEYS})
+    fields.update(
+        {
+            key: (None if (raw := getattr(spec, key)) is None else float(raw))
+            for key in CONDITION_OPTIONAL_KEYS
+        }
+    )
+    return fields
+
+
+def _revalidated(spec: ConditionSpec, **changes: Any) -> ConditionSpec:
+    """A copy of ``spec`` with ``changes``, validated as a new ``ConditionSpec``."""
+    return ConditionSpec.model_validate({**spec.model_dump(), **changes})
+
+
+def with_condition_value(spec: ConditionSpec, key: str, value: Optional[float]) -> ConditionSpec:
+    """A re-validated copy of ``spec`` with one value replaced.
+
+    ``value=None`` clears an optional key; any other key needs a number. Raises
+    ``ValueError`` (pydantic's ``ValidationError`` included) for an unknown key or a bad value.
+    """
+    if value is None and key not in CONDITION_OPTIONAL_KEYS:
+        raise ValueError(f"{key} needs a value")
+    number = None if value is None else float(value)
+    if key in CONDITION_SCALAR_KEYS or key in CONDITION_OPTIONAL_KEYS:
+        return _revalidated(spec, **{key: number})
+    if key in VESSEL_MOTION_KEYS:
+        motion = {**spec.vessel_motion.model_dump(), key: number}
+        return _revalidated(spec, vessel_motion=motion)
+    raise ValueError(f"Unknown condition field {key!r}")
+
+
+def with_condition_lift(spec: ConditionSpec, lift: str) -> ConditionSpec:
+    """A re-validated copy of ``spec`` with ``lift``; hidden offboard values are kept."""
+    return _revalidated(spec, lift=str(lift))
+
+
+def with_condition_name(spec: ConditionSpec, name: str) -> ConditionSpec:
+    """A copy of ``spec`` named ``name`` (the editor checks the name)."""
+    return _revalidated(spec, name=str(name))
+
+
+def new_condition(existing: list[str], wind_speed_m_s: float) -> ConditionSpec:
+    """An onboard condition named ``condition_<n>`` (first unused n), defaults elsewhere."""
+    n = 1
+    while f"{NEW_CONDITION_PREFIX}{n}" in existing:
+        n += 1
+    return ConditionSpec(name=f"{NEW_CONDITION_PREFIX}{n}", wind_speed_m_s=wind_speed_m_s)
 
 
 def primary_structure_rows(doc: Optional[CraneDocument]) -> list[dict[str, Any]]:

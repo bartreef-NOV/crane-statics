@@ -964,3 +964,21 @@ class TestConditionLifecycle:
         vm._cancel_all()
         assert vm.currentCondition == "gale" and len(resets) == 3
         vm.shutdown()
+
+    def test_renaming_the_charted_condition_falls_back(self):
+        from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
+        from tests.rules_docs import gale, rules_doc, without_suspended_rope
+
+        session = SessionState()
+        chart = ChartViewModel(session)
+        chart.setOutreachStep(20.0)
+        model = ModelViewModel(session)
+        session.model.set_document(
+            without_suspended_rope(rules_doc("ABS", gale("a", wind=30.0), gale("b", wind=5.0)))
+        )
+        assert chart.currentCondition == "a"
+        model.renameCondition("z")
+        chart._cancel_all()
+        assert model.conditionNames == ["z", "b"]
+        assert chart.currentCondition in model.conditionNames
+        chart.shutdown()

@@ -24,12 +24,15 @@ from crane_statics.data import payload_hoist_ids
 
 from ..models.document_forms import (
     clear_support_width,
+    condition_fields,
     contractual_fields,
+    editable_conditions,
     environment_from_conditions,
     environment_settings,
     hoist_fields,
     mass_kwargs,
     mass_point_fields,
+    new_condition,
     node_fields,
     node_kwargs,
     primary_structure_rows,
@@ -38,6 +41,9 @@ from ..models.document_forms import (
     set_environment_value,
     wind_area_fields,
     wind_kwargs,
+    with_condition_lift,
+    with_condition_name,
+    with_condition_value,
     hoist_kwargs,
 )
 from ..models.list_models import DictListModel
@@ -73,6 +79,7 @@ class ModelViewModel(QObject):
     editFailed = pyqtSignal(str)
     environmentChanged = pyqtSignal()
     healthChanged = pyqtSignal()
+    conditionsChanged = pyqtSignal()
 
     def __init__(self, session: SessionState, parent=None):
         super().__init__(parent)
@@ -80,6 +87,7 @@ class ModelViewModel(QObject):
         self._model = session.model
         self._selected_body_id: str = COMPONENT_ORDER[0]
         self._contractual_mode: str = "normal"
+        self._selected_condition: Optional[str] = None
 
         self._nodes_model = RecordTableModel(
             node_columns(self._selected_body_id), self, commit=self._commit_node_cell
@@ -101,7 +109,13 @@ class ModelViewModel(QObject):
         )
         self._primary_structure_model = DictListModel(PRIMARY_ROLES, self)
 
-        self._session.document_changed.connect(lambda _doc: self.refresh())
+        self._session.document_changed.connect(self._on_document_changed)
+
+    def _on_document_changed(self, _doc) -> None:
+        if not self._model.restoring:
+            # Another document: its first condition. Undo/redo keeps the selection.
+            self._selected_condition = None
+        self.refresh()
 
     # ------------------------------------------------------------------
     # Selection
@@ -239,11 +253,13 @@ class ModelViewModel(QObject):
         self._refresh_component_tables()
         self._refresh_hoist_tables()
         self._refresh_primary_structure()
+        self._follow_conditions()
         self.componentsChanged.emit()
         self.hoistsChanged.emit()
         self.selectedHoistChanged.emit()
         self.environmentChanged.emit()
         self.healthChanged.emit()
+        self.conditionsChanged.emit()
 
     def _body(self):
         doc = self._model.document
@@ -324,6 +340,106 @@ class ModelViewModel(QObject):
         self.environmentChanged.emit()
         self.healthChanged.emit()
         self.modelEdited.emit()
+
+    # ------------------------------------------------------------------
+    # Load conditions (rules documents)
+    # ------------------------------------------------------------------
+
+    @pyqtProperty(list, notify=conditionsChanged)
+    def conditionNames(self) -> list:
+        return list(editable_conditions(self._model.document))
+
+    @pyqtProperty(str, notify=conditionsChanged)
+    def selectedCondition(self) -> str:
+        return self._selected_condition or ""
+
+    @pyqtProperty("QVariantMap", notify=conditionsChanged)
+    def condition(self) -> dict:
+        spec = self._selected_spec()
+        return {} if spec is None else condition_fields(spec)
+
+    @pyqtSlot(str)
+    def selectCondition(self, name: str) -> None:
+        if name == self._selected_condition or name not in self.conditionNames:
+            return
+        self._selected_condition = name
+        self.conditionsChanged.emit()
+
+    @pyqtSlot(str, float)
+    def setConditionValue(self, key: str, value: float) -> None:
+        self._edit_selected_condition(lambda spec: with_condition_value(spec, key, value))
+
+    @pyqtSlot(str)
+    def clearConditionValue(self, key: str) -> None:
+        self._edit_selected_condition(lambda spec: with_condition_value(spec, key, None))
+
+    @pyqtSlot(str)
+    def setConditionLift(self, lift: str) -> None:
+        self._edit_selected_condition(lambda spec: with_condition_lift(spec, lift))
+
+    @pyqtSlot(str)
+    def renameCondition(self, new_name: str) -> None:
+        spec = self._selected_spec()
+        if spec is not None and new_name == spec.name:
+            return
+        self._edit_selected_condition(
+            lambda spec: with_condition_name(spec, new_name), select=new_name
+        )
+
+    @pyqtSlot()
+    def addCondition(self) -> None:
+        selected = self._selected_spec()
+        wind = 0.0 if selected is None else selected.wind_speed_m_s
+        added = new_condition(self.conditionNames, wind)
+
+        def mutate(editor: DocumentEditor) -> None:
+            editor.add_condition(added)
+            self._selected_condition = added.name
+
+        self._apply_edit(mutate)
+
+    @pyqtSlot()
+    def duplicateCondition(self) -> None:
+        name = self._selected_condition
+        if name is None:
+            self.editFailed.emit("Select a condition first")
+            return
+
+        def mutate(editor: DocumentEditor) -> None:
+            self._selected_condition = editor.duplicate_condition(name)
+
+        self._apply_edit(mutate)
+
+    @pyqtSlot()
+    def deleteCondition(self) -> None:
+        name = self._selected_condition
+        if name is None:
+            self.editFailed.emit("Select a condition first")
+            return
+        self._apply_edit(lambda editor: editor.delete_condition(name))
+
+    def _selected_spec(self):
+        return editable_conditions(self._model.document).get(self._selected_condition or "")
+
+    def _edit_selected_condition(self, edit, select: Optional[str] = None) -> None:
+        """Replace the selected condition by ``edit(spec)``; on success select ``select``."""
+        spec = self._selected_spec()
+        if spec is None:
+            self.editFailed.emit("Select a condition first")
+            return
+
+        def mutate(editor: DocumentEditor) -> None:
+            editor.update_condition(spec.name, edit(spec))
+            if select is not None:
+                self._selected_condition = select
+
+        self._apply_edit(mutate)
+
+    def _follow_conditions(self) -> None:
+        """A selection that no longer exists becomes the first condition (or none)."""
+        names = self.conditionNames
+        if self._selected_condition not in names:
+            self._selected_condition = names[0] if names else None
 
     @pyqtProperty(QObject, constant=True)
     def primaryStructureModel(self) -> QObject:
