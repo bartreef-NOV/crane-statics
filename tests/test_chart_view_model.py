@@ -880,6 +880,25 @@ class TestCalculationDetails:
         assert vm.provenanceRows == []
         vm.shutdown()
 
+    @pytest.mark.parametrize(
+        "example", ["crane_input_GT283_abs.yaml", "crane_input_GT283_dnv.yaml"]
+    )
+    def test_inspect_from_a_drawn_chart_fills_rows(self, example):
+        """The shipped rules examples, drawn to completion: a curve point and a limit
+        point both fill the details."""
+        vm = self._drawn(load_document(EXAMPLE.parent / example))
+        assert vm.chartComplete and vm.curvePoints
+        x = vm.curvePoints[len(vm.curvePoints) // 2][0]
+        vm.inspectChartPoint({"seriesId": "", "outreach": x, "load": 1.0})
+        assert vm.provenanceRows
+        vm.inspectChartPoint(None)
+        assert vm.provenanceRows == []
+        assert vm.limitSeries
+        limit_id = vm.limitSeries[0]["id"]
+        vm.inspectChartPoint({"seriesId": limit_id, "outreach": x, "load": 1.0})
+        assert vm.provenanceRows
+        vm.shutdown()
+
     def test_dnv_notes_state_that_sh_is_omitted(self):
         from tests.rules_docs import gale, rules_doc, without_suspended_rope
 

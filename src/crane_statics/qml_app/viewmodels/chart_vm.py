@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
 from PyQt6 import sip
 from PyQt6.QtCore import QObject, QThread, QTimer, QUrl, pyqtSignal, pyqtSlot
+from PyQt6.QtQml import QJSValue
 
 from crane_statics.qml_app.qt_compat import pyqtProperty
 
@@ -1340,6 +1341,9 @@ class ChartViewModel(QObject):
     def inspectChartPoint(self, point: Any) -> None:
         """Inspect the plot's pinned or hovered point: a curve point (one with a
         ``seriesId``) shows its outreach's trail; a contractual marker or none clears it."""
+        # A point built in QML JavaScript arrives as a QJSValue, not a dict.
+        if isinstance(point, QJSValue):
+            point = point.toVariant()
         if isinstance(point, dict) and isinstance(point.get("seriesId"), str):
             try:
                 self.setDetailOutreach(float(point["outreach"]))

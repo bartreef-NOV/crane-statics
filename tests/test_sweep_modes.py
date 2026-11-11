@@ -438,3 +438,17 @@ def test_cached_rerun_returns_the_same_provenance() -> None:
     )
     assert first is not None and first["provenance"]
     assert first == again == plain
+
+
+@pytest.mark.parametrize("example", ["crane_input_GT283_abs.yaml", "crane_input_GT283_dnv.yaml"])
+def test_every_curve_point_has_a_trail(example: str) -> None:
+    """The shipped rules examples: every curve outreach has a non-empty clause trail."""
+    from crane_statics.data import payload_hoist_ids
+
+    doc = load_document(ROOT / "examples" / example)
+    for hoist_id in payload_hoist_ids(doc):
+        payload = run_mode_sweep(doc, hoist_id, "normal", RULES_LIMITS, RULES_STEP, {})
+        assert payload is not None and payload["curve_data"], hoist_id
+        prov = payload["provenance"]
+        assert {p[0] for p in prov} == {p[0] for p in payload["curve_data"]}, hoist_id
+        assert all(records for _x, records, _w, _c in prov), hoist_id

@@ -209,9 +209,13 @@ Item {
                             spacing: 4
 
                             Label {
+                                objectName: "calculationDetailsHint"
                                 Layout.fillWidth: true
                                 visible: chartVm.provenanceRows.length === 0
-                                text: qsTr("Hover or click a point on the capacity curve to see how its factors were obtained.")
+                                // A streaming chart has no clause trail yet: say so, not "hover".
+                                text: chartVm.chartComplete
+                                      ? qsTr("Hover or click a point on the capacity curve to see how its factors were obtained.")
+                                      : qsTr("Chart is still being computed.")
                                 color: detailsPalette.placeholderText
                                 wrapMode: Text.WordWrap
                             }

@@ -174,23 +174,49 @@ Item {
         canvas.requestPaint()
     }
 
+    // The pixel distance from (x, y) to the drawn line of ``points``, and the sample at the
+    // nearer end of the closest segment. Null for an empty series.
+    function nearestOnLine(points, x, y, ranges) {
+        let best = null
+        for (let i = 0; i < points.length; ++i) {
+            const ax = mapX(points[i][0], ranges, plotLeft, plotWidth)
+            const ay = mapY(points[i][1], ranges, plotTop, plotHeight)
+            const next = i + 1 < points.length ? i + 1 : i
+            const bx = mapX(points[next][0], ranges, plotLeft, plotWidth)
+            const by = mapY(points[next][1], ranges, plotTop, plotHeight)
+            const lengthSquared = (bx - ax) * (bx - ax) + (by - ay) * (by - ay)
+            const t = lengthSquared > 0
+                ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / lengthSquared))
+                : 0
+            const distance = Math.hypot(ax + t * (bx - ax) - x, ay + t * (by - ay) - y)
+            if (best === null || distance < best.distance) {
+                const sample = t <= 0.5 ? i : next
+                best = {
+                    distance: distance, index: sample,
+                    x: sample === i ? ax : bx, y: sample === i ? ay : by
+                }
+            }
+        }
+        return best
+    }
+
     function nearestPoint(x, y) {
         const ranges = viewRanges
         const series = collectSeries()
         const candidates = []
         for (let s = 0; s < series.length; ++s) {
             const points = series[s].points || []
-            for (let i = 0; i < points.length; ++i) {
-                const px = mapX(points[i][0], ranges, plotLeft, plotWidth)
-                const py = mapY(points[i][1], ranges, plotTop, plotHeight)
-                candidates.push({
-                    x: px, y: py, outreach: points[i][0], load: points[i][1],
-                    // The series a governing case is asked for: "" is the combined curve.
-                    seriesId: series[s].id === "capacity" ? "" : series[s].id,
-                    label: series[s].label, color: series[s].color || pal.placeholderText,
-                    distance: Math.hypot(px - x, py - y)
-                })
-            }
+            // Hit the drawn line, not only its samples: a sparse curve has wide gaps.
+            const hit = nearestOnLine(points, x, y, ranges)
+            if (hit === null)
+                continue
+            candidates.push({
+                x: hit.x, y: hit.y, outreach: points[hit.index][0], load: points[hit.index][1],
+                // The series a governing case is asked for: "" is the combined curve.
+                seriesId: series[s].id === "capacity" ? "" : series[s].id,
+                label: series[s].label, color: series[s].color || pal.placeholderText,
+                distance: hit.distance
+            })
         }
         if (seriesKeyVisible("contractual")) {
             const markers = chartVm.markers || []

@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import QMetaObject, QObject, QUrl
+from PyQt6.QtCore import QMetaObject, QObject, QPoint, Qt, QUrl
 from PyQt6.QtTest import QTest
 from PyQt6.QtQml import (
     QJSValue,
@@ -895,6 +895,129 @@ def test_condition_selector_switches_the_chart_and_details_list_the_trail(qml_en
     assert selector.property("currentText") == "calm"
     chart_vm._cancel_all()
     chart_vm._refresh_timer.stop()
+    assert warnings == []
+
+
+RULES_EXAMPLE = EXAMPLE.parent / "crane_input_GT283_abs.yaml"
+
+
+def _drawn_rules_chart(qml_engine):
+    """Main.qml on the ABS example, Load Chart tab shown, with a finished chart."""
+    engine, app_vm, _model_vm, warnings = qml_engine
+    chart_vm = engine.rootContext().contextProperty("chartVm")
+    chart_vm._outreach_step = 10.0
+    app_vm.openPath(str(RULES_EXAMPLE))
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
+    root = engine.rootObjects()[-1]
+    chart_vm._cancel_all()
+    chart_vm.drawBlocking()
+    chart_vm._refresh_timer.stop()
+    root.findChild(QObject, "workspaceTabs").setProperty("currentIndex", 1)
+    QTest.qWait(50)
+    plot = root.findChild(QObject, "quickChartPlot")
+    rows = root.findChild(QObject, "provenanceRepeater")
+    assert plot is not None and rows is not None
+    assert chart_vm.chartComplete and chart_vm.curvePoints
+    return root, plot, rows, chart_vm, warnings
+
+
+@pytest.mark.parametrize("prop", ["pinnedPoint", "hoveredPoint"])
+def test_plot_point_fills_calculation_details(qml_engine, prop):
+    """The plot's pinned or hovered curve point reaches the details panel."""
+    _root, plot, rows, chart_vm, warnings = _drawn_rules_chart(qml_engine)
+    assert rows.property("count") == 0
+    x, y = chart_vm.curvePoints[len(chart_vm.curvePoints) // 2]
+    plot.setProperty(prop, {"seriesId": "", "outreach": x, "load": y, "label": "Capacity"})
+    QTest.qWait(20)
+    assert rows.property("count") == len(chart_vm.provenanceRows) > 0
+    plot.setProperty(prop, None)
+    QTest.qWait(20)
+    assert rows.property("count") == 0
+    assert warnings == []
+
+
+@pytest.mark.parametrize("prop", ["pinnedPoint", "hoveredPoint"])
+def test_a_point_made_in_qml_fills_calculation_details(qml_engine, prop):
+    """A point built by the plot's JavaScript (as ``nearestPoint`` builds it) reaches the
+    view model as a ``QJSValue``, not a dict: it must still fill the details."""
+    _root, plot, rows, chart_vm, warnings = _drawn_rules_chart(qml_engine)
+    x, y = chart_vm.curvePoints[len(chart_vm.curvePoints) // 2]
+    _evaluate_in(plot, f'{prop} = {{ seriesId: "", outreach: {x}, load: {y} }}')
+    QTest.qWait(20)
+    assert rows.property("count") == len(chart_vm.provenanceRows) > 0
+    _evaluate_in(plot, f"{prop} = null")
+    QTest.qWait(20)
+    assert rows.property("count") == 0
+    assert warnings == []
+
+
+def test_hovering_and_clicking_the_curve_fills_calculation_details(qml_engine):
+    """Real mouse events between two curve samples: hover fills the details, a click pins
+    them, and they stay pinned once the pointer leaves the plot."""
+    root, plot, rows, chart_vm, warnings = _drawn_rules_chart(qml_engine)
+    _only_series_visible(plot, "capacity")
+    points = chart_vm.curvePoints
+    i = len(points) // 2
+    (x0, y0), (x1, y1) = points[i], points[i + 1]
+    scene = _evaluate_in(
+        plot,
+        f"""
+        (function () {{
+            const x = (mapX({x0}, viewRanges, plotLeft, plotWidth)
+                       + mapX({x1}, viewRanges, plotLeft, plotWidth)) / 2
+            const y = (mapY({y0}, viewRanges, plotTop, plotHeight)
+                       + mapY({y1}, viewRanges, plotTop, plotHeight)) / 2
+            const p = mapToItem(null, x, y)
+            return [p.x, p.y]
+        }})()
+        """,
+    )
+    target = QPoint(round(scene[0]), round(scene[1]))
+    QTest.mouseMove(root, QPoint(target.x() - 20, target.y()))
+    QTest.mouseMove(root, target)
+    QTest.qWait(20)
+    assert rows.property("count") == len(chart_vm.provenanceRows) > 0
+    QTest.mouseClick(root, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, target)
+    QTest.mouseMove(root, QPoint(2, 2))
+    QTest.qWait(20)
+    assert rows.property("count") == len(chart_vm.provenanceRows) > 0
+    assert warnings == []
+
+
+def test_details_hint_says_a_streaming_chart_is_still_being_computed(qml_engine):
+    root, _plot, _rows, chart_vm, warnings = _drawn_rules_chart(qml_engine)
+    hint = root.findChild(QObject, "calculationDetailsHint")
+    assert hint is not None and hint.property("text").startswith("Hover or click")
+    chart_vm._set_partial(True)
+    assert hint.property("text") == "Chart is still being computed."
+    chart_vm._set_partial(False)
+    assert hint.property("text").startswith("Hover or click")
+    assert warnings == []
+
+
+def test_nearest_point_between_samples(qml_engine):
+    """A pointer between two curve samples, or a little above the curve, finds it."""
+    _root, plot, _rows, chart_vm, warnings = _drawn_rules_chart(qml_engine)
+    _only_series_visible(plot, "capacity")
+    points = chart_vm.curvePoints
+    i = len(points) // 2
+    (x0, y0), (x1, y1) = points[i], points[i + 1]
+    found = _evaluate_in(
+        plot,
+        f"""
+        (function () {{
+            const ax = mapX({x0}, viewRanges, plotLeft, plotWidth)
+            const ay = mapY({y0}, viewRanges, plotTop, plotHeight)
+            const bx = mapX({x1}, viewRanges, plotLeft, plotWidth)
+            const by = mapY({y1}, viewRanges, plotTop, plotHeight)
+            const mid = nearestPoint((ax + bx) / 2, (ay + by) / 2)
+            const above = nearestPoint(ax, ay - 10)
+            return [mid === null ? null : mid.seriesId, above === null ? null : above.seriesId,
+                    Math.hypot(bx - ax, by - ay)]
+        }})()
+        """,
+    )
+    assert found[0] == "" and found[1] == "", found
     assert warnings == []
 
 
