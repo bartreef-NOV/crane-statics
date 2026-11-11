@@ -17,8 +17,10 @@ from crane_statics.core.document_edit import (
 )
 from crane_statics.core.io import load_document
 from crane_statics.core.session_model import SessionModel
+from crane_statics.data.models import ConditionSpec
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
+from tests.rules_docs import GT283, gale, rules_doc
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
 
@@ -693,3 +695,77 @@ class TestContractualModeEditing:
         model_vm.selectHoist(plain)
 
         assert model_vm.contractualMode == "normal"
+
+
+class TestConditionEdits:
+    def test_add_condition_appends(self):
+        doc = rules_doc("DNV", gale("a"), gale("b"))
+        DocumentEditor(doc).add_condition(gale("c"))
+        assert list(doc.conditions) == ["a", "b", "c"]
+
+    def test_update_condition_changes_wind(self):
+        doc = rules_doc("DNV", gale("a"), gale("b"))
+        DocumentEditor(doc).update_condition("a", gale("a", wind=40.0))
+        assert doc.conditions["a"].wind_speed_m_s == 40.0
+
+    def test_update_condition_renames_in_place(self):
+        doc = rules_doc("DNV", gale("a"), gale("b"))
+        DocumentEditor(doc).update_condition("a", gale("z"))
+        assert list(doc.conditions) == ["z", "b"]
+        assert doc.conditions["z"].name == "z"
+
+    def test_duplicate_condition_names_copy(self):
+        doc = rules_doc("DNV", gale("a"), gale("b"))
+        editor = DocumentEditor(doc)
+        assert editor.duplicate_condition("a") == "a_copy"
+        assert editor.duplicate_condition("a") == "a_copy2"
+        assert list(doc.conditions) == ["a", "a_copy2", "a_copy", "b"]
+        assert doc.conditions["a_copy"].name == "a_copy"
+
+    def test_delete_condition(self):
+        doc = rules_doc("DNV", gale("a"), gale("b"))
+        DocumentEditor(doc).delete_condition("a")
+        assert list(doc.conditions) == ["b"]
+
+    def _refused(self, doc, action):
+        before = {k: v.model_copy(deep=True) for k, v in doc.conditions.items()}
+        with pytest.raises(DocumentEditError):
+            action(DocumentEditor(doc))
+        assert doc.conditions == before
+
+    def test_delete_last_condition_refused(self):
+        doc = rules_doc("DNV", gale("a"))
+        self._refused(doc, lambda e: e.delete_condition("a"))
+
+    def test_duplicate_name_refused(self):
+        doc = rules_doc("DNV", gale("a"), gale("b"))
+        self._refused(doc, lambda e: e.add_condition(gale("a")))
+        self._refused(doc, lambda e: e.update_condition("a", gale("b")))
+
+    @pytest.mark.parametrize("bad", ["", "1x", "a b"])
+    def test_bad_name_refused(self, bad):
+        doc = rules_doc("DNV", gale("a"), gale("b"))
+        self._refused(doc, lambda e: e.add_condition(gale("ok").model_copy(update={"name": bad})))
+        self._refused(
+            doc, lambda e: e.update_condition("a", gale("ok").model_copy(update={"name": bad}))
+        )
+
+    def test_unknown_condition_refused(self):
+        doc = rules_doc("DNV", gale("a"), gale("b"))
+        self._refused(doc, lambda e: e.update_condition("nope", gale("n")))
+        self._refused(doc, lambda e: e.duplicate_condition("nope"))
+        self._refused(doc, lambda e: e.delete_condition("nope"))
+
+    def test_no_rules_refused(self):
+        doc = load_document(GT283)
+        self._refused(doc, lambda e: e.add_condition(gale("a")))
+
+    def test_offboard_without_wave_inputs_refused(self):
+        doc = rules_doc("ABS", gale("a"))
+        bad = ConditionSpec(name="x", lift="offboard", wind_speed_m_s=10.0)
+        self._refused(doc, lambda e: e.add_condition(bad))
+
+    def test_edit_rejected_by_rules_validation_leaves_document_unchanged(self):
+        doc = rules_doc("ABS", gale("a"))
+        bad = ConditionSpec(name="a", lift="offboard", wind_speed_m_s=10.0)
+        self._refused(doc, lambda e: e.update_condition("a", bad))

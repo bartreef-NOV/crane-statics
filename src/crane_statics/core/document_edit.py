@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from ..data.authored_models import hoist_node_prefix
 from ..data.normalize import derive_payload_hoist_rope_geometry
+from ..rules import RulesValidationError, validate_rules_document
 from ..data.models import (
     Body,
+    ConditionSpec,
     ContractualPoint,
     CraneDocument,
     Hoist,
@@ -23,6 +26,7 @@ from ..data.models import (
 )
 
 BOOM_BODY_ID = "boom"
+CONDITION_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
 
 
 class DocumentEditError(ValueError):
@@ -569,3 +573,74 @@ class DocumentEditor:
     def _guard_index(index: int, length: int, what: str) -> None:
         if not (0 <= index < length):
             raise DocumentEditError(f"Select a {what} first")
+
+    # -- load conditions -----------------------------------------------
+
+    def add_condition(self, condition: ConditionSpec) -> None:
+        conditions = self._conditions()
+        self._guard_condition_name(condition.name, conditions, previous=None)
+        self._commit_conditions({**conditions, condition.name: condition})
+
+    def update_condition(self, name: str, edited: ConditionSpec) -> None:
+        conditions = self._conditions()
+        self._guard_known_condition(name, conditions)
+        self._guard_condition_name(edited.name, conditions, previous=name)
+        self._commit_conditions(
+            {
+                (edited.name if k == name else k): (edited if k == name else v)
+                for k, v in conditions.items()
+            }
+        )
+
+    def duplicate_condition(self, name: str) -> str:
+        conditions = self._conditions()
+        self._guard_known_condition(name, conditions)
+        new_name = f"{name}_copy"
+        suffix = 2
+        while new_name in conditions:
+            new_name = f"{name}_copy{suffix}"
+            suffix += 1
+        copy = conditions[name].model_copy(deep=True, update={"name": new_name})
+        result: dict[str, ConditionSpec] = {}
+        for key, value in conditions.items():
+            result[key] = value
+            if key == name:
+                result[new_name] = copy
+        self._commit_conditions(result)
+        return new_name
+
+    def delete_condition(self, name: str) -> None:
+        conditions = self._conditions()
+        self._guard_known_condition(name, conditions)
+        if len(conditions) == 1:
+            raise DocumentEditError("A rules document needs at least one condition")
+        self._commit_conditions({k: v for k, v in conditions.items() if k != name})
+
+    def _conditions(self) -> dict[str, ConditionSpec]:
+        if self._doc.rules is None:
+            raise DocumentEditError("Conditions need a rules document")
+        return dict(self._doc.conditions)
+
+    @staticmethod
+    def _guard_known_condition(name: str, conditions: dict[str, ConditionSpec]) -> None:
+        if name not in conditions:
+            raise DocumentEditError(f"Unknown condition {name!r}")
+
+    @staticmethod
+    def _guard_condition_name(
+        name: str, conditions: dict[str, ConditionSpec], *, previous: Optional[str]
+    ) -> None:
+        if not CONDITION_NAME_PATTERN.match(name):
+            raise DocumentEditError(
+                "Condition name must start with a letter and use only letters, numbers, _ or -"
+            )
+        if name in conditions and name != previous:
+            raise DocumentEditError(f"Condition {name!r} already exists")
+
+    def _commit_conditions(self, conditions: dict[str, ConditionSpec]) -> None:
+        candidate = self._doc.model_copy(update={"conditions": conditions})
+        try:
+            validate_rules_document(candidate)
+        except RulesValidationError as exc:
+            raise DocumentEditError(str(exc)) from exc
+        self._doc.conditions = conditions
