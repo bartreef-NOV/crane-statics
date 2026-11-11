@@ -1115,7 +1115,8 @@ def test_conditions_panel_has_a_field_for_every_condition_value(qml_engine, tmp_
 
 def test_offboard_fields_show_only_for_offboard(qml_engine):
     # The ABS example is valid offboard: its hoist rope has the stiffness an offboard
-    # lift needs, and offboard_supply carries the wave height and velocities.
+    # lift needs, and offboard_supply carries the wave height and velocities. The group
+    # stays visible for onboard conditions (captioned) so the values can be entered.
     engine, app_vm, model_vm, warnings = qml_engine
     app_vm.openPath(str(RULES_EXAMPLE))
     component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "ConditionsPanel.qml")))
@@ -1124,19 +1125,43 @@ def test_offboard_fields_show_only_for_offboard(qml_engine):
     offboard = panel.findChild(QObject, "conditionOffboardGroup")
     lift = panel.findChild(QObject, "conditionLiftBox")
     assert model_vm.selectedCondition == "onboard_sea"
-    assert offboard.property("visible") is False
+    assert offboard.property("visible") is True
+    assert offboard.property("title") == "Used for offboard lifts"
 
     model_vm.selectCondition("offboard_supply")
     assert offboard.property("visible") is True
+    assert offboard.property("title") == "Offboard"
     model_vm.setConditionLift("onboard")
     assert model_vm.condition["lift"] == "onboard"
-    assert offboard.property("visible") is False
+    assert offboard.property("visible") is True
+    assert offboard.property("title") == "Used for offboard lifts"
     assert lift.property("currentText") == "onboard"
-    # The hidden offboard values are kept, so switching back is valid again.
+    # The offboard values are kept, so switching back is valid again.
     model_vm.setConditionLift("offboard")
     assert model_vm.condition["lift"] == "offboard"
-    assert offboard.property("visible") is True
+    assert offboard.property("title") == "Offboard"
     assert lift.property("currentText") == "offboard"
+    assert warnings == []
+
+
+def test_onboard_condition_can_become_offboard_via_the_panel_fields(qml_engine):
+    engine, app_vm, model_vm, warnings = qml_engine
+    app_vm.openPath(str(RULES_EXAMPLE))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "ConditionsPanel.qml")))
+    panel = component.create()
+    assert panel is not None, component.errorString()
+    assert model_vm.selectedCondition == "onboard_sea"
+    assert model_vm.condition["lift"] == "onboard"
+    for key, text in (
+        ("significant_wave_height_m", "1.5"),
+        ("v_in_m_s", "0.6"),
+        ("v_t_m_s", "0.3"),
+    ):
+        field = panel.findChild(QObject, f"conditionField_{key}")
+        field.setProperty("text", text)
+        _evaluate_in(field, "editingFinished()")
+    model_vm.setConditionLift("offboard")
+    assert model_vm.condition["lift"] == "offboard"
     assert warnings == []
 
 

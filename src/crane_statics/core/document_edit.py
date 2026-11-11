@@ -6,8 +6,6 @@ import re
 from typing import Optional
 
 from ..data.authored_models import hoist_node_prefix
-from ..data.normalize import derive_payload_hoist_rope_geometry
-from ..rules import RulesValidationError, validate_rules_document
 from ..data.models import (
     Body,
     ConditionSpec,
@@ -24,9 +22,11 @@ from ..data.models import (
     _is_managed_hook_node_id,
     _managed_hook_node_id,
 )
+from ..data.normalize import derive_payload_hoist_rope_geometry
+from ..rules import RulesValidationError, validate_rules_document
 
 BOOM_BODY_ID = "boom"
-CONDITION_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
+CONDITION_NAME_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
 
 
 class DocumentEditError(ValueError):
@@ -149,7 +149,7 @@ def build_payload_hoist(
         if split_lower_block_mass_t is None or float(split_lower_block_mass_t) > float(
             lower_block_mass_t
         ):
-            raise DocumentEditError("Split hook mass must be <= normal hook mass")
+            raise DocumentEditError("Split lower block mass must be <= lower block mass")
 
     return Hoist(
         id=hoist_id,
@@ -630,7 +630,7 @@ class DocumentEditor:
     def _guard_condition_name(
         name: str, conditions: dict[str, ConditionSpec], *, previous: Optional[str]
     ) -> None:
-        if not CONDITION_NAME_PATTERN.match(name):
+        if not CONDITION_NAME_PATTERN.fullmatch(name):
             raise DocumentEditError(
                 "Condition name must start with a letter and use only letters, numbers, _ or -"
             )

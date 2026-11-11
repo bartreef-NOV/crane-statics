@@ -223,7 +223,7 @@ RowLayout {
                     }
 
                     IntRow { label: qsTr("Falls"); fieldKey: "falls" }
-                    NumberRow { label: qsTr("Lower block mass (t)"); fieldKey: "lower_block_mass_t" }
+                    NumberRow { label: qsTr("Lower Block Mass (t)"); fieldKey: "lower_block_mass_t" }
                     NumberRow { label: qsTr("DAF"); fieldKey: "hook_daf" }
                 }
             }
@@ -291,7 +291,7 @@ RowLayout {
                     }
                     NumberRow {
                         visible: !!root.fields.splitable_block
-                        label: qsTr("Split lower block mass (t)")
+                        label: qsTr("Split Lower Block Mass (t)")
                         fieldKey: "split_lower_block_mass_t"
                     }
                 }

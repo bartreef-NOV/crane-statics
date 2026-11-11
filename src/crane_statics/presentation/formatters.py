@@ -352,7 +352,7 @@ class HoistFormatter:
                 editable=payload_only,
             ),
             Column(
-                "Lower block mass (t)",
+                "Lower Block Mass (t)",
                 payload_value(lambda h: h.lower_block_mass_t),
                 decimals=3,
                 field="lower_block_mass_t",
@@ -380,7 +380,7 @@ class HoistFormatter:
                 editable=split_only,
             ),
             Column(
-                "Split lower block mass (t)",
+                "Split Lower Block Mass (t)",
                 payload_value(lambda h: h.split_lower_block_mass_t),
                 decimals=3,
                 field="split_lower_block_mass_t",

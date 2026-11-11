@@ -246,8 +246,8 @@ RowLayout {
             GroupBox {
                 objectName: "conditionOffboardGroup"
                 Layout.fillWidth: true
-                visible: modelVm.condition.lift === "offboard"
-                title: qsTr("Offboard")
+                visible: true
+                title: modelVm.condition.lift === "offboard" ? qsTr("Offboard") : qsTr("Used for offboard lifts")
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -259,12 +259,12 @@ RowLayout {
                         nullable: true
                     }
                     ConditionRow {
-                        label: qsTr("Supply Deck Velocity v_in (m/s)")
+                        label: qsTr("Supply Deck Vertical Velocity v_in (m/s)")
                         fieldKey: "v_in_m_s"
                         nullable: true
                     }
                     ConditionRow {
-                        label: qsTr("Crane Tip Velocity v_t (m/s)")
+                        label: qsTr("Crane Tip Vertical Velocity v_t (m/s)")
                         fieldKey: "v_t_m_s"
                         nullable: true
                     }

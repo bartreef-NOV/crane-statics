@@ -66,7 +66,7 @@ Dialog {
         Label { text: qsTr("Falls:") }
         SpinBox { id: fallsSpin; Layout.preferredWidth: 200; from: 1; to: 99; value: 1 }
 
-        Label { text: qsTr("Lower block mass (t):") }
+        Label { text: qsTr("Lower Block Mass (t):") }
         NumberField { id: lowerBlockMassField; Layout.preferredWidth: 200 }
 
         Label { text: qsTr("Linear Mass (kg/m):") }
@@ -92,7 +92,7 @@ Dialog {
             value: 1
         }
 
-        Label { text: qsTr("Split lower block mass (t):"); visible: splitableCheck.checked }
+        Label { text: qsTr("Split Lower Block Mass (t):"); visible: splitableCheck.checked }
         NumberField { id: splitLowerBlockMassField; Layout.preferredWidth: 200; visible: splitableCheck.checked }
 
         Label { text: qsTr("DAF:") }

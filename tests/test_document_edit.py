@@ -166,7 +166,7 @@ class TestHoistEditing:
             )
 
     def test_split_hook_mass_must_not_exceed_normal(self):
-        with pytest.raises(DocumentEditError, match="Split hook mass"):
+        with pytest.raises(DocumentEditError, match="Split lower block mass"):
             build_payload_hoist(
                 "QA",
                 "n1",
@@ -354,10 +354,10 @@ class TestModelViewModelEditing:
         for payload_header in (
             "Support Node",
             "Falls",
-            "Lower block mass (t)",
+            "Lower Block Mass (t)",
             "Splittable",
             "Split Falls",
-            "Split lower block mass (t)",
+            "Split Lower Block Mass (t)",
             "DAF",
             "Offlead (deg)",
             "Sidelead (deg)",
@@ -492,14 +492,14 @@ class TestInlineCellEditing:
         assert self._cell(hoists, row, self._column(hoists, "Splittable"), b"editorKind") == "bool"
         assert self._cell(hoists, row, self._column(hoists, "Falls"), b"editorKind") == "int"
         assert (
-            self._cell(hoists, row, self._column(hoists, "Lower block mass (t)"), b"editorKind")
+            self._cell(hoists, row, self._column(hoists, "Lower Block Mass (t)"), b"editorKind")
             == "number"
         )
         # A check box is seeded with the value, a text field with what the cell shows.
         assert self._cell(hoists, row, self._column(hoists, "Splittable"), b"edit") is True
         hoist = hoists.record_at(row)
         assert self._cell(hoists, row, self._column(hoists, "Falls"), b"edit") == hoist.falls
-        assert self._cell(hoists, row, self._column(hoists, "Lower block mass (t)"), b"edit") == (
+        assert self._cell(hoists, row, self._column(hoists, "Lower Block Mass (t)"), b"edit") == (
             f"{hoist.lower_block_mass_t:.3f}"
         )
 
@@ -742,7 +742,7 @@ class TestConditionEdits:
         self._refused(doc, lambda e: e.add_condition(gale("a")))
         self._refused(doc, lambda e: e.update_condition("a", gale("b")))
 
-    @pytest.mark.parametrize("bad", ["", "1x", "a b"])
+    @pytest.mark.parametrize("bad", ["", "1x", "a b", "a\n"])
     def test_bad_name_refused(self, bad):
         doc = rules_doc("DNV", gale("a"), gale("b"))
         self._refused(doc, lambda e: e.add_condition(gale("ok").model_copy(update={"name": bad})))

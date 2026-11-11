@@ -88,6 +88,8 @@ decisions that should not be re-litigated are in [docs/adr/](docs/adr/).
 
 Authored input (YAML) is strict `crane-statics` schema version `12.0.0` (`src/crane_statics/schemas/crane-statics-v12.schema.json`).
 
+12.0.0 renames `hook_mass_t` / `split.hook_mass_t` to `lower_block_mass_t`; v11 files are rejected — rename the key by find-and-replace and set `version: 12.0.0`.
+
 Each hoist is self-contained: its `reeving` lists the rope path from the winch outwards, and an entry with `body` and coordinates defines a sheave or winch that belongs to that hoist (`boom` nodes use `u_m`/`w_m`, the others `x_m`/`z_m`). A hoist-local node `winch` in hoist `MH` becomes runtime node `mh_winch`. The last reeving entry is the support node the hook hangs from. Entries without coordinates pass through a node already defined (`boom_heel`, or a shared node under a body's `nodes`). Delete a hoist block to remove the hoist and its sheaves; copy one and rename its key to add a hoist.
 
 Defaults apply for gravity, air density and vessel motion. Body sections (`boom`, `rear_leg`, `front_leg`, `platform`) and their `mass_points`, `wind_areas` and `nodes` may be omitted when empty. The schema includes coordinate-frame examples and descriptions for schema-aware editors. See `examples/` for complete files.
@@ -128,6 +130,7 @@ model_definition:
 - The dynamic factor comes from the standard, not from a typed value. A `daf` other than 1.0 overrides it in every case of every condition, and the results flag the override.
 - Offboard lifts need `significant_wave_height_m`, `v_in_m_s` and `v_t_m_s`. For ABS, `v_in_m_s` and `v_t_m_s` are the standard's `v_d` and `v_c` in `v_r = v_h + sqrt(v_d^2 + v_c^2)`; for DNV they are `Vin` and `Vt` in `VR = 0.5*VL + sqrt(Vin^2 + Vt^2)`. The Hs-based default velocities are not used.
 - The hook stiffness is rope-only (boom hoist and active hoist as series EA/L), which is conservative. See [ADR-0004](docs/adr/0004-rules-profiles-keep-the-core-class-free.md) for the decision and its known limitations.
+- The Model > Conditions tab (rules documents only) lists, adds, duplicates, deletes and edits the conditions. The Offboard group stays visible for onboard conditions so the wave height and velocities can be entered before switching the lift to offboard.
 - The Load Chart workspace has a condition selector. Each condition has its own chart, and the Scene follows the selected condition and case.
 - The Calculation details panel lists, for the inspected chart point, each factor with its value, inputs, formula, clause, whether it was computed or overridden, and any warnings.
 - The chart CSV export of a rules chart adds the columns `condition`, `case`, `factor`, `unit`, `inputs`, `formula`, `clause`, `source`, `warnings` after `series,outreach_m,load_t`, one row per factor of each capacity point.
