@@ -95,7 +95,12 @@ def test_legacy_examples_unchanged(example):
 
 
 def test_rules_examples_carry_rules_and_offboard_inputs():
-    assert [p.stem for p in RULES_EXAMPLES] == ["crane_input_GT283_abs", "crane_input_GT283_dnv"]
+    assert [p.stem for p in RULES_EXAMPLES] == [
+        "crane_input_13778_retracted_dnv",
+        "crane_input_22689_abs",
+        "crane_input_GT283_abs",
+        "crane_input_GT283_dnv",
+    ]
     for example in RULES_EXAMPLES:
         doc = load_document(example)
         assert doc.rules is not None and doc.rules.standard == example.stem[-3:].upper()
@@ -224,6 +229,8 @@ def test_rules_examples_are_as_save_document_writes_them(example, tmp_path):
     save_document(load_document(example), target)
 
     def norm(data: bytes) -> bytes:
-        return data.replace(b"\r\n", b"\n")
+        """Line endings normalised, ``# illustrative`` comments dropped (a save keeps none)."""
+        lines = data.replace(b"\r\n", b"\n").split(b"\n")
+        return b"\n".join(ln for ln in lines if not ln.lstrip().startswith(b"#"))
 
     assert norm(target.read_bytes()) == norm(example.read_bytes())
