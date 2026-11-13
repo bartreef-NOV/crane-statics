@@ -17,7 +17,7 @@ import math
 from typing import TYPE_CHECKING, Optional
 
 from ..calculation.dynamic_factor import DynamicFactor
-from ..data.models import ConditionSpec, CraneDocument, Hoist
+from ..data.models import ConditionHoist, ConditionSpec, CraneDocument, Hoist
 from .factors import AbsOnboardFactor, LinearFactor, MaxFactor
 from .factors import RelativeVelocityFactor
 from .foundation import abs_pedestal_factor
@@ -38,8 +38,6 @@ MIN_SIDE_LOAD_FRACTION = 0.02
 RETAINING_LIVE_FACTOR = 3.75
 #: ABS 2-2/11.3: heavy-lift VAF in mild conditions, before vessel acceleration.
 HEAVY_LIFT_BASE_VAF = 1.1
-#: ``Hoist.hook_daf`` default; any other value is a manual override.
-_DEFAULT_DAF = 1.0
 
 _CL_ONBOARD = "ABS 2-2/9.3.1, p.53"
 _CL_OFFBOARD = "ABS 2-2/9.3.2, p.53"
@@ -181,17 +179,20 @@ class AbsProfile:
                 "(no hook mass and no load chart), so no representative dynamic factor is "
                 "stated; each point uses its own live load"
             )
-        if hoist.hook_daf != _DEFAULT_DAF:
-            # The daf replaces the factor value, not the load: the suspended rope stays in LL.
-            factor = LinearFactor(float(hoist.hook_daf), suspended_rope_mass_t)
+        settings = _hoist_settings(cond, hoist_id)
+        if settings.daf is not None:
+            # An authored daf is the manual override (omitted: derived from the standard).
+            # It replaces the factor value, not the load: the suspended rope stays in LL.
+            daf = float(settings.daf)
+            factor = LinearFactor(daf, suspended_rope_mass_t)
             records.append(
                 ProvenanceRecord(
                     "dynamic_factor",
-                    float(hoist.hook_daf),
+                    daf,
                     "-",
-                    f"{clause} (overridden by hoists.{hoist_id}.hook_daf)",
+                    f"{clause} (overridden by conditions.{cond.name}.hoists.{hoist_id}.daf)",
                     "VAF = manual daf",
-                    {"hook_daf": float(hoist.hook_daf)},
+                    {"daf": daf},
                     "override",
                 )
             )
@@ -313,6 +314,17 @@ def _crane_class(doc: CraneDocument) -> str:
     if rules.crane_class is None:
         raise RulesValidationError("rules.crane_class: required under standard ABS")
     return rules.crane_class
+
+
+def _hoist_settings(cond: ConditionSpec, hoist_id: str) -> ConditionHoist:
+    """``hoist_id``'s entry in ``cond``: its lead limits and optional manual daf."""
+    settings = cond.hoists.get(hoist_id)
+    if settings is None:
+        raise RulesValidationError(
+            f"conditions.{cond.name}.hoists.{hoist_id}: hoist {hoist_id!r} is not usable in "
+            f"condition {cond.name!r}"
+        )
+    return settings
 
 
 def _hoist(doc: CraneDocument, hoist_id: str) -> Hoist:

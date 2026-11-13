@@ -11,7 +11,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional
 
 from ..calculation.dynamic_factor import DynamicFactor, as_dynamic_factor
-from ..calculation.engine import CraneCalculator, get_calculator
+from ..calculation.engine import CraneCalculator
 from ..calculation.solver.kinematics import KinematicsAdapter, hoist_angle_bounds
 from .analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from .demand_extraction import extract_connection_component_response
@@ -44,7 +44,7 @@ _SCENE_LIFT_ENTRIES = 64
 
 
 class _SceneContext(NamedTuple):
-    """The Scene's solve context under its condition (rules documents)."""
+    """The Scene's solve context under its condition."""
 
     key: tuple[int, str, str]
     condition: LoadCondition
@@ -62,8 +62,8 @@ class KinematicsService:
         scene_document: Optional[Callable[[], Optional[CraneDocument]]] = None,
     ):
         self._session = session
-        # The document the Scene draws (``HoistStateService.scene_document``: on a rules
-        # document, its environment is the Scene's condition); the session's by default.
+        # The document the Scene draws (``HoistStateService.scene_document``: its
+        # environment is the Scene's condition); the session's by default.
         self._scene_document = scene_document
         self._angle_bounds: dict[str, tuple[float, float]] = {}
         self._kin: Optional[KinematicsAdapter] = None
@@ -149,17 +149,14 @@ class HoistStateService:
         return self._session.scene_condition()
 
     def scene_document(self) -> Optional[CraneDocument]:
-        """The document the Scene solves: legacy the session's, else its condition's."""
+        """The document the Scene solves: the session's under the Scene's condition."""
         doc = self._session.document
-        if doc is None or doc.rules is None:
-            return doc
+        if doc is None:
+            return None
         return self._scene_context(doc).document
 
     def scene_calculator(self, doc: CraneDocument) -> CraneCalculator:
-        """The Scene's calculator: legacy the shared ``get_calculator(doc)``; on a rules
-        document a private one of the Scene condition's document."""
-        if doc.rules is None:
-            return get_calculator(doc)
+        """The Scene's calculator: a private one of the Scene condition's document."""
         return self._scene_context(doc).calc
 
     def _scene_context(self, doc: CraneDocument) -> _SceneContext:
@@ -179,14 +176,15 @@ class HoistStateService:
     def dynamic_factor(self, hoist: Optional[Hoist]) -> DynamicFactor:
         """The factor the Scene converts payload and hook force with, for ``hoist``.
 
-        Legacy: the authored ``hook_daf`` (1.0 without a hoist). On a rules document, the
-        profile's factor under the Scene's case (``SessionModel.scene_condition``) at the
-        hoist's current boom angle, hook position (tackle length) and hook mode, as the
-        chart computes it there; it counts the rope hanging at that hook (``extra_mass_t``).
+        The lift setup's factor under the Scene's case (``SessionModel.scene_condition``),
+        1.0 without a hoist or document. Without rules that is the condition's constant
+        ``daf`` for the hoist; on a rules document the profile's factor at the hoist's
+        current boom angle, hook position (tackle length) and hook mode, as the chart
+        computes it there, counting the rope hanging at that hook (``extra_mass_t``).
         """
         doc = self._session.document
-        if hoist is None or doc is None or doc.rules is None:
-            return as_dynamic_factor(float(hoist.hook_daf) if hoist is not None else 1.0)
+        if hoist is None or doc is None:
+            return as_dynamic_factor(1.0)
         mode, angle, tackle_m = self._scene_hook_state(hoist)
         return (
             self._scene_lift(doc)
@@ -195,7 +193,7 @@ class HoistStateService:
         )
 
     def hook_lateral(self, hoist_id: str) -> Optional[HookLateral]:
-        """The live-load lateral the Scene's solves of ``hoist_id`` apply (legacy: None).
+        """The live-load lateral the Scene's solves of ``hoist_id`` apply (no rules: None).
 
         Its magnitude and floor come from the Scene condition's lift setup (the one
         ``dynamic_factor`` uses), its wind on the load at the Scene's wind speed. A single
@@ -203,10 +201,11 @@ class HoistStateService:
         horizontal inertia, ``-(a_x, a_y)`` of the resolved vessel motion with the tilt
         folded in (+x without any), and the wind on the load points the same way (both at
         full magnitude, as the envelope's worst direction has them); spec section 9.4.
+        A setup without rules has no lateral (``lift_factor.hook_lateral`` gives None).
         """
         doc = self._session.document
         hoist = self._session.payload_hoist_by_id(hoist_id)
-        if doc is None or hoist is None or doc.rules is None:
+        if doc is None or hoist is None:
             return None
         state = self._session.hoist_states.get(hoist.id)
         if state is None:
@@ -236,14 +235,14 @@ class HoistStateService:
         return hook_lateral(setup, float(sc.wind_speed_m_s), direction, support_z_m=support_z)
 
     def demand_scales(self, hoist_id: str) -> Optional[dict[str, DemandScale]]:
-        """The pedestal and retaining-component scales of the Scene's solves (legacy: None).
+        """The pedestal and retaining-component scales of the Scene's solves (no rules: None).
 
         From the Scene condition's lift setup (the one ``dynamic_factor`` uses), with LL
         counting the rope hanging at the Scene hook (``lift_factor.demand_scales``).
         """
         doc = self._session.document
         hoist = self._session.payload_hoist_by_id(hoist_id)
-        if doc is None or hoist is None or doc.rules is None:
+        if doc is None or hoist is None:
             return None
         mode, angle, tackle_m = self._scene_hook_state(hoist)
         lift = self._scene_lift(doc)
@@ -265,7 +264,7 @@ class HoistStateService:
         return mode, angle, tackle_m
 
     def suspended_rope_mass_t(self, hoist_id: str) -> float:
-        """The suspended rope the Scene factor of ``hoist_id`` amplifies, in t (legacy: 0).
+        """The suspended rope the Scene factor of ``hoist_id`` amplifies, in t (no rules: 0).
 
         The same mass ``dynamic_factor`` passes to the profile (``LiftFactors``), at the
         Scene's boom angle, tackle length and hook mode.
@@ -280,17 +279,19 @@ class HoistStateService:
     def hook_force_follows_scene_state(self) -> bool:
         """Whether a payload's hook force changes with the boom angle, hook position and mode.
 
-        True on a rules document: its factor is per boom angle and counts the suspended rope
-        hanging at the Scene hook. A legacy factor is the constant ``hook_daf``.
+        True under a rules case: its factor is per boom angle and counts the suspended rope
+        hanging at the Scene hook. Without rules the factor is the condition's constant
+        ``daf``.
         """
-        doc = self._session.document
-        return doc is not None and doc.rules is not None
+        if self._session.document is None:
+            return False
+        return self.scene_condition().is_rules_case
 
     def amplified_rope_hoist_id(self, hoist_id: str) -> Optional[str]:
         """The hoist whose hook rope the Scene's solves count in the hook force, if any.
 
-        On a rules document the Scene factor (``dynamic_factor``) carries the suspended
-        rope, so the solves leave it out of the dead load; legacy: None.
+        Under a rules case the Scene factor (``dynamic_factor``) carries the suspended
+        rope, so the solves leave it out of the dead load; without rules: None.
         """
         doc = self._session.document
         if doc is None:

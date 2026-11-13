@@ -33,6 +33,7 @@ from crane_statics.rules.validation import (
     heavy_lift_tip_reach_m,
     tip_vertical_accel_g,
 )
+from tests.rules_docs import load_v13
 
 ROOT = Path(__file__).parent.parent
 ABS_EXAMPLE = ROOT / "examples" / "crane_input_GT283_abs.yaml"
@@ -42,10 +43,11 @@ A_Z = 0.3
 
 
 def _heavy_doc(accel_z: float, pitch_alpha: float) -> CraneDocument:
-    doc = load_document(ABS_EXAMPLE)
+    doc = load_v13(ABS_EXAMPLE)
     assert doc.rules is not None
     motion = VesselMotion(accel_z_m_s2=accel_z, pitch_angular_accel_rad_s2=pitch_alpha)
-    cond = ConditionSpec(name="mild", wind_speed_m_s=10.0, vessel_motion=motion)
+    hoists = dict(next(iter(doc.conditions.values())).hoists)  # every payload hoist
+    cond = ConditionSpec(name="mild", wind_speed_m_s=10.0, vessel_motion=motion, hoists=hoists)
     return doc.model_copy(
         update={
             "rules": doc.rules.model_copy(update={"crane_class": "heavy_lift"}),
@@ -77,7 +79,16 @@ def _threshold_alpha(reach_m: float) -> float:
 def _rated_angles(doc: CraneDocument, hoist: Hoist) -> tuple[float, float]:
     kin = KinematicsAdapter(doc.model_dump())
     lo, hi = hoist_angle_bounds(kin, hoist.id, hoist.outreach_min_m, hoist.outreach_max_m)
-    for point in (*hoist.contractual_points, *hoist.split_contractual_points):
+    points = [
+        p
+        for cond in doc.conditions.values()
+        if hoist.id in cond.hoists
+        for p in (
+            *cond.hoists[hoist.id].contractual_points,
+            *cond.hoists[hoist.id].split_contractual_points,
+        )
+    ]
+    for point in points:
         angle = kin.outreach_to_angle(point.outreach_m, hoist.id)
         if angle is not None:
             lo, hi = min(lo, angle), max(hi, angle)

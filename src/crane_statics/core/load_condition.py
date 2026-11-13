@@ -1,11 +1,11 @@
 """The environmental inputs one analysis runs under.
 
-A legacy document carries a single set of them (its ``environment``), so every analysis
-runs under that one condition. A rules document names its conditions instead
-(``doc.conditions``) and each one yields the in-service cases its standard defines
-(``rules.profile_for(doc.rules).cases``). Analyses read their wind speed and vessel-motion
-limits through ``LoadCondition`` rather than from the document: on a rules document the
-document environment's wind speed and vessel motion are runtime placeholders.
+Every document names its conditions (``doc.conditions``). Without rules each condition is
+one analysis case, at its own wind speed and vessel motion; with rules each yields the
+in-service cases its standard defines (``rules.profile_for(doc.rules).cases``). Analyses
+read their wind speed, vessel-motion limits and per-hoist settings through
+``LoadCondition`` rather than from the document: the document environment's wind speed
+and vessel motion are runtime placeholders.
 """
 
 from __future__ import annotations
@@ -13,52 +13,76 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from ..data.models import ConditionSpec, CraneDocument, VesselMotion
+from ..data.models import ConditionHoist, ConditionSpec, CraneDocument, VesselMotion
 from ..rules import profile_for
 from ..rules.types import CaseSpec
 
+#: The condition name the v13 migration gives a document without rules.
 DEFAULT_CONDITION_NAME = "default"
+
+_NO_CONDITION = "document has no load condition"
 
 
 @dataclass(frozen=True)
 class LoadCondition:
     """Wind speed and vessel-motion limits (± values) of one analysis case.
 
-    A legacy document has one, ``spec`` and ``case`` None. On a rules document there is one
-    per (condition, profile case), named ``"<condition>/<case>"``; ``spec`` is the
-    condition and ``case`` the profile case its wind and vessel motion come from.
+    ``spec`` is the condition the case belongs to. Without rules there is one case per
+    condition, named after it, ``case`` None. On a rules document there is one per
+    (condition, profile case), named ``"<condition>/<case>"``; ``case`` is the profile
+    case its wind and vessel motion come from.
     """
 
     name: str
     wind_speed_m_s: float
     vessel_motion: VesselMotion
-    spec: Optional[ConditionSpec] = None
+    spec: ConditionSpec
     case: Optional[CaseSpec] = None
 
     @property
     def condition_name(self) -> str:
-        """The name of the condition this case belongs to (its own name if legacy)."""
-        return self.spec.name if self.spec is not None else self.name
+        """The name of the condition this case belongs to."""
+        return self.spec.name
 
+    @property
+    def is_rules_case(self) -> bool:
+        """Whether a rules profile derived this case (its factor comes from the standard)."""
+        return self.case is not None
 
-def default_load_condition(doc: CraneDocument) -> LoadCondition:
-    """The condition of the document's environment: what a legacy analysis uses."""
-    return LoadCondition(
-        name=DEFAULT_CONDITION_NAME,
-        wind_speed_m_s=float(doc.environment.max_wind_speed_m_s),
-        vessel_motion=doc.environment.vessel_motion,
-    )
+    def usable_hoist_ids(self) -> tuple[str, ...]:
+        """The payload hoists usable under this case's condition, in the condition's order."""
+        return tuple(self.spec.hoists)
+
+    def hoist_settings(self, hoist_id: str) -> ConditionHoist:
+        """``hoist_id``'s lead limits, DAF and chart under this case's condition.
+
+        Raises ``KeyError`` naming the condition and the hoist when the condition does not
+        list the hoist.
+        """
+        settings = self.spec.hoists.get(hoist_id)
+        if settings is None:
+            raise KeyError(
+                f"conditions.{self.condition_name}.hoists.{hoist_id}: hoist {hoist_id!r} is "
+                f"not usable in condition {self.condition_name!r}"
+            )
+        return settings
 
 
 def condition_names(doc: CraneDocument) -> tuple[str, ...]:
-    """The document's condition names, in document order (legacy: the default one)."""
-    if doc.rules is None:
-        return (DEFAULT_CONDITION_NAME,)
+    """The document's condition names, in document order."""
     return tuple(doc.conditions)
 
 
 def _cases_of(doc: CraneDocument, spec: ConditionSpec) -> tuple[LoadCondition, ...]:
-    assert doc.rules is not None
+    if doc.rules is None:
+        return (
+            LoadCondition(
+                name=spec.name,
+                wind_speed_m_s=float(spec.wind_speed_m_s),
+                vessel_motion=spec.vessel_motion,
+                spec=spec,
+            ),
+        )
     return tuple(
         LoadCondition(
             name=f"{spec.name}/{case.name}",
@@ -72,9 +96,10 @@ def _cases_of(doc: CraneDocument, spec: ConditionSpec) -> tuple[LoadCondition, .
 
 
 def load_conditions(doc: CraneDocument) -> tuple[LoadCondition, ...]:
-    """Every analysis case of the document: one per (condition, profile case) with rules."""
-    if doc.rules is None:
-        return (default_load_condition(doc),)
+    """Every analysis case of the document: one per condition, per profile case with rules.
+
+    Empty for a document without conditions.
+    """
     return tuple(case for spec in doc.conditions.values() for case in _cases_of(doc, spec))
 
 
@@ -82,16 +107,12 @@ def condition_cases(doc: CraneDocument, condition_name: Optional[str]) -> tuple[
     """The cases of the condition ``condition_name`` (None: the document's first one).
 
     A chart for one condition is the minimum over these. Raises ``KeyError`` naming an
-    unknown condition.
+    unknown condition, or when the document has no condition at all.
     """
-    if doc.rules is None:
-        if condition_name not in (None, DEFAULT_CONDITION_NAME):
-            raise KeyError(f"unknown load condition {condition_name!r}")
-        return (default_load_condition(doc),)
     if condition_name is None:
         spec = next(iter(doc.conditions.values()), None)
         if spec is None:
-            raise KeyError("the rules document has no load condition")
+            raise KeyError(_NO_CONDITION)
     else:
         spec = doc.conditions.get(condition_name)
         if spec is None:
@@ -104,14 +125,12 @@ def scene_case(
 ) -> LoadCondition:
     """The analysis case the Scene runs under: ``case_name`` of ``condition_name``.
 
-    Legacy: the default condition (both names ignored). On a rules document None names the
-    first condition; a ``case_name`` of None takes the profile's most severe case, its
-    last one (profiles list their cases mildest first: ABS has one, DNV Case I then Case
-    II, which adds the wind and 1.5 times the heel/trim). Raises ``KeyError`` naming an
-    unknown condition or case.
+    None names the first condition; a ``case_name`` of None takes the condition's most
+    severe case, its last one (a condition without rules has one; profiles list their cases
+    mildest first: ABS has one, DNV Case I then Case II, which adds the wind and 1.5 times
+    the heel/trim). Raises ``KeyError`` naming an unknown condition or case, or when the
+    document has no condition.
     """
-    if doc.rules is None:
-        return default_load_condition(doc)
     cases = condition_cases(doc, condition_name)
     if case_name is None:
         return cases[-1]
@@ -125,13 +144,10 @@ def condition_document(doc: CraneDocument, condition: LoadCondition) -> CraneDoc
     """``doc`` with the environment ``condition`` runs under, for the calculator.
 
     The calculation reads the wind speed, the vessel-motion defaults and the pitch/roll
-    reference point from the document environment; on a rules document those are
-    placeholders, so a calculator for one case is built from this document instead. A
-    legacy condition returns ``doc`` itself (the analysis is unchanged). The copy is not
+    reference point from the document environment; those are placeholders, so a
+    calculator for one case is built from this document instead. The copy is not
     re-validated: a case may have zero wind, which the environment validator rejects.
     """
-    if condition.spec is None:
-        return doc
     environment = doc.environment.model_copy(
         update={
             "max_wind_speed_m_s": float(condition.wind_speed_m_s),

@@ -7,7 +7,12 @@ from typing import Literal
 
 import pytest
 
-from crane_statics.core import governing_case, lift_factor, limit_auto_set, load_document, sweep
+import yaml
+
+from crane_statics.core import governing_case, lift_factor, limit_auto_set, sweep
+from crane_statics.core.io import _StrictIntSafeLoader
+from crane_statics.data import normalize_document
+from crane_statics.data.migrate_v13 import migrate_document
 from crane_statics.data.models import ConditionSpec, CraneDocument, RulesSpec, VesselMotion
 
 GT283 = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
@@ -16,13 +21,27 @@ MOTION = VesselMotion(
 )
 
 
+def load_v13(path: Path) -> CraneDocument:
+    """The v12 example at ``path``, migrated to v13 and normalized."""
+    with open(path, "r", encoding="utf-8-sig") as f:
+        data = yaml.load(f, Loader=_StrictIntSafeLoader)
+    return normalize_document(migrate_document(data))
+
+
 def gale(name: str = "gale", wind: float = 30.0, motion: VesselMotion = MOTION) -> ConditionSpec:
     return ConditionSpec(name=name, wind_speed_m_s=wind, vessel_motion=motion)
 
 
 def rules_doc(standard: Literal["ABS", "DNV"], *conditions: ConditionSpec) -> CraneDocument:
-    """GT283 under ``standard`` with ``conditions``; the environment holds runtime dummies."""
-    doc = load_document(GT283)
+    """GT283 under ``standard`` with ``conditions``; the environment holds runtime dummies.
+
+    A condition listing no hoists gets GT283's own hoist settings (its migrated ``default``
+    condition: lead limits, the authored DAFs, which are manual overrides under rules, and
+    the contractual points).
+    """
+    doc = load_v13(GT283)
+    hoists = doc.conditions["default"].hoists
+    listed = [c if c.hoists else c.model_copy(update={"hoists": dict(hoists)}) for c in conditions]
     # The dummies a rules document carries at runtime: no analysis may read them.
     env = doc.environment.model_copy(
         update={"max_wind_speed_m_s": 20.0, "vessel_motion": VesselMotion()}
@@ -32,7 +51,7 @@ def rules_doc(standard: Literal["ABS", "DNV"], *conditions: ConditionSpec) -> Cr
             "rules": RulesSpec(
                 standard=standard, crane_class="offshore" if standard == "ABS" else None
             ),
-            "conditions": {c.name: c for c in conditions},
+            "conditions": {c.name: c for c in listed},
             "environment": env,
         }
     )
@@ -53,9 +72,19 @@ def without_suspended_rope(doc: CraneDocument) -> CraneDocument:
 
 
 def legacy_equivalent(doc: CraneDocument, wind: float, motion: VesselMotion) -> CraneDocument:
-    """``doc`` without rules, its environment at ``wind`` and ``motion``."""
+    """``doc`` without rules, one condition at ``wind`` and ``motion``.
+
+    The condition takes the hoist settings of ``doc``'s first condition (an authored DAF is
+    the constant factor, 1.0 without one); the environment carries the same values.
+    """
+    first = next(iter(doc.conditions.values()))
+    condition = ConditionSpec(
+        name="default", wind_speed_m_s=wind, vessel_motion=motion, hoists=dict(first.hoists)
+    )
     env = doc.environment.model_copy(update={"max_wind_speed_m_s": wind, "vessel_motion": motion})
-    return doc.model_copy(update={"rules": None, "conditions": {}, "environment": env})
+    return doc.model_copy(
+        update={"rules": None, "conditions": {"default": condition}, "environment": env}
+    )
 
 
 def without_live_lateral(monkeypatch: pytest.MonkeyPatch) -> None:

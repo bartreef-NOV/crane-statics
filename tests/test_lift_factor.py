@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import Literal, Optional
 
 import pytest
 
@@ -10,23 +11,29 @@ from crane_statics.calculation.dynamic_factor import ConstantDynamicFactor
 from crane_statics.calculation.engine import get_calculator
 from crane_statics.calculation.rope_mass import hook_support_node_id
 from crane_statics.calculation.solver.kinematics import KinematicsAdapter
-from crane_statics.core import load_document
-from crane_statics.core.analysis_cases import analysis_mode_by_name
+from crane_statics.core.analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from crane_statics.core.analysis_services import HoistStateService
 from crane_statics.core.governing_case import governing_case
-from crane_statics.core.lift_factor import LiftFactors, factor_for_point
+from crane_statics.core.lift_factor import (
+    LiftFactors,
+    amplified_rope_hoist_id,
+    factor_for_point,
+    needs_stiffness,
+)
 from crane_statics.core.limit_auto_set import _evaluate_contractual_points
 from crane_statics.core.load_condition import condition_cases
 from crane_statics.core.session_model import SessionModel
 from crane_statics.core.sweep import run_mode_sweep
 from crane_statics.data.models import ConditionSpec, CraneDocument, VesselMotion
 from crane_statics.rules import RulesValidationError, validate_rules_document
+from crane_statics.rules.factors import AbsOnboardFactor, LinearFactor
 from crane_statics.rules.stiffness import payload_hoist_stiffness_terms
 from tests import rules_reference as ref
 from tests.rules_docs import (
     without_live_lateral,
     GT283,
     legacy_equivalent,
+    load_v13,
     rules_doc,
     without_suspended_rope,
 )
@@ -56,22 +63,25 @@ def _sea(**kw) -> ConditionSpec:
     )
 
 
-def _rules(doc: CraneDocument, daf: float) -> CraneDocument:
+def _with_daf(doc: CraneDocument, daf: Optional[float]) -> CraneDocument:
+    """``doc`` with ``daf`` as the MH entry's authored DAF in every condition."""
+    conditions = {}
+    for name, cond in doc.conditions.items():
+        hoists = dict(cond.hoists)
+        hoists[HOIST] = hoists[HOIST].model_copy(update={"daf": daf})
+        conditions[name] = cond.model_copy(update={"hoists": hoists})
+    return doc.model_copy(update={"conditions": conditions})
+
+
+def _rules(doc: CraneDocument, daf: Optional[float]) -> CraneDocument:
     ropes = [r.model_copy(update={"ea_kN": EA_KN.get(r.id, r.ea_kN)}) for r in doc.ropes]
-    hoists = [
-        (
-            h.model_copy(update={"hook_daf": daf, "max_hoisting_speed_m_s": V_H})
-            if h.id == HOIST
-            else h.model_copy(update={"max_hoisting_speed_m_s": V_H})
-        )
-        for h in doc.hoists
-    ]
-    out = doc.model_copy(update={"ropes": ropes, "hoists": hoists})
+    hoists = [h.model_copy(update={"max_hoisting_speed_m_s": V_H}) for h in doc.hoists]
+    out = _with_daf(doc.model_copy(update={"ropes": ropes, "hoists": hoists}), daf)
     validate_rules_document(out)
     return out
 
 
-def _abs_doc(daf: float = 1.0, **cond) -> CraneDocument:
+def _abs_doc(daf: Optional[float] = None, **cond) -> CraneDocument:
     return _rules(rules_doc("ABS", _sea(**cond)), daf)
 
 
@@ -119,25 +129,82 @@ def _support_z(doc: CraneDocument, angle: float) -> float:
     return float(positions[hook_support_node_id(doc_dict, HOIST)]["z"])
 
 
-# --- legacy ------------------------------------------------------------------------------
-
-
-def test_legacy_document_gets_the_constant_authored_factor() -> None:
-    doc = load_document(GT283)
+def _plain_mode(doc: CraneDocument) -> HoistAnalysisMode:
+    """MH's normal mode without contractual points (no ``analysis_cases`` lookup)."""
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    angle = _angle(doc)
-    setup = _setup(doc, angle)
-    assert setup.factor == ConstantDynamicFactor(hoist.hook_daf)
+    return HoistAnalysisMode("normal", float(hoist.lower_block_mass_t), {}, [])
+
+
+SCENE_ANGLE = 60.0
+
+
+# --- without rules -----------------------------------------------------------------------
+
+
+def _rules_less(daf: Optional[float]):
+    doc = _with_daf(load_v13(GT283), daf)
+    assert doc.rules is None
+    condition = condition_cases(doc, None)[0]
+    lift = LiftFactors(doc, None)
+    return doc, condition, lift, lift.setup(condition, HOIST, _plain_mode(doc), SCENE_ANGLE)
+
+
+def test_rules_less_daf_defaults_one() -> None:
+    doc, condition, lift, setup = _rules_less(None)
+    assert setup.factor == ConstantDynamicFactor(1.0)
     assert setup.records == () and setup.warnings == ()
     assert setup.retaining_live_factor == 1.0
     assert setup.foundation.live_factor(1234.0) == 1.0 and setup.foundation.dead_factor == 1.0
     assert setup.lateral.min_fraction == 0.0 and setup.lateral.wind_area_m2 == 0.0
+    # All rope stays dead load and nothing is factored, as before conditions were required.
+    assert amplified_rope_hoist_id(condition, HOIST) is None
+    assert not needs_stiffness(condition)
+    mode = _plain_mode(doc)
+    assert lift.demand_scales(condition, HOIST, mode, SCENE_ANGLE, setup) is None
 
 
-def test_legacy_governing_case_names_no_condition() -> None:
-    case = governing_case(load_document(GT283), HOIST, "normal", LIMITS, OUTREACH, None)
-    assert case is not None
-    assert case.condition_name is None and case.case_name is None
+def test_rules_less_daf_authored_constant() -> None:
+    doc, condition, _lift, setup = _rules_less(1.1)
+    assert setup.factor == ConstantDynamicFactor(1.1)
+    uncached = factor_for_point(doc, condition, HOIST, _plain_mode(doc), None, SCENE_ANGLE)
+    assert uncached.factor == ConstantDynamicFactor(1.1)
+
+
+def test_setup_of_a_hoist_the_condition_does_not_list_names_both() -> None:
+    doc, condition, lift, _unused = _rules_less(None)
+    with pytest.raises(KeyError, match=r"(?s)default.*BH|BH.*default"):
+        lift.setup(condition, "BH", _plain_mode(doc), SCENE_ANGLE)
+
+
+# --- the manual daf of a rules condition -------------------------------------------------
+
+
+@pytest.mark.parametrize("standard", ["ABS", "DNV"])
+def test_rules_daf_override_only_when_given(standard: Literal["ABS", "DNV"]) -> None:
+    deck = ConditionSpec(name="deck", lift="onboard", wind_speed_m_s=0.0, vessel_motion=MOTION)
+
+    def setup(daf: Optional[float]):
+        doc = _with_daf(rules_doc(standard, deck), daf)
+        lift = LiftFactors(doc, None)
+        condition = condition_cases(doc, None)[0]
+        mode = _plain_mode(doc)
+        rope_t = lift.suspended_rope_mass_t(HOIST, mode, SCENE_ANGLE)
+        return rope_t, lift.setup(condition, HOIST, mode, SCENE_ANGLE)
+
+    _rope_t, derived = setup(None)
+    assert all(r.source == "computed" for r in derived.records)
+    if standard == "ABS":
+        assert isinstance(derived.factor, AbsOnboardFactor)
+    (computed,) = [r for r in derived.records if r.quantity == "dynamic_factor"]
+
+    rope_t, manual = setup(1.2)
+    assert manual.factor == LinearFactor(1.2, rope_t)
+    assert manual.factor != derived.factor
+    dyn = {r.source: r for r in manual.records if r.quantity == "dynamic_factor"}
+    assert set(dyn) == {"computed", "override"}
+    assert dyn["computed"] == computed  # the derived value stays on record
+    assert dyn["override"].value == 1.2
+    assert "conditions.deck.hoists.MH.daf" in dyn["override"].clause
 
 
 # --- ABS offboard against the oracle -----------------------------------------------------
@@ -229,7 +296,7 @@ def test_hook_height_override_lowers_the_stiffness_and_the_factor() -> None:
 
 
 def test_hook_height_override_at_the_lowest_hook_height_is_the_design_position() -> None:
-    lowest = next(h for h in load_document(GT283).hoists if h.id == HOIST).lowest_hook_height_m
+    lowest = next(h for h in load_v13(GT283).hoists if h.id == HOIST).lowest_hook_height_m
     assert lowest is not None
     doc = _abs_doc(hook_height_override_m=lowest)
     angle = _angle(doc)
@@ -242,7 +309,7 @@ def test_hook_height_override_at_the_lowest_hook_height_is_the_design_position()
 
 def test_dnv_case_ii_lift_setup_lateral_spec_has_its_own_incline() -> None:
     # The LiftSetup lateral spec only; the solver does not use it yet (Task 11).
-    doc = _rules(rules_doc("DNV", _sea()), 1.0)
+    doc = _rules(rules_doc("DNV", _sea()), None)
     angle = _angle(doc)
     case_i, case_ii = _setup(doc, angle, 0), _setup(doc, angle, 1)
     assert case_ii.lateral.incline_deg == pytest.approx(1.5 * case_i.lateral.incline_deg)
@@ -265,6 +332,7 @@ def test_governing_case_hook_load_is_the_chart_value_through_the_factor() -> Non
 def test_auto_set_hook_force_uses_the_factor_at_each_contractual_point() -> None:
     doc = _abs_doc()
     hoist = next(h for h in doc.hoists if h.id == HOIST)
+    points = doc.conditions["sea"].hoists[HOIST].contractual_points
     results = _evaluate_contractual_points(
         [hoist],
         doc,
@@ -273,9 +341,9 @@ def test_auto_set_hook_force_uses_the_factor_at_each_contractual_point() -> None
         G,
         lambda _pt, hook_kN, _case: hook_kN,
     )
-    assert len(results) == len(hoist.contractual_points)
+    assert len(results) == len(points)
     for result in results:
-        cp = hoist.contractual_points[result.cp_index]
+        cp = points[result.cp_index]
         factor = _setup(doc, result.angle_deg).factor
         assert result.best_demand == pytest.approx(factor.hook_force_kN(cp.load_t, HOOK_T, G))
         assert result.best_demand > ConstantDynamicFactor(1.1).hook_force_kN(cp.load_t, HOOK_T, G)
@@ -316,8 +384,8 @@ def _dnv_onboard_doc() -> CraneDocument:
 
 def test_scene_factor_follows_in_place_document_edits() -> None:
     doc = _dnv_onboard_doc()
-    hoist = next(h for h in doc.hoists if h.id == HOIST)
-    hoist.hook_daf = 1.0  # computed, not the GT283 manual 1.1
+    settings = doc.conditions["deck"].hoists[HOIST]
+    settings.daf = None  # computed, not the GT283 manual 1.1
     session = SessionModel()
     session.set_document(doc)
     session.select_payload_hoist(HOIST)
@@ -328,20 +396,23 @@ def test_scene_factor_follows_in_place_document_edits() -> None:
 
     # Rated 1000 t: W = 1050 t * g > 5000 kN, so the DNV psi floor is 1.1.
     assert factor() == pytest.approx(ref.dnv_psi_floor((1000.0 + HOOK_T) * G))
-    for cp in hoist.contractual_points:
+    for cp in settings.contractual_points:
         cp.load_t = 100.0  # edited in place, as the chart's contractual-point editor does
     assert factor() == pytest.approx(ref.dnv_psi_floor((100.0 + HOOK_T) * G)) == 1.3
-    hoist.hook_daf = 1.45  # in place: a manual daf now overrides
+    settings.daf = 1.45  # in place: a manual daf now overrides
     assert factor() == pytest.approx(1.45)
 
 
 def _no_ea_offboard_doc() -> CraneDocument:
     doc = rules_doc("ABS", _sea())  # not validated: no rope EA
-    hoists = [
-        h.model_copy(update={"max_hoisting_speed_m_s": V_H, "contractual_points": []})
-        for h in doc.hoists
-    ]
-    return doc.model_copy(update={"hoists": hoists})
+    hoists = [h.model_copy(update={"max_hoisting_speed_m_s": V_H}) for h in doc.hoists]
+    return doc.model_copy(update={"hoists": hoists, "conditions": {"sea": _no_points(doc, "sea")}})
+
+
+def _no_points(doc: CraneDocument, name: str) -> ConditionSpec:
+    cond = doc.conditions[name]
+    entries = {k: v.model_copy(update={"contractual_points": []}) for k, v in cond.hoists.items()}
+    return cond.model_copy(update={"hoists": entries})
 
 
 def test_sweep_raises_on_an_inconsistent_rules_document_instead_of_dropping_points() -> None:
@@ -352,7 +423,7 @@ def test_sweep_raises_on_an_inconsistent_rules_document_instead_of_dropping_poin
 
 def test_mode_without_contractual_points_warns_of_the_rated_load_fallback() -> None:
     doc = _no_ea_offboard_doc()
-    doc = doc.model_copy(update={"conditions": {"deck": _dnv_onboard_doc().conditions["deck"]}})
+    doc = doc.model_copy(update={"conditions": {"deck": _no_points(_dnv_onboard_doc(), "deck")}})
     setup = _setup(doc, _angle(doc))
     assert any("no contractual points" in w for w in setup.warnings)
     assert not any("no contractual points" in w for w in _setup(_abs_doc(), _angle(doc)).warnings)
@@ -360,22 +431,14 @@ def test_mode_without_contractual_points_warns_of_the_rated_load_fallback() -> N
 
 def test_split_mode_warns_that_the_stiffness_ignores_the_split_block() -> None:
     doc = _abs_doc()
-    hoists = [
-        (
-            h.model_copy(
-                update={
-                    "splitable_block": True,
-                    "split_falls": 10,
-                    "split_lower_block_mass_t": 30.0,
-                    "split_contractual_points": h.contractual_points,
-                }
-            )
-            if h.id == HOIST
-            else h
-        )
-        for h in doc.hoists
-    ]
-    doc = doc.model_copy(update={"hoists": hoists})
+    split_block = {"splitable_block": True, "split_falls": 10, "split_lower_block_mass_t": 30.0}
+    hoists = [h.model_copy(update=split_block) if h.id == HOIST else h for h in doc.hoists]
+    sea = doc.conditions["sea"]
+    entries = dict(sea.hoists)
+    mh = entries[HOIST]
+    entries[HOIST] = mh.model_copy(update={"split_contractual_points": mh.contractual_points})
+    sea = sea.model_copy(update={"hoists": entries})
+    doc = doc.model_copy(update={"hoists": hoists, "conditions": {"sea": sea}})
     angle = _angle(doc)
     split = analysis_mode_by_name(next(h for h in doc.hoists if h.id == HOIST), "split")
     assert split.name == "split"

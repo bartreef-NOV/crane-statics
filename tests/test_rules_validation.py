@@ -7,13 +7,23 @@ import pytest
 from crane_statics.core.io import DocumentIOError, load_document
 from crane_statics.data.models import ConditionSpec, RulesSpec, VesselMotion, payload_hoist_ids
 from crane_statics.rules import RulesValidationError, validate_rules_document
+from tests.rules_docs import load_v13
 
 G = 9.81
 GT283 = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
 
 
 def _base():
-    return load_document(GT283)
+    return load_v13(GT283)
+
+
+def _listing(doc, conditions):
+    """``conditions`` each listing the hoists of ``doc``'s first condition if it lists none."""
+    hoists = next(iter(doc.conditions.values())).hoists
+    return {
+        n: c if c.hoists else c.model_copy(update={"hoists": dict(hoists)})
+        for n, c in conditions.items()
+    }
 
 
 def _doc(standard="ABS", crane_class="offshore", conditions=None, ea=False, speed=False):
@@ -25,7 +35,9 @@ def _doc(standard="ABS", crane_class="offshore", conditions=None, ea=False, spee
     return doc.model_copy(
         update={
             "rules": RulesSpec(standard=standard, crane_class=crane_class),
-            "conditions": conditions or {"c": ConditionSpec(name="c", wind_speed_m_s=10.0)},
+            "conditions": _listing(
+                doc, conditions or {"c": ConditionSpec(name="c", wind_speed_m_s=10.0)}
+            ),
             "ropes": ropes,
             "hoists": hoists,
         }
@@ -135,10 +147,15 @@ def test_hook_height_override_bounds():
     lowest = hoist.lowest_hook_height_m
     top = lowest + hoist.max_hook_travel_m
     inside = {"c": ConditionSpec(name="c", wind_speed_m_s=1.0, hook_height_override_m=lowest)}
-    validate_rules_document(doc.model_copy(update={"conditions": inside}))
+    validate_rules_document(doc.model_copy(update={"conditions": _listing(doc, inside)}))
     for bad in (lowest - 1.0, top + 1.0):
         conds = {"c": ConditionSpec(name="c", wind_speed_m_s=1.0, hook_height_override_m=bad)}
-        _fails(doc.model_copy(update={"conditions": conds}), "hook_height_override_m")
+        _fails(
+            doc.model_copy(update={"conditions": _listing(doc, conds)}), "hook_height_override_m"
+        )
+    # A condition that does not list a hoist does not bound its override by that hoist.
+    unlisted = ConditionSpec(name="c", wind_speed_m_s=1.0, hook_height_override_m=lowest - 1.0)
+    validate_rules_document(doc.model_copy(update={"conditions": {"c": unlisted}}))
 
 
 def test_load_document_runs_validation(tmp_path):

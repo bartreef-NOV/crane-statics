@@ -34,7 +34,7 @@ from crane_statics.core.lift_factor import LiftFactors
 from crane_statics.core.limit_auto_set import compute_required_rope_capacity_kN
 from crane_statics.core.load_condition import condition_cases, condition_document
 from crane_statics.core.sweep import run_mode_sweep
-from crane_statics.data.models import ConditionSpec, VesselMotion
+from crane_statics.data.models import ConditionHoist, ConditionSpec, VesselMotion
 from crane_statics.rules import validate_rules_document
 from crane_statics.rules.abs_profile import AbsProfile
 from tests import rules_reference as ref
@@ -341,7 +341,7 @@ def test_rules_hook_lateral_from_the_lift_setup() -> None:
     force = setup.lateral.wind_force_per_speed_sq * 100.0
     assert lateral.constant_x_kN == pytest.approx(force) and lateral.constant_y_kN == 0.0
     assert lateral.constant_magnitude() == pytest.approx(force)
-    legacy = lift_factor.legacy_lift_setup(hoist)
+    legacy = lift_factor.rules_less_lift_setup(ConditionHoist(offlead_deg=0.0))
     assert lift_factor.hook_lateral(legacy, 10.0, support_z_m=support_z) is None
 
 

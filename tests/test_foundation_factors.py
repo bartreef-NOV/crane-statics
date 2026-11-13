@@ -183,11 +183,12 @@ def test_retaining_limits_only_on_an_abs_document() -> None:
 
 
 def test_core_scales_follow_the_lift_setup() -> None:
-    from crane_statics.core.lift_factor import legacy_lift_setup
+    from crane_statics.core.lift_factor import rules_less_lift_setup
 
     doc = rules_doc("ABS", gale())
     hoist = next(h for h in doc.hoists if h.id == "MH")
-    assert demand_scales(legacy_lift_setup(hoist), lambda h: h) is None
+    settings = doc.conditions["gale"].hoists["MH"]
+    assert demand_scales(rules_less_lift_setup(settings), lambda h: h) is None
 
     from crane_statics.core.lift_factor import LiftFactors
     from crane_statics.core.load_condition import condition_cases
