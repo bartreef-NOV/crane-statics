@@ -46,6 +46,14 @@ def _tag_chart(chart: list[dict[str, Any]], names: list[str]) -> list[dict[str, 
 
 def migrate_document(doc: dict[str, Any]) -> dict[str, Any]:
     """Return a v13 copy of the v12 authored document ``doc`` (the input is not mutated)."""
+    schema = doc.get("schema") if isinstance(doc, dict) else None
+    if not isinstance(schema, dict) or "version" not in schema:
+        raise ValueError("Document has no schema.version; expected a v12 authored document")
+    version = str(schema["version"])
+    if not version.startswith("12."):
+        raise ValueError(f"Cannot migrate schema version {version!r}; expected 12.x")
+    if not isinstance(doc.get("model_definition"), dict):
+        raise ValueError("Document has no model_definition mapping")
     out = deepcopy(doc)
     md: dict[str, Any] = out["model_definition"]
     hoists: dict[str, Any] = md.get("hoists", {})
@@ -100,13 +108,16 @@ def migrate_file(path: str | Path) -> None:
     path = Path(path)
     with open(path, "r", encoding="utf-8-sig") as f:
         data = yaml.load(f, Loader=_StrictIntSafeLoader)
-    migrated = migrate_document(data)
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(
-            migrated,
-            f,
-            Dumper=_CompactSafeDumper,
-            sort_keys=False,
-            allow_unicode=True,
-            width=100,
-        )
+    try:
+        migrated = migrate_document(data)
+    except ValueError as e:
+        raise ValueError(f"{path}: {e}") from e
+    # Serialize fully before touching the file so a failure never leaves it half written.
+    text = yaml.dump(
+        migrated,
+        Dumper=_CompactSafeDumper,
+        sort_keys=False,
+        allow_unicode=True,
+        width=100,
+    )
+    path.write_text(text, encoding="utf-8")

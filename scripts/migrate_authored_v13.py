@@ -11,9 +11,17 @@ from crane_statics.data.migrate_v13 import migrate_file
 
 
 def main(paths: list[str]) -> None:
+    failed = False
     for path in paths:
-        migrate_file(path)
-        print(f"migrated {path}")
+        try:
+            migrate_file(path)
+        except Exception as e:  # report and continue with the remaining files
+            print(f"error: {path}: {e}", file=sys.stderr)
+            failed = True
+        else:
+            print(f"migrated {path}")
+    if failed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

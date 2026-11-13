@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from crane_statics.data.migrate_v13 import migrate_document
+from crane_statics.data.migrate_v13 import migrate_document, migrate_file
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 MOTION = {"accel_x_m_s2": 0.3, "roll_deg": 2.0}
@@ -149,6 +149,7 @@ def test_input_not_mutated():
 @pytest.mark.parametrize("path", sorted(EXAMPLES.glob("*.yaml")), ids=lambda p: p.name)
 def test_examples_migrate_cleanly(path: Path):
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["schema"]["version"] = "12.0.0"  # examples are not yet bumped (done in a later task)
     out = migrate_document(doc)
     md = _md(out)
     names = list(md["conditions"])
@@ -165,3 +166,33 @@ def test_examples_migrate_cleanly(path: Path):
             assert all(p["conditions"] == names for p in chart)
         for cond in md["conditions"].values():
             assert hid in cond["hoists"]
+
+
+def test_v13_document_rejected():
+    out = migrate_document(_v12_plain())
+    with pytest.raises(ValueError, match="13.0.0"):
+        migrate_document(out)
+
+
+def test_missing_schema_block_rejected():
+    doc = _v12_plain()
+    del doc["schema"]
+    with pytest.raises(ValueError, match="schema"):
+        migrate_document(doc)
+    doc = _v12_plain()
+    del doc["model_definition"]
+    with pytest.raises(ValueError, match="model_definition"):
+        migrate_document(doc)
+
+
+def test_migrate_file_in_place_then_refuses_second_run(tmp_path: Path):
+    target = tmp_path / "doc.yaml"
+    target.write_text(yaml.safe_dump(_v12_plain(), sort_keys=False), encoding="utf-8")
+
+    migrate_file(target)
+    migrated_text = target.read_text(encoding="utf-8")
+    assert yaml.safe_load(migrated_text)["schema"]["version"] == "13.0.0"
+
+    with pytest.raises(ValueError, match="doc.yaml"):
+        migrate_file(target)
+    assert target.read_text(encoding="utf-8") == migrated_text
