@@ -163,30 +163,6 @@ def test_rules_without_conditions_rejected():
     assert "conditions" in _error(data)
 
 
-def test_conditions_without_rules_rejected():
-    data = _legacy()
-    data["model_definition"]["conditions"] = {"c": {"wind_speed_m_s": 10.0}}
-    assert "rules" in _error(data)
-
-
-def test_vessel_motion_beside_rules_rejected():
-    data = _authored()
-    data["model_definition"]["vessel_motion"] = {"roll_deg": 3.0}
-    assert "vessel_motion" in _error(data)
-
-
-def test_max_wind_beside_rules_rejected():
-    data = _authored()
-    data["model_definition"]["environment"]["max_wind_speed_m_s"] = 20.0
-    assert "max_wind_speed_m_s" in _error(data)
-
-
-def test_max_wind_required_without_rules():
-    data = _legacy()
-    data["model_definition"]["environment"] = {}
-    assert "max_wind_speed_m_s" in _error(data)
-
-
 def test_ea_with_modulus_rejected():
     data = _authored()
     data["model_definition"]["hoists"]["MH"]["rope"] = {

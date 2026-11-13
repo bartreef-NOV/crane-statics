@@ -97,7 +97,13 @@ def _validate_authored_schema(data: dict[str, Any]) -> None:
             f"Unsupported authored schema version {version!r}; expected major version "
             f"{AUTHORED_SCHEMA_MAJOR_VERSION}"
         )
-        if authored_schema_major(version) == 11:
+        if authored_schema_major(version) == 12:
+            message += (
+                "; in 13.0.0 hoist daf/offlead_deg/sidelead_deg moved into conditions and "
+                "chart points name their conditions: convert the file with "
+                "scripts/migrate_authored_v13.py"
+            )
+        elif authored_schema_major(version) == 11:
             message += "; hook_mass_t was renamed lower_block_mass_t in 12.0.0"
         raise DocumentIOError(message)
     try:
