@@ -260,6 +260,24 @@ def test_hoist_usable_in_one_condition_only_is_valid():
     AuthoredDocument.model_validate(data)
 
 
+def test_chart_point_naming_condition_without_the_hoist_rejected():
+    data = _rules()
+    del _md(data)["conditions"]["offboard_calm"]["hoists"]["AH"]
+    message = _error(data)
+    assert "hoists.AH.load_chart.0 names condition 'offboard_calm'" in message
+    assert "does not list hoist 'AH'" in message
+
+
+def test_split_point_naming_condition_without_the_hoist_rejected():
+    data = _rules()
+    del _md(data)["conditions"]["offboard_calm"]["hoists"]["MH"]
+    for point in _md(data)["hoists"]["MH"]["load_chart"]:
+        point["conditions"] = ["onboard_sea"]
+    message = _error(data)
+    assert "hoists.MH.split.load_chart.0 names condition 'offboard_calm'" in message
+    assert "does not list hoist 'MH'" in message
+
+
 def test_split_needs_split_points_per_usable_condition():
     data = _rules()
     for point in _md(data)["hoists"]["MH"]["split"]["load_chart"]:

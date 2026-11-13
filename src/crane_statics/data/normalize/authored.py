@@ -859,14 +859,11 @@ def _normalize_contractual_curve_points(
     curve_norm: list[dict[str, Any]] = []
     for idx, cp in enumerate(curve_src):
         if isinstance(cp, dict):
-            _require_object_keys(
-                cp, {"outreach_m", "load_t", "conditions"}, {"label"}, f"{ctx}[{idx}]"
-            )
+            _require_object_keys(cp, {"outreach_m", "load_t", "conditions"}, set(), f"{ctx}[{idx}]")
             curve_norm.append(
                 {
                     "outreach_m": float(cp["outreach_m"]),
                     "load_t": float(cp["load_t"]),
-                    **({"label": str(cp["label"])} if cp.get("label") else {}),
                     "conditions": [str(name) for name in cp["conditions"]],
                 }
             )

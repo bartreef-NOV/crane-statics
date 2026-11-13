@@ -164,6 +164,55 @@ def test_export_keeps_a_point_repeated_within_one_condition():
     assert normalize_document(exported).model_dump() == doc.model_dump()
 
 
+def _round_trip_with_chart(load_chart: list[dict]):
+    data = _two_condition_doc()
+    data["model_definition"]["hoists"]["MH"]["load_chart"] = load_chart
+    doc = normalize_document(data)
+    exported = document_to_authored_form(doc)
+    return doc, exported, normalize_document(exported)
+
+
+def test_export_preserves_each_conditions_point_order_for_ascending_charts():
+    # B's 10 m point first appears after A's points, but B's chart starts with it.
+    doc, exported, reimported = _round_trip_with_chart(
+        [
+            _point(12.0, 100.0, "A"),
+            _point(20.0, 60.0, "A"),
+            _point(10.0, 120.0, "B"),
+            _point(12.0, 100.0, "B"),
+        ]
+    )
+
+    assert _pairs(doc.conditions["B"].hoists["MH"].contractual_points) == [
+        (10.0, 120.0),
+        (12.0, 100.0),
+    ]
+    assert exported["model_definition"]["hoists"]["MH"]["load_chart"] == [
+        _point(10.0, 120.0, "B"),
+        _point(12.0, 100.0, "A", "B"),
+        _point(20.0, 60.0, "A"),
+    ]
+    assert reimported.model_dump() == doc.model_dump()
+
+
+def test_export_preserves_conflicting_point_orders():
+    # A has 12 then 20, B has 20 then 12: no single merged order serves both.
+    doc, exported, reimported = _round_trip_with_chart(
+        [_point(12.0, 100.0, "A"), _point(20.0, 60.0, "A", "B"), _point(12.0, 100.0, "B")]
+    )
+
+    assert _pairs(doc.conditions["B"].hoists["MH"].contractual_points) == [
+        (20.0, 60.0),
+        (12.0, 100.0),
+    ]
+    assert exported["model_definition"]["hoists"]["MH"]["load_chart"] == [
+        _point(12.0, 100.0, "A"),
+        _point(20.0, 60.0, "A", "B"),
+        _point(12.0, 100.0, "B"),
+    ]
+    assert reimported.model_dump() == doc.model_dump()
+
+
 @pytest.mark.parametrize(
     "example",
     [

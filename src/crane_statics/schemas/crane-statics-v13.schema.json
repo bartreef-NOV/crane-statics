@@ -510,7 +510,7 @@
           "type": "number"
         },
         "conditions": {
-          "description": "Names of the conditions this point applies to; each must be defined under 'conditions'.",
+          "description": "Names of the conditions this point applies to; each must be defined under 'conditions' and list this hoist.",
           "items": {
             "minLength": 1,
             "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",

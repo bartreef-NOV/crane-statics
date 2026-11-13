@@ -422,7 +422,7 @@ class AuthoredLoadChartPoint(BaseModel):
         min_length=1,
         json_schema_extra={"uniqueItems": True},
         description="Names of the conditions this point applies to; each must be defined "
-        "under 'conditions'.",
+        "under 'conditions' and list this hoist.",
     )
 
     @field_validator("conditions")
@@ -710,6 +710,12 @@ class AuthoredModelDefinition(BaseModel):
             charts = [("load_chart", hoist.load_chart)]
             if hoist.split is not None:
                 charts.append(("split.load_chart", hoist.split.load_chart))
+            usable_in = [n for n, c in self.conditions.items() if hoist_id in c.hoists]
+            if not usable_in:
+                raise ValueError(
+                    f"hoist {hoist_id!r} is not listed in any condition; list it under "
+                    f"conditions.<name>.hoists.{hoist_id}"
+                )
             for chart_name, chart in charts:
                 for index, point in enumerate(chart):
                     for tag in point.conditions:
@@ -718,12 +724,11 @@ class AuthoredModelDefinition(BaseModel):
                                 f"hoists.{hoist_id}.{chart_name}.{index}.conditions: "
                                 f"{tag!r} is not a defined condition"
                             )
-            usable_in = [n for n, c in self.conditions.items() if hoist_id in c.hoists]
-            if not usable_in:
-                raise ValueError(
-                    f"hoist {hoist_id!r} is not listed in any condition; list it under "
-                    f"conditions.<name>.hoists.{hoist_id}"
-                )
+                        if tag not in usable_in:
+                            raise ValueError(
+                                f"hoists.{hoist_id}.{chart_name}.{index} names condition "
+                                f"{tag!r} which does not list hoist {hoist_id!r}"
+                            )
             for name in usable_in:
                 for chart_name, chart in charts:
                     if not any(name in point.conditions for point in chart):

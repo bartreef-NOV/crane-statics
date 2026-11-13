@@ -105,26 +105,37 @@ def _authored_condition_hoist(entry: dict[str, Any]) -> dict[str, Any]:
 def _tagged_chart(conditions: dict[str, Any], hoist_id: str, key: str) -> list[dict[str, Any]]:
     """One authored load chart for ``hoist_id`` from the per-condition point lists at ``key``.
 
-    A point shared by several conditions is written once naming all of them; points are
-    ordered by first appearance (condition order, then chart order). The n-th repeat of a
-    point within one condition matches the n-th repeat in another, so repeats survive."""
+    The merged chart keeps every condition's own point order, so re-reading it gives each
+    condition back exactly its points. Conditions are merged in order: each point of a
+    condition reuses the first equal point after the condition's previous one, else it is
+    inserted after that previous point, before the first later point of larger outreach.
+    A point shared by several conditions is thus written once naming all of them, and
+    where conditions order their points differently the conflicting points are written
+    separately per condition."""
     chart: list[dict[str, Any]] = []
-    by_key: dict[tuple[float, float, int], dict[str, Any]] = {}
     for name, cond in conditions.items():
         entry = (cond.get("hoists") or {}).get(hoist_id)
         if entry is None:
             continue
-        seen: dict[tuple[float, float], int] = {}
+        last = -1  # index in chart of this condition's previous point
         for cp in entry.get(key) or []:
-            pair = (float(cp.get("outreach_m", 0.0)), float(cp.get("load_t", 0.0)))
-            occurrence = seen.get(pair, 0)
-            seen[pair] = occurrence + 1
-            point = by_key.get((*pair, occurrence))
-            if point is None:
-                point = {"outreach_m": pair[0], "load_t": pair[1], "conditions": []}
-                by_key[(*pair, occurrence)] = point
-                chart.append(point)
-            point["conditions"].append(str(name))
+            outreach, load = float(cp.get("outreach_m", 0.0)), float(cp.get("load_t", 0.0))
+            match = next(
+                (
+                    i
+                    for i in range(last + 1, len(chart))
+                    if (chart[i]["outreach_m"], chart[i]["load_t"]) == (outreach, load)
+                ),
+                None,
+            )
+            if match is None:
+                match = next(
+                    (i for i in range(last + 1, len(chart)) if chart[i]["outreach_m"] > outreach),
+                    len(chart),
+                )
+                chart.insert(match, {"outreach_m": outreach, "load_t": load, "conditions": []})
+            chart[match]["conditions"].append(str(name))
+            last = match
     return chart
 
 
