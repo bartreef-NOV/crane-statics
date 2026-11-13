@@ -47,7 +47,7 @@ class _SceneContext(NamedTuple):
     """The Scene's solve context under its condition."""
 
     key: tuple[int, str, str]
-    condition: LoadCondition
+    condition: Optional[LoadCondition]
     document: CraneDocument
     calc: CraneCalculator
     lift: LiftFactors
@@ -160,12 +160,13 @@ class HoistStateService:
         return self._scene_context(doc).calc
 
     def _scene_context(self, doc: CraneDocument) -> _SceneContext:
-        condition = self.scene_condition()
+        # A document without conditions (runtime only) solves under its own environment.
+        condition = self._session.scene_condition_or_none()
         # Every input of the factor, the contractual (rated) loads included.
         digest = hashlib.sha256(doc.model_dump_json().encode("utf-8")).hexdigest()
-        key = (id(doc), digest, condition.name)
+        key = (id(doc), digest, "" if condition is None else condition.name)
         if self._scene is None or self._scene.key != key:
-            document = condition_document(doc, condition)
+            document = doc if condition is None else condition_document(doc, condition)
             # Private calculators: the shared one is never rebuilt after an in-place edit,
             # and an id-keyed cache must not hold the copies.
             calc = CraneCalculator(document)
@@ -173,22 +174,34 @@ class HoistStateService:
             self._scene = _SceneContext(key, condition, document, calc, lift)
         return self._scene
 
+    def _usable_condition(self, hoist_id: str) -> Optional[LoadCondition]:
+        """The Scene's condition when ``hoist_id`` is usable in it, else None.
+
+        The Scene's selected hoist always is (``SessionModel.scene_hoist_ids``); other
+        hoists get the neutral answers (factor 1.0, no lateral, no scales)."""
+        condition = self._session.scene_condition_or_none()
+        if condition is None or hoist_id not in condition.usable_hoist_ids():
+            return None
+        return condition
+
     def dynamic_factor(self, hoist: Optional[Hoist]) -> DynamicFactor:
         """The factor the Scene converts payload and hook force with, for ``hoist``.
 
         The lift setup's factor under the Scene's case (``SessionModel.scene_condition``),
-        1.0 without a hoist or document. Without rules that is the condition's constant
+        1.0 without a hoist or document, or for a hoist the case's condition does not list.
+        Without rules that is the condition's constant
         ``daf`` for the hoist; on a rules document the profile's factor at the hoist's
         current boom angle, hook position (tackle length) and hook mode, as the chart
         computes it there, counting the rope hanging at that hook (``extra_mass_t``).
         """
         doc = self._session.document
-        if hoist is None or doc is None:
+        condition = None if hoist is None else self._usable_condition(hoist.id)
+        if hoist is None or doc is None or condition is None:
             return as_dynamic_factor(1.0)
         mode, angle, tackle_m = self._scene_hook_state(hoist)
         return (
             self._scene_lift(doc)
-            .setup(self.scene_condition(), hoist.id, mode, angle, tackle_length_m=tackle_m)
+            .setup(condition, hoist.id, mode, angle, tackle_length_m=tackle_m)
             .factor
         )
 
@@ -205,7 +218,8 @@ class HoistStateService:
         """
         doc = self._session.document
         hoist = self._session.payload_hoist_by_id(hoist_id)
-        if doc is None or hoist is None:
+        condition = self._usable_condition(hoist_id)
+        if doc is None or hoist is None or condition is None:
             return None
         state = self._session.hoist_states.get(hoist.id)
         if state is None:
@@ -214,7 +228,7 @@ class HoistStateService:
             return self._case_lateral
         mode, angle, tackle_m = self._scene_hook_state(hoist)
         setup = self._scene_lift(doc).setup(
-            self.scene_condition(), hoist.id, mode, angle, tackle_length_m=tackle_m
+            condition, hoist.id, mode, angle, tackle_length_m=tackle_m
         )
         sc = state.scene_state
         motion = crane_frame_motion(
@@ -242,11 +256,11 @@ class HoistStateService:
         """
         doc = self._session.document
         hoist = self._session.payload_hoist_by_id(hoist_id)
-        if doc is None or hoist is None:
+        condition = self._usable_condition(hoist_id)
+        if doc is None or hoist is None or condition is None:
             return None
         mode, angle, tackle_m = self._scene_hook_state(hoist)
         lift = self._scene_lift(doc)
-        condition = self.scene_condition()
         setup = lift.setup(condition, hoist.id, mode, angle, tackle_length_m=tackle_m)
         return lift.demand_scales(condition, hoist.id, mode, angle, setup, tackle_m)
 
@@ -255,10 +269,14 @@ class HoistStateService:
         return self._scene_context(doc).lift
 
     def _scene_hook_state(self, hoist: Hoist) -> tuple[HoistAnalysisMode, float, Optional[float]]:
-        """(mode, boom angle, tackle length) of ``hoist`` in the Scene."""
+        """(mode, boom angle, tackle length) of ``hoist`` in the Scene.
+
+        The mode's contractual points are the hoist's chart under the Scene's condition.
+        """
         state = self._session.hoist_states.get(hoist.id)
         split = bool(state is not None and state.split_mode_active)
-        mode = analysis_mode_by_name(hoist, "split" if split else "normal")
+        settings = self._session.scene_hoist_settings(hoist.id)
+        mode = analysis_mode_by_name(hoist, "split" if split else "normal", settings)
         angle = float(state.scene_state.boom_angle_deg) if state is not None else 0.0
         tackle_m = float(state.scene_state.tackle_length_m) if state is not None else None
         return mode, angle, tackle_m
@@ -283,20 +301,20 @@ class HoistStateService:
         hanging at the Scene hook. Without rules the factor is the condition's constant
         ``daf``.
         """
-        if self._session.document is None:
-            return False
-        return self.scene_condition().is_rules_case
+        condition = self._session.scene_condition_or_none()
+        return condition is not None and condition.is_rules_case
 
     def amplified_rope_hoist_id(self, hoist_id: str) -> Optional[str]:
         """The hoist whose hook rope the Scene's solves count in the hook force, if any.
 
         Under a rules case the Scene factor (``dynamic_factor``) carries the suspended
-        rope, so the solves leave it out of the dead load; without rules: None.
+        rope, so the solves leave it out of the dead load; without rules, or for a hoist
+        the condition does not list (its factor is 1.0): None.
         """
-        doc = self._session.document
-        if doc is None:
+        condition = self._usable_condition(hoist_id)
+        if condition is None:
             return None
-        return amplified_rope_hoist_id(self.scene_condition(), hoist_id)
+        return amplified_rope_hoist_id(condition, hoist_id)
 
     def contractual_points_for_hoist_mode(self, hoist: Optional[Hoist]) -> list:
         """Get contractual load points for hoist's current mode."""

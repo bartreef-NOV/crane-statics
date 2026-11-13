@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 import pytest
 
@@ -13,7 +13,13 @@ from crane_statics.core import governing_case, lift_factor, limit_auto_set, swee
 from crane_statics.core.io import _StrictIntSafeLoader
 from crane_statics.data import normalize_document
 from crane_statics.data.migrate_v13 import migrate_document
-from crane_statics.data.models import ConditionSpec, CraneDocument, RulesSpec, VesselMotion
+from crane_statics.data.models import (
+    ConditionHoist,
+    ConditionSpec,
+    CraneDocument,
+    RulesSpec,
+    VesselMotion,
+)
 
 GT283 = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
 MOTION = VesselMotion(
@@ -26,6 +32,28 @@ def load_v13(path: Path) -> CraneDocument:
     with open(path, "r", encoding="utf-8-sig") as f:
         data = yaml.load(f, Loader=_StrictIntSafeLoader)
     return normalize_document(migrate_document(data))
+
+
+def _copied(hoists: dict[str, ConditionHoist]) -> dict[str, ConditionHoist]:
+    """Deep copies of condition hoist entries: no two conditions may share one."""
+    return {hid: entry.model_copy(deep=True) for hid, entry in hoists.items()}
+
+
+def first_settings(doc: CraneDocument, hoist_id: str) -> Optional[ConditionHoist]:
+    """``hoist_id``'s entry in ``doc``'s first condition (``iter_hoist_analysis_modes``
+    takes it); None when that condition does not list the hoist."""
+    first = next(iter(doc.conditions.values()))
+    return first.hoists.get(hoist_id)
+
+
+def with_condition(
+    doc: CraneDocument, name: str, hoists: dict[str, ConditionHoist]
+) -> CraneDocument:
+    """``doc`` with one more condition ``name``: a copy of its first condition (wind,
+    vessel motion and the rest) that lists only ``hoists``."""
+    first = next(iter(doc.conditions.values()))
+    added = first.model_copy(deep=True, update={"name": name, "hoists": _copied(hoists)})
+    return doc.model_copy(update={"conditions": {**doc.conditions, name: added}})
 
 
 def gale(name: str = "gale", wind: float = 30.0, motion: VesselMotion = MOTION) -> ConditionSpec:
@@ -41,7 +69,9 @@ def rules_doc(standard: Literal["ABS", "DNV"], *conditions: ConditionSpec) -> Cr
     """
     doc = load_v13(GT283)
     hoists = doc.conditions["default"].hoists
-    listed = [c if c.hoists else c.model_copy(update={"hoists": dict(hoists)}) for c in conditions]
+    listed = [
+        c if c.hoists else c.model_copy(update={"hoists": _copied(hoists)}) for c in conditions
+    ]
     # The dummies a rules document carries at runtime: no analysis may read them.
     env = doc.environment.model_copy(
         update={"max_wind_speed_m_s": 20.0, "vessel_motion": VesselMotion()}
@@ -79,7 +109,7 @@ def legacy_equivalent(doc: CraneDocument, wind: float, motion: VesselMotion) -> 
     """
     first = next(iter(doc.conditions.values()))
     condition = ConditionSpec(
-        name="default", wind_speed_m_s=wind, vessel_motion=motion, hoists=dict(first.hoists)
+        name="default", wind_speed_m_s=wind, vessel_motion=motion, hoists=_copied(first.hoists)
     )
     env = doc.environment.model_copy(update={"max_wind_speed_m_s": wind, "vessel_motion": motion})
     return doc.model_copy(

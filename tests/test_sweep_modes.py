@@ -15,7 +15,12 @@ from crane_statics.core.load_condition import DEFAULT_CONDITION_NAME, condition_
 from crane_statics.core.sweep_cache import ComputeCache, compute_fingerprint
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mode_sweep
 from crane_statics.data.models import CraneDocument, VesselMotion
+from crane_statics.core.chart_cache import ChartJob, plan_chart_jobs
+from crane_statics.core.session_model import SessionModel
 from tests.rules_docs import (
+    GT283,
+    load_v13,
+    with_condition,
     without_foundation_factors,
     without_live_lateral,
     MOTION,
@@ -452,3 +457,61 @@ def test_every_curve_point_has_a_trail(example: str) -> None:
         prov = payload["provenance"]
         assert {p[0] for p in prov} == {p[0] for p in payload["curve_data"]}, hoist_id
         assert all(records for _x, records, _w, _c in prov), hoist_id
+
+
+# GT283 without rules: hoists MH, AH and trolley, all usable in its migrated ``default``.
+GT_LIMITS: dict[str, dict] = {
+    "MH__rope": {"T": 3000.0},
+    "AH__rope": {"T": 3000.0},
+    "rear_hinge": {"Fx": 5000.0},
+}
+GT_STEP = 20.0
+
+
+def test_unusable_hoist_not_charted() -> None:
+    """A condition that omits AH has no chart, governing case or Auto-Set point for AH."""
+    gt = load_v13(GT283)
+    doc = with_condition(gt, "calm", {"MH": gt.conditions["default"].hoists["MH"]})
+
+    assert (
+        run_mode_sweep(doc, "AH", "normal", GT_LIMITS, GT_STEP, {}, condition_name="calm") is None
+    )
+    assert governing_case(doc, "AH", "normal", GT_LIMITS, 30.0, None, "calm") is None
+    charted = run_mode_sweep(doc, "AH", "normal", GT_LIMITS, GT_STEP, {}, condition_name="default")
+    assert charted is not None and charted["n_points"] > 0
+
+    session = SessionModel()
+    session.set_document(doc)
+    assert session.usable_hoist_ids("calm") == ["MH"]
+    assert session.usable_hoist_ids("default") == ["MH", "AH", "trolley"]
+    jobs = plan_chart_jobs(
+        ChartJob("MH", "normal", "calm"), session.usable_hoist_ids("calm"), lambda _h: True
+    )
+    assert {job.hoist_id for job in jobs} == {"MH"}
+
+    # Auto-Set evaluates AH's points under ``default`` only, each point once.
+    result = compute_required_rope_capacity_kN(doc, "AH__rope")
+    assert result.governing_condition == "default"
+    assert result.evaluated_points == len(gt.conditions["default"].hoists["AH"].contractual_points)
+
+
+def test_conditions_with_different_leads_chart_differently() -> None:
+    """The lead limits are read per condition: a larger offlead lowers MH's chart there."""
+    gt = load_v13(GT283)
+    default = gt.conditions["default"].hoists
+    leaning = default["MH"].model_copy(update={"offlead_deg": 6.0})
+    doc = with_condition(gt, "leaning", {**default, "MH": leaning})
+
+    def curve(name: str) -> list:
+        payload = run_mode_sweep(doc, "MH", "normal", GT_LIMITS, GT_STEP, {}, condition_name=name)
+        assert payload is not None
+        return payload["curve_data"]
+
+    base, leaned = curve("default"), curve("leaning")
+    assert [x for x, _ in base] == [x for x, _ in leaned]
+    assert all(lean < plain for (_x, plain), (_y, lean) in zip(base, leaned))
+    # Each condition's governing case applies its own lead limit.
+    for name, offlead in (("default", 1.0), ("leaning", 6.0)):
+        case = governing_case(doc, "MH", "normal", GT_LIMITS, 20.0, "rear_hinge", name)
+        assert case is not None and case.condition_name == name
+        assert abs(case.scene_fields["offlead_deg"]) == offlead

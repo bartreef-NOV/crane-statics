@@ -8,6 +8,7 @@ from typing import Optional
 from ..data.authored_models import hoist_node_prefix
 from ..data.models import (
     Body,
+    ConditionHoist,
     ConditionSpec,
     ContractualPoint,
     CraneDocument,
@@ -134,12 +135,11 @@ def build_payload_hoist(
     splitable_block: bool = False,
     split_falls: Optional[int] = None,
     split_lower_block_mass_t: Optional[float] = None,
-    hook_daf: float = 1.0,
-    offlead_deg: float = 0.0,
-    sidelead_deg: float = 0.0,
     linear_mass_kg_m: float = 0.0,
     lowest_hook_height_m: float = 0.0,
 ) -> Hoist:
+    """A payload hoist. Its lead limits, DAF and charts are per condition
+    (``DocumentEditor.set_condition_hoist_settings``), not part of the hoist."""
     hoist_id = hoist_id.strip()
     if not hoist_id:
         raise DocumentEditError("Hoist ID cannot be empty")
@@ -163,14 +163,8 @@ def build_payload_hoist(
         split_lower_block_mass_t=(
             None if split_lower_block_mass_t is None else float(split_lower_block_mass_t)
         ),
-        hook_daf=float(hook_daf),
-        offlead_deg=float(offlead_deg),
-        sidelead_deg=float(sidelead_deg),
         linear_mass_kg_m=max(0.0, float(linear_mass_kg_m)),
         lowest_hook_height_m=float(lowest_hook_height_m),
-        split_contractual_points=(
-            [ContractualPoint(outreach_m=0.0, load_t=0.0)] if splitable_block else []
-        ),
     )
 
 
@@ -182,6 +176,16 @@ def build_segment(from_node_id: str, to_node_id: str, mult: int = 1) -> Segment:
     if from_node_id == to_node_id:
         raise DocumentEditError("Segment endpoints must differ")
     return Segment(from_node_id=from_node_id, to_node_id=to_node_id, mult=max(1, int(mult)))
+
+
+def _check_condition_hoist_values(
+    offlead_deg: float, sidelead_deg: float, daf: Optional[float]
+) -> None:
+    """The bounds of ``ConditionHoist``: leads >= 0, an authored DAF >= 1."""
+    if float(offlead_deg) < 0.0 or float(sidelead_deg) < 0.0:
+        raise DocumentEditError("Lead angles must be >= 0")
+    if daf is not None and float(daf) < 1.0:
+        raise DocumentEditError("DAF must be >= 1")
 
 
 def build_contractual_point(outreach_m: float, load_t: float) -> ContractualPoint:
@@ -403,10 +407,7 @@ class DocumentEditor:
         edited.rope_length_m = current.rope_length_m
         edited.rope_id = current.rope_id
         edited.load_node_id = current.load_node_id
-        edited.contractual_points = [cp.model_copy(deep=True) for cp in current.contractual_points]
-        edited.split_contractual_points = [
-            cp.model_copy(deep=True) for cp in current.split_contractual_points
-        ]
+        # The hoist's lead limits, DAF and charts live in the conditions: untouched here.
         self.sync_managed_payload_hook(edited)
 
         for index, hoist in enumerate(self._doc.hoists):
@@ -433,6 +434,9 @@ class DocumentEditor:
             for end in (seg.from_node_id, seg.to_node_id)
         }
         self._doc.hoists = [h for h in self._doc.hoists if h.id != hoist_id]
+        # No condition may list a hoist the document no longer has.
+        for spec in self._doc.conditions.values():
+            spec.hoists.pop(hoist_id, None)
 
         if not any(h.rope_id == rope_id for h in self._doc.hoists):
             self._doc.ropes = [r for r in self._doc.ropes if r.id != rope_id]
@@ -544,30 +548,110 @@ class DocumentEditor:
 
     # -- contractual points --------------------------------------------
 
-    def contractual_points(self, hoist_id: str, mode: str = "normal") -> list[ContractualPoint]:
+    def _condition_hoist(self, hoist_id: str, condition_name: Optional[str]) -> ConditionHoist:
+        """``hoist_id``'s entry in condition ``condition_name`` (None: the first)."""
+        self._hoist(hoist_id)
+        if condition_name is None:
+            spec = next(iter(self._doc.conditions.values()), None)
+            if spec is None:
+                raise DocumentEditError("The document has no load condition")
+        else:
+            spec = self._doc.conditions.get(condition_name)
+            if spec is None:
+                raise DocumentEditError(f"Unknown condition {condition_name!r}")
+        settings = spec.hoists.get(hoist_id)
+        if settings is None:
+            raise DocumentEditError(f"Hoist '{hoist_id}' is not usable in condition {spec.name!r}")
+        return settings
+
+    def contractual_points(
+        self, hoist_id: str, mode: str = "normal", condition_name: Optional[str] = None
+    ) -> list[ContractualPoint]:
+        """``hoist_id``'s chart points in ``mode`` under ``condition_name`` (None: the
+        first condition), the list itself: edits apply to that condition only."""
         hoist = self._hoist(hoist_id)
+        settings = self._condition_hoist(hoist_id, condition_name)
         if mode == "split":
             if not bool(hoist.splitable_block):
                 raise DocumentEditError("Selected hoist is not splitable")
-            return hoist.split_contractual_points
-        return hoist.contractual_points
+            return settings.split_contractual_points
+        return settings.contractual_points
 
     def add_contractual_point(
-        self, hoist_id: str, point: ContractualPoint, mode: str = "normal"
+        self,
+        hoist_id: str,
+        point: ContractualPoint,
+        mode: str = "normal",
+        condition_name: Optional[str] = None,
     ) -> None:
-        self.contractual_points(hoist_id, mode).append(point)
+        self.contractual_points(hoist_id, mode, condition_name).append(point)
 
     def update_contractual_point(
-        self, hoist_id: str, index: int, point: ContractualPoint, mode: str = "normal"
+        self,
+        hoist_id: str,
+        index: int,
+        point: ContractualPoint,
+        mode: str = "normal",
+        condition_name: Optional[str] = None,
     ) -> None:
-        points = self.contractual_points(hoist_id, mode)
+        points = self.contractual_points(hoist_id, mode, condition_name)
         self._guard_index(index, len(points), "contractual point")
         points[index] = point
 
-    def delete_contractual_point(self, hoist_id: str, index: int, mode: str = "normal") -> None:
-        points = self.contractual_points(hoist_id, mode)
+    def delete_contractual_point(
+        self,
+        hoist_id: str,
+        index: int,
+        mode: str = "normal",
+        condition_name: Optional[str] = None,
+    ) -> None:
+        points = self.contractual_points(hoist_id, mode, condition_name)
         self._guard_index(index, len(points), "contractual point")
         points.pop(index)
+
+    def add_condition_hoist(
+        self,
+        hoist_id: str,
+        condition_name: str,
+        *,
+        offlead_deg: float,
+        sidelead_deg: float,
+        daf: Optional[float],
+    ) -> None:
+        """Make payload hoist ``hoist_id`` usable in ``condition_name``, without charts yet."""
+        hoist = self._hoist(hoist_id)
+        if self.is_solve_hoist(hoist):
+            raise DocumentEditError("The boom hoist cannot be usable in a condition")
+        spec = self._doc.conditions.get(condition_name)
+        if spec is None:
+            raise DocumentEditError(f"Unknown condition {condition_name!r}")
+        if hoist_id in spec.hoists:
+            raise DocumentEditError(
+                f"Hoist '{hoist_id}' is already usable in condition {condition_name!r}"
+            )
+        _check_condition_hoist_values(offlead_deg, sidelead_deg, daf)
+        spec.hoists[hoist_id] = ConditionHoist(
+            offlead_deg=float(offlead_deg),
+            sidelead_deg=float(sidelead_deg),
+            daf=None if daf is None else float(daf),
+        )
+
+    def set_condition_hoist_settings(
+        self,
+        hoist_id: str,
+        condition_name: Optional[str],
+        *,
+        offlead_deg: float,
+        sidelead_deg: float,
+        daf: Optional[float],
+    ) -> None:
+        """Set ``hoist_id``'s lead limits and DAF under ``condition_name`` (None: the
+        first condition); its charts there are kept. The hoist must be usable there."""
+        settings = self._condition_hoist(hoist_id, condition_name)
+        _check_condition_hoist_values(offlead_deg, sidelead_deg, daf)
+        settings.offlead_deg = float(offlead_deg)
+        settings.sidelead_deg = float(sidelead_deg)
+        settings.daf = None if daf is None else float(daf)
 
     @staticmethod
     def _guard_index(index: int, length: int, what: str) -> None:
@@ -613,12 +697,10 @@ class DocumentEditor:
         conditions = self._conditions()
         self._guard_known_condition(name, conditions)
         if len(conditions) == 1:
-            raise DocumentEditError("A rules document needs at least one condition")
+            raise DocumentEditError("A document needs at least one condition")
         self._commit_conditions({k: v for k, v in conditions.items() if k != name})
 
     def _conditions(self) -> dict[str, ConditionSpec]:
-        if self._doc.rules is None:
-            raise DocumentEditError("Conditions need a rules document")
         return dict(self._doc.conditions)
 
     @staticmethod

@@ -39,7 +39,7 @@ class ContractualPointResult:
     """Result from evaluating a single contractual point across all directional cases.
 
     ``condition_name`` and ``case_name`` name the load condition and profile case of the
-    best demand; None on a legacy document.
+    best demand; ``case_name`` is None for a condition without rules.
     """
 
     hoist_id: str
@@ -51,6 +51,8 @@ class ContractualPointResult:
     best_case: DirectionalAnalysisCase
     condition_name: Optional[str] = None
     case_name: Optional[str] = None
+    #: The point's rated load: with ``cp_outreach_m`` it names the point across conditions.
+    cp_load_t: float = 0.0
 
 
 @dataclass
@@ -127,21 +129,22 @@ def _evaluate_contractual_points(
         factored_entity: On a rules case, read this entity's demand under the case's
             demand scale (``lift_factor.demand_scales``: the pedestal factor on
             ``platform_base``, the retaining factor on ``platform_base_retaining``), as
-            the chart checks it. None or a legacy case: the plain demand.
+            the chart checks it. None or a case without rules: the plain demand.
 
     Returns:
         List of ContractualPointResult with best demand per contractual point, over every
-        load case of the document (``load_condition.load_conditions``). ``calc`` serves a
-        legacy document; each case of a rules document gets a calculator of its own
-        environment. The contractual load becomes a hook force through each case's dynamic
+        load case of the document (``load_condition.load_conditions``). Each case takes the
+        hoists usable in its condition, with their lead limits and contractual points there
+        (``LoadCondition.hoist_settings``), and gets a calculator of its own environment
+        (``calc`` only seeds the hook-stiffness solves, which read no environment). A
+        point tagged with several conditions is one point: its best demand over all of
+        them. The contractual load becomes a hook force through each case's dynamic
         factor at the point's boom angle (``lift_factor``), as the sweep converts it.
     """
-    best: dict[tuple[str, str, int], ContractualPointResult] = {}
+    best: dict[tuple[str, str, float, float], ContractualPointResult] = {}
     lift = LiftFactors(doc, calc)
     for condition in load_conditions(doc):
-        case_calc = (
-            calc if condition.spec is None else CraneCalculator(condition_document(doc, condition))
-        )
+        case_calc = CraneCalculator(condition_document(doc, condition))
         for result in _evaluate_condition(
             hoists,
             case_calc,
@@ -153,7 +156,8 @@ def _evaluate_contractual_points(
             use_lead_channel_composition,
             factored_entity,
         ):
-            key = (result.hoist_id, result.mode_name, result.cp_index)
+            # A point by its values: the conditions it names each list a copy of it.
+            key = (result.hoist_id, result.mode_name, result.cp_outreach_m, result.cp_load_t)
             if key not in best or result.best_demand > best[key].best_demand:
                 best[key] = result
     return list(best.values())
@@ -170,14 +174,18 @@ def _evaluate_condition(
     use_lead_channel_composition: bool,
     factored_entity: Optional[str] = None,
 ) -> list[ContractualPointResult]:
-    """``_evaluate_contractual_points`` for one load case."""
+    """``_evaluate_contractual_points`` for one load case: the usable ``hoists`` only."""
     results = []
     wind_speed = condition.wind_speed_m_s
-    condition_name = None if condition.spec is None else condition.spec.name
+    condition_name = condition.condition_name
     case_name = None if condition.case is None else condition.case.name
+    usable = condition.usable_hoist_ids()
 
     for hoist in hoists:
-        for mode in iter_hoist_analysis_modes(hoist):
+        if hoist.id not in usable:
+            continue
+        settings = condition.hoist_settings(hoist.id)
+        for mode in iter_hoist_analysis_modes(hoist, settings):
             for cp_index, cp in enumerate(mode.contractual_points):
                 try:
                     angle = kin.outreach_to_angle(float(cp.outreach_m), hoist.id)
@@ -204,11 +212,11 @@ def _evaluate_condition(
                     if scales is None or factored_entity is None
                     else scales.get(factored_entity)
                 )
-                # The live-load lateral (None: legacy): its wind rides in each solve, its
+                # The live-load lateral (None without rules): its wind rides in each solve, its
                 # H-proportional part is taken at the worst of the circumscribed 16-gon
                 # directions (the demand is convex in it; spec section 9.4).
                 lateral: Optional[HookLateral] = None
-                if condition.spec is not None:
+                if condition.is_rules_case:
                     lateral = hook_lateral(
                         setup,
                         wind_speed,
@@ -226,7 +234,7 @@ def _evaluate_condition(
                         ]
                 points_by_wind: dict[str, Any] = {}
                 if use_lead_channel_composition:
-                    for case in iter_wind_lead_directional_cases(hoist, wind_speed):
+                    for case in iter_wind_lead_directional_cases(settings, wind_speed):
                         if case.wind_direction in points_by_wind:
                             continue
                         points_by_wind[case.wind_direction] = calc.compute_analysis_point(
@@ -241,7 +249,7 @@ def _evaluate_condition(
                             amplified_rope_hoist_id=amplified,
                         )
 
-                for case in iter_wind_lead_directional_cases(hoist, wind_speed):
+                for case in iter_wind_lead_directional_cases(settings, wind_speed):
                     if not use_lead_channel_composition:
                         pt = calc.compute_analysis_point(
                             float(angle),
@@ -298,6 +306,7 @@ def _evaluate_condition(
                             best_case=best_case,
                             condition_name=condition_name,
                             case_name=case_name,
+                            cp_load_t=float(cp.load_t),
                         )
                     )
 

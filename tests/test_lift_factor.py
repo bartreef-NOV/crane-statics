@@ -30,6 +30,7 @@ from crane_statics.rules.factors import AbsOnboardFactor, LinearFactor
 from crane_statics.rules.stiffness import payload_hoist_stiffness_terms
 from tests import rules_reference as ref
 from tests.rules_docs import (
+    first_settings,
     without_live_lateral,
     GT283,
     legacy_equivalent,
@@ -106,7 +107,9 @@ def _point(doc: CraneDocument, angle: float):
 
 
 def _setup(doc: CraneDocument, angle: float, case_index: int = 0):
-    mode = analysis_mode_by_name(next(h for h in doc.hoists if h.id == HOIST), "normal")
+    mode = analysis_mode_by_name(
+        next(h for h in doc.hoists if h.id == HOIST), "normal", first_settings(doc, HOIST)
+    )
     condition = condition_cases(doc, None)[case_index]
     return factor_for_point(doc, condition, HOIST, mode, _point(doc, angle), angle)
 
@@ -168,6 +171,15 @@ def test_rules_less_daf_authored_constant() -> None:
     assert setup.factor == ConstantDynamicFactor(1.1)
     uncached = factor_for_point(doc, condition, HOIST, _plain_mode(doc), None, SCENE_ANGLE)
     assert uncached.factor == ConstantDynamicFactor(1.1)
+
+
+def test_rules_less_governing_case_names_condition_default() -> None:
+    """Without rules the governing case names its condition (the migrated ``default``) and
+    no profile case: the condition has one case."""
+    case = governing_case(load_v13(GT283), HOIST, "normal", LIMITS, OUTREACH, None)
+    assert case is not None
+    assert case.condition_name == "default" and case.case_name is None
+    assert case.hook_lateral is None
 
 
 def test_setup_of_a_hoist_the_condition_does_not_list_names_both() -> None:
@@ -359,7 +371,9 @@ def test_scene_conversions_use_the_scene_condition_factor() -> None:
     scene = session.hoist_states[HOIST].scene_state
     scene.tackle_length_m = 40.0  # the suspended rope hangs at the Scene's hook
     angle = float(scene.boom_angle_deg)
-    mode = analysis_mode_by_name(next(h for h in doc.hoists if h.id == HOIST), "normal")
+    mode = analysis_mode_by_name(
+        next(h for h in doc.hoists if h.id == HOIST), "normal", first_settings(doc, HOIST)
+    )
     expected = factor_for_point(
         doc, session.scene_condition(), HOIST, mode, _point(doc, angle), angle, tackle_length_m=40.0
     ).factor
@@ -440,7 +454,9 @@ def test_split_mode_warns_that_the_stiffness_ignores_the_split_block() -> None:
     sea = sea.model_copy(update={"hoists": entries})
     doc = doc.model_copy(update={"hoists": hoists, "conditions": {"sea": sea}})
     angle = _angle(doc)
-    split = analysis_mode_by_name(next(h for h in doc.hoists if h.id == HOIST), "split")
+    split = analysis_mode_by_name(
+        next(h for h in doc.hoists if h.id == HOIST), "split", first_settings(doc, HOIST)
+    )
     assert split.name == "split"
     condition = condition_cases(doc, None)[0]
     setup = factor_for_point(doc, condition, HOIST, split, _point(doc, angle), angle)
@@ -451,7 +467,9 @@ def test_split_mode_warns_that_the_stiffness_ignores_the_split_block() -> None:
 def test_bounded_lift_factors_keep_at_most_max_entries() -> None:
     doc = _abs_doc()
     lift = LiftFactors(doc, get_calculator(doc), max_entries=2)
-    mode = analysis_mode_by_name(next(h for h in doc.hoists if h.id == HOIST), "normal")
+    mode = analysis_mode_by_name(
+        next(h for h in doc.hoists if h.id == HOIST), "normal", first_settings(doc, HOIST)
+    )
     condition = condition_cases(doc, None)[0]
     angles = [_angle(doc, x) for x in (16.0, 20.0, 25.0)]
     setups = [lift.setup(condition, HOIST, mode, a) for a in angles]

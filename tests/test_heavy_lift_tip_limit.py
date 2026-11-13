@@ -33,7 +33,7 @@ from crane_statics.rules.validation import (
     heavy_lift_tip_reach_m,
     tip_vertical_accel_g,
 )
-from tests.rules_docs import load_v13
+from tests.rules_docs import first_settings, load_v13
 
 ROOT = Path(__file__).parent.parent
 ABS_EXAMPLE = ROOT / "examples" / "crane_input_GT283_abs.yaml"
@@ -104,7 +104,7 @@ def _repro_file(tmp_path: Path) -> Path:
 def _sweep_warnings(doc: CraneDocument, hoist: Hoist) -> list[str]:
     """Every provenance warning of every mode's sweep of ``hoist`` (none may raise)."""
     warnings: list[str] = []
-    for mode in iter_hoist_analysis_modes(hoist):
+    for mode in iter_hoist_analysis_modes(hoist, first_settings(doc, hoist.id)):
         limits = {f"{hoist.rope_id}_T": {"T": 1.0e4}}
         payload = run_mode_sweep(doc, hoist.id, mode.name, limits, 2.5, {})
         assert payload is not None

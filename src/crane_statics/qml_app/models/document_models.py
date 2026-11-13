@@ -44,9 +44,12 @@ def wind_area_columns(body_id: str) -> list[Column]:
     return _to_qml(ComponentTableFormatter.wind_area_columns(body_id))
 
 
-def hoist_columns(is_boom_hoist: Callable[[Any], bool] | None = None) -> list[Column]:
-    """Column definitions for hoist table."""
-    return _to_qml(HoistFormatter.table_columns(is_boom_hoist))
+def hoist_columns(
+    is_boom_hoist: Callable[[Any], bool] | None = None,
+    condition_settings: Callable[[Any], Any] | None = None,
+) -> list[Column]:
+    """Column definitions for hoist table (``HoistFormatter.table_columns``)."""
+    return _to_qml(HoistFormatter.table_columns(is_boom_hoist, condition_settings))
 
 
 def rope_segment_columns() -> list[Column]:

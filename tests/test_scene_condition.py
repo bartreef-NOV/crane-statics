@@ -255,3 +255,58 @@ def test_the_scene_condition_label_is_empty_for_a_legacy_document() -> None:
     _session, scene, chart = _vms(load_document(EXAMPLE))
     assert scene.sceneConditionLabel == ""
     chart.shutdown()
+
+
+def test_scene_hoist_falls_back_to_first_usable_when_condition_changes() -> None:
+    """The Scene's hoist is always usable under its condition: switching to a condition
+    that does not list it selects that condition's first usable hoist, whose lead limits
+    there seed the Scene; a hoist the condition does not list cannot be selected."""
+    from crane_statics.core.analysis_services import HoistStateService
+    from crane_statics.core.session_model import SessionModel
+    from tests.rules_docs import GT283, load_v13, with_condition
+
+    gt = load_v13(GT283)
+    default = gt.conditions["default"].hoists
+    ah = default["AH"].model_copy(update={"offlead_deg": 3.0})
+    doc = with_condition(gt, "calm", {"trolley": default["trolley"], "AH": ah})
+    session = SessionModel()
+    selected: list[str] = []
+    session.subscribe("hoist_selected", selected.append)
+    session.set_document(doc)
+    assert session.selected_hoist_id == HOIST
+    assert session.scene_hoist_ids() == ["MH", "AH", "trolley"]
+
+    assert session.set_scene_condition("calm", None, seed=True)
+    # Document order, not the condition's listing order.
+    assert session.scene_hoist_ids() == ["AH", "trolley"]
+    assert session.selected_hoist_id == "AH" and selected == ["AH"]
+    assert session.hoist_states["AH"].scene_state.offlead_deg == 3.0
+    session.select_payload_hoist(HOIST)
+    assert session.selected_hoist_id == "AH"
+    # The Scene's services never raise for a hoist the condition does not list.
+    service = HoistStateService(session)
+    mh = session.editor_hoist_by_id(HOIST)
+    assert service.dynamic_factor(mh).payload_t(100.0, 0.0, 9.81) == pytest.approx(100.0 / 9.81)
+    assert service.hook_lateral(HOIST) is None and service.demand_scales(HOIST) is None
+    assert session.contractual_points_for_mode(HOIST) == []
+
+    assert session.set_scene_condition("default", None, seed=True)
+    assert session.selected_hoist_id == "AH"  # still usable there: kept
+
+
+def test_a_document_without_conditions_opens_without_a_scene_hoist() -> None:
+    """Runtime tolerates a document without conditions: nothing is usable, nothing raises."""
+    from crane_statics.core.analysis_services import HoistStateService
+    from crane_statics.core.session_model import SessionModel
+    from tests.rules_docs import GT283, load_v13
+
+    doc = load_v13(GT283).model_copy(update={"conditions": {}})
+    session = SessionModel()
+    session.set_document(doc)
+    assert session.selected_hoist_id is None and session.scene_hoist_ids() == []
+    assert session.scene_condition_or_none() is None
+    assert not session.set_scene_condition("default", None, seed=True)
+    service = HoistStateService(session)
+    assert service.amplified_rope_hoist_id(HOIST) is None
+    assert not service.hook_force_follows_scene_state()
+    assert service.scene_document() is doc

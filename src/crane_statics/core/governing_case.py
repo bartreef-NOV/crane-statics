@@ -44,12 +44,12 @@ class GoverningCase:
     applies ``scene_fields``.
 
     ``condition_name`` and ``case_name`` name the load condition and its profile case
-    that governed (``LoadCondition.spec.name`` and ``.case.name``); None on a legacy
-    document.
+    that governed (``LoadCondition.condition_name`` and ``.case.name``); ``case_name`` is
+    None for a condition without rules, which has one case.
 
     ``hook_lateral`` is the hook lateral the point was evaluated at (signed, crane frame,
     no floor: the envelope's worst direction), for the Scene to solve the case with; None
-    without one (legacy).
+    without one (no rules).
     """
 
     limit_id: str
@@ -85,15 +85,16 @@ def governing_case(
     """
     conditions = condition_cases(doc, condition_name)
     hoist = next((h for h in doc.hoists if h.id == hoist_id), None)
-    if hoist is None:
-        return None
-    mode = analysis_mode_by_name(hoist, mode_name)
+    if hoist is None or hoist_id not in conditions[0].usable_hoist_ids():
+        return None  # not usable in the condition: run_mode_sweep has no chart either
+    settings = conditions[0].hoist_settings(hoist_id)
+    mode = analysis_mode_by_name(hoist, mode_name, settings)
     if mode.name != mode_name:
         return None  # split without a split block: run_mode_sweep has no curve either
     doc_dict = doc.model_dump()
     kin = KinematicsAdapter(doc_dict)
-    offlead_deg = float(getattr(hoist, "offlead_deg", 0.0))
-    sidelead_deg = float(getattr(hoist, "sidelead_deg", 0.0))
+    offlead_deg = float(settings.offlead_deg)
+    sidelead_deg = float(settings.sidelead_deg)
 
     candidates = [
         lid
@@ -108,7 +109,7 @@ def governing_case(
 
     # ((payload, hook load), envelope case, probes, condition, lateral) of the lowest limit
     # over the cases. Within a case the factor is one, so the hook load orders as the
-    # payload does; it breaks payload ties, which keeps the legacy (hook load) choice exactly.
+    # payload does; it breaks payload ties, which keeps the single-case (hook load) choice.
     best: Optional[
         tuple[tuple[float, float], EnvelopeCase, ProbeSet, LoadCondition, Optional[HookLateral]]
     ] = None
@@ -132,11 +133,11 @@ def governing_case(
         setup = lift.setup(condition, hoist_id, mode, angle, probes.zero)
         factor = setup.factor
         lateral = (
-            None
-            if condition.spec is None
-            else hook_lateral(
+            hook_lateral(
                 setup, condition.wind_speed_m_s, support_z_m=lift.support_z_m(hoist_id, angle)
             )
+            if condition.is_rules_case
+            else None
         )
         scales = lift.demand_scales(condition, hoist_id, mode, angle, setup)
         for lid in candidates:
@@ -188,7 +189,7 @@ def governing_case(
         mode_name=mode.name,
         scene_fields=fields,
         outreach_m=float(outreach_m),
-        condition_name=None if condition.spec is None else condition.spec.name,
+        condition_name=condition.condition_name,
         case_name=None if condition.case is None else condition.case.name,
         hook_lateral=(
             None

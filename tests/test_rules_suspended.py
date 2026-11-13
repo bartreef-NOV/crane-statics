@@ -26,6 +26,7 @@ from crane_statics.rules import validate_rules_document
 from crane_statics.rules.factors import LinearFactor
 from crane_statics.rules.suspended import suspended_rope_mass_t
 from tests.rules_docs import (
+    first_settings,
     GT283,
     legacy_equivalent,
     load_v13,
@@ -255,15 +256,25 @@ def test_lift_setup_carries_the_suspended_rope_as_the_factor_extra_mass() -> Non
     lift = LiftFactors(doc, None)
     for angle in (GOLDEN_ANGLE, 75.0):
         positions = _positions(doc_dict, angle)
-        normal = lift.setup(condition, HOIST, analysis_mode_by_name(hoist, "normal"), angle)
+        normal = lift.setup(
+            condition,
+            HOIST,
+            analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST)),
+            angle,
+        )
         assert normal.factor == LinearFactor(DAF, suspended_rope_mass_t(doc_dict, HOIST, positions))
-        split = lift.setup(condition, HOIST, analysis_mode_by_name(hoist, "split"), angle)
+        split = lift.setup(
+            condition,
+            HOIST,
+            analysis_mode_by_name(hoist, "split", first_settings(doc, HOIST)),
+            angle,
+        )
         split_mult = falls_override_effective_mult(doc_dict, {HOIST: 10})
         assert split.factor == LinearFactor(
             DAF, suspended_rope_mass_t(doc_dict, HOIST, positions, split_mult)
         )
     # The rope hangs at the hook position the tackle length gives.
-    mode = analysis_mode_by_name(hoist, "normal")
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))
     short = lift.setup(condition, HOIST, mode, GOLDEN_ANGLE, tackle_length_m=10.0)
     expected = suspended_rope_mass_t(doc_dict, HOIST, _positions(doc_dict, GOLDEN_ANGLE, 10.0))
     assert short.factor == LinearFactor(DAF, expected)

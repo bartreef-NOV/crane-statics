@@ -52,37 +52,9 @@ def collect_model_health_issues(doc: Optional[CraneDocument]) -> tuple[list[str]
             f"(found {len(solve_hoist_ids)}: {_sample(solve_hoist_ids)})"
         )
 
-    solve_hoists_with_contractual = sorted(
-        hoist.id for hoist in doc.hoists if hoist.id in solve_hoist_ids and hoist.contractual_points
-    )
-    if solve_hoists_with_contractual:
-        blocking.append(
-            f"Solve-mode hoists cannot define contractual curves: "
-            f"{_sample(solve_hoists_with_contractual)}"
-        )
-
-    hoists_without_contractual_points = sorted(
-        hoist.id
-        for hoist in doc.hoists
-        if hoist.id not in solve_hoist_ids and not hoist.contractual_points
-    )
-    if hoists_without_contractual_points:
-        warnings.append(
-            f"Hoists without contractual points: {_sample(hoists_without_contractual_points)}"
-        )
-
-    splitable_without_split_points = sorted(
-        hoist.id
-        for hoist in doc.hoists
-        if hoist.id not in solve_hoist_ids
-        and bool(getattr(hoist, "splitable_block", False))
-        and not list(getattr(hoist, "split_contractual_points", []))
-    )
-    if splitable_without_split_points:
-        warnings.append(
-            "Splitable hoists without split contractual points: "
-            f"{_sample(splitable_without_split_points)}"
-        )
+    condition_blocking, condition_warnings = _condition_hoist_issues(doc, solve_hoist_ids)
+    blocking.extend(condition_blocking)
+    warnings.extend(condition_warnings)
 
     insufficient_rope_length = _hoists_with_insufficient_rope_length(doc, solve_hoist_ids)
     if insufficient_rope_length:
@@ -102,6 +74,68 @@ def collect_model_health_issues(doc: Optional[CraneDocument]) -> tuple[list[str]
             f"{_sample(unreachable)}"
         )
 
+    return blocking, warnings
+
+
+def _condition_hoist_issues(
+    doc: CraneDocument, solve_hoist_ids: list[str]
+) -> tuple[list[str], list[str]]:
+    """(blocking, warnings) about the hoists the conditions list (``ConditionSpec.hoists``).
+
+    Each condition owns the lead limits, DAF and charts of the payload hoists usable under
+    it. Blocking: no condition at all, a condition listing the boom hoist or an unknown
+    hoist, a payload hoist no condition lists (it could never be analysed). Warnings, as
+    ``hoist in condition``: a usable hoist without contractual points there, a splitable
+    one without split points there.
+    """
+    blocking: list[str] = []
+    warnings: list[str] = []
+    if not doc.conditions:
+        blocking.append("At least one load condition is required")
+        return blocking, warnings
+    known = {hoist.id for hoist in doc.hoists}
+    payload = [hoist for hoist in doc.hoists if hoist.id not in solve_hoist_ids]
+    listed = {hid for spec in doc.conditions.values() for hid in spec.hoists}
+
+    solve_listed = sorted(
+        f"{hid} in {name}"
+        for name, spec in doc.conditions.items()
+        for hid in spec.hoists
+        if hid in solve_hoist_ids
+    )
+    if solve_listed:
+        blocking.append(f"The boom hoist cannot be usable in a condition: {_sample(solve_listed)}")
+    unknown = sorted(
+        f"{hid} in {name}"
+        for name, spec in doc.conditions.items()
+        for hid in spec.hoists
+        if hid not in known
+    )
+    if unknown:
+        blocking.append(f"Conditions list unknown hoists: {_sample(unknown)}")
+    unusable = sorted(hoist.id for hoist in payload if hoist.id not in listed)
+    if unusable:
+        blocking.append(f"Hoists usable in no condition: {_sample(unusable)}")
+
+    without_points = sorted(
+        f"{hoist.id} in {name}"
+        for hoist in payload
+        for name, spec in doc.conditions.items()
+        if hoist.id in spec.hoists and not spec.hoists[hoist.id].contractual_points
+    )
+    if without_points:
+        warnings.append(f"Hoists without contractual points: {_sample(without_points)}")
+    without_split_points = sorted(
+        f"{hoist.id} in {name}"
+        for hoist in payload
+        if hoist.splitable_block
+        for name, spec in doc.conditions.items()
+        if hoist.id in spec.hoists and not spec.hoists[hoist.id].split_contractual_points
+    )
+    if without_split_points:
+        warnings.append(
+            f"Splitable hoists without split contractual points: {_sample(without_split_points)}"
+        )
     return blocking, warnings
 
 

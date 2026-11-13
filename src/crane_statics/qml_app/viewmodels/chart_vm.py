@@ -125,7 +125,7 @@ def _trail_rows(condition: str, trail: Optional[tuple]) -> list[list[str]]:
 
     ``case`` is the governing case, ``factor`` is ``quantity=value`` of the record with its
     ``unit``, ``inputs`` its inputs as ``name=value; name=value`` in the record's order,
-    ``source`` its ``computed`` or ``override`` (a manual ``hook_daf`` replacing the
+    ``source`` its ``computed`` or ``override`` (a condition's manual ``daf`` replacing the
     standard's factor). The point's
     warnings, joined by `` | ``, repeat on each of its rows so any row filters alone. A
     point without a trail still gets one row, with the condition only.
@@ -374,8 +374,8 @@ class ChartViewModel(QObject):
         # The clause trail of the rendered capacity curve and its condition (rules only).
         self._provenance: list[tuple[float, tuple, tuple, str]] = []
         self._condition_name = ""
-        # Rules documents: the condition names and the selected one, whose chart is drawn.
-        # Legacy: [] and None (the document's only condition).
+        # The condition names and the selected one, whose chart is drawn ([] and None
+        # without a document or without conditions).
         self._condition_names: list[str] = []
         self._condition: Optional[str] = None
         # The calculation-details panel: the inspected outreach (None: no point) and the
@@ -416,7 +416,8 @@ class ChartViewModel(QObject):
 
     @pyqtProperty(list, notify=hoistsChanged)
     def hoistIds(self) -> list:
-        return self._model.payload_hoist_ids()
+        """The payload hoists usable in the chart's condition: the ones it has charts of."""
+        return self._model.usable_hoist_ids(self._condition)
 
     @pyqtProperty(str, notify=hoistsChanged)
     def selectedHoistId(self) -> str:
@@ -451,7 +452,7 @@ class ChartViewModel(QObject):
 
     @pyqtProperty(list, notify=conditionChanged)
     def conditionNames(self) -> list:
-        """The rules document's condition names in document order; [] for legacy."""
+        """The document's condition names in document order (with or without rules)."""
         return list(self._condition_names)
 
     @pyqtProperty(str, notify=conditionChanged)
@@ -465,7 +466,9 @@ class ChartViewModel(QObject):
             return
         self._condition = name
         self.conditionChanged.emit()
+        # The Scene follows, and with it the selected hoist (one usable in ``name``).
         self._scene_follows_condition()
+        self.hoistsChanged.emit()
         # Work for the previous condition is dropped: every job is re-planned for this one.
         running = self._running
         if running is not None and running.job.condition != name:
@@ -479,7 +482,7 @@ class ChartViewModel(QObject):
         the first condition."""
         doc = self._model.document
         rules = None if doc is None else doc.rules
-        names = list(condition_names(doc)) if doc is not None and rules is not None else []
+        names = [] if doc is None else list(condition_names(doc))
         condition = self._condition if self._condition in names else (names[0] if names else None)
         notes = ProvenanceFormatter.standing_notes(None if rules is None else str(rules.standard))
         if names != self._condition_names or condition != self._condition:
@@ -489,6 +492,7 @@ class ChartViewModel(QObject):
             self.conditionChanged.emit()
             if followed:
                 self._scene_follows_condition()
+                self.hoistsChanged.emit()
         if notes != self._calculation_notes:
             self._calculation_notes = notes
             self.provenanceChanged.emit()
@@ -719,6 +723,7 @@ class ChartViewModel(QObject):
             self._model.contractual_points_for_mode(
                 self._model.selected_hoist_id,
                 self._current_chart_mode(),
+                self._condition,
             )
         )
 
@@ -734,6 +739,7 @@ class ChartViewModel(QObject):
                 hoist_id,
                 build_contractual_point(fields.get("outreach_m", 0.0), fields.get("load_t", 0.0)),
                 self._current_chart_mode(),
+                self._condition,
             )
         )
 
@@ -745,6 +751,7 @@ class ChartViewModel(QObject):
                 row,
                 build_contractual_point(fields.get("outreach_m", 0.0), fields.get("load_t", 0.0)),
                 self._current_chart_mode(),
+                self._condition,
             )
         )
 
@@ -752,7 +759,7 @@ class ChartViewModel(QObject):
     def deleteContractualPoint(self, row: int) -> None:
         self._edit_contractual(
             lambda editor, hoist_id: editor.delete_contractual_point(
-                hoist_id, row, self._current_chart_mode()
+                hoist_id, row, self._current_chart_mode(), self._condition
             )
         )
 
@@ -1498,7 +1505,8 @@ class ChartViewModel(QObject):
         # Not a content change: that would clear the label the Scene shows.
         where = f"{name} at {request.outreach_m:.1f} m"
         if case.condition_name is not None:
-            where += f" ({case.condition_name} / {case.case_name})"
+            names = [case.condition_name, *([] if case.case_name is None else [case.case_name])]
+            where += f" ({' / '.join(names)})"
         scene.apply_governing_case(case, f"Governing case: {where}")
         if self._status_text.startswith("Finding the governing case"):
             self._set_status(request.previous_status)

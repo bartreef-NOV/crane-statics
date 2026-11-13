@@ -46,12 +46,11 @@ def _sweep_case(
     doc: CraneDocument, condition: LoadCondition, compute_scope: Optional[ComputeScope]
 ) -> _SweepCase:
     # A private calculator: the shared get_calculator cache never evicts, so every sweep
-    # would leak a document copy. Built from the case's environment (legacy: ``doc``).
+    # would leak a document copy. Built from the case's environment.
     calc = CraneCalculator(condition_document(doc, condition))
-    scope = compute_scope
-    if compute_scope is not None and condition.spec is not None:
-        # Each case of a rules condition solves under its own wind and motion.
-        scope = compute_scope.for_case(condition.name)
+    # Each case solves under its own wind and motion, so its solves are its own: two
+    # conditions of a document without rules differ in wind and motion too.
+    scope = None if compute_scope is None else compute_scope.for_case(condition.name)
     return _SweepCase(calc, condition.wind_speed_m_s, condition.vessel_motion, scope, condition)
 
 
@@ -172,13 +171,17 @@ def run_mode_sweep(
 ) -> Optional[dict[str, Any]]:
     """Compute one analysis mode's curve, contractual verdicts and per-limit series.
 
-    Returns None when the mode does not apply to the hoist (split without a split block).
+    Returns None when the mode does not apply to the hoist (split without a split block)
+    or the hoist is not usable in the condition (``LoadCondition.usable_hoist_ids``): it
+    has no chart there.
     ``condition_name`` names the load condition (``load_condition.condition_names``); None
-    is the document's first one, a legacy document's only one. Every value is the minimum
+    is the document's first one. The hoist's lead limits and contractual points are its
+    entry in that condition (``LoadCondition.hoist_settings``). Every value is the minimum
     over the condition's cases (``load_condition.condition_cases``), each solved under its
     own wind speed and vessel motion and with its own dynamic factor at each boom angle
-    (``lift_factor.LiftFactors``; legacy: the constant ``hook_daf``). An unknown name
-    raises ``KeyError``; an inconsistent rules document raises ``RulesValidationError``.
+    (``lift_factor.LiftFactors``; without rules the condition's constant ``daf``). An
+    unknown name raises ``KeyError``; an inconsistent rules document raises
+    ``RulesValidationError``.
     ``on_points`` receives the finite (outreach, load_t) pairs in ascending outreach, in
     batches of at most ``batch_points``; the batches concatenate to ``curve_data``.
     ``compute_scope`` (for this document, hoist and mode) supplies and keeps the probe
@@ -188,8 +191,8 @@ def run_mode_sweep(
     warnings, case)`` per ``curve_data`` point: the ``LiftSetup.records``/``warnings`` of the case
     that set that point's capacity (the one of lowest payload; the first on a tie), the very
     setup its capacity was computed with; ``case`` is that case's profile name (ABS
-    "In-service", DNV "Case I"/"Case II"). It is ``[]`` for a legacy document, whose factor
-    is the authored constant. ``condition`` is the swept condition's name.
+    "In-service", DNV "Case I"/"Case II"). It is ``[]`` for a condition without rules,
+    whose factor is the authored constant. ``condition`` is the swept condition's name.
     ``on_contractual`` receives a copy of the contractual results once, right after stage 1
     (not when the mode has no contractual points). ``on_limit_points`` receives, with each
     flush when any limit gained points (the final flush may bring limit points without a
@@ -207,15 +210,19 @@ def run_mode_sweep(
     hoist = next(h for h in doc.hoists if h.id == hoist_id)
     if mode_name == "split" and not _split_applies(hoist):
         return None
+    if hoist_id not in conditions[0].usable_hoist_ids():
+        return None
+    # Every case of the condition shares its hoist entry.
+    settings = conditions[0].hoist_settings(hoist_id)
     kin = KinematicsAdapter(doc.model_dump())
     # The Model's vessel motion values are ± limits and the hoist's leads are taken with
     # both signs; the chart reports the worst case over them, every slew and wind angle,
     # and every case of the condition.
     cases = [_sweep_case(doc, condition, compute_scope) for condition in conditions]
-    # The dynamic factor of each case at each boom angle (legacy: the constant hook_daf).
+    # The dynamic factor of each case at each boom angle (without rules: the constant daf).
     lift = LiftFactors(doc, cases[0].calc)
-    offlead_deg = float(getattr(hoist, "offlead_deg", 0.0))
-    sidelead_deg = float(getattr(hoist, "sidelead_deg", 0.0))
+    offlead_deg = float(settings.offlead_deg)
+    sidelead_deg = float(settings.sidelead_deg)
 
     def _capacity(
         case: _SweepCase,
@@ -270,10 +277,11 @@ def run_mode_sweep(
                 results[lid] = compute()
             else:
                 signature: Hashable = limit_signature(lid, {c: v or 0.0 for c, v in comps.items()})
-                if case.condition.spec is not None:
+                if case.condition.is_rules_case:
                     # A rules factor, lateral and demand scales depend on inputs the
                     # fingerprint leaves out (the rated loads of the contractual points), so
-                    # they key the result too.
+                    # they key the result too. Without rules the factor is the condition's
+                    # constant daf, which the fingerprint covers.
                     signature = (signature, factor, lateral, scale_key)
                 results[lid] = case.scope.limit_result(angle, signature, compute)
         return results
@@ -306,15 +314,14 @@ def run_mode_sweep(
             return None
         setup = lift.setup(case.condition, hoist_id, mode, angle, probes.zero)
         factor = setup.factor
-        # The live-load lateral of the case (None: legacy), its wind at the case wind speed.
+        # The live-load lateral of the case (None without rules), its wind at the case wind
+        # speed.
         lateral = (
-            None
-            if case.condition.spec is None
-            else hook_lateral(
-                setup, case.wind_speed_m_s, support_z_m=lift.support_z_m(hoist_id, angle)
-            )
+            hook_lateral(setup, case.wind_speed_m_s, support_z_m=lift.support_z_m(hoist_id, angle))
+            if case.condition.is_rules_case
+            else None
         )
-        # The pedestal and retaining-component factors of the case (None: legacy).
+        # The pedestal and retaining-component factors of the case (None without rules).
         scales = lift.demand_scales(case.condition, hoist_id, mode, angle, setup)
         scale_key = (setup.foundation.dead_factor, setup.retaining_live_factor)
         results = _limit_results(
@@ -367,7 +374,7 @@ def run_mode_sweep(
 
     def _compute_mode(mode_name: str) -> dict[str, Any]:
         check_cancelled()
-        mode = analysis_mode_by_name(hoist, mode_name)
+        mode = analysis_mode_by_name(hoist, mode_name, settings)
         mode_contractual_points = mode.contractual_points
         if mode_name == "split" and not mode_contractual_points:
             return {
@@ -450,7 +457,7 @@ def run_mode_sweep(
                             limit_series_map[lid].append((outreach, result.load_t))
                     if math.isfinite(load_t):
                         trail = trail_cache.get((round(float(angle), 10), mode.name))
-                        if trail is not None and cases[0].condition.spec is not None:
+                        if trail is not None and cases[0].condition.is_rules_case:
                             trail_by_outreach[outreach] = trail
                         curve_outreach.append(outreach)
                         curve_load_t.append(load_t)

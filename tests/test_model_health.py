@@ -142,3 +142,43 @@ class TestHealthOnViewModel:
         assert vm.healthSeverity == severity
         assert vm.healthVerdict == verdict
         assert vm.healthChecks == checks
+
+
+class TestConditionHoistHealth:
+    """The conditions own each hoist's settings and charts: their gaps are health issues."""
+
+    @staticmethod
+    def _doc():
+        from tests.rules_docs import GT283, load_v13
+
+        return load_v13(GT283)
+
+    def test_migrated_document_has_no_condition_issues(self):
+        blocking, warnings = collect_model_health_issues(self._doc())
+        assert blocking == []
+        assert not any("contractual" in w for w in warnings)
+
+    def test_payload_hoist_usable_in_no_condition_blocks(self):
+        doc = self._doc()
+        doc.conditions["default"].hoists.pop("AH")
+        blocking, _warnings = collect_model_health_issues(doc)
+        assert "Hoists usable in no condition: AH" in blocking
+
+    def test_boom_or_unknown_hoist_in_a_condition_blocks(self):
+        doc = self._doc()
+        mh = doc.conditions["default"].hoists["MH"]
+        doc.conditions["default"].hoists.update({"BH": mh, "XX": mh})
+        blocking, _warnings = collect_model_health_issues(doc)
+        assert "The boom hoist cannot be usable in a condition: BH in default" in blocking
+        assert "Conditions list unknown hoists: XX in default" in blocking
+
+    def test_usable_hoist_without_points_warns_naming_the_condition(self):
+        doc = self._doc()
+        doc.conditions["default"].hoists["AH"].contractual_points.clear()
+        _blocking, warnings = collect_model_health_issues(doc)
+        assert "Hoists without contractual points: AH in default" in warnings
+
+    def test_document_without_conditions_blocks_without_crashing(self):
+        doc = self._doc().model_copy(update={"conditions": {}})
+        blocking, _warnings = collect_model_health_issues(doc)
+        assert "At least one load condition is required" in blocking

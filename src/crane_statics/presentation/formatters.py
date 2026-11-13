@@ -312,13 +312,32 @@ class HoistFormatter:
     @staticmethod
     def table_columns(
         is_boom_hoist: Optional[Callable[[Any], bool]] = None,
+        condition_settings: Optional[Callable[[Any], Any]] = None,
     ) -> list[Column]:
         """Column definitions for hoist table.
 
         The two hoist kinds share the table but not the authored fields: the boom
         hoist owns no hook of its own. Columns that do not apply to a row read
         blank there and refuse to be edited.
+
+        A payload hoist's DAF and lead limits are per condition: ``condition_settings``
+        gives a hoist's entry (``ConditionHoist``) in the condition shown, None when the
+        hoist is not usable there; those columns are then blank and not editable. An
+        omitted DAF reads 1.0 (without rules the factor; with rules no override).
         """
+
+        def settings(hoist: Any) -> Any:
+            return None if condition_settings is None else condition_settings(hoist)
+
+        def setting_value(getter: Callable[[Any], Any]) -> Callable[[Any], Any]:
+            def value(hoist: Any) -> Any:
+                entry = None if is_boom(hoist) else settings(hoist)
+                return None if entry is None else getter(entry)
+
+            return value
+
+        def setting_editable(hoist: Any) -> bool:
+            return not is_boom(hoist) and settings(hoist) is not None
 
         def is_boom(hoist: Any) -> bool:
             return bool(is_boom_hoist and is_boom_hoist(hoist))
@@ -388,24 +407,24 @@ class HoistFormatter:
             ),
             Column(
                 "DAF",
-                payload_value(lambda h: h.hook_daf),
+                setting_value(lambda s: 1.0 if s.daf is None else s.daf),
                 decimals=3,
                 field="hook_daf",
-                editable=payload_only,
+                editable=setting_editable,
             ),
             Column(
                 "Offlead (deg)",
-                payload_value(lambda h: h.offlead_deg),
+                setting_value(lambda s: s.offlead_deg),
                 decimals=3,
                 field="offlead_deg",
-                editable=payload_only,
+                editable=setting_editable,
             ),
             Column(
                 "Sidelead (deg)",
-                payload_value(lambda h: h.sidelead_deg),
+                setting_value(lambda s: s.sidelead_deg),
                 decimals=3,
                 field="sidelead_deg",
-                editable=payload_only,
+                editable=setting_editable,
             ),
             Column(
                 "Lowest Hook Height (m)",
