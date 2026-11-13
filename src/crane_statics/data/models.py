@@ -216,11 +216,14 @@ class Hoist(BaseModel):
         default=None, description="Hook falls count for managed hook synthesis"
     )
     lower_block_mass_t: float = Field(default=0.0, description="Hook block mass in tonnes")
-    hook_daf: float = Field(default=1.0, description="Dynamic amplification factor")
-    outreach_min_m: Optional[float] = Field(default=None, description="Minimum outreach")
-    outreach_max_m: Optional[float] = Field(default=None, description="Maximum outreach")
-    offlead_deg: float = Field(default=0.0, description="Offlead angle limit")
-    sidelead_deg: float = Field(default=0.0, description="Sidelead angle limit")
+    outreach_min_m: Optional[float] = Field(
+        default=None,
+        description="Minimum outreach: the smallest contractual-point outreach (normal and "
+        "split) over every condition the hoist is usable in",
+    )
+    outreach_max_m: Optional[float] = Field(
+        default=None, description="Maximum outreach, as outreach_min_m but the largest"
+    )
     splitable_block: bool = Field(
         default=False, description="Whether the payload hook block can be split"
     )
@@ -230,7 +233,6 @@ class Hoist(BaseModel):
     split_lower_block_mass_t: Optional[float] = Field(
         default=None, description="Hook block mass in tonnes when split"
     )
-    split_contractual_points: list[ContractualPoint] = Field(default_factory=list)
     max_hook_travel_m: Optional[float] = Field(
         default=None,
         description="Maximum hook travel. Derived for payload hoists from "
@@ -242,7 +244,6 @@ class Hoist(BaseModel):
         "max_hook_travel_m and rope_length_m derive from it. Payload hoists carry crane-frame "
         "z = 0 when unauthored",
     )
-    contractual_points: list[ContractualPoint] = Field(default_factory=list)
     max_hoisting_speed_m_s: Optional[float] = Field(
         default=None, gt=0.0, description="Maximum hoisting speed in m/s"
     )
@@ -253,13 +254,6 @@ class Hoist(BaseModel):
         description="Total rope length in metres. Authored for the boom hoist; for payload hoists "
         "derived as the reeved length at min outreach with the hook at the lowest hook height",
     )
-
-    @field_validator("hook_daf")
-    @classmethod
-    def validate_daf(cls, v: float) -> float:
-        if v < 1.0:
-            raise ValueError("hook_daf must be >= 1.0")
-        return v
 
     @field_validator("falls")
     @classmethod
@@ -276,16 +270,12 @@ class Hoist(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def apply_contractual_defaults(self) -> "Hoist":
-        """Apply defaults from contractual points if bounds are missing."""
-        if self.contractual_points:
-            outreaches = [p.outreach_m for p in self.contractual_points]
-            if self.outreach_min_m is None and outreaches:
-                self.outreach_min_m = min(outreaches)
-            if self.outreach_max_m is None and outreaches:
-                self.outreach_max_m = max(outreaches)
+    def apply_outreach_defaults(self) -> "Hoist":
+        """Default missing outreach bounds and check the split-block settings.
 
-        # Fallback defaults if still None
+        The contractual points live per condition (``ConditionSpec.hoists``), so the
+        normalizer derives the bounds from them; that a splitable block has split points
+        in at least one condition is checked there too."""
         if self.outreach_min_m is None:
             self.outreach_min_m = 0.0
         if self.outreach_max_m is None:
@@ -308,8 +298,6 @@ class Hoist(BaseModel):
                 raise ValueError("split_falls must be <= falls")
             if float(self.split_lower_block_mass_t) > float(self.lower_block_mass_t):
                 raise ValueError("split_lower_block_mass_t must be <= lower_block_mass_t")
-            if not self.split_contractual_points:
-                raise ValueError("splitable_block requires split_contractual_points")
 
         return self
 
@@ -345,8 +333,27 @@ class RulesSpec(BaseModel):
     cabin_above_slewing_bearing: bool = False
 
 
+class ConditionHoist(BaseModel):
+    """A payload hoist's settings and load chart under one condition."""
+
+    offlead_deg: float = Field(ge=0.0, description="Offlead angle limit")
+    sidelead_deg: float = Field(default=0.0, ge=0.0, description="Sidelead angle limit")
+    daf: Optional[float] = Field(
+        default=None,
+        ge=1.0,
+        description="Hook dynamic amplification factor as authored. None: derived from the "
+        "standard under rules, 1.0 without rules",
+    )
+    contractual_points: list[ContractualPoint] = Field(
+        default_factory=list, description="Chart points naming this condition"
+    )
+    split_contractual_points: list[ContractualPoint] = Field(
+        default_factory=list, description="Split-block chart points naming this condition"
+    )
+
+
 class ConditionSpec(BaseModel):
-    """One named in-service condition under the document's rules."""
+    """One named in-service condition and the payload hoists usable under it."""
 
     name: str
     lift: Literal["onboard", "offboard"] = "onboard"
@@ -358,6 +365,10 @@ class ConditionSpec(BaseModel):
     load_wind_area_m2: float = Field(default=0.0, ge=0.0)
     load_drag_coefficient: float = Field(default=1.0, gt=0.0)
     hook_height_override_m: Optional[float] = None
+    hoists: dict[str, ConditionHoist] = Field(
+        default_factory=dict,
+        description="Payload hoists usable in this condition, keyed by hoist id",
+    )
 
 
 class CraneDocument(BaseModel):
@@ -378,10 +389,14 @@ class CraneDocument(BaseModel):
         "Read once when a session starts; the session's own limits are what is analysed",
     )
     rules: Optional[RulesSpec] = Field(
-        default=None, description="Rule set; present iff conditions is non-empty"
+        default=None,
+        description="Rule set the conditions are assessed against; None assesses each "
+        "condition once with its own wind, vessel motion and DAF",
     )
     conditions: dict[str, ConditionSpec] = Field(
-        default_factory=dict, description="Named conditions assessed under rules, as authored"
+        default_factory=dict,
+        description="Named conditions as authored (with or without rules), each owning the "
+        "settings and contractual points of the payload hoists usable under it",
     )
     connections: Optional[list[dict[str, Any]]] = Field(
         default=None, description="Runtime-generated only"

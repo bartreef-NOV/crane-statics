@@ -188,4 +188,26 @@ def test_signed_vessel_motion_round_trips(tmp_path):
     vm = saved["model_definition"]["conditions"]["default"]["vessel_motion"]
     assert vm["accel_x_m_s2"] == -1.0
     assert vm["roll_deg"] == -3.0
-    assert load_document(out).environment.vessel_motion.roll_deg == -3.0
+    assert load_document(out).conditions["default"].vessel_motion.roll_deg == -3.0
+
+
+def test_rules_less_document_saves_its_condition_hoist_settings(tmp_path):
+    data = _minimal_v6()
+    data["model_definition"]["conditions"]["default"]["hoists"]["MH"] = {
+        "offlead_deg": 1.5,
+        "daf": 1.1,
+    }
+    path = tmp_path / "model.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    doc = load_document(path)
+    out = tmp_path / "out.yaml"
+    save_document(doc, out)
+    saved = yaml.safe_load(out.read_text(encoding="utf-8"))["model_definition"]
+
+    assert doc.rules is None
+    assert saved["conditions"]["default"]["hoists"] == {"MH": {"offlead_deg": 1.5, "daf": 1.1}}
+    assert saved["hoists"]["MH"]["load_chart"] == [
+        {"outreach_m": 0.0, "load_t": 0.0, "conditions": ["default"]}
+    ]
+    assert "max_wind_speed_m_s" not in saved["environment"]

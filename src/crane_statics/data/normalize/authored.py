@@ -204,10 +204,12 @@ def _normalize_payload_hoist(
     hoist_segments: list[dict[str, Any]],
     hoist_path: list[str],
     nodes_with_primary: dict[str, Any],
+    usable_in: set[str],
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Normalize one payload hoist into (runtime rope id, rope, hoist) records.
 
-    Registers the hoist's managed hook node in nodes_with_primary."""
+    usable_in names the conditions listing the hoist: its outreach bounds span their
+    chart points (normal and split). Registers the managed hook node in nodes_with_primary."""
     support_node_id = _resolve_support_node_id(hoist, hoist_key, hoist_path)
     split_mode_obj = hoist.get("split")
     normal_falls = int(hoist["falls"])
@@ -268,14 +270,15 @@ def _normalize_payload_hoist(
             split_mode_obj["load_chart"],
             f"model_definition.hoists[{hoist_key}].split.load_chart",
         )
+        if not _points_for_conditions(split_curve, usable_in):
+            raise ValueError(
+                f"model_definition.hoists[{hoist_key}].split: a splitable block needs split "
+                "load chart points in at least one condition listing the hoist"
+            )
 
-    normal_min_outreach, normal_max_outreach = _hoist_curve_outreach_bounds(normal_curve)
-    split_min_outreach = normal_min_outreach
-    split_max_outreach = normal_max_outreach
-    if split_curve:
-        split_min_outreach, split_max_outreach = _hoist_curve_outreach_bounds(split_curve)
-    min_outreach = min(normal_min_outreach, split_min_outreach)
-    max_outreach = max(normal_max_outreach, split_max_outreach)
+    min_outreach, max_outreach = _hoist_curve_outreach_bounds(
+        _points_for_conditions([*normal_curve, *split_curve], usable_in)
+    )
 
     hoist_norm = {
         "rope_id": runtime_rope_id,
@@ -289,18 +292,14 @@ def _normalize_payload_hoist(
             if split_mode_obj is not None
             else hoist["lower_block_mass_t"]
         ),
-        "hook": {
-            "mass_t": float(hoist["lower_block_mass_t"]),
-            "daf": float(hoist["daf"]),
-            "offlead_deg_limit": float(hoist["offlead_deg"]),
-            "sidelead_deg_limit": float(hoist["sidelead_deg"]),
-        },
+        "hook": {"mass_t": float(hoist["lower_block_mass_t"])},
         "operating_envelope": {
             "outreach_min_m": float(min_outreach),
             "outreach_max_m": float(max_outreach),
         },
-        "contractual_curve": normal_curve,
-        "split_contractual_points": split_curve,
+        # Tagged charts: the caller moves them into the conditions whose names they carry.
+        "load_chart": normal_curve,
+        "split_load_chart": split_curve,
         "linear_mass_kg_m": float(rope_src["linear_mass_kg_m"]),
         **(
             {"max_hoisting_speed_m_s": float(hoist["max_hoisting_speed_m_s"])}
@@ -335,17 +334,11 @@ def _normalize_boom_hoist(
             boom_segments, f"model_definition.hoists[{BOOM_HOIST_ID}]"
         ),
         "linear_mass_kg_m": float(rope_src["linear_mass_kg_m"]),
-        "hook": {
-            "mass_t": 0.0,
-            "daf": 1.0,
-            "offlead_deg_limit": 0.0,
-            "sidelead_deg_limit": 0.0,
-        },
+        "hook": {"mass_t": 0.0},
         "operating_envelope": {
             "outreach_min_m": 0.0,
             "outreach_max_m": 200.0,
         },
-        "contractual_curve": [],
         "rope_length_m": (
             float(rope_src["length_m"]) if rope_src.get("length_m") is not None else None
         ),
@@ -558,23 +551,6 @@ def _runtime_ropes(ropes_norm: dict[str, Any], node_ids: set[str]) -> list[dict[
     return ropes
 
 
-def _runtime_curve_points(points: list[Any], ctx: str) -> list[dict[str, Any]]:
-    """Validate and convert contractual curve points; ctx names the list in errors."""
-    out: list[dict[str, Any]] = []
-    for idx, cp in enumerate(points):
-        if not isinstance(cp, dict):
-            raise ValueError(f"{ctx}[{idx}] must be an object")
-        _require_object_keys(cp, {"outreach_m", "load_t"}, {"label"}, f"{ctx}[{idx}]")
-        cp_runtime: dict[str, float | str] = {
-            "outreach_m": float(cp["outreach_m"]),
-            "load_t": float(cp["load_t"]),
-        }
-        if "label" in cp:
-            cp_runtime["label"] = str(cp["label"])
-        out.append(cp_runtime)
-    return out
-
-
 def _runtime_hoists(
     hoists_norm: dict[str, Any], rope_ids: set[str], node_ids: set[str]
 ) -> list[dict[str, Any]]:
@@ -589,7 +565,6 @@ def _runtime_hoists(
                 "load_node_id",
                 "hook",
                 "operating_envelope",
-                "contractual_curve",
             },
             {
                 "support_node_id",
@@ -597,7 +572,6 @@ def _runtime_hoists(
                 "splitable_block",
                 "split_falls",
                 "split_lower_block_mass_t",
-                "split_contractual_points",
                 "linear_mass_kg_m",
                 "lowest_hook_height_m",
                 "rope_length_m",
@@ -607,15 +581,9 @@ def _runtime_hoists(
         )
         hook = hoist["hook"]
         envl = hoist["operating_envelope"]
-        curve = hoist["contractual_curve"]
-        if not isinstance(hook, dict) or not isinstance(envl, dict) or not isinstance(curve, list):
-            raise ValueError(f"hoist[{hoist_id}] hook/envelope/curve have invalid types")
-        _require_object_keys(
-            hook,
-            {"mass_t", "daf", "offlead_deg_limit"},
-            {"sidelead_deg_limit"},
-            f"hoist[{hoist_id}].hook",
-        )
+        if not isinstance(hook, dict) or not isinstance(envl, dict):
+            raise ValueError(f"hoist[{hoist_id}] hook/envelope have invalid types")
+        _require_object_keys(hook, {"mass_t"}, set(), f"hoist[{hoist_id}].hook")
         _require_object_keys(
             envl,
             {"outreach_min_m", "outreach_max_m"},
@@ -630,13 +598,6 @@ def _runtime_hoists(
             raise ValueError(
                 f"hoist[{hoist_id}].load_node_id references unknown node {load_node_id!r}"
             )
-        cps = _runtime_curve_points(curve, f"hoist[{hoist_id}].contractual_curve")
-        split_curve = hoist.get("split_contractual_points") or []
-        if not isinstance(split_curve, list):
-            raise ValueError(f"hoist[{hoist_id}].split_contractual_points must be an array")
-        split_cps = _runtime_curve_points(
-            split_curve, f"hoist[{hoist_id}].split_contractual_points"
-        )
         hoists.append(
             {
                 "id": str(hoist_id),
@@ -647,22 +608,9 @@ def _runtime_hoists(
                 "splitable_block": bool(hoist.get("splitable_block", False)),
                 "split_falls": hoist.get("split_falls"),
                 "split_lower_block_mass_t": hoist.get("split_lower_block_mass_t"),
-                "split_contractual_points": split_cps,
                 "lower_block_mass_t": float(hook["mass_t"]),
-                "hook_daf": float(hook["daf"]),
-                "offlead_deg": float(hook["offlead_deg_limit"]),
-                "sidelead_deg": float(
-                    hook[
-                        (
-                            "sidelead_deg_limit"
-                            if "sidelead_deg_limit" in hook
-                            else "offlead_deg_limit"
-                        )
-                    ]
-                ),
                 "outreach_min_m": float(envl["outreach_min_m"]),
                 "outreach_max_m": float(envl["outreach_max_m"]),
-                "contractual_points": cps,
                 "linear_mass_kg_m": float(hoist.get("linear_mass_kg_m", 0.0)),
                 "lowest_hook_height_m": (
                     float(hoist["lowest_hook_height_m"])
@@ -684,39 +632,59 @@ def _runtime_hoists(
     return hoists
 
 
-def _runtime_environment(
-    environment_src: dict[str, Any], vessel_motion_src: dict[str, Any]
-) -> dict[str, Any]:
+def _runtime_environment(environment_src: dict[str, Any]) -> dict[str, Any]:
+    # Wind speed and vessel motion are authored per condition; the runtime environment
+    # keeps its placeholder defaults for them.
     return {
         "gravity_m_s2": -abs(float(environment_src.get("gravity_m_s2", DEFAULT_GRAVITY_M_S2))),
-        # With rules each condition carries its own wind speed; keep the runtime default.
-        **(
-            {"max_wind_speed_m_s": abs(float(environment_src["max_wind_speed_m_s"]))}
-            if environment_src.get("max_wind_speed_m_s") is not None
-            else {}
-        ),
         "air_density_kg_m3": float(
             environment_src.get("air_density_kg_m3", DEFAULT_AIR_DENSITY_KG_M3)
         ),
-        "vessel_motion": {
-            key: float(vessel_motion_src.get(key, default))
-            for key, default in DEFAULT_VESSEL_MOTION.items()
-        },
     }
 
 
-def _runtime_conditions(conditions_src: dict[str, Any]) -> dict[str, Any]:
-    return {
-        str(name): {
+def _points_for_conditions(points: list[dict[str, Any]], names: set[str]) -> list[dict[str, Any]]:
+    """The chart points naming any of ``names``, in chart order."""
+    return [p for p in points if names.intersection(p["conditions"])]
+
+
+def _untagged(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{k: v for k, v in p.items() if k != "conditions"} for p in points]
+
+
+def _runtime_conditions(
+    conditions_src: dict[str, Any],
+    charts: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]],
+) -> dict[str, Any]:
+    """Runtime conditions; charts maps payload hoist id -> (load chart, split load chart)
+    with each point's ``conditions`` tags, and a condition's points for a hoist are the
+    points naming it."""
+    out: dict[str, Any] = {}
+    for name, condition in conditions_src.items():
+        hoists: dict[str, Any] = {}
+        for hoist_id, entry in (condition.get("hoists") or {}).items():
+            normal, split = charts[str(hoist_id)]
+            hoists[str(hoist_id)] = {
+                "offlead_deg": float(entry["offlead_deg"]),
+                "sidelead_deg": float(entry.get("sidelead_deg") or 0.0),
+                "daf": float(entry["daf"]) if entry.get("daf") is not None else None,
+                "contractual_points": _untagged(_points_for_conditions(normal, {name})),
+                "split_contractual_points": _untagged(_points_for_conditions(split, {name})),
+            }
+        out[str(name)] = {
             "name": str(name),
-            **{key: value for key, value in condition.items() if key != "vessel_motion"},
+            **{
+                key: value
+                for key, value in condition.items()
+                if key not in ("vessel_motion", "hoists")
+            },
             "vessel_motion": {
                 key: float(condition["vessel_motion"].get(key, default))
                 for key, default in DEFAULT_VESSEL_MOTION.items()
             },
+            "hoists": hoists,
         }
-        for name, condition in conditions_src.items()
-    }
+    return out
 
 
 def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
@@ -795,17 +763,25 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
 
     ropes_norm: dict[str, Any] = {}
     hoists_norm: dict[str, Any] = {}
+    conditions_src: dict[str, Any] = md.get("conditions") or {}
+    charts: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
 
     for hoist_id, hoist in payload_hoists_src.items():
         hoist_key = str(hoist_id)
         if not isinstance(hoist, dict):
             raise ValueError(f"model_definition.hoists[{hoist_key}] must be an object")
         hoist_segments, hoist_path = expanded[hoist_key]
+        usable_in = {
+            str(name)
+            for name, condition in conditions_src.items()
+            if hoist_key in (condition.get("hoists") or {})
+        }
         rope_id, rope_norm, hoist_norm = _normalize_payload_hoist(
-            hoist_key, hoist, hoist_segments, hoist_path, nodes_with_primary
+            hoist_key, hoist, hoist_segments, hoist_path, nodes_with_primary, usable_in
         )
         ropes_norm[rope_id] = rope_norm
         hoists_norm[hoist_key] = hoist_norm
+        charts[hoist_key] = (hoist_norm.pop("load_chart"), hoist_norm.pop("split_load_chart"))
 
     boom_rope_id, boom_rope_norm, boom_hoist_norm = _normalize_boom_hoist(
         boom_hoist_src, expanded[boom_id][0]
@@ -816,9 +792,6 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
     environment_src = md.get("environment")
     if not isinstance(environment_src, dict):
         raise ValueError("model_definition.environment must be an object")
-    vessel_motion_src = md.get("vessel_motion", {})
-    if not isinstance(vessel_motion_src, dict):
-        raise ValueError("model_definition.vessel_motion must be an object")
 
     boom_width_m = float(structure["boom_width_m"])
     slewing_bearing_diameter_m = (
@@ -839,7 +812,7 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         "metadata": {
             "name": str(metadata_src["name"]),
         },
-        "environment": _runtime_environment(environment_src, vessel_motion_src),
+        "environment": _runtime_environment(environment_src),
         "support_widths": {
             "boom_width_m": boom_width_m,
             "slewing_bearing_diameter_m": slewing_bearing_diameter_m,
@@ -856,7 +829,7 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
         "ropes": ropes,
         "hoists": hoists,
         "rules": md.get("rules"),
-        "conditions": _runtime_conditions(md.get("conditions") or {}),
+        "conditions": _runtime_conditions(conditions_src, charts),
     }
 
 
@@ -886,12 +859,15 @@ def _normalize_contractual_curve_points(
     curve_norm: list[dict[str, Any]] = []
     for idx, cp in enumerate(curve_src):
         if isinstance(cp, dict):
-            _require_object_keys(cp, {"outreach_m", "load_t"}, {"label"}, f"{ctx}[{idx}]")
+            _require_object_keys(
+                cp, {"outreach_m", "load_t", "conditions"}, {"label"}, f"{ctx}[{idx}]"
+            )
             curve_norm.append(
                 {
                     "outreach_m": float(cp["outreach_m"]),
                     "load_t": float(cp["load_t"]),
                     **({"label": str(cp["label"])} if cp.get("label") else {}),
+                    "conditions": [str(name) for name in cp["conditions"]],
                 }
             )
             continue
