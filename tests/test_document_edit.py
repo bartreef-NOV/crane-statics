@@ -257,11 +257,17 @@ class TestRopeAndContractualEditing:
         payload = next(h for h in document.hoists if not editor.is_solve_hoist(h))
         before = len(editor.contractual_points(payload.id))
 
+        original = [(p.outreach_m, p.load_t) for p in editor.contractual_points(payload.id)]
         editor.add_contractual_point(payload.id, build_contractual_point(30.0, 100.0))
-        assert len(editor.contractual_points(payload.id)) == before + 1
+        points = [(p.outreach_m, p.load_t) for p in editor.contractual_points(payload.id)]
+        assert len(points) == before + 1
+        # In outreach order, as a tagged chart point is added (was: appended last).
+        added = points.index((30.0, 100.0))
+        assert all(o <= 30.0 for o, _ in points[:added])
+        assert all(o > 30.0 for o, _ in points[added + 1 :])
 
-        editor.delete_contractual_point(payload.id, before)
-        assert len(editor.contractual_points(payload.id)) == before
+        editor.delete_contractual_point(payload.id, added)
+        assert [(p.outreach_m, p.load_t) for p in editor.contractual_points(payload.id)] == original
 
 
 class TestModelViewModelEditing:

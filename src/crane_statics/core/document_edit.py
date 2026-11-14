@@ -687,7 +687,16 @@ class DocumentEditor:
         mode: str = "normal",
         condition_name: Optional[str] = None,
     ) -> None:
-        self.contractual_points(hoist_id, mode, condition_name).append(point)
+        """Add ``point`` to one condition's chart, before its first point of larger
+        outreach (as ``add_chart_point``). Validity-guarded: refused (``DocumentEditError``,
+        document unchanged) when a document that saved would no longer save."""
+        points = self.contractual_points(hoist_id, mode, condition_name)
+        with self._keeping_valid():
+            position = next(
+                (i for i, p in enumerate(points) if p.outreach_m > point.outreach_m),
+                len(points),
+            )
+            points.insert(position, point)
 
     def update_contractual_point(
         self,
@@ -697,9 +706,11 @@ class DocumentEditor:
         mode: str = "normal",
         condition_name: Optional[str] = None,
     ) -> None:
+        """Replace point ``index`` of one condition's chart in place. Validity-guarded."""
         points = self.contractual_points(hoist_id, mode, condition_name)
         self._guard_index(index, len(points), "contractual point")
-        points[index] = point
+        with self._keeping_valid():
+            points[index] = point
 
     def delete_contractual_point(
         self,
@@ -708,9 +719,13 @@ class DocumentEditor:
         mode: str = "normal",
         condition_name: Optional[str] = None,
     ) -> None:
+        """Delete point ``index`` of one condition's chart (other conditions naming an
+        equal point keep it). Validity-guarded: deleting a condition's last point of a
+        hoist is refused on a document that saves."""
         points = self.contractual_points(hoist_id, mode, condition_name)
         self._guard_index(index, len(points), "contractual point")
-        points.pop(index)
+        with self._keeping_valid():
+            points.pop(index)
 
     # -- condition hoists and chart-point tags -------------------------
 

@@ -127,6 +127,19 @@ def _table(vm: ChartViewModel) -> list[dict]:
     return [model.record_at(index) for index in range(model.count)]
 
 
+def _empty_the_chart(vm: ChartViewModel) -> None:
+    """Leave the drawn condition without contractual points in the current mode.
+
+    The app refuses that edit (a condition needs a point per usable hoist, or the
+    document stops saving), so the state is set up on the document directly, then the
+    view model is told as an edit would tell it."""
+    vm._contractual_points()  # the hoist and mode exist
+    vm._model.contractual_points_for_mode(
+        vm._model.selected_hoist_id, vm._current_chart_mode(), vm._condition
+    ).clear()
+    vm._edit_contractual(lambda _editor, _hoist_id: None)
+
+
 def _curve_steps() -> list:
     return [
         ("points", [(30.0, 250.0), (35.0, 240.0)]),
@@ -231,8 +244,7 @@ def test_split_mode_streams_its_own_contractual_points(vm, sweeps):
     # A mode without contractual points (the normal mode, emptied): no markers, no rows.
     vm.setChartMode("normal")
     normal = _visible(vm)
-    for _ in range(len(normal_points)):
-        vm.deleteContractualPoint(0)
+    _empty_the_chart(vm)
     assert vm._contractual_points() == []
     sweeps.script(normal, [], _payload([]))
     vm.draw()
@@ -419,8 +431,7 @@ def test_markers_set_the_partial_y_axis_until_the_curve_arrives(vm, sweeps):
 
 
 def test_partial_y_axis_without_curve_or_markers_keeps_the_default(vm, sweeps):
-    for _ in range(len(vm._contractual_points())):
-        vm.deleteContractualPoint(0)
+    _empty_the_chart(vm)
     assert vm._contractual_points() == []
     job = _visible(vm)
     steps = [("limits", {"MH__rope_T": [(30.0, 50000.0)]})]

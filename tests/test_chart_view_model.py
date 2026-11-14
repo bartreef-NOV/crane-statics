@@ -327,18 +327,30 @@ class TestContractualEditing:
         chart_vm.addContractualPoint({"outreach_m": 33.0, "load_t": 120.0})
         assert chart_vm.contractualModel.count == before + 1
 
-        chart_vm.deleteContractualPoint(before)
+        added = [
+            chart_vm.contractualFields(i) for i in range(chart_vm.contractualModel.count)
+        ].index({"outreach_m": 33.0, "load_t": 120.0})
+        chart_vm.deleteContractualPoint(added)
         assert chart_vm.contractualModel.count == before
+        assert {"outreach_m": 33.0, "load_t": 120.0} not in [
+            chart_vm.contractualFields(i) for i in range(chart_vm.contractualModel.count)
+        ]
 
     def test_markers_follow_edits_in_row_order(self, chart_vm):
         before = chart_vm.contractualModel.count
 
         chart_vm.addContractualPoint({"outreach_m": 33.0, "load_t": 120.0})
         assert len(chart_vm.markers) == before + 1
-        assert chart_vm.markers[-1]["outreach"] == pytest.approx(33.0)
-        assert chart_vm.markers[-1]["status"] == "pending"
+        # The new point takes its place in outreach order (was: appended last).
+        row = next(
+            i for i, m in enumerate(chart_vm.markers) if m["outreach"] == pytest.approx(33.0)
+        )
+        assert chart_vm.markers[row]["status"] == "pending"
+        assert [m["outreach"] for m in chart_vm.markers] == sorted(
+            m["outreach"] for m in chart_vm.markers
+        )
 
-        chart_vm.deleteContractualPoint(before)
+        chart_vm.deleteContractualPoint(row)
         assert len(chart_vm.markers) == before
 
     def test_update_writes_back_to_the_document(self, chart_vm):

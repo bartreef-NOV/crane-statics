@@ -876,6 +876,57 @@ def test_chart_point_table_ignores_the_scene_condition():
     assert vm.chartPoints == rows
 
 
+def test_per_condition_point_edits_refuse_what_would_not_save(doc):
+    """The Load Chart workspace edits one condition's chart: validity-guarded too (were:
+    a negative outreach or load, or deleting every point of a hoist there, accepted and
+    the document no longer saved)."""
+    first, _second = _names(doc)
+    count = len(_points(doc, first))
+    bad = build_contractual_point(-5.0, 1.0)
+    negative_load = build_contractual_point(30.0, -1.0)
+    _refused(doc, lambda e: e.add_contractual_point(HOIST, bad, "normal", first))
+    _refused(doc, lambda e: e.add_contractual_point(HOIST, negative_load, "normal", first))
+    _refused(doc, lambda e: e.update_contractual_point(HOIST, 0, bad, "normal", first))
+
+    editor = DocumentEditor(doc)
+    for _ in range(count - 1):
+        editor.delete_contractual_point(HOIST, 0, "normal", first)
+    assert len(_points(doc, first)) == 1
+    # The last point of the hoist there: refused.
+    message = _refused(doc, lambda e: e.delete_contractual_point(HOIST, 0, "normal", first))
+    assert HOIST in message and first in message
+
+
+def test_per_condition_add_goes_in_outreach_order(doc):
+    first, second = _names(doc)
+    before = _points(doc, first)
+    outreach = (before[0][0] + before[1][0]) / 2.0
+    DocumentEditor(doc).add_contractual_point(
+        HOIST, build_contractual_point(outreach, 9.0), "normal", first
+    )
+    assert _points(doc, first) == [before[0], (outreach, 9.0), *before[1:]]
+    assert _points(doc, second) == before
+    _exports_valid(doc)
+
+
+def test_chart_view_model_reports_a_refused_point_edit():
+    from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
+
+    session = SessionState()
+    vm = ChartViewModel(session)
+    session.model.set_document(load_example(RULES_LESS_EXAMPLE))
+    session.model.select_payload_hoist("trolley")  # one chart point in ``default``
+    assert vm.selectedHoistId == "trolley"
+    snapshot = session.model.document.model_dump_json()
+    vm.deleteContractualPoint(0)
+    assert "trolley" in vm.statusText
+    vm.addContractualPoint({"outreach_m": -3.0, "load_t": 1.0})
+    assert "outreach_m" in vm.statusText
+    assert session.model.document.model_dump_json() == snapshot
+    assert not session.model.dirty
+    vm.shutdown()
+
+
 def test_has_rules_follows_the_document():
     _session, vm, _failed, _edited = _vm(RULES_EXAMPLE)
     assert vm.hasRules is True
