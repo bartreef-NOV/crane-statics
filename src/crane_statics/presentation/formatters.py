@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping, Optional
 
-from crane_statics.core.document_edit import shown_daf
+from crane_statics.core.hoist_daf import shown_daf
 from crane_statics.core.results import ResultRow
 from crane_statics.data import CraneDocument
 

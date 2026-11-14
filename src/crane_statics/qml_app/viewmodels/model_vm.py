@@ -9,7 +9,6 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from crane_statics.qml_app.qt_compat import pyqtProperty
 
 from crane_statics.core.document_edit import (
-    ConditionHoistValues,
     DocumentEditError,
     DocumentEditor,
     build_contractual_point,
@@ -27,7 +26,7 @@ from ..models.document_forms import (
     chart_point_rows,
     clear_support_width,
     condition_fields,
-    condition_hoist_daf,
+    entered_daf_value,
     condition_hoist_rows,
     condition_hoist_kwargs,
     contractual_fields,
@@ -473,33 +472,28 @@ class ModelViewModel(QObject):
             self.editFailed.emit("Select a condition first")
             return
         self._apply_edit(
-            lambda editor: editor.set_condition_hoist(
+            lambda editor: editor.enter_condition_hoist(
                 name,
                 hoist_id,
                 float(offlead_deg),
                 float(sidelead_deg),
-                condition_hoist_daf(editor.document, daf),
+                entered_daf_value(daf),
             )
         )
 
     @pyqtSlot(str, bool)
     def setConditionHoistUsable(self, hoist_id: str, usable: bool) -> None:
-        """The table's "usable" checkbox: list ``hoist_id`` in the selected condition (no
-        lead limits, no DAF override, the chart points of the first condition listing it)
-        or drop it there."""
+        """The table's "usable" checkbox (``DocumentEditor.set_condition_hoist_usable``)."""
         name = self._selected_condition
         if name is None:
             self.editFailed.emit("Select a condition first")
             return
         spec = self._selected_spec()
         if spec is not None and (hoist_id in spec.hoists) == bool(usable):
-            return
-        if usable:
-            self._apply_edit(
-                lambda editor: editor.set_condition_hoist(name, hoist_id, 0.0, 0.0, None)
-            )
-        else:
-            self.removeConditionHoist(hoist_id)
+            return  # already so: no edit, no undo step
+        self._apply_edit(
+            lambda editor: editor.set_condition_hoist_usable(name, hoist_id, bool(usable))
+        )
 
     @pyqtSlot(str)
     def removeConditionHoist(self, hoist_id: str) -> None:
@@ -785,15 +779,21 @@ class ModelViewModel(QObject):
         # Usable under the condition shown, with the form's DAF and leads (none without
         # a condition).
         condition_name = self._shown_condition
-        values = condition_hoist_kwargs(fields) or {"offlead_deg": 0.0, "sidelead_deg": 0.0}
-        settings = None if condition_name is None else ConditionHoistValues(**values)
-        self._apply_edit(
-            lambda editor: editor.add_hoist(
+        values = condition_hoist_kwargs(fields)
+
+        def mutate(editor: DocumentEditor) -> None:
+            settings = (
+                None
+                if condition_name is None or values is None
+                else editor.hoist_form_settings(None, condition_name, **values)
+            )
+            editor.add_hoist(
                 build_payload_hoist(**hoist_kwargs(fields)),
                 settings=settings,
                 condition_name=condition_name,
             )
-        )
+
+        self._apply_edit(mutate)
 
     @pyqtSlot(int, "QVariantMap", result="bool")
     def updateHoist(self, row: int, fields: dict) -> bool:
@@ -814,19 +814,26 @@ class ModelViewModel(QObject):
                     ),
                 )
             )
-        # The form carries DAF and leads only for a hoist the condition shown lists.
+        # The form carries DAF and leads only for a hoist the condition shown lists; an
+        # unchanged DAF number keeps the stored DAF (``hoist_form_settings``).
         values = condition_hoist_kwargs(fields)
         condition_name = self._shown_condition
         shown = self._shown_settings(current) is not None
-        settings = ConditionHoistValues(**values) if values is not None and shown else None
-        return self._apply_edit(
-            lambda editor: editor.update_hoist(
+
+        def mutate(editor: DocumentEditor) -> None:
+            settings = (
+                editor.hoist_form_settings(current.id, condition_name, **values)
+                if values is not None and shown
+                else None
+            )
+            editor.update_hoist(
                 current.id,
                 build_payload_hoist(**hoist_kwargs(fields)),
                 settings=settings,
                 condition_name=condition_name,
             )
-        )
+
+        return self._apply_edit(mutate)
 
     @pyqtSlot(int, str, "QVariant", result="bool")
     def setHoistField(self, row: int, field: str, value: Any) -> bool:

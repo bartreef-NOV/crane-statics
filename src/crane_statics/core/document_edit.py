@@ -34,6 +34,7 @@ from ..data.models import (
 )
 from ..data.normalize import derive_payload_hoist_rope_geometry
 from ..rules import RulesValidationError, validate_rules_document
+from .hoist_daf import entered_daf, submitted_daf
 
 BOOM_BODY_ID = "boom"
 CONDITION_NAME_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
@@ -210,28 +211,6 @@ class ConditionHoistValues:
         """Raise ``DocumentEditError`` unless the values are within ``ConditionHoist``'s
         bounds."""
         _check_condition_hoist_values(self.offlead_deg, self.sidelead_deg, self.daf)
-
-
-def shown_daf(daf: Optional[float]) -> float:
-    """The factor an authored DAF stands for in a number field: an unset one is 1.0.
-
-    (Under rules an unset DAF is derived from the standard; views flag that themselves.)"""
-    return 1.0 if daf is None else float(daf)
-
-
-def entered_daf(value: Optional[float], *, rules: bool) -> Optional[float]:
-    """The DAF to store for an entered ``value``; None is no override.
-
-    Without rules 1.0 is the default factor and is stored as no override, so the document
-    exports as it was authored. Under rules an entered 1.0 is an explicit override of the
-    derived factor; clearing it (None) restores the derived one. This is the one place
-    the "1.0 vs None" rule lives."""
-    if value is None:
-        return None
-    number = float(value)
-    if not rules and number == 1.0:
-        return None
-    return number
 
 
 @dataclass(frozen=True)
@@ -905,6 +884,64 @@ class DocumentEditor:
             )
         with self._keeping_valid():
             spec.hoists = {hid: e for hid, e in spec.hoists.items() if hid != hoist_id}
+
+    def enter_condition_hoist(
+        self,
+        condition: str,
+        hoist_id: str,
+        offlead_deg: float,
+        sidelead_deg: float,
+        daf: Optional[float],
+    ) -> None:
+        """``set_condition_hoist`` with an entered DAF (None: clear the override), stored
+        under the document's own rules (``hoist_daf.entered_daf``)."""
+        self.set_condition_hoist(
+            condition,
+            hoist_id,
+            offlead_deg,
+            sidelead_deg,
+            entered_daf(daf, rules=self._doc.rules is not None),
+        )
+
+    def set_condition_hoist_usable(self, condition: str, hoist_id: str, usable: bool) -> bool:
+        """List ``hoist_id`` in ``condition`` (no lead limits, no DAF override, the chart
+        points of the first condition listing it: ``set_condition_hoist``) or drop it there
+        (``remove_condition_hoist``). False, and nothing changes, when it already is so."""
+        spec = self._condition(condition)
+        if (hoist_id in spec.hoists) == bool(usable):
+            self._payload_hoist(hoist_id)
+            return False
+        if usable:
+            self.set_condition_hoist(condition, hoist_id, 0.0, 0.0, None)
+        else:
+            self.remove_condition_hoist(condition, hoist_id)
+        return True
+
+    def hoist_form_settings(
+        self,
+        hoist_id: Optional[str],
+        condition_name: Optional[str],
+        *,
+        offlead_deg: float,
+        sidelead_deg: float,
+        shown_daf: float,
+    ) -> ConditionHoistValues:
+        """The settings a hoist form submits for ``hoist_id`` (None: a new hoist) under
+        ``condition_name`` (None: the first condition). The form shows a DAF number; an
+        unchanged one keeps the stored DAF (``hoist_daf.submitted_daf``), so editing
+        another field of the hoist never alters it."""
+        spec = (
+            next(iter(self._doc.conditions.values()), None)
+            if condition_name is None
+            else self._doc.conditions.get(condition_name)
+        )
+        entry = None if spec is None or hoist_id is None else spec.hoists.get(hoist_id)
+        current = None if entry is None else entry.daf
+        return ConditionHoistValues(
+            offlead_deg=float(offlead_deg),
+            sidelead_deg=float(sidelead_deg),
+            daf=submitted_daf(current, shown_daf, rules=self._doc.rules is not None),
+        )
 
     def tagged_chart(self, hoist_id: str, split: bool = False) -> list[TaggedChartPoint]:
         """``hoist_id``'s load chart (``split``: the split-block one) as saved: each point
