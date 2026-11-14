@@ -1,10 +1,8 @@
-schema: {name: crane-statics, version: 13.0.0}
+schema: {name: crane-statics, version: 14.0.0}
 metadata: {name: Crane Statics Example 22689 (ABS)}
 model_definition:
   environment: {gravity_m_s2: 9.81, air_density_kg_m3: 1.225}
-  # illustrative: not from the crane datasheet
   rules: {standard: ABS, crane_class: offshore}
-  # illustrative: not from the crane datasheet
   conditions:
     onboard_sea:
       wind_speed_m_s: 20.0
@@ -16,8 +14,6 @@ model_definition:
         pitch_deg: 1.0
         pitch_angular_accel_rad_s2: 0.0
         roll_angular_accel_rad_s2: 0.0
-        reference_x_m: 0.0
-        reference_z_m: 0.0
       hoists:
         MH: {offlead_deg: 1.0, sidelead_deg: 2.5}
         WH: {offlead_deg: 2.0, sidelead_deg: 4.5}
@@ -33,8 +29,6 @@ model_definition:
         pitch_deg: 1.0
         pitch_angular_accel_rad_s2: 0.0
         roll_angular_accel_rad_s2: 0.0
-        reference_x_m: 0.0
-        reference_z_m: 0.0
       significant_wave_height_m: 1.5
       v_in_m_s: 0.6
       v_t_m_s: 0.3
@@ -53,8 +47,6 @@ model_definition:
         pitch_deg: 1.0
         pitch_angular_accel_rad_s2: 0.0
         roll_angular_accel_rad_s2: 0.0
-        reference_x_m: 0.0
-        reference_z_m: 0.0
       significant_wave_height_m: 1.0
       v_in_m_s: 0.6
       v_t_m_s: 0.3
@@ -144,7 +136,6 @@ model_definition:
       area_y_m2: 169.4
   hoists:
     BH:
-      # illustrative: not from the crane datasheet
       rope: {linear_mass_kg_m: 20.3, length_m: 4500.0, ea_kN: 210000.0}
       reeving:
       - {node: winch, body: platform, x_m: -8.35, z_m: 5.85}
@@ -152,7 +143,6 @@ model_definition:
       - {node: aframe_sheave_2, body: rear_leg, x_m: -11.0, z_m: 58.3, parts: 2}
       - {node: boom_sheave_3, body: boom, u_m: 153.0, w_m: 3.8, parts: 24}
     MH:
-      # illustrative: not from the crane datasheet
       rope: {linear_mass_kg_m: 20.3, ea_kN: 95000.0}
       reeving:
       - {node: winch, body: platform, x_m: -8.374, z_m: 2.218}
@@ -162,7 +152,6 @@ model_definition:
       - {node: boom_sheave_4, body: boom, u_m: 155.0, w_m: -6.05, parts: 2}
       lower_block_mass_t: 102.0
       falls: 20
-      # illustrative: not from the crane datasheet
       max_hoisting_speed_m_s: 0.166
       lowest_hook_height_m: -53.0
       load_chart:
@@ -237,7 +226,6 @@ model_definition:
           - offboard_hs05
           - offboard_hs10
     WH:
-      # illustrative: not from the crane datasheet
       rope: {linear_mass_kg_m: 13.4, ea_kN: 61000.0}
       reeving:
       - {node: winch, body: platform, x_m: -8.25, z_m: 8.32}
@@ -247,7 +235,6 @@ model_definition:
       - {node: boom_sheave_4, body: boom, u_m: 164.0, w_m: -9.5}
       lower_block_mass_t: 13.77
       falls: 4
-      # illustrative: not from the crane datasheet
       max_hoisting_speed_m_s: 0.44
       lowest_hook_height_m: -53.0
       load_chart:
@@ -276,7 +263,6 @@ model_definition:
         - offboard_hs05
         - offboard_hs10
     SH:
-      # illustrative: not from the crane datasheet
       rope: {linear_mass_kg_m: 4.6, ea_kN: 51000.0}
       reeving:
       - {node: winch, body: boom, u_m: 77.8, w_m: 0.0}
@@ -284,7 +270,6 @@ model_definition:
       - {node: boom_sheave_2, body: boom, u_m: 160.8, w_m: -8.33}
       lower_block_mass_t: 1.632
       falls: 1
-      # illustrative: not from the crane datasheet
       max_hoisting_speed_m_s: 0.8
       lowest_hook_height_m: -53.0
       load_chart:

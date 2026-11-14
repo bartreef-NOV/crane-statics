@@ -16,6 +16,9 @@ v13 was breaking (removed fields): payload-hoist daf/offlead_deg/sidelead_deg,
 environment.max_wind_speed_m_s and top-level vessel_motion moved into the now
 required conditions, and load-chart points gained a required ``conditions``
 list. v12 files are converted with scripts/migrate_authored_v13.py.
+v14 was breaking (removed fields): the vessel-motion reference point moved from each
+condition's vessel_motion (reference_x_m/reference_z_m) to structure.motion_reference
+(x_m/z_m). v13 files are converted with scripts/migrate_authored_v14.py.
 Enforcing that distinction automatically (diffing generated schemas across
 versions) is not built; treat it as a review discipline for now.
 """
@@ -34,8 +37,8 @@ from pydantic import (
 )
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
-AUTHORED_SCHEMA_MAJOR_VERSION = 13
-AUTHORED_SCHEMA_VERSION = "13.0.0"
+AUTHORED_SCHEMA_MAJOR_VERSION = 14
+AUTHORED_SCHEMA_VERSION = "14.0.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -109,8 +112,16 @@ class AuthoredVesselMotion(BaseModel):
     pitch_deg: float = 0.0
     pitch_angular_accel_rad_s2: float = 0.0
     roll_angular_accel_rad_s2: float = 0.0
-    reference_x_m: float = 0.0
-    reference_z_m: float = 0.0
+
+
+class AuthoredMotionReference(BaseModel):
+    """The crane-frame point the vessel's pitch and roll rotate about. It belongs to the
+    crane, not to a condition."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x_m: float = Field(default=0.0, description="Crane-frame X of the pitch/roll reference.")
+    z_m: float = Field(default=0.0, description="Crane-frame Z of the pitch/roll reference.")
 
 
 class AuthoredEnvironment(BaseModel):
@@ -605,6 +616,11 @@ class AuthoredStructure(BaseModel):
         gt=0,
         description="Slewing bearing diameter. Omit to skip platform-base bearing line "
         "load checks.",
+    )
+    motion_reference: AuthoredMotionReference = Field(
+        default_factory=AuthoredMotionReference,
+        description="Point the vessel's pitch and roll rotate about; the conditions' angular "
+        "accelerations act about it. Omitted values are zero.",
     )
     boom_heel: AuthoredGlobalPosition2D = Field(
         description="Global position of the boom's heel (foot) pivot."

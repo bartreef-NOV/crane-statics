@@ -143,6 +143,19 @@ ColumnLayout {
 
     GroupBox {
         Layout.fillWidth: true
+        title: qsTr("Vessel Motion Reference")
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: root.layoutSpacing
+
+            EnvRow { label: qsTr("Motion Reference X (m)"); fieldKey: "reference_x_m" }
+            EnvRow { label: qsTr("Motion Reference Z (m)"); fieldKey: "reference_z_m" }
+        }
+    }
+
+    GroupBox {
+        Layout.fillWidth: true
         title: qsTr("Environment")
 
         ColumnLayout {

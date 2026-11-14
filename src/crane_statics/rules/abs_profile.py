@@ -114,7 +114,9 @@ class AbsProfile:
         # slew-rotated (alpha_roll, alpha_pitch) and x_ref in the crane frame; physically the
         # reference point stays on the vessel while the boom slews about x = 0. Both levers
         # are at most |x_ref| + |x_tip|, and |alpha_pitch_c| <= |alpha_pitch| + |alpha_roll|.
-        a_v_g, lever_m = tip_vertical_accel_g(motion, support_x_m)
+        a_v_g, lever_m = tip_vertical_accel_g(
+            motion, support_x_m, doc.motion_reference.reference_x_m
+        )
         ll_kN = (chart_max_load_t + mode.lower_block_mass_t + suspended_rope_mass_t) * gravity
 
         records: list[ProvenanceRecord] = []
@@ -123,7 +125,9 @@ class AbsProfile:
         if crane_class == "heavy_lift":
             # 2-2/11.3: validate_rules_document rejected a_v over 0.07 g at every rated
             # angle; a point beyond them (the Scene's free angle) warns instead.
-            excess = heavy_lift_a_v_excess(cond.name, motion, support_x_m)
+            excess = heavy_lift_a_v_excess(
+                cond.name, motion, support_x_m, doc.motion_reference.reference_x_m
+            )
             if excess is not None:
                 warnings.append(
                     f"{excess} (this boom angle is outside the hoist's operating range and "
@@ -246,7 +250,7 @@ class AbsProfile:
             # add their lever-arm term there (core evaluates it at the support node).
             accel_fraction_per_m_x=abs(motion.pitch_angular_accel_rad_s2) / GRAVITY_M_S2,
             accel_fraction_per_m_y=abs(motion.roll_angular_accel_rad_s2) / GRAVITY_M_S2,
-            reference_z_m=motion.reference_z_m,
+            reference_z_m=doc.motion_reference.reference_z_m,
         )
         records.append(
             ProvenanceRecord(

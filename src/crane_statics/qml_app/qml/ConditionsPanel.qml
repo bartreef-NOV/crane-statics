@@ -456,8 +456,6 @@ RowLayout {
                     ConditionRow { label: qsTr("Pitch (rad/s²)"); fieldKey: "pitch_angular_accel_rad_s2" }
                     ConditionRow { label: qsTr("Roll angle (°)"); fieldKey: "roll_deg" }
                     ConditionRow { label: qsTr("Pitch angle (°)"); fieldKey: "pitch_deg" }
-                    ConditionRow { label: qsTr("Motion Reference X (m)"); fieldKey: "reference_x_m" }
-                    ConditionRow { label: qsTr("Motion Reference Z (m)"); fieldKey: "reference_z_m" }
                 }
             }
 

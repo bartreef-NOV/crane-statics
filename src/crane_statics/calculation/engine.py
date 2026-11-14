@@ -340,10 +340,9 @@ class CraneCalculator:
                 moments[group]["Mz"] += rel_x * float(fy) - rel_y * float(fx)
 
         env = self.doc.environment
-        vm = env.vessel_motion
         gravity_abs = abs(float(env.gravity_m_s2))
-        ref_x = float(vm.reference_x_m if vm is not None else 0.0)
-        roll_ref_z = float(vm.reference_z_m if vm is not None else 0.0)
+        ref_x = float(self.doc.motion_reference.reference_x_m)
+        roll_ref_z = float(self.doc.motion_reference.reference_z_m)
 
         def _mass_force(mass_t: float, xw: float, zw: float) -> tuple[float, float, float]:
             fx, fz = inertia_force(

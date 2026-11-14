@@ -329,9 +329,9 @@ class _LoadBuilder:
         categories -- the detail text names the reeved and spooled shares.
         """
         gx, gz = self._gravity_kN_per_t()
-        vessel_motion = self._env.get("vessel_motion", {}) or {}
-        ref_x = float(vessel_motion.get("reference_x_m", 0.0))
-        ref_z = float(vessel_motion.get("reference_z_m", 0.0))
+        reference = self._doc.get("motion_reference", {}) or {}
+        ref_x = float(reference.get("reference_x_m", 0.0))
+        ref_z = float(reference.get("reference_z_m", 0.0))
         ax = float(self._c.accel_x_m_s2)
         az = float(self._c.accel_z_m_s2)
         pitch = float(self._c.pitch_accel_rad_s2)
@@ -416,9 +416,9 @@ class _LoadBuilder:
         if abs(ax) < 1e-9 and abs(az) < 1e-9 and abs(pitch) < 1e-9:
             return ()
 
-        vessel_motion = self._env.get("vessel_motion", {}) or {}
-        ref_x = float(vessel_motion.get("reference_x_m", 0.0))
-        ref_z = float(vessel_motion.get("reference_z_m", 0.0))
+        reference = self._doc.get("motion_reference", {}) or {}
+        ref_x = float(reference.get("reference_x_m", 0.0))
+        ref_z = float(reference.get("reference_z_m", 0.0))
 
         masses: list[tuple[float, float, float, str]] = []
         for body_id, body in self._bodies():

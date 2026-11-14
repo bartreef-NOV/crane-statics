@@ -522,8 +522,7 @@ def _engine_oop(case: SceneCase) -> dict[str, Any]:
         for group, (left, right) in OOP_SIDES.items()
     }
     moments["platform_base"] = {"mx": -platform_mx}
-    assert doc.environment.vessel_motion is not None
-    ref_z = float(doc.environment.vessel_motion.reference_z_m)
+    ref_z = float(doc.motion_reference.reference_z_m)
     # _out_of_plane_variants' fy_m and fy_w, on the engine's own point geometry.
     fy = -geometry.mass_t * (
         motion.accel_y_m_s2 - motion.roll_accel_rad_s2 * (geometry.mass_z - ref_z)

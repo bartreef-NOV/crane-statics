@@ -158,7 +158,9 @@ def test_validation_names_the_condition_a_v_and_the_real_reach() -> None:
     message = str(err.value)
     hoist = next(h for h in _payload_hoists(doc) if f"hoists.{h.id}'s" in message)
     reach = _reach(doc, hoist)
-    a_v, lever = tip_vertical_accel_g(doc.conditions["mild"].vessel_motion, reach)
+    a_v, lever = tip_vertical_accel_g(
+        doc.conditions["mild"].vessel_motion, reach, doc.motion_reference.reference_x_m
+    )
     assert f"a_v {a_v:.4g} g" in message
     assert f"(x {reach:g} m, lever arm {lever:g} m)" in message
 

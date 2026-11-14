@@ -27,14 +27,16 @@ class RulesValidationError(ValueError):
     """A rules document is inconsistent; the message is one line and names the field."""
 
 
-def tip_vertical_accel_g(motion: VesselMotion, support_x_m: float) -> tuple[float, float]:
+def tip_vertical_accel_g(
+    motion: VesselMotion, support_x_m: float, reference_x_m: float
+) -> tuple[float, float]:
     """ABS 5.17 a_v at a hook support node at crane-frame x ``support_x_m``: (a_v in g, lever).
 
     The linear ``|a_z|`` plus the angular accelerations times a bound on their lever arm
     over every slew, ``(|alpha_pitch| + |alpha_roll|) * (|x_ref| + |x_tip|)``. It grows
     with ``|support_x_m|``, so a bound on the reach bounds a_v.
     """
-    lever_m = abs(motion.reference_x_m) + abs(float(support_x_m))
+    lever_m = abs(reference_x_m) + abs(float(support_x_m))
     angular = abs(motion.pitch_angular_accel_rad_s2) + abs(motion.roll_angular_accel_rad_s2)
     return (abs(motion.accel_z_m_s2) + angular * lever_m) / GRAVITY_M_S2, lever_m
 
@@ -43,10 +45,11 @@ def heavy_lift_a_v_excess(
     condition_name: str,
     motion: VesselMotion,
     support_x_m: float,
+    reference_x_m: float,
     where: str = "at the boom tip",
 ) -> Optional[str]:
     """ABS 2-2/11.3: the message when a heavy-lift a_v exceeds 0.07 g there, else None."""
-    a_v_g, lever_m = tip_vertical_accel_g(motion, support_x_m)
+    a_v_g, lever_m = tip_vertical_accel_g(motion, support_x_m, reference_x_m)
     if a_v_g <= HEAVY_LIFT_MAX_ACCEL_G * (1.0 + _REL_TOL):
         return None
     return (
@@ -184,6 +187,7 @@ def _validate_heavy_lift_tip(doc: CraneDocument, condition_name: str) -> None:
             condition_name,
             motion,
             reach,
+            doc.motion_reference.reference_x_m,
             where=f"at hoists.{hoist.id}'s largest boom-tip reach in its operating range",
         )
         if message is not None:

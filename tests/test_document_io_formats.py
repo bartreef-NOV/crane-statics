@@ -11,7 +11,7 @@ from crane_statics.core.io import DocumentIOError, save_document
 
 def _minimal_v6() -> dict:
     return {
-        "schema": {"name": "crane-statics", "version": "13.0.0"},
+        "schema": {"name": "crane-statics", "version": "14.0.0"},
         "metadata": {"name": "V6 Minimal"},
         "model_definition": {
             "environment": {

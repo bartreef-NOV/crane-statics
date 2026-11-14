@@ -34,7 +34,7 @@ from crane_statics.core.lift_factor import LiftFactors
 from crane_statics.core.limit_auto_set import compute_required_rope_capacity_kN
 from crane_statics.core.load_condition import condition_cases, condition_document
 from crane_statics.core.sweep import run_mode_sweep
-from crane_statics.data.models import ConditionHoist, ConditionSpec, VesselMotion
+from crane_statics.data.models import ConditionHoist, ConditionSpec, MotionReference, VesselMotion
 from crane_statics.rules import validate_rules_document
 from crane_statics.rules.abs_profile import AbsProfile
 from tests import rules_reference as ref
@@ -365,11 +365,10 @@ def test_abs_horizontal_acceleration_is_taken_at_the_boom_tip() -> None:
         pitch_deg=2.0,
         pitch_angular_accel_rad_s2=0.04,
         roll_angular_accel_rad_s2=0.06,
-        reference_x_m=12.0,
-        reference_z_m=-6.0,
     )
+    reference = MotionReference(reference_x_m=12.0, reference_z_m=-6.0)
     cond = ConditionSpec(name="c", wind_speed_m_s=0.0, vessel_motion=motion)
-    doc = rules_doc("ABS", cond)
+    doc = rules_doc("ABS", cond, reference=reference)
     condition = condition_cases(doc, "c")[0]
     hoist = next(h for h in doc.hoists if h.id == HOIST)
     mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))
@@ -390,7 +389,9 @@ def test_abs_horizontal_acceleration_is_taken_at_the_boom_tip() -> None:
     still = motion.model_copy(
         update={"pitch_angular_accel_rad_s2": 0.0, "roll_angular_accel_rad_s2": 0.0}
     )
-    doc_still = rules_doc("ABS", cond.model_copy(update={"vessel_motion": still}))
+    doc_still = rules_doc(
+        "ABS", cond.model_copy(update={"vessel_motion": still}), reference=reference
+    )
     lift_still = LiftFactors(doc_still, CraneCalculator(doc_still))
     setup_still = lift_still.setup(condition_cases(doc_still, "c")[0], HOIST, mode, ANGLE)
     plain = lift_factor.hook_lateral(
@@ -783,15 +784,15 @@ TIP_MOTION = VesselMotion(
     accel_z_m_s2=0.5,
     pitch_angular_accel_rad_s2=0.05,
     roll_angular_accel_rad_s2=-0.03,
-    reference_x_m=-3.0,
 )
+TIP_REFERENCE = MotionReference(reference_x_m=-3.0)
 
 
 def _abs_setup(
     lift: Literal["onboard", "offboard"], motion: VesselMotion, support_x_m: float, **kw: Any
 ):
     cond = ConditionSpec(name="c", lift=lift, wind_speed_m_s=0.0, vessel_motion=motion, **kw)
-    doc = rules_doc("ABS", cond)
+    doc = rules_doc("ABS", cond, reference=TIP_REFERENCE)
     hoists = [h.model_copy(update={"max_hoisting_speed_m_s": 0.5}) for h in doc.hoists]
     doc = doc.model_copy(update={"hoists": hoists})
     hoist = next(h for h in doc.hoists if h.id == HOIST)
@@ -855,7 +856,7 @@ def test_abs_offboard_factor_uses_the_tip_a_v() -> None:
 
 def test_lift_setup_passes_the_support_node_x_at_each_angle() -> None:
     cond = ConditionSpec(name="c", wind_speed_m_s=0.0, vessel_motion=TIP_MOTION)
-    doc = rules_doc("ABS", cond)
+    doc = rules_doc("ABS", cond, reference=TIP_REFERENCE)
     condition = condition_cases(doc, "c")[0]
     hoist = next(h for h in doc.hoists if h.id == HOIST)
     mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))

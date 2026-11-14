@@ -238,9 +238,9 @@ def _accumulate_loads(
     env = doc_dict.get("environment", {})
     gravity = abs(env.get("gravity_m_s2", 9.81))
     air_density = env.get("air_density_kg_m3", 1.225)
-    vm = env.get("vessel_motion") or {}
-    ref_x = float(vm.get("reference_x_m", 0.0))
-    ref_z = float(vm.get("reference_z_m", 0.0))
+    reference = doc_dict.get("motion_reference") or {}
+    ref_x = float(reference.get("reference_x_m", 0.0))
+    ref_z = float(reference.get("reference_z_m", 0.0))
 
     # Mass / inertia loads
     for bidx, mass_t, cx, cz in ctx["mass_entries_global"]:

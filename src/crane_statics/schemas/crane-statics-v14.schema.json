@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/schemas/crane-statics-v13.schema.json",
+  "$id": "https://example.com/schemas/crane-statics-v14.schema.json",
   "title": "AuthoredDocument",
   "$defs": {
     "AuthoredBoomBody": {
@@ -728,6 +728,26 @@
       "title": "AuthoredModelDefinition",
       "type": "object"
     },
+    "AuthoredMotionReference": {
+      "additionalProperties": false,
+      "description": "The crane-frame point the vessel's pitch and roll rotate about. It belongs to the\ncrane, not to a condition.",
+      "properties": {
+        "x_m": {
+          "default": 0.0,
+          "description": "Crane-frame X of the pitch/roll reference.",
+          "title": "X M",
+          "type": "number"
+        },
+        "z_m": {
+          "default": 0.0,
+          "description": "Crane-frame Z of the pitch/roll reference.",
+          "title": "Z M",
+          "type": "number"
+        }
+      },
+      "title": "AuthoredMotionReference",
+      "type": "object"
+    },
     "AuthoredPayloadHoist": {
       "additionalProperties": false,
       "description": "Self-contained payload hoist: its rope, its reeving path with the sheaves it\nowns, its hook mass, falls and its load chart. Lead angles and DAF are set per\ncondition under ``conditions.<name>.hoists``. The hook hangs from the\nlast reeving node unless support_node names another; the application creates the\nmanaged hook node automatically.",
@@ -1096,7 +1116,7 @@
           "type": "string"
         },
         "version": {
-          "pattern": "^13\\.\\d+\\.\\d+$",
+          "pattern": "^14\\.\\d+\\.\\d+$",
           "title": "Version",
           "type": "string"
         }
@@ -1165,6 +1185,10 @@
           "description": "Slewing bearing diameter. Omit to skip platform-base bearing line load checks.",
           "title": "Slewing Bearing Diameter M"
         },
+        "motion_reference": {
+          "$ref": "#/$defs/AuthoredMotionReference",
+          "description": "Point the vessel's pitch and roll rotate about; the conditions' angular accelerations act about it. Omitted values are zero."
+        },
         "boom_heel": {
           "$ref": "#/$defs/AuthoredGlobalPosition2D",
           "description": "Global position of the boom's heel (foot) pivot."
@@ -1229,16 +1253,6 @@
         "roll_angular_accel_rad_s2": {
           "default": 0.0,
           "title": "Roll Angular Accel Rad S2",
-          "type": "number"
-        },
-        "reference_x_m": {
-          "default": 0.0,
-          "title": "Reference X M",
-          "type": "number"
-        },
-        "reference_z_m": {
-          "default": 0.0,
-          "title": "Reference Z M",
           "type": "number"
         }
       },
@@ -1430,7 +1444,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "13.0.0"
+        "version": "14.0.0"
       }
     }
   ],

@@ -86,9 +86,9 @@ decisions that should not be re-litigated are in [docs/adr/](docs/adr/).
 
 ## Document Lifecycle
 
-Authored input (YAML) is strict `crane-statics` schema version `13.0.0` (`src/crane_statics/schemas/crane-statics-v13.schema.json`).
+Authored input (YAML) is strict `crane-statics` schema version `14.0.0` (`src/crane_statics/schemas/crane-statics-v14.schema.json`).
 
-13.0.0 moves each payload hoist's `daf`, `offlead_deg` and `sidelead_deg` into `conditions.<name>.hoists.<id>`. `conditions` is now always required and `rules` is optional. Load-chart points carry `conditions: [...]`, naming the conditions they apply to. The top-level `environment.max_wind_speed_m_s` and `vessel_motion` are removed; each condition has its own `wind_speed_m_s` and `vessel_motion`. Convert v12 files with `PYTHONPATH=src python scripts/migrate_authored_v13.py <files>` (v12 files are rejected otherwise). 12.0.0 had renamed `hook_mass_t` to `lower_block_mass_t`.
+14.0.0 moves the vessel-motion reference point (`reference_x_m`, `reference_z_m`) from each condition's `vessel_motion` to the crane: `structure.motion_reference: {x_m, z_m}`, omitted values are zero. Convert v13 files with `PYTHONPATH=src python scripts/migrate_authored_v14.py <files>`; it refuses a file whose conditions disagree on the point, so make them equal first (v13 files are rejected otherwise). 13.0.0 moves each payload hoist's `daf`, `offlead_deg` and `sidelead_deg` into `conditions.<name>.hoists.<id>`. `conditions` is now always required and `rules` is optional. Load-chart points carry `conditions: [...]`, naming the conditions they apply to. The top-level `environment.max_wind_speed_m_s` and `vessel_motion` are removed; each condition has its own `wind_speed_m_s` and `vessel_motion`. Convert v12 files with `PYTHONPATH=src python scripts/migrate_authored_v13.py <files>` (v12 files are rejected otherwise). 12.0.0 had renamed `hook_mass_t` to `lower_block_mass_t`.
 
 Each hoist is self-contained: its `reeving` lists the rope path from the winch outwards, and an entry with `body` and coordinates defines a sheave or winch that belongs to that hoist (`boom` nodes use `u_m`/`w_m`, the others `x_m`/`z_m`). A hoist-local node `winch` in hoist `MH` becomes runtime node `mh_winch`. The last reeving entry is the support node the hook hangs from. Entries without coordinates pass through a node already defined (`boom_heel`, or a shared node under a body's `nodes`). Delete a hoist block to remove the hoist and its sheaves; copy one and rename its key to add a hoist.
 
@@ -199,7 +199,7 @@ Keep QML declarative and route state changes through the owning view model. Add 
 
 ## References
 
-- `src/crane_statics/schemas/crane-statics-v13.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
+- `src/crane_statics/schemas/crane-statics-v14.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
 - ABS, *Requirements for Certification of Lifting Appliances*, January 2026. Part 2-2: 9.3 (p.52-54), 5.15 (p.46), 5.13.5(c) (p.46), 5.17 (p.47-48), 5.19 (p.49-50), 5.21 (p.50-51), 11 (p.56-57)
 - DNV-ST-0378, *Offshore and platform lifting appliances*, July 2019, amended October 2021: 4.1.3.2 (p.54), 4.2.2.1 (p.57), 4.2.3.2 and 4.2.3.3 (p.58), 8.2.2.1 (p.90), 8.2.2.2 (p.91), 8.2.2.4 (p.91)
 

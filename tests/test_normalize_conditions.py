@@ -20,7 +20,7 @@ def _point(outreach_m: float, load_t: float, *conditions: str) -> dict:
 def _two_condition_doc() -> dict:
     """A v13 document with conditions A and B sharing one hoist with different charts."""
     return {
-        "schema": {"name": "crane-statics", "version": "13.0.0"},
+        "schema": {"name": "crane-statics", "version": "14.0.0"},
         "metadata": {"name": "Two conditions"},
         "model_definition": {
             "environment": {"gravity_m_s2": 9.81, "air_density_kg_m3": 1.225},

@@ -449,6 +449,13 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
     structure_out: dict[str, Any] = {"boom_width_m": float(widths.get("boom_width_m", 1.0))}
     if widths.get("slewing_bearing_diameter_m") is not None:
         structure_out["slewing_bearing_diameter_m"] = float(widths["slewing_bearing_diameter_m"])
+    reference = data.get("motion_reference") or {}
+    motion_reference = {
+        "x_m": float(reference.get("reference_x_m", 0.0)),
+        "z_m": float(reference.get("reference_z_m", 0.0)),
+    }
+    if any(motion_reference.values()):
+        structure_out["motion_reference"] = motion_reference
     structure_out.update(
         {
             "boom_heel": _primary_xy("boom_heel"),

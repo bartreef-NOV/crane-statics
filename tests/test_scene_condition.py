@@ -15,13 +15,13 @@ from crane_statics.data.models import CraneDocument, VesselMotion
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
-from tests.rules_docs import gale, rules_doc
+from tests.rules_docs import REFERENCE, gale, rules_doc
 from tests.test_lift_factor import _rules, _sea
 from tests.test_scene_view_model import MockCanvas
 
 HOIST = "MH"
 STEP = 4.5
-CALM = VesselMotion(accel_x_m_s2=0.3, roll_deg=3.0, pitch_deg=4.0, reference_z_m=-1.0)
+CALM = VesselMotion(accel_x_m_s2=0.3, roll_deg=3.0, pitch_deg=4.0)
 
 
 def _vms(doc: CraneDocument) -> tuple[SessionState, SceneViewModel, ChartViewModel]:
@@ -139,12 +139,12 @@ def test_the_scene_follows_the_chart_condition_at_its_most_severe_case() -> None
     assert state.scene_state.vessel_roll_deg == pytest.approx(1.5 * CALM.roll_deg)
     assert state.scene_state.vessel_pitch_deg == pytest.approx(1.5 * CALM.pitch_deg)
     assert state.scene_state.accel_x_m_s2 == 0.0
-    # The Scene solves and draws the condition's environment (its motion reference point).
+    # The Scene solves and draws the condition's environment (the crane's motion reference point).
     scene_doc = scene._hoist_state.scene_document()
-    assert scene_doc is not None and scene_doc.environment.vessel_motion.reference_z_m == -1.0
+    assert scene_doc is not None and scene_doc.motion_reference == REFERENCE
     kinematics = scene._kinematics.kinematics()
     assert kinematics is not None
-    assert kinematics.doc["environment"]["vessel_motion"]["reference_z_m"] == -1.0
+    assert kinematics.doc["motion_reference"] == REFERENCE.model_dump()
     assert model.document is not None
     assert scene._hoist_state.scene_calculator(model.document).doc is scene_doc
     chart.shutdown()

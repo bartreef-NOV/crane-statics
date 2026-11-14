@@ -41,11 +41,11 @@ def test_package_data_glob_still_matches_schema_filename():
     ), f"{relative_path!r} is not matched by any package-data glob {patterns!r} in pyproject.toml"
 
 
-def test_authored_schema_version_is_13():
+def test_authored_schema_version_is_14():
     from crane_statics.data.authored_models import AUTHORED_SCHEMA_VERSION
 
-    assert AUTHORED_SCHEMA_VERSION == "13.0.0"
-    assert AUTHORED_SCHEMA_MAJOR_VERSION == 13
+    assert AUTHORED_SCHEMA_VERSION == "14.0.0"
+    assert AUTHORED_SCHEMA_MAJOR_VERSION == 14
     assert not (SCHEMAS_DIR / "crane-statics-v12.schema.json").exists()
 
 

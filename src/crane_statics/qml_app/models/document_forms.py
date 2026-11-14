@@ -30,9 +30,9 @@ VESSEL_MOTION_KEYS = [
     "accel_z_m_s2",
     "roll_angular_accel_rad_s2",
     "pitch_angular_accel_rad_s2",
-    "reference_x_m",
-    "reference_z_m",
 ]
+# The crane's pitch/roll reference point (``doc.motion_reference``); not a condition value.
+MOTION_REFERENCE_KEYS = ["reference_x_m", "reference_z_m"]
 SUPPORT_WIDTH_KEYS = ["boom_width_m", "slewing_bearing_diameter_m"]
 # Support-width keys that may be cleared back to "unset" via clearEnvironmentValue.
 NULLABLE_SUPPORT_WIDTH_KEYS = {"slewing_bearing_diameter_m"}
@@ -61,6 +61,9 @@ def environment_settings(doc: Optional[CraneDocument]) -> dict:
         {key: float(getattr(doc.environment.vessel_motion, key)) for key in VESSEL_MOTION_KEYS}
     )
     env_dict.update(
+        {key: float(getattr(doc.motion_reference, key)) for key in MOTION_REFERENCE_KEYS}
+    )
+    env_dict.update(
         {
             key: (float(raw) if (raw := getattr(doc.support_widths, key)) is not None else None)
             for key in SUPPORT_WIDTH_KEYS
@@ -82,14 +85,16 @@ def environment_from_conditions(doc: Optional[CraneDocument]) -> bool:
 
 
 def set_environment_value(doc: CraneDocument, key: str, value: float) -> bool:
-    """Set one scalar setting (gravity, air density, a support width); False when the key
-    is not one (the per-condition wind speed and vessel motion included) or the value is
-    unchanged."""
+    """Set one scalar setting (gravity, air density, a support width, the motion reference
+    point); False when the key is not one (the per-condition wind speed and vessel motion
+    included) or the value is unchanged."""
     target: Any
     if key in EDITABLE_ENVIRONMENT_KEYS:
         target = doc.environment
     elif key in SUPPORT_WIDTH_KEYS:
         target = doc.support_widths
+    elif key in MOTION_REFERENCE_KEYS:
+        target = doc.motion_reference
     else:
         return False
     previous = getattr(target, key)

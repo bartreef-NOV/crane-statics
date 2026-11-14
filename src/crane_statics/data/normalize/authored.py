@@ -817,6 +817,10 @@ def _normalize_authored_document(doc_data: dict[str, Any]) -> dict[str, Any]:
             "boom_width_m": boom_width_m,
             "slewing_bearing_diameter_m": slewing_bearing_diameter_m,
         },
+        "motion_reference": {
+            "reference_x_m": float(structure["motion_reference"]["x_m"]),
+            "reference_z_m": float(structure["motion_reference"]["z_m"]),
+        },
         "saved_limits": {
             str(limit_id): {
                 "capacity_kN": float(limit["capacity_kN"]),

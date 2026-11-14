@@ -303,7 +303,7 @@ def _expected_roll_fy(calc, roll_rad_s2):
     above the reference, so the point accelerates toward -y and its inertia force
     -m*a_y = +m*omega*z points toward +y.
     """
-    ref_z = float(calc.doc.environment.vessel_motion.reference_z_m)
+    ref_z = float(calc.doc.motion_reference.reference_z_m)
     return sum(m * roll_rad_s2 * (z - ref_z) for m, z in _all_point_masses(calc))
 
 

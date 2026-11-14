@@ -21,6 +21,7 @@ from crane_statics.data.authored_models import (
     format_authored_validation_error,
 )
 from crane_statics.data.migrate_v13 import migrate_document
+from crane_statics.data.migrate_v14 import migrate_document as migrate_document_v14
 
 EXAMPLES = sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
 
@@ -96,11 +97,12 @@ def _v12_plain() -> dict:
 
 
 def _rules() -> dict:
-    return migrate_document(_v12_rules())
+    return migrate_document_v14(migrate_document(_v12_rules()))
 
 
 def _plain() -> dict:
-    return migrate_document(_v12_plain())
+    """The v12 plain document as a current (v14) one."""
+    return migrate_document_v14(migrate_document(_v12_plain()))
 
 
 def _md(data: dict) -> dict:
@@ -114,9 +116,9 @@ def _error(data: dict) -> str:
     return format_authored_validation_error(info.value)
 
 
-def test_version_is_13():
-    assert AUTHORED_SCHEMA_MAJOR_VERSION == 13
-    assert AUTHORED_SCHEMA_VERSION == "13.0.0"
+def test_version_is_14():
+    assert AUTHORED_SCHEMA_MAJOR_VERSION == 14
+    assert AUTHORED_SCHEMA_VERSION == "14.0.0"
 
 
 @pytest.mark.parametrize("example", EXAMPLES, ids=lambda p: p.name)
@@ -314,7 +316,7 @@ def test_v12_document_rejected_with_version_message(tmp_path):
         load_document(path)
     message = str(info.value)
     assert "Unsupported authored schema version '12.0.0'" in message
-    assert "major version 13" in message
+    assert "major version 14" in message
     assert "migrate_authored_v13" in message
     with pytest.raises(ValidationError):
         AuthoredDocument.model_validate(_v12_rules())

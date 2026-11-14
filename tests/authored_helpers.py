@@ -19,18 +19,23 @@ from crane_statics.core.io import _StrictIntSafeLoader, load_document
 from crane_statics.core.load_condition import condition_document, scene_case
 from crane_statics.data.authored_models import AUTHORED_SCHEMA_MAJOR_VERSION, authored_schema_major
 from crane_statics.data.migrate_v13 import migrate_document
+from crane_statics.data.migrate_v14 import migrate_document as migrate_document_v14
 from crane_statics.data.models import ConditionHoist, CraneDocument
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 
 
 def v13(doc: dict[str, Any]) -> dict[str, Any]:
-    """``doc`` as a v13 authored dict: migrated from v12, or ``doc`` itself when already v13."""
+    """``doc`` as a current (v14) authored dict: migrated from v12 or v13, or ``doc`` itself
+    when already current. (The name predates v14.)"""
     schema = doc.get("schema")
     version = schema.get("version") if isinstance(schema, dict) else None
-    if authored_schema_major(version) == AUTHORED_SCHEMA_MAJOR_VERSION:
+    major = authored_schema_major(version)
+    if major == AUTHORED_SCHEMA_MAJOR_VERSION:
         return doc
-    return migrate_document(doc)
+    if major == 12:
+        doc = migrate_document(doc)
+    return migrate_document_v14(doc)
 
 
 def copy_hoist(model_definition: dict[str, Any], source: str, target: str) -> dict[str, Any]:

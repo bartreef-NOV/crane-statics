@@ -1,4 +1,4 @@
-schema: {name: crane-statics, version: 13.0.0}
+schema: {name: crane-statics, version: 14.0.0}
 metadata: {name: Crane Statics Example GT283 (ABS)}
 model_definition:
   environment: {gravity_m_s2: 9.81, air_density_kg_m3: 1.226}
@@ -14,8 +14,6 @@ model_definition:
         pitch_deg: 1.0
         pitch_angular_accel_rad_s2: 0.0
         roll_angular_accel_rad_s2: 0.0
-        reference_x_m: 0.0
-        reference_z_m: 0.0
       hoists:
         MH: {offlead_deg: 1.0, sidelead_deg: 2.5}
         AH: {offlead_deg: 2.0, sidelead_deg: 4.5}
@@ -31,8 +29,6 @@ model_definition:
         pitch_deg: 1.0
         pitch_angular_accel_rad_s2: 0.0
         roll_angular_accel_rad_s2: 0.0
-        reference_x_m: 0.0
-        reference_z_m: 0.0
       significant_wave_height_m: 1.5
       v_in_m_s: 0.6
       v_t_m_s: 0.3

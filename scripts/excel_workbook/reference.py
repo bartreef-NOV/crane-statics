@@ -104,8 +104,8 @@ JSON. Lengths m, masses t, areas m^2, angles deg. Top level:
   ``accel_y_m_s2``, ``accel_z_m_s2``, ``roll_deg``, ``pitch_deg``,
   ``pitch_angular_accel_rad_s2``, ``roll_angular_accel_rad_s2``, ``reference_x_m``,
   ``reference_z_m``} (the wind speed and motion are the first condition's, the motion
-  values its +/- limits, not used by a scene case; the reference point is used for
-  pitch/roll lever arms).
+  values its +/- limits, not used by a scene case; the reference point is the crane's
+  ``motion_reference``, used for pitch/roll lever arms).
 * ``structure``: ``boom_width_m``, ``slewing_bearing_diameter_m`` and ``points``:
   {``boom_heel``, ``upper_hinge``, ``rear_hinge``, ``front_hinge``, ``platform_base``}
   -> {``node_id``, ``x_m``, ``z_m``}. ``node_id`` is the runtime node the point is
@@ -482,7 +482,10 @@ def _expanded_model_from_document(doc: CraneDocument, source: str) -> dict[str, 
             "gravity_abs_m_s2": abs(float(env["gravity_m_s2"])),
             "air_density_kg_m3": float(env["air_density_kg_m3"]),
             "max_wind_speed_m_s": float(env["max_wind_speed_m_s"]),
-            "vessel_motion": {k: float(v) for k, v in env["vessel_motion"].items()},
+            "vessel_motion": {
+                **{k: float(v) for k, v in env["vessel_motion"].items()},
+                **{k: float(v) for k, v in dd["motion_reference"].items()},
+            },
         },
         "structure": {
             "boom_width_m": float(dd["support_widths"]["boom_width_m"]),

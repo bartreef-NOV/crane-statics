@@ -59,8 +59,8 @@ def _document(*, offset_boom_mass: bool) -> CraneDocument:
     vm.pitch_angular_accel_rad_s2 = LIMITS["pitch_accel_rad_s2"]
     vm.roll_deg = LIMITS["vessel_roll_deg"]
     vm.pitch_deg = LIMITS["vessel_pitch_deg"]
-    vm.reference_x_m = 3.0
-    vm.reference_z_m = -2.0
+    doc.motion_reference.reference_x_m = 3.0
+    doc.motion_reference.reference_z_m = -2.0
     if offset_boom_mass:
         boom = next(b for b in doc.bodies if b.id == "boom")
         mp = boom.mass_points[0]

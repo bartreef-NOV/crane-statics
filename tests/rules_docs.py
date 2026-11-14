@@ -14,15 +14,16 @@ from crane_statics.data.models import (
     ConditionSpec,
     CraneDocument,
     RulesSpec,
+    MotionReference,
     VesselMotion,
 )
 from tests.authored_helpers import example_path, read_yaml, v13
 
 #: The GT283 example (schema v13).
 GT283 = example_path("crane_input_GT283.yaml")
-MOTION = VesselMotion(
-    accel_x_m_s2=0.8, roll_deg=4.0, pitch_deg=2.5, reference_x_m=3.0, reference_z_m=-2.0
-)
+MOTION = VesselMotion(accel_x_m_s2=0.8, roll_deg=4.0, pitch_deg=2.5)
+#: The crane's pitch/roll reference point that ``rules_doc`` gives its document.
+REFERENCE = MotionReference(reference_x_m=3.0, reference_z_m=-2.0)
 
 
 def load_v13(path: Path) -> CraneDocument:
@@ -66,8 +67,13 @@ def gale(name: str = "gale", wind: float = 30.0, motion: VesselMotion = MOTION) 
     return ConditionSpec(name=name, wind_speed_m_s=wind, vessel_motion=motion)
 
 
-def rules_doc(standard: Literal["ABS", "DNV"], *conditions: ConditionSpec) -> CraneDocument:
-    """GT283 under ``standard`` with ``conditions``; the environment holds runtime dummies.
+def rules_doc(
+    standard: Literal["ABS", "DNV"],
+    *conditions: ConditionSpec,
+    reference: MotionReference = REFERENCE,
+) -> CraneDocument:
+    """GT283 under ``standard`` with ``conditions`` and the crane's motion ``reference``
+    point; the environment holds runtime dummies.
 
     A condition listing no hoists gets GT283's own hoist settings (its migrated ``default``
     condition: lead limits, the authored DAFs, which are manual overrides under rules, and
@@ -89,6 +95,7 @@ def rules_doc(standard: Literal["ABS", "DNV"], *conditions: ConditionSpec) -> Cr
             ),
             "conditions": {c.name: c for c in listed},
             "environment": env,
+            "motion_reference": reference,
         }
     )
 

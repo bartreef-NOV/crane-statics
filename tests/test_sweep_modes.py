@@ -14,7 +14,7 @@ from crane_statics.core.limit_auto_set import compute_required_rope_capacity_kN
 from crane_statics.core.load_condition import DEFAULT_CONDITION_NAME, condition_cases
 from crane_statics.core.sweep_cache import ComputeCache, compute_fingerprint
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mode_sweep
-from crane_statics.data.models import CraneDocument, VesselMotion
+from crane_statics.data.models import CraneDocument, MotionReference, VesselMotion
 from crane_statics.core.chart_cache import ChartJob, plan_chart_jobs
 from crane_statics.core.session_model import SessionModel
 from tests.rules_docs import (
@@ -271,22 +271,29 @@ ANGULAR_MOTION = VesselMotion(
     pitch_deg=1.5,
     pitch_angular_accel_rad_s2=0.04,
     roll_angular_accel_rad_s2=0.06,
-    reference_x_m=12.0,
-    reference_z_m=-6.0,
 )
+REFERENCE_POINT = MotionReference(reference_x_m=12.0, reference_z_m=-6.0)
 
 
 def test_rules_sweep_uses_the_condition_reference_point(monkeypatch: pytest.MonkeyPatch) -> None:
     without_live_lateral(monkeypatch)  # the legacy equivalent has no hook lateral
     without_foundation_factors(monkeypatch)  # nor pedestal factors
-    doc = _rules_doc("ABS", gale(wind=15.0, motion=ANGULAR_MOTION))
+    doc = _rules_doc("ABS", gale(wind=15.0, motion=ANGULAR_MOTION)).model_copy(
+        update={"motion_reference": REFERENCE_POINT}
+    )
     swept = run_mode_sweep(doc, HOIST, "normal", RULES_LIMITS, RULES_STEP, {})
     same = run_mode_sweep(
         legacy_equivalent(doc, 15.0, ANGULAR_MOTION), HOIST, "normal", RULES_LIMITS, RULES_STEP, {}
     )
-    origin = ANGULAR_MOTION.model_copy(update={"reference_x_m": 0.0, "reference_z_m": 0.0})
     at_origin = run_mode_sweep(
-        legacy_equivalent(doc, 15.0, origin), HOIST, "normal", RULES_LIMITS, RULES_STEP, {}
+        legacy_equivalent(doc, 15.0, ANGULAR_MOTION).model_copy(
+            update={"motion_reference": MotionReference()}
+        ),
+        HOIST,
+        "normal",
+        RULES_LIMITS,
+        RULES_STEP,
+        {},
     )
     assert swept is not None and same is not None and at_origin is not None
     assert swept["curve_data"]

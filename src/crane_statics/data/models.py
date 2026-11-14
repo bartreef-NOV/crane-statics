@@ -19,8 +19,6 @@ DEFAULT_VESSEL_MOTION = {
     "pitch_deg": 0.0,
     "pitch_angular_accel_rad_s2": 0.0,
     "roll_angular_accel_rad_s2": 0.0,
-    "reference_x_m": 0.0,
-    "reference_z_m": 0.0,
 }
 PRIMARY_NODE_DEFAULTS: dict[str, dict[str, Any]] = {
     "platform_base": {"body": "platform", "x_m": 0.0, "z_m": 0.0},
@@ -64,7 +62,7 @@ class VesselMotion(BaseModel):
     """Vessel motion limits under environment (vessel-frame, gravity excluded).
 
     Each value is a ± limit: the load chart ignores its sign and takes the worst case over
-    both signs. The reference point fields are positions, not limits.
+    both signs. The pitch/roll reference point is the crane's (``MotionReference``).
     """
 
     accel_x_m_s2: float = Field(default=0.0, description="Vessel-frame X acceleration")
@@ -72,10 +70,16 @@ class VesselMotion(BaseModel):
     accel_z_m_s2: float = Field(default=0.0, description="Vessel-frame Z acceleration")
     roll_deg: float = Field(default=0.0, description="Vessel roll angle (gravity tilt)")
     pitch_deg: float = Field(default=0.0, description="Vessel pitch angle (gravity tilt)")
-    reference_x_m: float = Field(default=0.0, description="Pitch rotation reference X")
-    reference_z_m: float = Field(default=0.0, description="Pitch rotation reference Z")
     pitch_angular_accel_rad_s2: float = Field(default=0.0, description="Pitch angular acceleration")
     roll_angular_accel_rad_s2: float = Field(default=0.0, description="Roll angular acceleration")
+
+
+class MotionReference(BaseModel):
+    """The crane-frame point the vessel's pitch and roll rotate about, a property of the
+    crane's position on the vessel (not of a condition)."""
+
+    reference_x_m: float = Field(default=0.0, description="Pitch rotation reference X")
+    reference_z_m: float = Field(default=0.0, description="Pitch rotation reference Z")
 
 
 class Environment(BaseModel):
@@ -383,6 +387,7 @@ class CraneDocument(BaseModel):
     ropes: list[Rope] = Field(default_factory=list)
     hoists: list[Hoist] = Field(default_factory=list)
     support_widths: SupportWidths = Field(default_factory=SupportWidths)
+    motion_reference: MotionReference = Field(default_factory=MotionReference)
     saved_limits: dict[str, SavedLimit] = Field(
         default_factory=dict,
         description="Design limits as authored: those differing from the default catalog. "

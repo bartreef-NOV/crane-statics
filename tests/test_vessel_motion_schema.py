@@ -12,8 +12,8 @@ from crane_statics.data.models import Environment, VesselMotion
 from tests.authored_helpers import example_path
 
 
-def test_major_version_is_13():
-    assert AUTHORED_SCHEMA_MAJOR_VERSION == 13
+def test_major_version_is_14():
+    assert AUTHORED_SCHEMA_MAJOR_VERSION == 14
 
 
 def test_slewing_angle_is_not_a_model_field():
@@ -24,14 +24,14 @@ def test_slewing_angle_is_not_a_model_field():
     assert not hasattr(VesselMotion(), "crane_slewing_angle_deg")
 
 
-def test_saved_documents_are_version_13(tmp_path):
+def test_saved_documents_are_version_14(tmp_path):
     from crane_statics.core.io import load_document, save_document
 
     doc = load_document(example_path("crane_input_GT283.yaml"))
     out = tmp_path / "out.yaml"
     save_document(doc, out)
     saved = yaml.safe_load(out.read_text(encoding="utf-8"))
-    assert saved["schema"]["version"] == "13.0.0"
+    assert saved["schema"]["version"] == "14.0.0"
 
 
 def test_authored_vessel_motion_accepts_signed_values_and_angles():

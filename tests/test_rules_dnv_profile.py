@@ -61,8 +61,6 @@ def _motion(roll=3.0, pitch=-2.0):
         accel_z_m_s2=0.5,
         roll_deg=roll,
         pitch_deg=pitch,
-        reference_x_m=4.0,
-        reference_z_m=-2.0,
         pitch_angular_accel_rad_s2=0.02,
         roll_angular_accel_rad_s2=0.03,
     )
@@ -165,7 +163,7 @@ def test_any_single_nonzero_acceleration_warns(field):
 
 
 def test_zero_accelerations_do_not_warn():
-    motion = VesselMotion(roll_deg=3.0, pitch_deg=-2.0, reference_x_m=4.0)
+    motion = VesselMotion(roll_deg=3.0, pitch_deg=-2.0)
     cond = ConditionSpec(name="c", wind_speed_m_s=12.0, vessel_motion=motion)
     assert not any("accelerations" in w for w in _setup(_doc(), cond).warnings)
 

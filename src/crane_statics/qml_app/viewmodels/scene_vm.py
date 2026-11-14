@@ -85,7 +85,7 @@ class SceneViewModel(QObject):
         self._model = session.model
         self._hoist_state = HoistStateService(self._model)
         # The Scene draws its condition's document (rules), so the drawn loads read the
-        # condition's vessel-motion reference point.
+        # crane's vessel-motion reference point.
         self._kinematics = KinematicsService(self._model, self._hoist_state.scene_document)
         self._calculator = AnalysisCalculator(self._model, self._kinematics, self._hoist_state)
         self._presenter = AnalysisPresenter(self._model, self._calculator, self._hoist_state)
