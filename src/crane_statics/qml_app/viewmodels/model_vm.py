@@ -24,8 +24,11 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.data import payload_hoist_ids
 
 from ..models.document_forms import (
+    chart_point_rows,
     clear_support_width,
     condition_fields,
+    condition_hoist_daf,
+    condition_hoist_rows,
     condition_hoist_kwargs,
     contractual_fields,
     editable_conditions,
@@ -451,6 +454,86 @@ class ModelViewModel(QObject):
             self.editFailed.emit("Select a condition first")
             return
         self._apply_edit(lambda editor: editor.delete_condition(name))
+
+    # -- the selected condition's hoists -------------------------------
+
+    @pyqtProperty(list, notify=conditionsChanged)
+    def conditionHoists(self) -> list:
+        """One row per payload hoist for the selected condition (``condition_hoist_rows``)."""
+        return condition_hoist_rows(self._model.document, self._selected_spec())
+
+    @pyqtSlot(str, float, float, "QVariant")
+    def setConditionHoist(
+        self, hoist_id: str, offlead_deg: float, sidelead_deg: float, daf: Any
+    ) -> None:
+        """Make ``hoist_id`` usable in the selected condition with these lead limits and
+        DAF (None/empty: no override, derived under rules)."""
+        name = self._selected_condition
+        if name is None:
+            self.editFailed.emit("Select a condition first")
+            return
+        self._apply_edit(
+            lambda editor: editor.set_condition_hoist(
+                name,
+                hoist_id,
+                float(offlead_deg),
+                float(sidelead_deg),
+                condition_hoist_daf(editor.document, daf),
+            )
+        )
+
+    @pyqtSlot(str, bool)
+    def setConditionHoistUsable(self, hoist_id: str, usable: bool) -> None:
+        """The table's "usable" checkbox: list ``hoist_id`` in the selected condition (no
+        lead limits, no DAF override, the chart points of the first condition listing it)
+        or drop it there."""
+        name = self._selected_condition
+        if name is None:
+            self.editFailed.emit("Select a condition first")
+            return
+        spec = self._selected_spec()
+        if spec is not None and (hoist_id in spec.hoists) == bool(usable):
+            return
+        if usable:
+            self._apply_edit(
+                lambda editor: editor.set_condition_hoist(name, hoist_id, 0.0, 0.0, None)
+            )
+        else:
+            self.removeConditionHoist(hoist_id)
+
+    @pyqtSlot(str)
+    def removeConditionHoist(self, hoist_id: str) -> None:
+        name = self._selected_condition
+        if name is None:
+            self.editFailed.emit("Select a condition first")
+            return
+        self._apply_edit(lambda editor: editor.remove_condition_hoist(name, hoist_id))
+
+    # -- the selected hoist's load chart, with each point's conditions --
+
+    @pyqtProperty(list, notify=selectedHoistChanged)
+    def chartPoints(self) -> list:
+        """The selected hoist's chart in the current mode as saved: each point once with
+        the conditions it names (``chart_point_rows``); [] for the boom hoist."""
+        editor = self._editor()
+        hoist = self._hoist()
+        if editor is None or hoist is None or self._is_boom_hoist(hoist):
+            return []
+        split = self._contractual_mode == "split" and self.hoistSplitable
+        return chart_point_rows(editor.tagged_chart(hoist.id, split))
+
+    @pyqtSlot(int, list)
+    def setPointConditions(self, index: int, conditions: list) -> None:
+        """Make chart point ``index`` (of ``chartPoints``) name exactly ``conditions``."""
+        hoist_id = self._model.selected_editor_hoist_id
+        if hoist_id is None:
+            self.editFailed.emit("Select a hoist first")
+            return
+        split = self._contractual_mode == "split" and self.hoistSplitable
+        names = [str(name) for name in conditions]
+        self._apply_edit(
+            lambda editor: editor.set_point_conditions(hoist_id, split, int(index), names)
+        )
 
     def _selected_spec(self):
         return editable_conditions(self._model.document).get(self._selected_condition or "")

@@ -11,6 +11,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping, Optional
 
+from crane_statics.core.document_edit import shown_daf
 from crane_statics.core.results import ResultRow
 from crane_statics.data import CraneDocument
 
@@ -407,7 +408,7 @@ class HoistFormatter:
             ),
             Column(
                 "DAF",
-                setting_value(lambda s: 1.0 if s.daf is None else s.daf),
+                setting_value(lambda s: shown_daf(s.daf)),
                 decimals=3,
                 field="hook_daf",
                 editable=setting_editable,

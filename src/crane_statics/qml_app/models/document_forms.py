@@ -11,7 +11,8 @@ from typing import Any, Optional
 
 from pydantic import ValidationError
 
-from crane_statics.data import CraneDocument
+from crane_statics.core.document_edit import TaggedChartPoint, entered_daf, shown_daf
+from crane_statics.data import CraneDocument, payload_hoist_ids
 from crane_statics.data.models import ConditionSpec
 from crane_statics.qml_app.contracts import EnvironmentSettings
 
@@ -282,7 +283,7 @@ def hoist_fields(hoist: Any, *, is_boom_hoist: bool, settings: Any = None) -> di
     if settings is not None:
         fields.update(
             {
-                "hook_daf": 1.0 if settings.daf is None else float(settings.daf),
+                "hook_daf": shown_daf(settings.daf),
                 "offlead_deg": float(settings.offlead_deg),
                 "sidelead_deg": float(settings.sidelead_deg),
             }
@@ -367,15 +368,88 @@ CONDITION_HOIST_KEYS = ("hook_daf", "offlead_deg", "sidelead_deg")
 
 def condition_hoist_kwargs(fields: dict) -> Optional[dict]:
     """The ``DocumentEditor.set_condition_hoist_settings`` keywords in a hoist form dict;
-    None when it has none. A DAF of 1.0 is no override (``daf`` None), as authored."""
+    None when it has none.
+
+    The hoist form shows an unset DAF as 1.0 (``shown_daf``) and cannot clear one, so a
+    1.0 it submits is read as no override (``entered_daf`` without rules), whatever the
+    document's rules; the per-condition hoist table (``condition_hoist_rows``) can."""
     if not any(key in fields for key in CONDITION_HOIST_KEYS):
         return None
-    daf = float(fields.get("hook_daf", 1.0))
     return {
         "offlead_deg": float(fields.get("offlead_deg", 0.0)),
         "sidelead_deg": float(fields.get("sidelead_deg", 0.0)),
-        "daf": None if daf == 1.0 else daf,
+        "daf": entered_daf(float(fields.get("hook_daf", 1.0)), rules=False),
     }
+
+
+# ----------------------------------------------------------------------
+# Per-condition hoist table and the tagged load chart
+# ----------------------------------------------------------------------
+
+
+def condition_hoist_rows(doc: Optional[CraneDocument], spec: Optional[ConditionSpec]) -> list:
+    """One row per payload hoist (document order) for the hoist table of condition ``spec``.
+
+    ``usable``: the condition lists the hoist; then ``offleadDeg``/``sideleadDeg`` are its
+    lead limits there and ``daf`` the authored factor (None: no override). ``dafDerived``
+    is True under rules when the factor is derived from the standard (``dafShown`` None,
+    the view shows a placeholder); otherwise ``dafShown`` is the factor that applies. A
+    row of a hoist the condition does not list carries None for the values.
+    """
+    if doc is None or spec is None:
+        return []
+    rules = doc.rules is not None
+    rows = []
+    for hoist_id in payload_hoist_ids(doc):
+        entry = spec.hoists.get(hoist_id)
+        if entry is None:
+            rows.append(
+                {
+                    "hoistId": hoist_id,
+                    "usable": False,
+                    "offleadDeg": None,
+                    "sideleadDeg": None,
+                    "daf": None,
+                    "dafShown": None,
+                    "dafDerived": False,
+                }
+            )
+            continue
+        derived = rules and entry.daf is None
+        rows.append(
+            {
+                "hoistId": hoist_id,
+                "usable": True,
+                "offleadDeg": float(entry.offlead_deg),
+                "sideleadDeg": float(entry.sidelead_deg),
+                "daf": None if entry.daf is None else float(entry.daf),
+                "dafShown": None if derived else shown_daf(entry.daf),
+                "dafDerived": derived,
+            }
+        )
+    return rows
+
+
+def condition_hoist_daf(doc: CraneDocument, value: Any) -> Optional[float]:
+    """The DAF to store for a value entered in the per-condition hoist table: None, "" or
+    an undefined QML value clear the override (``entered_daf``)."""
+    if value is None or value == "":
+        return None
+    return entered_daf(float(value), rules=doc.rules is not None)
+
+
+def chart_point_rows(points: list[TaggedChartPoint]) -> list[dict[str, Any]]:
+    """One row per authored load-chart point: its index, outreach, load and the names of
+    the conditions it applies to (``DocumentEditor.tagged_chart``)."""
+    return [
+        {
+            "index": index,
+            "outreachM": float(point.outreach_m),
+            "loadT": float(point.load_t),
+            "conditions": list(point.conditions),
+        }
+        for index, point in enumerate(points)
+    ]
 
 
 def segment_kwargs(fields: dict) -> dict:
