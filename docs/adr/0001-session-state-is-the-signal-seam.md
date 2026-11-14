@@ -13,7 +13,7 @@ flag. It is pure Python and publishes changes through a small `subscribe(event,
 callback)` registry.
 
 `qml_app.session.SessionState` is the Qt side of that. It wraps a `SessionModel`,
-declares six `pyqtSignal`s, and connects each to the matching model event so QML
+declares seven `pyqtSignal`s, and connects each to the matching model event so QML
 view models can `connect(...)` to them.
 
 It also used to mirror the model: roughly forty members, every one of the form
@@ -32,7 +32,7 @@ reaches the model's interior regardless of how many delegates sit in front of it
 
 ## Decision
 
-`SessionState` is the six signals plus the `model` it wraps:
+`SessionState` is the seven signals plus the `model` it wraps:
 
 ```python
 class SessionState(QObject):
@@ -42,6 +42,7 @@ class SessionState(QObject):
     hoist_selected = pyqtSignal(str)
     design_limits_changed = pyqtSignal(list)
     notification = pyqtSignal(str, str)
+    scene_condition_changed = pyqtSignal()
 
     def __init__(self, model=None, parent=None):
         super().__init__(parent)
@@ -55,10 +56,15 @@ its `__init__` and reads session state as `self._model.x`; `self._session` is ke
 for signal connections and for the object's lifetime, nothing else.
 
 The old test is replaced by `test_session_state_stays_a_signal_seam`, which asserts
-the public class surface is exactly those six signals and that an instance carries a
+the public class surface is exactly those seven signals and that an instance carries a
 `SessionModel`. The intent of the original rule — an explicit surface, no magic — is
 better served by having nothing to be explicit about than by forty hand-written
 delegates.
+
+Amendment (schema 13.0.0): the seventh signal, `scene_condition_changed`, is emitted by
+`SessionModel` when the Scene's selected condition or case changes. Conditions own the
+per-hoist settings, so the Scene's hoists and lead seeds follow that selection and view
+models need to hear about it. It is a signal like the others, not a delegate.
 
 ## Consequences
 

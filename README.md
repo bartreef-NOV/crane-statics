@@ -86,51 +86,70 @@ decisions that should not be re-litigated are in [docs/adr/](docs/adr/).
 
 ## Document Lifecycle
 
-Authored input (YAML) is strict `crane-statics` schema version `12.0.0` (`src/crane_statics/schemas/crane-statics-v12.schema.json`).
+Authored input (YAML) is strict `crane-statics` schema version `13.0.0` (`src/crane_statics/schemas/crane-statics-v13.schema.json`).
 
-12.0.0 renames `hook_mass_t` / `split.hook_mass_t` to `lower_block_mass_t`; v11 files are rejected — rename the key by find-and-replace and set `version: 12.0.0`.
+13.0.0 moves each payload hoist's `daf`, `offlead_deg` and `sidelead_deg` into `conditions.<name>.hoists.<id>`. `conditions` is now always required and `rules` is optional. Load-chart points carry `conditions: [...]`, naming the conditions they apply to. The top-level `environment.max_wind_speed_m_s` and `vessel_motion` are removed; each condition has its own `wind_speed_m_s` and `vessel_motion`. Convert v12 files with `PYTHONPATH=src python scripts/migrate_authored_v13.py <files>` (v12 files are rejected otherwise). 12.0.0 had renamed `hook_mass_t` to `lower_block_mass_t`.
 
 Each hoist is self-contained: its `reeving` lists the rope path from the winch outwards, and an entry with `body` and coordinates defines a sheave or winch that belongs to that hoist (`boom` nodes use `u_m`/`w_m`, the others `x_m`/`z_m`). A hoist-local node `winch` in hoist `MH` becomes runtime node `mh_winch`. The last reeving entry is the support node the hook hangs from. Entries without coordinates pass through a node already defined (`boom_heel`, or a shared node under a body's `nodes`). Delete a hoist block to remove the hoist and its sheaves; copy one and rename its key to add a hoist.
 
-Defaults apply for gravity, air density and vessel motion. Body sections (`boom`, `rear_leg`, `front_leg`, `platform`) and their `mass_points`, `wind_areas` and `nodes` may be omitted when empty. The schema includes coordinate-frame examples and descriptions for schema-aware editors. See `examples/` for complete files.
+Defaults apply for gravity and air density (and, per condition, vessel motion). Body sections (`boom`, `rear_leg`, `front_leg`, `platform`) and their `mass_points`, `wind_areas` and `nodes` may be omitted when empty. The schema includes coordinate-frame examples and descriptions for schema-aware editors. See `examples/` for complete files.
 
 ### ABS/DNV rules
 
-An optional `rules` section selects the certifying standard, and a `conditions` map holds the named lift conditions. With `rules`, the wind speed and `vessel_motion` move from `environment` into each condition; a `rules` section without conditions is rejected. Without `rules` the document behaves as before. Each hoist may carry `rope` (`ea_kN`, or elastic modulus and metallic area) and `max_hoisting_speed_m_s`. This excerpt is from the document in `tests/test_rules_schema.py`, which loads:
+Every document defines `conditions`, a map of named lift conditions. Each condition holds the wind speed, the vessel motion and a `hoists` map of the payload hoists usable under it. A hoist entry carries `offlead_deg`, `sidelead_deg` and an optional `daf`. A hoist is usable only if a condition lists it and its load-chart points name that condition (each listed condition needs at least one point naming it; the boom hoist `BH` is never listed). An optional `rules` section selects the certifying standard (ABS or DNV) and enables `lift: offboard`. Each hoist may carry `rope` (`ea_kN`, or elastic modulus and metallic area) and `max_hoisting_speed_m_s`. This excerpt is from `examples/crane_input_GT283_abs.yaml`:
 
 ```yaml
 model_definition:
-  hoists:
-    BH:
-      reeving: [{node: boom_heel}, {node: rear_top, parts: 4}]
-      rope: {ea_kN: 90000.0}
-    MH:
-      # reeving, lower_block_mass_t, falls, load_chart ... as usual
-      daf: 1.1                        # a manual override of the computed factor
-      rope: {ea_kN: 40000.0}
-      max_hoisting_speed_m_s: 0.25
-  rules:
-    standard: DNV                     # or ABS; ABS may add crane_class: offshore | heavy_lift
+  rules: {standard: ABS, crane_class: offshore}   # or DNV
   conditions:
     onboard_sea:
       wind_speed_m_s: 20.0
-      significant_wave_height_m: 2.5
-      vessel_motion: {accel_z_m_s2: 1.5, roll_deg: 5.0}
-    offboard_calm:
+      vessel_motion: {accel_x_m_s2: 0.3, accel_y_m_s2: 0.4, accel_z_m_s2: 0.5, roll_deg: 2.0, pitch_deg: 1.0}
+      hoists:
+        MH: {offlead_deg: 1.0, sidelead_deg: 2.5}   # daf omitted: derived from the standard
+        AH: {offlead_deg: 2.0, sidelead_deg: 4.5}
+    offboard_supply:
       lift: offboard
-      wind_speed_m_s: 12.0
-      significant_wave_height_m: 1.0
-      v_in_m_s: 0.5
-      v_t_m_s: 0.8
-      load_wind_area_m2: 4.0
-      load_drag_coefficient: 1.2
-      hook_height_override_m: 15.0
+      wind_speed_m_s: 15.0
+      significant_wave_height_m: 1.5
+      # v_in_m_s, v_t_m_s ... as below
+      hoists:
+        MH: {offlead_deg: 1.0, sidelead_deg: 2.5}
+  hoists:
+    MH:
+      # reeving, lower_block_mass_t, falls ... as usual
+      rope: {ea_kN: 40000.0}
+      max_hoisting_speed_m_s: 0.25
+      load_chart:
+      - outreach_m: 16.0
+        load_t: 1000.0
+        conditions: [onboard_sea, offboard_supply]
+      - outreach_m: 25.0
+        load_t: 1000.0
+        conditions: [onboard_sea, offboard_supply]
 ```
 
-- The dynamic factor comes from the standard, not from a typed value. A `daf` other than 1.0 overrides it in every case of every condition, and the results flag the override.
+Without `rules` every condition is onboard and the standard is not applied. A minimal rules-less document uses one `default` condition (this is the shape of `examples/crane_input_GT283.yaml`):
+
+```yaml
+model_definition:
+  conditions:
+    default:
+      wind_speed_m_s: 20.0
+      hoists:
+        MH: {offlead_deg: 1.0, sidelead_deg: 2.5, daf: 1.1}
+  hoists:
+    MH:
+      # reeving, lower_block_mass_t, falls ... as usual
+      load_chart:
+      - {outreach_m: 16.0, load_t: 1000.0, conditions: [default]}
+      - {outreach_m: 25.0, load_t: 1000.0, conditions: [default]}
+```
+
+- Dynamic factor (`daf`, per hoist per condition): with `rules`, an omitted `daf` is derived from the standard and a given value is a manual override that the results flag; without `rules`, an omitted `daf` is 1.0.
 - Offboard lifts need `significant_wave_height_m`, `v_in_m_s` and `v_t_m_s`. For ABS, `v_in_m_s` and `v_t_m_s` are the standard's `v_d` and `v_c` in `v_r = v_h + sqrt(v_d^2 + v_c^2)`; for DNV they are `Vin` and `Vt` in `VR = 0.5*VL + sqrt(Vin^2 + Vt^2)`. The Hs-based default velocities are not used.
 - The hook stiffness is rope-only (boom hoist and active hoist as series EA/L), which is conservative. See [ADR-0004](docs/adr/0004-rules-profiles-keep-the-core-class-free.md) for the decision and its known limitations.
-- The Model > Conditions tab (rules documents only) lists, adds, duplicates, deletes and edits the conditions. The Offboard group stays visible for onboard conditions so the wave height and velocities can be entered before switching the lift to offboard.
+- The Model > Conditions tab lists, adds, duplicates, deletes and edits the conditions and each condition's per-hoist off-lead, side-lead and DAF. The Offboard group stays visible for onboard conditions so the wave height and velocities can be entered before switching the lift to offboard.
 - The Load Chart workspace has a condition selector. Each condition has its own chart, and the Scene follows the selected condition and case.
 - The Calculation details panel lists, for the inspected chart point, each factor with its value, inputs, formula, clause, whether it was computed or overridden, and any warnings.
 - The chart CSV export of a rules chart adds the columns `condition`, `case`, `factor`, `unit`, `inputs`, `formula`, `clause`, `source`, `warnings` after `series,outreach_m,load_t`, one row per factor of each capacity point.
@@ -180,7 +199,7 @@ Keep QML declarative and route state changes through the owning view model. Add 
 
 ## References
 
-- `src/crane_statics/schemas/crane-statics-v12.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
+- `src/crane_statics/schemas/crane-statics-v13.schema.json` - Authored JSON schema (Draft 2020-12), generated from `crane_statics.data.authored_models` via `python -m crane_statics.schemas.generate_schema`
 - ABS, *Requirements for Certification of Lifting Appliances*, January 2026. Part 2-2: 9.3 (p.52-54), 5.15 (p.46), 5.13.5(c) (p.46), 5.17 (p.47-48), 5.19 (p.49-50), 5.21 (p.50-51), 11 (p.56-57)
 - DNV-ST-0378, *Offshore and platform lifting appliances*, July 2019, amended October 2021: 4.1.3.2 (p.54), 4.2.2.1 (p.57), 4.2.3.2 and 4.2.3.3 (p.58), 8.2.2.1 (p.90), 8.2.2.2 (p.91), 8.2.2.4 (p.91)
 
