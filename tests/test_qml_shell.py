@@ -1274,6 +1274,72 @@ def test_conditions_panel_edits_the_hoists_of_the_selected_condition(qml_engine)
     assert warnings == []
 
 
+def test_conditions_panel_edit_of_one_field_keeps_the_others_exact(qml_engine):
+    """The fields show 3 decimals; an untouched one passes the stored value on, so
+    editing the side-lead never rounds an off-lead of 1.23456 or a DAF of 1.0625."""
+    panel, model_vm, warnings = _panel(qml_engine, "ConditionsPanel.qml", RULES_EXAMPLE)
+    name = model_vm.selectedCondition
+    hoist = model_vm.conditionHoists[0]["hoistId"]
+    assert model_vm.setConditionHoist(hoist, 1.23456, 0.987654, 1.0625)
+    session = model_vm._model
+
+    # Leaving every field as shown is no edit at all.
+    edited: list[int] = []
+    model_vm.modelEdited.connect(lambda: edited.append(1))
+    _evaluate_in(_named(panel, f"conditionHoistDaf_{hoist}"), "editingFinished()")
+    assert edited == []
+
+    side = _named(panel, f"conditionHoistSidelead_{hoist}")
+    side.setProperty("text", "3.5")
+    _evaluate_in(side, "editingFinished()")
+    entry = session.document.conditions[name].hoists[hoist]
+    assert (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (1.23456, 3.5, 1.0625)
+    assert edited == [1]
+    assert warnings == []
+
+
+def test_chart_point_dialog_keeps_untouched_values_exact(qml_engine):
+    engine, _app_vm, _model_vm, warnings = qml_engine
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_DIR / "dialogs" / "ChartPointDialog.qml"))
+    )
+    dialog = component.create()
+    assert dialog is not None, component.errorString()
+    dialog.setProperty("conditionNames", ["a", "b"])
+    committed: list = []
+    dialog.committed.connect(lambda index, fields: committed.append((index, fields.toVariant())))
+    opened = '{"outreach_m": 12.34567, "load_t": 2.71828, "conditions": ["a"]}'
+
+    _evaluate_in(dialog, f"openFor(3, {opened})")
+    _evaluate_in(dialog, "accepted()")
+    assert committed == []  # nothing changed: no edit
+
+    _evaluate_in(dialog, f"openFor(3, {opened})")
+    load = next(o for o in dialog.findChildren(QObject) if o.property("text") == "2.718")
+    load.setProperty("text", "3")
+    _evaluate_in(dialog, "accepted()")
+    index, fields = committed[-1]
+    assert index == 3
+    assert (fields["outreach_m"], fields["load_t"], fields["conditions"]) == (12.34567, 3.0, ["a"])
+    assert warnings == []
+
+
+def test_unchanged_chart_point_and_hoist_settings_are_no_edit():
+    from crane_statics.core.io import load_document
+
+    session = SessionState()
+    vm = ModelViewModel(session)
+    session.model.set_document(load_document(RULES_EXAMPLE))
+    edited: list[int] = []
+    vm.modelEdited.connect(lambda: edited.append(1))
+    vm.selectHoist("MH")
+    fields = vm.chartPointFields(0)
+    assert vm.updateChartPoint(0, fields)
+    row = vm.conditionHoists[0]
+    assert not vm.setConditionHoist(row["hoistId"], row["offleadDeg"], row["sideleadDeg"], None)
+    assert edited == [] and not session.model.can_undo
+
+
 def test_conditions_panel_usable_checkbox_lists_and_drops_a_hoist(qml_engine):
     panel, model_vm, warnings = _panel(qml_engine, "ConditionsPanel.qml", RULES_EXAMPLE)
     names = model_vm.conditionNames

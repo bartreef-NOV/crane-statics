@@ -831,6 +831,50 @@ class DocumentEditor:
             entered_daf(daf, rules=self._doc.rules is not None),
         )
 
+    def entered_condition_hoist_is_current(
+        self,
+        condition: str,
+        hoist_id: str,
+        offlead_deg: float,
+        sidelead_deg: float,
+        daf: Optional[float],
+    ) -> bool:
+        """Whether ``enter_condition_hoist`` with these values would change nothing: the
+        hoist is usable in ``condition`` with exactly these settings."""
+        spec = self._doc.conditions.get(condition)
+        entry = None if spec is None else spec.hoists.get(hoist_id)
+        if entry is None:
+            return False
+        stored = entered_daf(daf, rules=self._doc.rules is not None)
+        return (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (
+            float(offlead_deg),
+            float(sidelead_deg),
+            stored,
+        )
+
+    def chart_point_is_current(
+        self,
+        hoist_id: str,
+        split: bool,
+        index: int,
+        point: ContractualPoint,
+        conditions: Optional[list[str]] = None,
+    ) -> bool:
+        """Whether ``update_chart_point`` with these values would change nothing (False
+        for a point that does not exist: the update itself reports why)."""
+        try:
+            chart = self.tagged_chart(hoist_id, split)
+        except DocumentEditError:
+            return False
+        if not 0 <= index < len(chart):
+            return False
+        current = chart[index]
+        same_conditions = conditions is None or tuple(conditions) == current.conditions
+        return same_conditions and (current.outreach_m, current.load_t) == (
+            float(point.outreach_m),
+            float(point.load_t),
+        )
+
     def set_condition_hoist_usable(self, condition: str, hoist_id: str, usable: bool) -> bool:
         """List ``hoist_id`` in ``condition`` (no lead limits, no DAF override, the chart
         points of the first condition listing it: ``set_condition_hoist``) or drop it there

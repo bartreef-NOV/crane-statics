@@ -449,19 +449,18 @@ class ModelViewModel(QObject):
         self, hoist_id: str, offlead_deg: float, sidelead_deg: float, daf: Any
     ) -> bool:
         """Make ``hoist_id`` usable in the selected condition with these lead limits and
-        DAF (None/empty: no override, derived under rules); False when refused."""
+        DAF (None/empty: no override, derived under rules); False when refused or when
+        nothing would change (then no edit and no undo step)."""
         name = self._selected_condition
-        if name is None:
+        editor = self._editor()
+        if name is None or editor is None:
             self.editFailed.emit("Select a condition first")
             return False
+        off, side, entered = float(offlead_deg), float(sidelead_deg), entered_daf_value(daf)
+        if editor.entered_condition_hoist_is_current(name, hoist_id, off, side, entered):
+            return False
         return self._apply_edit(
-            lambda editor: editor.enter_condition_hoist(
-                name,
-                hoist_id,
-                float(offlead_deg),
-                float(sidelead_deg),
-                entered_daf_value(daf),
-            )
+            lambda editor: editor.enter_condition_hoist(name, hoist_id, off, side, entered)
         )
 
     @pyqtSlot(str, bool, result=bool)
@@ -870,8 +869,19 @@ class ModelViewModel(QObject):
     @pyqtSlot(int, "QVariantMap", result="bool")
     def updateChartPoint(self, row: int, fields: dict) -> bool:
         """Replace chart point ``row`` in every condition it names; the form's
-        ``conditions`` (if given) also retag it."""
+        ``conditions`` (if given) also retag it. Values it already has are no edit (no undo
+        step)."""
         conditions = chart_point_conditions(fields)
+        editor = self._editor()
+        hoist_id = self._model.selected_editor_hoist_id
+        if (
+            editor is not None
+            and hoist_id is not None
+            and editor.chart_point_is_current(
+                hoist_id, self._split_chart(), int(row), _chart_point(fields), conditions
+            )
+        ):
+            return True
         return self._chart_edit(
             lambda editor, hoist_id, split: editor.update_chart_point(
                 hoist_id, split, int(row), _chart_point(fields), conditions

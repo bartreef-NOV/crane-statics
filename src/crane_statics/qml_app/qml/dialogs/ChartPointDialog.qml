@@ -13,15 +13,47 @@ Dialog {
     // The conditions a point of this hoist can name (the hoist is usable in them).
     property var conditionNames: []
     property var checkedNames: []
+    // The point as opened (null for a new one): untouched fields submit these values.
+    property var original: null
 
     signal committed(int index, var fields)
 
     function openFor(index, values) {
         editIndex = index
-        outreachField.setValue(values && values.outreach_m !== undefined ? values.outreach_m : 0)
-        loadField.setValue(values && values.load_t !== undefined ? values.load_t : 0)
-        checkedNames = values && values.conditions ? values.conditions.slice() : conditionNames.slice()
+        original = values ? {
+            "outreach_m": values.outreach_m !== undefined ? values.outreach_m : 0,
+            "load_t": values.load_t !== undefined ? values.load_t : 0,
+            "conditions": values.conditions ? values.conditions.slice() : conditionNames.slice()
+        } : null
+        outreachField.setValue(original ? original.outreach_m : 0)
+        loadField.setValue(original ? original.load_t : 0)
+        checkedNames = original ? original.conditions.slice() : conditionNames.slice()
         open()
+    }
+
+    // A field's value: the opened one while its text still shows it (so a value with
+    // more decimals than the field shows is not rounded), else what was typed.
+    function fieldValue(field, value) {
+        if (original === null)
+            return field.value
+        const text = field.text.trim()
+        if (text === Number(value).toFixed(field.decimals) || Number(text) === Number(value))
+            return value
+        return field.value
+    }
+
+    function submit() {
+        const fields = {
+            "outreach_m": fieldValue(outreachField, original ? original.outreach_m : 0),
+            "load_t": fieldValue(loadField, original ? original.load_t : 0),
+            "conditions": checkedNames
+        }
+        // Nothing changed: no edit (and no undo step).
+        if (editIndex >= 0 && original !== null && fields.outreach_m === original.outreach_m
+                && fields.load_t === original.load_t
+                && JSON.stringify(fields.conditions) === JSON.stringify(original.conditions))
+            return
+        committed(editIndex, fields)
     }
 
     function setChecked(name, on) {
@@ -45,11 +77,7 @@ Dialog {
 
     onCheckedNamesChanged: syncOk()
     onOpened: syncOk()
-    onAccepted: committed(editIndex, {
-        "outreach_m": outreachField.value,
-        "load_t": loadField.value,
-        "conditions": checkedNames
-    })
+    onAccepted: submit()
 
     ColumnLayout {
         spacing: 8

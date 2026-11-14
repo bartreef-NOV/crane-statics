@@ -97,16 +97,31 @@ RowLayout {
             dafField.text = shown(modelData.dafShown)
         }
 
+        // Whether a field still holds the value it was shown with: the same text (the
+        // value rounded to the field's decimals) or the same number typed differently.
+        function unchanged(field, value) {
+            const text = field.text.trim()
+            if (text === shown(value))
+                return true
+            return text !== "" && value !== null && value !== undefined
+                && Number(text) === Number(value)
+        }
+
         function commit() {
             if (!usable)
                 return
-            const changed = offleadField.text !== shown(modelData.offleadDeg)
-                || sideleadField.text !== shown(modelData.sideleadDeg)
-                || dafField.text !== shown(modelData.dafShown)
-            if (changed) {
-                const daf = dafField.text.trim() === "" ? null : dafField.value
+            // An untouched field passes the stored value on, not its rounded text, so
+            // editing one field never rounds another (off-lead 1.23456, DAF 1.0625).
+            const sameOff = unchanged(offleadField, modelData.offleadDeg)
+            const sameSide = unchanged(sideleadField, modelData.sideleadDeg)
+            const sameDaf = unchanged(dafField, modelData.dafShown)
+            if (!(sameOff && sameSide && sameDaf)) {
+                const off = sameOff ? modelData.offleadDeg : offleadField.value
+                const side = sameSide ? modelData.sideleadDeg : sideleadField.value
+                const daf = sameDaf ? modelData.daf
+                                    : (dafField.text.trim() === "" ? null : dafField.value)
                 // An accepted edit rebuilds the rows (this one included): nothing to do here.
-                if (modelVm.setConditionHoist(hoistId, offleadField.value, sideleadField.value, daf))
+                if (modelVm.setConditionHoist(hoistId, off, side, daf))
                     return
             }
             // A rejected value changes nothing: show the condition's values again.
