@@ -18,7 +18,7 @@ from crane_statics.data.models import (
 )
 from tests.authored_helpers import example_path, read_yaml, v13
 
-#: The GT283 example on schema v13 (a migrated copy while ``examples/`` is still v12).
+#: The GT283 example (schema v13).
 GT283 = example_path("crane_input_GT283.yaml")
 MOTION = VesselMotion(
     accel_x_m_s2=0.8, roll_deg=4.0, pitch_deg=2.5, reference_x_m=3.0, reference_z_m=-2.0
@@ -26,7 +26,8 @@ MOTION = VesselMotion(
 
 
 def load_v13(path: Path) -> CraneDocument:
-    """The example at ``path`` on schema v13 (migrated when still v12), normalized."""
+    """The authored file at ``path``, normalized (a v12 file is migrated first; the
+    shipped examples are v13)."""
     return normalize_document(v13(read_yaml(path)))
 
 

@@ -51,8 +51,7 @@ from scripts.excel_workbook.reference import (
 )
 from tests.authored_helpers import case_document, example_path
 
-#: The 22689 example the workbook is built from, on schema v13 (a migrated copy while
-#: ``examples/`` is still v12).
+#: The 22689 example the workbook is built from (schema v13).
 YAML_PATH = example_path(_EXAMPLE_YAML)
 
 
