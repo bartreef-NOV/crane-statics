@@ -122,7 +122,9 @@ def test_show_applies_case_and_emits_signal(drawn: Pair) -> None:
     expected = governing_case(doc, "MH", "normal", chart._enabled_limits(), outreach, ROPE)
     assert expected is not None
     assert drawn.scene_fields() == expected.scene_fields
-    assert scene.governingCaseLabel == f"Governing case: {series['label']} at {outreach:.1f} m"
+    # v13: the case names its condition, ``default`` without rules (was: no condition).
+    label = f"Governing case: {series['label']} at {outreach:.1f} m (default)"
+    assert scene.governingCaseLabel == label
     assert scene.canRestoreInputs
     # The apply is not an edit: the chart stays drawn, so the label is kept.
     assert not chart.stale
@@ -145,7 +147,8 @@ def test_combined_curve_takes_the_lowest_limit(drawn: Pair) -> None:
     assert expected is not None
     assert drawn.scene_fields() == expected.scene_fields
     name = chart._limit_display_names()[expected.limit_id]
-    assert scene.governingCaseLabel == f"Governing case: {name} at {outreach:.1f} m"
+    # v13: the case names its condition, ``default`` without rules (was: no condition).
+    assert scene.governingCaseLabel == f"Governing case: {name} at {outreach:.1f} m (default)"
 
 
 def test_unavailable_when_stale_or_busy(pair: Pair) -> None:
@@ -247,7 +250,8 @@ def test_split_mode_uses_chart_mode(pair: Pair, monkeypatch) -> None:
 
     _doc, hoist_id, mode_name, limits, at, limit_id, condition = gate.calls[0]
     assert (hoist_id, mode_name, at, limit_id) == ("MH", "split", outreach, ROPE)
-    assert condition is None  # the chart's condition: a legacy document's only one
+    # The chart's condition: v13 names a rules-less document's only one (was: None).
+    assert condition == "default"
     assert limits == chart._enabled_limits()
     assert scene.hookMode == "split"
 

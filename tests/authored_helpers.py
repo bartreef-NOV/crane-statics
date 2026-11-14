@@ -54,31 +54,40 @@ def read_yaml(path: Union[str, Path]) -> dict[str, Any]:
     return data
 
 
-@functools.lru_cache(maxsize=None)
-def _copy_dir() -> Path:
-    return Path(tempfile.mkdtemp(prefix="crane_statics_v13_examples_"))
+def _is_v13(path: Path) -> bool:
+    return authored_schema_major(read_yaml(path)["schema"]["version"]) == 13
 
 
 @functools.lru_cache(maxsize=None)
-def _example_path(path: Path) -> Path:
-    if authored_schema_major(read_yaml(path)["schema"]["version"]) == 13:
-        return path
-    copy = _copy_dir() / path.name
-    shutil.copyfile(path, copy)
-    migrate_file(copy)
-    return copy
+def _examples_dir() -> Path:
+    """``examples/`` itself once every example is v13; otherwise a per-process temporary
+    copy of it with the v12 files migrated (all files, so siblings resolve too)."""
+    sources = sorted(EXAMPLES.glob("*.yaml"))
+    if all(_is_v13(p) for p in sources):
+        return EXAMPLES
+    target = Path(tempfile.mkdtemp(prefix="crane_statics_v13_examples_"))
+    for source in sources:
+        copy = target / source.name
+        shutil.copyfile(source, copy)
+        if not _is_v13(copy):
+            migrate_file(copy)
+    return target
 
 
 def example_path(example: Union[str, Path]) -> Path:
     """A v13 file of ``example`` (a file name under ``examples/`` or a path to one).
 
-    A v12 example is migrated into a per-process temporary directory, keeping its file
-    name; a v13 example is its own file. Treat the result as read-only.
+    While ``examples/`` holds v12 files this is the example's migrated copy in a
+    per-process temporary directory (same file name, next to the other examples); once
+    they are v13 it is the example itself. Treat the result as read-only.
     """
     path = Path(example)
     if not path.is_absolute() and path.parent == Path("."):
         path = EXAMPLES / path
-    return _example_path(path.resolve())
+    path = path.resolve()
+    if path.parent != EXAMPLES:
+        return path  # already a migrated copy, or a file outside examples/
+    return _examples_dir() / path.name
 
 
 def example_dict(example: Union[str, Path]) -> dict[str, Any]:

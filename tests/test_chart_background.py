@@ -79,7 +79,7 @@ class SweepFake:
                 raise SweepCancelled()
 
     def __call__(self, doc, hoist_id, mode, *args, should_cancel=None, on_points=None, **kwargs):
-        job = ChartJob(hoist_id, mode)
+        job = ChartJob(hoist_id, mode, kwargs.get("condition_name"))
         self.calls.append(job)
         self.threads[job] = QThread.currentThread()
         if job in self._streams:
@@ -154,7 +154,7 @@ def vm(sweeps):
 
 
 def _visible(vm: ChartViewModel) -> ChartJob:
-    return ChartJob(vm.selectedHoistId, vm.chartMode)
+    return ChartJob(vm.selectedHoistId, vm.chartMode, vm._wanted_job().condition)
 
 
 def _planned(vm: ChartViewModel) -> list[ChartJob]:
@@ -202,7 +202,8 @@ def test_draw_fills_the_cache_for_every_planned_job(vm, sweeps):
 
     fingerprint = vm._wanted_key().fingerprint
     for job in jobs:
-        assert vm._cache.get(ChartKey(job.hoist_id, job.mode, STEP, fingerprint)) is not None
+        key = ChartKey(job.hoist_id, job.mode, STEP, fingerprint, job.condition)
+        assert vm._cache.get(key) is not None
     assert sweeps.calls[0] == jobs[0]
     assert sorted(sweeps.calls) == sorted(jobs)
 
@@ -240,7 +241,7 @@ def test_selecting_an_unfinished_chart_jumps_the_queue(vm, sweeps):
     wait_idle(vm)
 
     assert sweeps.cancelled == [first]
-    assert sweeps.calls[:3] == [first, ChartJob(other, "normal"), first]
+    assert sweeps.calls[:3] == [first, ChartJob(other, "normal", first.condition), first]
 
 
 def test_hoist_switch_during_a_sweep_shows_the_new_hoist(vm, sweeps):
@@ -256,7 +257,7 @@ def test_hoist_switch_during_a_sweep_shows_the_new_hoist(vm, sweeps):
     wait_idle(vm)
 
     assert vm.selectedHoistId == other
-    assert vm.curvePoints == _expected_curve(vm, ChartJob(other, "normal"))
+    assert vm.curvePoints == _expected_curve(vm, ChartJob(other, "normal", first.condition))
     assert vm.stale is False
     assert vm.busy is False
     assert sweeps.calls.count(first) == 1
@@ -421,7 +422,7 @@ def test_document_replaced_while_running_is_safe(vm, sweeps):
     puts = _record_puts(vm)
 
     replacement = load_document(EXAMPLE)
-    replacement.environment.max_wind_speed_m_s += 1.0
+    replacement.conditions["default"].wind_speed_m_s += 1.0
     vm._session.model.set_document(replacement)
     release.set()
     wait_idle(vm)
@@ -484,5 +485,5 @@ def test_non_splittable_hoist_gets_no_split_job(vm, sweeps):
     wait_idle(vm)
 
     for hoist_id in non_splittable:
-        assert ChartJob(hoist_id, "normal") in sweeps.calls
-        assert ChartJob(hoist_id, "split") not in sweeps.calls
+        assert ChartJob(hoist_id, "normal", "default") in sweeps.calls
+        assert ChartJob(hoist_id, "split", "default") not in sweeps.calls

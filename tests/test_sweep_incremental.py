@@ -35,10 +35,11 @@ LIMITS: dict[str, dict] = {
 @pytest.fixture(scope="module")
 def doc() -> CraneDocument:
     document = load_document(EXAMPLE)
-    vm = document.environment.vessel_motion
+    condition = document.conditions["default"]
+    vm = condition.vessel_motion
     for field, value in VESSEL.items():
         setattr(vm, field, float(value))
-    document.environment.max_wind_speed_m_s = 20.0
+    condition.wind_speed_m_s = 20.0
     return document
 
 
@@ -172,8 +173,10 @@ def test_same_entity_different_components_are_separate(doc: CraneDocument) -> No
     def _miss() -> LimitResult:
         raise AssertionError("expected a cached result")
 
+    # The sweep caches each case's solves under the case name (v13: always, "default" here).
+    case_scope = scope.for_case("default")
     results = [
-        scope.limit_result(angle, limit_signature(lid, comps), _miss)
+        case_scope.limit_result(angle, limit_signature(lid, comps), _miss)
         for lid, comps in limits.items()
     ]
     assert results[0] != results[1]

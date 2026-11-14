@@ -29,7 +29,7 @@ def test_fingerprint_changes_with_document_limits_and_names_and_restores_on_undo
     base = chart_fingerprint(doc, LIMITS, {})
     assert chart_fingerprint(doc, LIMITS, {}) == base
 
-    cp = doc.hoists[0].contractual_points[0]
+    cp = doc.conditions["default"].hoists[doc.hoists[0].id].contractual_points[0]
     original = cp.load_t
     cp.load_t = original + 1.0
     assert chart_fingerprint(doc, LIMITS, {}) != base

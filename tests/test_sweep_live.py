@@ -31,10 +31,11 @@ NAMES = {"platform_base": "Bearing line load", "rear_hinge": "Rear hinge Fx"}
 @pytest.fixture(scope="module")
 def doc() -> CraneDocument:
     document = load_document(EXAMPLE)
-    vm = document.environment.vessel_motion
+    condition = document.conditions["default"]
+    vm = condition.vessel_motion
     for field, value in VESSEL.items():
         setattr(vm, field, float(value))
-    document.environment.max_wind_speed_m_s = 20.0
+    condition.wind_speed_m_s = 20.0
     return document
 
 
@@ -73,7 +74,7 @@ def test_on_contractual_fires_once_before_any_curve_batch(doc: CraneDocument) ->
 
 def test_on_contractual_not_called_without_contractual_points(doc: CraneDocument) -> None:
     calls: list[Any] = []
-    hoist = next(h for h in doc.hoists if h.id == HOIST)
+    hoist = doc.conditions["default"].hoists[HOIST]
     saved = (list(hoist.contractual_points), hoist.split_contractual_points)
     hoist.contractual_points = []
     hoist.split_contractual_points = []

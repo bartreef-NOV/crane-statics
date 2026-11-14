@@ -25,8 +25,7 @@ def _rules_doc() -> CraneDocument:
         name="deck", lift="onboard", wind_speed_m_s=0.0, vessel_motion=VesselMotion()
     )
     doc = rules_doc("ABS", cond)
-    hoists = [h.model_copy(update={"hook_daf": DAF}) if h.id == HOIST else h for h in doc.hoists]
-    doc = doc.model_copy(update={"hoists": hoists})
+    doc.conditions["deck"].hoists[HOIST].daf = DAF
     validate_rules_document(doc)
     return doc
 
@@ -80,7 +79,6 @@ def _offboard_vm(split: bool = False) -> SceneViewModel:
                         "splitable_block": True,
                         "split_falls": 10,
                         "split_lower_block_mass_t": 30.0,
-                        "split_contractual_points": h.contractual_points,
                     }
                 )
                 if h.id == HOIST
@@ -88,6 +86,9 @@ def _offboard_vm(split: bool = False) -> SceneViewModel:
             )
             for h in doc.hoists
         ]
+        for condition in doc.conditions.values():
+            entry = condition.hoists[HOIST]
+            entry.split_contractual_points = list(entry.contractual_points)
         doc = doc.model_copy(update={"hoists": hoists})
     return _vm(doc)
 

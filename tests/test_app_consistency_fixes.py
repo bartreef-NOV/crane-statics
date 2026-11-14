@@ -279,7 +279,7 @@ def test_wind_speed_zero_gives_zero_and_no_error(angle, direction):
 
 # --- Task 4: near-singular statics fail clearly, with a reason -----------------------------
 
-EXAMPLES = sorted((ROOT / "examples").glob("*.yaml"))
+EXAMPLES = [example_path(p) for p in sorted((ROOT / "examples").glob("*.yaml"))]
 
 
 def test_is_ill_conditioned_flags_singular_and_near_singular():

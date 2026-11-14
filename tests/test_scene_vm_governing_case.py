@@ -47,7 +47,7 @@ class MockCanvas(QObject):
 def _document():
     doc = load_document(EXAMPLE)
     for name, value in VESSEL_LIMITS.items():
-        setattr(doc.environment.vessel_motion, name, value)
+        setattr(doc.conditions["default"].vessel_motion, name, value)
     return doc
 
 

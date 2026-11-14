@@ -795,8 +795,9 @@ def test_edit_menu_undo_follows_history(qml_engine):
     assert undo is not None and redo is not None
     assert undo.property("enabled") is False
 
-    wind = model_vm._model.document.environment.max_wind_speed_m_s
-    model_vm.setEnvironmentValue("max_wind_speed_m_s", wind + 1.0)
+    # v13: the wind speed is a condition setting; the air density is still an edit here.
+    rho = model_vm._model.document.environment.air_density_kg_m3
+    model_vm.setEnvironmentValue("air_density_kg_m3", rho + 0.1)
     assert undo.property("enabled") is True and redo.property("enabled") is False
 
     app_vm.undo()
@@ -826,9 +827,12 @@ def test_chart_menu_edits_contractual_points_at_the_cursor(qml_engine):
     assert delete.property("enabled") is True
     QMetaObject.invokeMethod(menu, "close")
 
-    # Far from every marker, inside the plot: only Add is available.
-    left, top = plot.property("plotLeft") + 1, plot.property("plotTop") + 1
-    _evaluate_in(workspace, f"openChartMenu(Qt.point({left}, {top}))")
+    # Far from every marker, inside the plot: only Add is available. The top-right corner
+    # (long outreach, high load) is clear of the chart; the top-left one is not once the
+    # condition selector (v13: shown for every document) shortens the plot.
+    right = plot.property("plotLeft") + plot.property("plotWidth") - 1
+    top = plot.property("plotTop") + 1
+    _evaluate_in(workspace, f"openChartMenu(Qt.point({right}, {top}))")
     assert add.property("enabled") is True
     assert edit.property("enabled") is False
     assert delete.property("enabled") is False
@@ -1023,7 +1027,7 @@ def test_nearest_point_between_samples(qml_engine):
     assert warnings == []
 
 
-def test_environment_panel_hides_the_condition_settings_of_a_rules_document(qml_engine, tmp_path):
+def test_environment_panel_hides_the_condition_settings_of_every_document(qml_engine, tmp_path):
     from crane_statics.core.io import save_document
     from tests.rules_docs import gale, rules_doc
 
@@ -1036,20 +1040,23 @@ def test_environment_panel_hides_the_condition_settings_of_a_rules_document(qml_
     assert panel is not None
     assert panel.findChild(QObject, "vesselMotionGroup").property("visible") is False
     assert panel.findChild(QObject, "conditionEnvironmentNote").property("visible") is True
+    # v13: a rules-less document keeps them on its ``default`` condition too (was: shown).
     app_vm.openPath(str(EXAMPLE))
-    assert panel.findChild(QObject, "vesselMotionGroup").property("visible") is True
-    assert panel.findChild(QObject, "conditionEnvironmentNote").property("visible") is False
+    assert panel.findChild(QObject, "vesselMotionGroup").property("visible") is False
+    assert panel.findChild(QObject, "conditionEnvironmentNote").property("visible") is True
     assert warnings == []
 
 
-def test_scene_condition_label_shows_on_a_rules_document_only(qml_engine):
+def test_scene_condition_label_names_the_condition_of_every_document(qml_engine):
     engine, app_vm, _model_vm, warnings = qml_engine
     app_vm.openPath(str(EXAMPLE))
     engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
     root = engine.rootObjects()[-1]
     label = root.findChild(QObject, "sceneConditionLabel")
     assert label is not None
-    assert label.property("visible") is False
+    # v13: a rules-less document runs under its ``default`` condition (was: hidden).
+    assert label.property("text") == "Condition: default"
+    assert label.property("visible") is True
 
     rules_example = EXAMPLE.parent / "crane_input_GT283_dnv.yaml"
     app_vm.openPath(str(rules_example))
@@ -1176,7 +1183,7 @@ def test_delete_button_disabled_for_the_last_condition(qml_engine, tmp_path):
     assert warnings == []
 
 
-def test_conditions_tab_only_for_rules_documents(qml_engine, tmp_path):
+def test_conditions_tab_for_every_document(qml_engine, tmp_path):
     from crane_statics.core.io import save_document
     from tests.rules_docs import gale, rules_doc
 
@@ -1196,7 +1203,9 @@ def test_conditions_tab_only_for_rules_documents(qml_engine, tmp_path):
     workspace.setProperty("visible", True)
     assert tabs.property("currentIndex") == 2
 
+    # v13: a rules-less document has a condition to edit too (was: the tab hidden and
+    # the selection back on the first tab).
     app_vm.openPath(str(EXAMPLE))
-    assert tab.property("visible") is False
-    assert tabs.property("currentIndex") == 0
+    assert tab.property("offered") is True
+    assert tabs.property("currentIndex") == 2
     assert warnings == []

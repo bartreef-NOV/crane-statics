@@ -13,7 +13,7 @@ from crane_statics.core.scene_build import SceneDisplay, derive_boom_axes
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.scene.scene_renderer import CraneSceneRenderer
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
-from tests.authored_helpers import example_path
+from tests.authored_helpers import authored_daf, example_path
 
 EXAMPLE = example_path("crane_input_22689.yaml")
 
@@ -86,7 +86,9 @@ class TestSceneViewModelState:
 
         assert state is not None
         assert hoist is not None
-        expected = hoist.lower_block_mass_t * hoist.hook_daf * scene_vm._hoist_state.gravity_abs()
+        doc = scene_vm._model.document
+        daf = authored_daf(doc, hoist.id)
+        expected = hoist.lower_block_mass_t * daf * scene_vm._hoist_state.gravity_abs()
         assert state.scene_state.hook_load_kN == pytest.approx(expected)
 
     def test_second_canvas_stays_synchronized(self, scene_vm):
@@ -333,7 +335,7 @@ class TestSceneViewModelState:
         assert scene_vm.hookLoadTonnes == pytest.approx(10.0)
 
     def test_environment_setters_write_through_to_session(self, scene_vm):
-        vm = scene_vm._model.document.environment.vessel_motion
+        vm = scene_vm._model.document.conditions["default"].vessel_motion
         vm.accel_x_m_s2 = vm.pitch_angular_accel_rad_s2 = 1.0
         scene_vm.setWindSpeed(12.5)
         scene_vm.setWindDirection("-Y")
@@ -361,7 +363,7 @@ class TestSceneViewModelState:
     def test_vessel_motion_setters_are_not_clamped_to_model_limits(
         self, scene_vm, monkeypatch, prop, setter, field, limit_field
     ):
-        setattr(scene_vm._model.document.environment.vessel_motion, limit_field, 3.0)
+        setattr(scene_vm._model.document.conditions["default"].vessel_motion, limit_field, 3.0)
         calls: list[int] = []
         emitted: list[int] = []
         monkeypatch.setattr(scene_vm, "_after_state_changed", lambda: calls.append(1))
@@ -383,7 +385,7 @@ class TestSceneViewModelState:
         assert sc.crane_slewing_angle_deg == pytest.approx(-90.0)
 
     def test_model_limit_edit_leaves_scene_values_alone(self, scene_vm):
-        vm = scene_vm._model.document.environment.vessel_motion
+        vm = scene_vm._model.document.conditions["default"].vessel_motion
         vm.roll_deg = 10.0
         scene_vm.setVesselRoll(8.0)
         sc = scene_vm._model.get_active_hoist_state().scene_state
@@ -396,7 +398,7 @@ class TestSceneViewModelState:
     def test_document_vessel_motion_seeds_every_hoist_scene_state(self):
         session = SessionState()
         doc = load_document(EXAMPLE)
-        vm = doc.environment.vessel_motion
+        vm = doc.conditions["default"].vessel_motion
         vm.roll_deg = 3.0
         vm.pitch_deg = -2.0
         vm.accel_x_m_s2 = 1.0

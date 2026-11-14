@@ -209,7 +209,7 @@ class TestHoistEditing:
 
     def test_update_hoist_preserves_contractual_points(self, editor, document):
         payload = next(h for h in document.hoists if not editor.is_solve_hoist(h))
-        original = [(cp.outreach_m, cp.load_t) for cp in payload.contractual_points]
+        original = [(cp.outreach_m, cp.load_t) for cp in editor.contractual_points(payload.id)]
         assert original
 
         editor.update_hoist(
@@ -221,7 +221,8 @@ class TestHoistEditing:
 
         updated = next(h for h in document.hoists if h.id == payload.id)
         assert updated.lower_block_mass_t == 42.0
-        assert [(cp.outreach_m, cp.load_t) for cp in updated.contractual_points] == original
+        kept = editor.contractual_points(payload.id)
+        assert [(cp.outreach_m, cp.load_t) for cp in kept] == original
 
     def test_solve_hoist_cannot_be_deleted(self, editor, document):
         solve = next((h for h in document.hoists if editor.is_solve_hoist(h)), None)
@@ -256,13 +257,13 @@ class TestRopeAndContractualEditing:
 
     def test_contractual_point_round_trip(self, editor, document):
         payload = next(h for h in document.hoists if not editor.is_solve_hoist(h))
-        before = len(payload.contractual_points)
+        before = len(editor.contractual_points(payload.id))
 
         editor.add_contractual_point(payload.id, build_contractual_point(30.0, 100.0))
-        assert len(payload.contractual_points) == before + 1
+        assert len(editor.contractual_points(payload.id)) == before + 1
 
         editor.delete_contractual_point(payload.id, before)
-        assert len(payload.contractual_points) == before
+        assert len(editor.contractual_points(payload.id)) == before
 
 
 class TestModelViewModelEditing:
@@ -570,16 +571,30 @@ class TestEnvironmentEditing:
             document.support_widths.slewing_bearing_diameter_m
         )
 
-    def test_setting_environment_value_writes_through(self, model_vm, document):
+    # v13: the wind speed and vessel motion are the condition's, also without rules, so
+    # the environment no longer takes them (was: written through to the environment).
+    def test_wind_speed_is_not_an_environment_value(self, model_vm, document):
+        wind = document.conditions["default"].wind_speed_m_s
         model_vm.setEnvironmentValue("max_wind_speed_m_s", 33.0)
 
-        assert document.environment.max_wind_speed_m_s == pytest.approx(33.0)
-        assert model_vm._model.dirty is True
+        assert document.conditions["default"].wind_speed_m_s == wind
+        assert document.environment.max_wind_speed_m_s != pytest.approx(33.0)
+        assert model_vm._model.dirty is False
 
-    def test_setting_vessel_motion_value_writes_through(self, model_vm, document):
+    def test_vessel_motion_is_not_an_environment_value(self, model_vm, document):
         model_vm.setEnvironmentValue("pitch_angular_accel_rad_s2", 0.125)
 
-        assert document.environment.vessel_motion.pitch_angular_accel_rad_s2 == pytest.approx(0.125)
+        motion = document.conditions["default"].vessel_motion
+        assert motion.pitch_angular_accel_rad_s2 != pytest.approx(0.125)
+        assert document.environment.vessel_motion.pitch_angular_accel_rad_s2 != pytest.approx(
+            0.125
+        )
+
+    def test_setting_gravity_writes_through(self, model_vm, document):
+        model_vm.setEnvironmentValue("gravity_m_s2", 9.80665)
+
+        assert abs(document.environment.gravity_m_s2) == pytest.approx(9.80665)
+        assert model_vm._model.dirty is True
 
     def test_setting_support_width_writes_through(self, model_vm, document):
         model_vm.setEnvironmentValue("boom_width_m", 4.5)
@@ -662,7 +677,8 @@ class TestContractualModeEditing:
         if hoist_id is None:
             pytest.skip("No splitable hoist in example")
         model_vm.selectHoist(hoist_id)
-        hoist = next(h for h in model_vm._model.document.hoists if h.id == hoist_id)
+        doc = model_vm._model.document
+        hoist = doc.conditions["default"].hoists[hoist_id]
 
         model_vm.setContractualMode("split")
 
@@ -675,7 +691,7 @@ class TestContractualModeEditing:
             pytest.skip("No splitable hoist in example")
         model_vm.selectHoist(hoist_id)
         model_vm.setContractualMode("split")
-        hoist = next(h for h in model_vm._model.document.hoists if h.id == hoist_id)
+        hoist = model_vm._model.document.conditions["default"].hoists[hoist_id]
         normal_before = len(hoist.contractual_points)
         split_before = len(hoist.split_contractual_points)
 
@@ -757,9 +773,11 @@ class TestConditionEdits:
         self._refused(doc, lambda e: e.duplicate_condition("nope"))
         self._refused(doc, lambda e: e.delete_condition("nope"))
 
-    def test_no_rules_refused(self):
+    def test_conditions_are_editable_without_rules(self):
+        # v13: a rules-less document has conditions too (was: condition edits refused).
         doc = load_document(GT283)
-        self._refused(doc, lambda e: e.add_condition(gale("a")))
+        DocumentEditor(doc).add_condition(gale("a"))
+        assert list(doc.conditions) == ["default", "a"]
 
     def test_offboard_without_wave_inputs_refused(self):
         doc = rules_doc("ABS", gale("a"))
@@ -961,14 +979,19 @@ class TestConditionViewModel:
         vm._model.set_document(rules_doc("DNV", gale("x"), gale("b")))
         assert vm.selectedCondition == "x"
 
-    def test_condition_properties_are_empty_without_rules(self):
-        vm = _condition_vm(load_document(GT283))
-        assert vm.conditionNames == []
-        assert vm.condition == {}
-        assert vm.selectedCondition == ""
-        _edited, failed = self._signals(vm)
+    def test_condition_properties_show_default_without_rules(self):
+        # v13: a rules-less document has its one condition ``default``, editable like any
+        # other (was: no condition properties and adding one refused).
+        doc = load_document(GT283)
+        vm = _condition_vm(doc)
+        assert vm.conditionNames == ["default"]
+        assert vm.condition["name"] == "default"
+        assert vm.condition["wind_speed_m_s"] == doc.conditions["default"].wind_speed_m_s
+        assert vm.selectedCondition == "default"
+        edited, failed = self._signals(vm)
         vm.addCondition()
-        assert failed
+        assert not failed and edited
+        assert len(vm.conditionNames) == 2
 
 
 # --- hoist edits and the condition-owned hoist settings (interim Model edit path) ------

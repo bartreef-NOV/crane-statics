@@ -41,7 +41,7 @@ class LiveSweeps(SweepFake):
         return gates
 
     def __call__(self, doc, hoist_id, mode, *args, **kwargs):
-        job = ChartJob(hoist_id, mode)
+        job = ChartJob(hoist_id, mode, kwargs.get("condition_name"))
         if job not in self._scripts:
             return super().__call__(doc, hoist_id, mode, *args, **kwargs)
         self.calls.append(job)
@@ -268,13 +268,13 @@ def test_mid_stream_switch_leaves_nothing_behind(vm, sweeps, action):
 
     if action == "hoist":
         other = next(h for h in vm.hoistIds if h != first.hoist_id)
-        wanted = ChartJob(other, "normal")
+        wanted = ChartJob(other, "normal", first.condition)
         _hold_next(vm, sweeps, wanted)
         vm.selectHoist(other)
     elif action == "mode":
         if not vm.splitable:
             pytest.skip("Selected hoist cannot split")
-        wanted = ChartJob(first.hoist_id, "split")
+        wanted = ChartJob(first.hoist_id, "split", first.condition)
         _hold_next(vm, sweeps, wanted)
         vm.setChartMode("split")
     elif action == "edit":
@@ -457,7 +457,7 @@ def test_a_disabled_limit_takes_no_colour(vm, sweeps):
 def test_background_job_promoted_mid_stream_shows_what_it_delivered(vm, sweeps):
     visible = _visible(vm)
     background = _planned(vm)[1]
-    assert background == ChartJob(visible.hoist_id, "split")
+    assert background == ChartJob(visible.hoist_id, "split", visible.condition)
     split_points = vm._model.contractual_points_for_mode(background.hoist_id, "split")
     verdicts = _verdicts(split_points)
     steps = [("points", [(30.0, 250.0)])]

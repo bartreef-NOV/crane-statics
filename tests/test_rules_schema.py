@@ -7,14 +7,21 @@ import pytest
 
 from crane_statics.core.io import DocumentIOError, load_document, save_document
 from crane_statics.data import normalize_document
+from tests.authored_helpers import example_path, v13
 
-_ALL_EXAMPLES = sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
+_ALL_EXAMPLES = [
+    example_path(p) for p in sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
+]
 #: The ``*_abs``/``*_dnv`` examples carry rules; the others are legacy documents.
 RULES_EXAMPLES = [p for p in _ALL_EXAMPLES if p.stem.endswith(("_abs", "_dnv"))]
 EXAMPLES = [p for p in _ALL_EXAMPLES if p not in RULES_EXAMPLES]
 
 
 def _authored() -> dict:
+    return v13(_authored_v12())
+
+
+def _authored_v12() -> dict:
     return {
         "schema": {"name": "crane-statics", "version": "12.0.0"},
         "metadata": {"name": "Rules"},
@@ -69,14 +76,14 @@ def _authored() -> dict:
 
 
 def _legacy() -> dict:
-    data = _authored()
+    data = _authored_v12()
     md = data["model_definition"]
     del md["rules"], md["conditions"]
     for hoist in md["hoists"].values():
         hoist.pop("rope", None)
         hoist.pop("max_hoisting_speed_m_s", None)
     md["environment"] = {"max_wind_speed_m_s": 20.0}
-    return data
+    return v13(data)
 
 
 def _error(data: dict) -> str:
@@ -89,7 +96,8 @@ def _error(data: dict) -> str:
 def test_legacy_examples_unchanged(example):
     doc = load_document(example)
     assert doc.rules is None
-    assert doc.conditions == {}
+    # v13: a rules-less document has its one condition ``default`` (was: none).
+    assert list(doc.conditions) == ["default"]
     assert all(h.max_hoisting_speed_m_s is None for h in doc.hoists)
     assert all(r.axial_stiffness_kN is None for r in doc.ropes)
 
@@ -106,7 +114,10 @@ def test_rules_examples_carry_rules_and_offboard_inputs():
         assert doc.rules is not None and doc.rules.standard == example.stem[-3:].upper()
         assert doc.conditions
         assert all(r.axial_stiffness_kN is not None for r in doc.ropes)
-        assert all(h.hook_daf == 1.0 for h in doc.hoists)
+        # No manual DAF override anywhere (v12: every hook_daf 1.0).
+        assert all(
+            entry.daf is None for c in doc.conditions.values() for entry in c.hoists.values()
+        )
 
 
 def test_rules_document_round_trips(tmp_path):
@@ -183,8 +194,10 @@ def test_legacy_document_round_trips_without_new_keys(tmp_path):
     path = tmp_path / "a.yaml"
     save_document(doc, path)
     text = path.read_text(encoding="utf-8")
-    for key in ("rules", "conditions", "ea_kN", "max_hoisting_speed_m_s"):
+    for key in ("rules", "ea_kN", "max_hoisting_speed_m_s"):
         assert key not in text
+    # v13: the wind and hoist settings are written on the one ``default`` condition.
+    assert list(load_document(path).conditions) == ["default"]
 
 
 def test_rules_error_surfaces_through_load(tmp_path):

@@ -30,16 +30,16 @@ class _Counter:
 def test_compute_fingerprint_ignores_contractual_points_only() -> None:
     doc = load_document(EXAMPLE)
     base = compute_fingerprint(doc)
-    hoist = doc.hoists[0]
+    hoist = doc.conditions["default"].hoists[doc.hoists[0].id]
     hoist.contractual_points[0].load_t += 1.0
     assert compute_fingerprint(doc) == base
     if hoist.split_contractual_points:
         hoist.split_contractual_points[0].load_t += 1.0
         assert compute_fingerprint(doc) == base
-    doc.environment.max_wind_speed_m_s += 1.0
+    doc.conditions["default"].wind_speed_m_s += 1.0
     changed_wind = compute_fingerprint(doc)
     assert changed_wind != base
-    doc.environment.vessel_motion.accel_x_m_s2 += 0.5
+    doc.conditions["default"].vessel_motion.accel_x_m_s2 += 0.5
     assert compute_fingerprint(doc) != changed_wind
 
 

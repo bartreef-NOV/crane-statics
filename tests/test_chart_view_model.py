@@ -504,12 +504,15 @@ class TestClauseTrailExport:
         vm = ChartViewModel(session)
         vm.setOutreachStep(20.0)
         base = without_suspended_rope(rules_doc("ABS", gale()))
-        plain = base.model_copy(
-            update={"hoists": [h.model_copy(update={"hook_daf": 1.0}) for h in base.hoists]}
-        )
-        manual = base.model_copy(
-            update={"hoists": [h.model_copy(update={"hook_daf": 1.7}) for h in base.hoists]}
-        )
+
+        def with_daf(daf):
+            doc = base.model_copy(deep=True)
+            for entry in doc.conditions["gale"].hoists.values():
+                entry.daf = daf
+            return doc
+
+        plain = with_daf(None)  # derived (v12: hook_daf 1.0)
+        manual = with_daf(1.7)  # the manual override
 
         def sources() -> set:
             _t, rows = self._export(vm, tmp_path)
@@ -730,12 +733,13 @@ def _rules_chart_vm(doc) -> ChartViewModel:
 
 
 class TestConditionSelector:
-    def test_a_legacy_document_has_no_condition_to_select(self, chart_vm):
-        assert chart_vm.conditionNames == []
-        assert chart_vm.currentCondition == ""
-        assert chart_vm._wanted_job().condition is None
-        chart_vm.setCurrentCondition("default")  # ignored: nothing to select
-        assert chart_vm.currentCondition == ""
+    def test_a_rules_less_document_selects_its_default_condition(self, chart_vm):
+        # v13: its one condition is ``default`` (was: no condition to select).
+        assert chart_vm.conditionNames == ["default"]
+        assert chart_vm.currentCondition == "default"
+        assert chart_vm._wanted_job().condition == "default"
+        chart_vm.setCurrentCondition("nope")  # ignored: not a condition of the document
+        assert chart_vm.currentCondition == "default"
 
     def test_switching_the_condition_draws_its_own_chart(self):
         from tests.rules_docs import gale, rules_doc, without_suspended_rope
