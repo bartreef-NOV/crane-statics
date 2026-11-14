@@ -1,0 +1,562 @@
+"""Editing which payload hoists each condition lists, their settings there, and the
+conditions each load-chart point names (authored schema v13).
+
+Every edit here is checked against the authored contract: a document that exports to a
+valid v13 authored document still does after the edit (or the edit is refused and the
+document left as it was).
+"""
+
+from __future__ import annotations
+
+from typing import Callable
+
+import pytest
+
+from crane_statics.core.document_edit import (
+    DocumentEditError,
+    DocumentEditor,
+    entered_daf,
+    shown_daf,
+)
+from crane_statics.core.session_model import SessionModel
+from crane_statics.data import AuthoredDocument, document_to_authored_form, normalize_document
+from crane_statics.data.models import ConditionSpec, CraneDocument
+from crane_statics.qml_app.session import SessionState
+from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
+from tests.authored_helpers import load_example
+
+RULES_EXAMPLE = "crane_input_22689_abs.yaml"  # ABS, two conditions, splitable MH
+RULES_LESS_EXAMPLE = "crane_input_GT283.yaml"  # no rules, one condition ``default``
+HOIST = "MH"
+
+
+def _two_conditions(example: str) -> CraneDocument:
+    """``example`` with at least two conditions (a rules-less one gets a duplicate)."""
+    doc = load_example(example)
+    if len(doc.conditions) < 2:
+        DocumentEditor(doc).duplicate_condition(next(iter(doc.conditions)))
+    return doc
+
+
+@pytest.fixture(params=[RULES_EXAMPLE, RULES_LESS_EXAMPLE], ids=["rules", "rules-less"])
+def doc(request) -> CraneDocument:
+    return _two_conditions(request.param)
+
+
+def _names(doc: CraneDocument) -> tuple[str, str]:
+    first, second = list(doc.conditions)[:2]
+    return first, second
+
+
+def _other_hoist(doc: CraneDocument) -> str:
+    """A payload hoist other than ``HOIST`` usable in the first condition."""
+    first = next(iter(doc.conditions.values()))
+    return next(hid for hid in first.hoists if hid != HOIST)
+
+
+def _exports_valid(doc: CraneDocument) -> dict:
+    """The authored form of ``doc``, which must validate against the v13 models."""
+    authored = document_to_authored_form(doc)
+    AuthoredDocument.model_validate(authored)
+    return authored
+
+
+def _points(doc: CraneDocument, condition: str, hoist_id: str = HOIST, split: bool = False):
+    entry = doc.conditions[condition].hoists[hoist_id]
+    points = entry.split_contractual_points if split else entry.contractual_points
+    return [(p.outreach_m, p.load_t) for p in points]
+
+
+def _refused(doc: CraneDocument, action: Callable[[DocumentEditor], object]) -> str:
+    snapshot = doc.model_dump_json()
+    with pytest.raises(DocumentEditError) as caught:
+        action(DocumentEditor(doc))
+    assert doc.model_dump_json() == snapshot
+    return str(caught.value)
+
+
+# ----------------------------------------------------------------------
+# DAF entry rule (one place for "1.0 vs None")
+# ----------------------------------------------------------------------
+
+
+def test_daf_entry_and_display_rule():
+    assert shown_daf(None) == 1.0 and shown_daf(1.3) == 1.3
+    assert entered_daf(None, rules=True) is None and entered_daf(None, rules=False) is None
+    # Without rules 1.0 is the default factor: stored as no override.
+    assert entered_daf(1.0, rules=False) is None
+    assert entered_daf(1.2, rules=False) == 1.2
+    # Under rules an entered 1.0 is an explicit override of the derived factor.
+    assert entered_daf(1.0, rules=True) == 1.0
+
+
+# ----------------------------------------------------------------------
+# set_condition_hoist
+# ----------------------------------------------------------------------
+
+
+def test_set_condition_hoist_updates_settings_and_keeps_points(doc):
+    _first, second = _names(doc)
+    before = _points(doc, second)
+    DocumentEditor(doc).set_condition_hoist(second, HOIST, 1.5, 0.5, 1.2)
+    entry = doc.conditions[second].hoists[HOIST]
+    assert (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (1.5, 0.5, 1.2)
+    assert _points(doc, second) == before
+    DocumentEditor(doc).set_condition_hoist(second, HOIST, 1.5, 0.5, None)
+    assert doc.conditions[second].hoists[HOIST].daf is None
+    _exports_valid(doc)
+
+
+def test_set_condition_hoist_on_an_unlisted_hoist_copies_the_points_of_the_first_listing():
+    doc = _two_conditions(RULES_EXAMPLE)
+    first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    editor.remove_condition_hoist(second, HOIST)
+    assert HOIST not in doc.conditions[second].hoists
+
+    editor.set_condition_hoist(second, HOIST, 2.0, 0.0, None)
+
+    entry = doc.conditions[second].hoists[HOIST]
+    assert (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (2.0, 0.0, None)
+    assert _points(doc, second) == _points(doc, first)
+    assert _points(doc, second, split=True) == _points(doc, first, split=True)
+    assert _points(doc, second, split=True)  # MH is splitable: split points copied too
+    _exports_valid(doc)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("nope", HOIST, 1.0, 0.0, None),  # unknown condition
+        (None, "nope", 1.0, 0.0, None),  # unknown hoist
+        (None, "BH", 1.0, 0.0, None),  # the boom hoist cannot be listed
+        (None, HOIST, -1.0, 0.0, None),
+        (None, HOIST, 1.0, -0.5, None),
+        (None, HOIST, 1.0, 0.0, 0.5),
+    ],
+    ids=["condition", "hoist", "boom", "offlead", "sidelead", "daf"],
+)
+def test_set_condition_hoist_refusals_leave_the_document_unchanged(doc, args):
+    condition = args[0] if args[0] is not None else _names(doc)[1]
+    _refused(doc, lambda e: e.set_condition_hoist(condition, *args[1:]))
+
+
+# ----------------------------------------------------------------------
+# remove_condition_hoist
+# ----------------------------------------------------------------------
+
+
+def test_remove_condition_hoist_drops_the_entry_and_its_point_tags(doc):
+    first, second = _names(doc)
+    DocumentEditor(doc).remove_condition_hoist(second, HOIST)
+    assert HOIST not in doc.conditions[second].hoists
+    assert all(second not in p.conditions for p in DocumentEditor(doc).tagged_chart(HOIST))
+    _exports_valid(doc)
+
+
+def test_remove_condition_hoist_refuses_the_last_condition_listing_it(doc):
+    first, second = _names(doc)
+    DocumentEditor(doc).remove_condition_hoist(second, HOIST)
+    message = _refused(doc, lambda e: e.remove_condition_hoist(first, HOIST))
+    assert HOIST in message and first in message
+
+
+def test_remove_condition_hoist_refuses_to_empty_a_condition(doc):
+    _first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    listed = list(doc.conditions[second].hoists)
+    for hoist_id in listed[:-1]:
+        editor.remove_condition_hoist(second, hoist_id)
+    message = _refused(doc, lambda e: e.remove_condition_hoist(second, listed[-1]))
+    assert second in message
+
+
+def test_remove_condition_hoist_refuses_an_unlisted_or_unknown_one(doc):
+    _first, second = _names(doc)
+    _refused(doc, lambda e: e.remove_condition_hoist(second, "nope"))
+    _refused(doc, lambda e: e.remove_condition_hoist("nope", HOIST))
+    DocumentEditor(doc).remove_condition_hoist(second, HOIST)
+    _refused(doc, lambda e: e.remove_condition_hoist(second, HOIST))
+
+
+# ----------------------------------------------------------------------
+# tagged_chart / set_point_conditions
+# ----------------------------------------------------------------------
+
+
+def test_tagged_chart_lists_each_point_once_with_its_conditions(doc):
+    first, second = _names(doc)
+    chart = DocumentEditor(doc).tagged_chart(HOIST)
+    assert [(p.outreach_m, p.load_t) for p in chart] == _points(doc, first)
+    assert all(p.conditions == (first, second) for p in chart)
+
+
+def test_set_point_conditions_untags_and_retags_a_point(doc):
+    first, second = _names(doc)
+    original = _points(doc, second)
+    editor = DocumentEditor(doc)
+
+    editor.set_point_conditions(HOIST, False, 0, [first])
+
+    assert _points(doc, second) == original[1:]
+    assert _points(doc, first) == original
+    assert editor.tagged_chart(HOIST)[0].conditions == (first,)
+    _exports_valid(doc)
+
+    editor.set_point_conditions(HOIST, False, 0, [second, first])
+
+    assert _points(doc, second) == original
+    assert editor.tagged_chart(HOIST)[0].conditions == (first, second)
+    _exports_valid(doc)
+
+
+def test_set_point_conditions_on_split_points():
+    doc = _two_conditions(RULES_EXAMPLE)
+    first, second = _names(doc)
+    original = _points(doc, second, split=True)
+    DocumentEditor(doc).set_point_conditions(HOIST, True, 1, [second])
+    assert _points(doc, first, split=True) == original[:1] + original[2:]
+    assert _points(doc, second, split=True) == original
+    assert _points(doc, first) == _points(doc, second)  # normal chart untouched
+    _exports_valid(doc)
+
+
+@pytest.mark.parametrize(
+    "conditions",
+    [[], ["nope"], ["{first}", "{first}"]],
+    ids=["empty", "undefined", "repeated"],
+)
+def test_set_point_conditions_refuses_bad_names(doc, conditions):
+    first, _second = _names(doc)
+    names = [c.format(first=first) for c in conditions]
+    _refused(doc, lambda e: e.set_point_conditions(HOIST, False, 0, names))
+
+
+def test_set_point_conditions_refuses_a_condition_not_listing_the_hoist(doc):
+    first, second = _names(doc)
+    DocumentEditor(doc).remove_condition_hoist(second, HOIST)
+    message = _refused(doc, lambda e: e.set_point_conditions(HOIST, False, 0, [first, second]))
+    assert second in message and HOIST in message
+
+
+def test_set_point_conditions_refuses_to_leave_a_condition_without_points():
+    doc = _two_conditions(RULES_LESS_EXAMPLE)
+    first, second = _names(doc)
+    # GT283's trolley has a single chart point, named by both conditions.
+    assert len(_points(doc, second, "trolley")) == 1
+    message = _refused(doc, lambda e: e.set_point_conditions("trolley", False, 0, [first]))
+    assert second in message and "trolley" in message
+
+
+def test_set_point_conditions_refuses_a_bad_index_or_hoist(doc):
+    first, _second = _names(doc)
+    _refused(doc, lambda e: e.set_point_conditions(HOIST, False, 99, [first]))
+    _refused(doc, lambda e: e.set_point_conditions("nope", False, 0, [first]))
+    _refused(doc, lambda e: e.set_point_conditions("BH", False, 0, [first]))
+
+
+def test_split_points_of_a_non_splitable_hoist_are_refused():
+    doc = _two_conditions(RULES_LESS_EXAMPLE)
+    first, _second = _names(doc)
+    _refused(doc, lambda e: e.set_point_conditions(HOIST, True, 0, [first]))
+
+
+# ----------------------------------------------------------------------
+# Condition rename / duplicate / delete / add
+# ----------------------------------------------------------------------
+
+
+def test_rename_condition_keeps_its_hoist_entries_and_point_tags(doc):
+    first, second = _names(doc)
+    entries = {hid: e.model_dump() for hid, e in doc.conditions[second].hoists.items()}
+    editor = DocumentEditor(doc)
+    renamed = doc.conditions[second].model_copy(update={"name": "renamed"})
+    editor.update_condition(second, renamed)
+    assert {hid: e.model_dump() for hid, e in doc.conditions["renamed"].hoists.items()} == entries
+    assert all(p.conditions == (first, "renamed") for p in editor.tagged_chart(HOIST))
+    _exports_valid(doc)
+
+
+def test_update_condition_without_hoists_keeps_the_current_entries(doc):
+    first, _second = _names(doc)
+    entries = {hid: e.model_dump() for hid, e in doc.conditions[first].hoists.items()}
+    DocumentEditor(doc).update_condition(first, ConditionSpec(name=first, wind_speed_m_s=12.0))
+    assert doc.conditions[first].wind_speed_m_s == 12.0
+    assert {hid: e.model_dump() for hid, e in doc.conditions[first].hoists.items()} == entries
+
+
+def test_duplicate_condition_copies_entries_and_tags_its_points(doc):
+    first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    copy = editor.duplicate_condition(first)
+    assert doc.conditions[copy].hoists == doc.conditions[first].hoists
+    assert doc.conditions[copy].hoists[HOIST] is not doc.conditions[first].hoists[HOIST]
+    assert all(copy in p.conditions for p in editor.tagged_chart(HOIST))
+    _exports_valid(doc)
+
+
+def test_delete_condition_drops_its_point_tags(doc):
+    first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    editor.delete_condition(second)
+    assert all(p.conditions == (first,) for p in editor.tagged_chart(HOIST))
+    _exports_valid(doc)
+
+
+def test_last_condition_cannot_be_deleted(doc):
+    first, second = _names(doc)
+    DocumentEditor(doc).delete_condition(second)
+    with pytest.raises(ValueError):
+        DocumentEditor(doc).delete_condition(first)
+    assert list(doc.conditions) == [first]
+
+
+def test_delete_condition_refuses_to_strand_a_hoist(doc):
+    first, second = _names(doc)
+    DocumentEditor(doc).remove_condition_hoist(second, HOIST)
+    message = _refused(doc, lambda e: e.delete_condition(first))
+    assert HOIST in message
+
+
+def test_add_condition_without_hoists_lists_those_of_the_first_condition(doc):
+    first, _second = _names(doc)
+    DocumentEditor(doc).add_condition(ConditionSpec(name="extra", wind_speed_m_s=10.0))
+    assert doc.conditions["extra"].hoists == doc.conditions[first].hoists
+    assert doc.conditions["extra"].wind_speed_m_s == 10.0
+    _exports_valid(doc)
+
+
+# ----------------------------------------------------------------------
+# Hoist add / delete
+# ----------------------------------------------------------------------
+
+
+def test_add_hoist_makes_it_usable_in_every_condition_with_zero_offlead(doc):
+    from tests.test_document_edit import _payload_hoist_like
+
+    DocumentEditor(doc).add_hoist(_payload_hoist_like(doc, HOIST, "NEW"))
+    for spec in doc.conditions.values():
+        entry = spec.hoists["NEW"]
+        assert (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (0.0, 0.0, None)
+        assert entry.contractual_points == []
+
+
+def test_delete_hoist_drops_its_entries_from_every_condition(doc):
+    other = _other_hoist(doc)
+    DocumentEditor(doc).delete_hoist(other)
+    assert all(other not in spec.hoists for spec in doc.conditions.values())
+    _exports_valid(doc)
+
+
+# ----------------------------------------------------------------------
+# Every edit keeps the document a valid v13 authored document, and the authored
+# form re-reads to the same per-condition settings and charts.
+# ----------------------------------------------------------------------
+
+
+def _condition_view(doc: CraneDocument) -> dict:
+    return {
+        name: {
+            hid: (
+                e.offlead_deg,
+                e.sidelead_deg,
+                e.daf,
+                [(p.outreach_m, p.load_t) for p in e.contractual_points],
+                [(p.outreach_m, p.load_t) for p in e.split_contractual_points],
+            )
+            for hid, e in spec.hoists.items()
+        }
+        for name, spec in doc.conditions.items()
+    }
+
+
+def _remove_then_relist(editor: DocumentEditor, _first: str, second: str, other: str) -> None:
+    editor.remove_condition_hoist(second, other)
+    editor.set_condition_hoist(second, other, 0.0, 0.0, None)
+
+
+EDITS: dict[str, Callable[[DocumentEditor, str, str, str], object]] = {
+    "set_condition_hoist": lambda e, a, b, o: e.set_condition_hoist(b, HOIST, 1.5, 0.5, 1.2),
+    "remove_then_relist": _remove_then_relist,
+    "set_point_conditions": lambda e, a, b, o: e.set_point_conditions(HOIST, False, 0, [a]),
+    "rename_condition": lambda e, a, b, o: e.update_condition(
+        b, e.document.conditions[b].model_copy(update={"name": "renamed"})
+    ),
+    "duplicate_condition": lambda e, a, b, o: e.duplicate_condition(a),
+    "delete_condition": lambda e, a, b, o: e.delete_condition(b),
+    "add_condition": lambda e, a, b, o: e.add_condition(
+        ConditionSpec(name="extra", wind_speed_m_s=10.0)
+    ),
+    "delete_hoist": lambda e, a, b, o: e.delete_hoist(o),
+}
+
+
+@pytest.mark.parametrize("edit", list(EDITS), ids=list(EDITS))
+def test_every_edit_round_trips_through_a_valid_authored_document(doc, edit):
+    first, second = _names(doc)
+    EDITS[edit](DocumentEditor(doc), first, second, _other_hoist(doc))
+    reread = normalize_document(_exports_valid(doc))
+    assert _condition_view(reread) == _condition_view(doc)
+
+
+# ----------------------------------------------------------------------
+# Rules-less documents: offboard lifts need rules
+# ----------------------------------------------------------------------
+
+
+def test_rules_less_condition_cannot_be_offboard():
+    doc = load_example(RULES_LESS_EXAMPLE)
+    spec = doc.conditions["default"]
+    offboard = spec.model_copy(
+        update={
+            "lift": "offboard",
+            "significant_wave_height_m": 1.5,
+            "v_in_m_s": 0.6,
+            "v_t_m_s": 0.3,
+        }
+    )
+    message = _refused(doc, lambda e: e.update_condition("default", offboard))
+    assert "rules" in message
+    added = offboard.model_copy(update={"name": "other"})
+    _refused(doc, lambda e: e.add_condition(added))
+
+
+def test_rules_less_condition_accepts_the_other_fields():
+    # Only the lift is rules-only in the authored contract (the sea-state fields are inert).
+    doc = load_example(RULES_LESS_EXAMPLE)
+    spec = doc.conditions["default"].model_copy(update={"significant_wave_height_m": 1.5})
+    DocumentEditor(doc).update_condition("default", spec)
+    _exports_valid(doc)
+
+
+# ----------------------------------------------------------------------
+# SessionModel.set_scene_condition
+# ----------------------------------------------------------------------
+
+
+def test_set_scene_condition_rejects_an_unknown_name():
+    doc = _two_conditions(RULES_EXAMPLE)
+    first, second = _names(doc)
+    session = SessionModel()
+    session.set_document(doc)
+    changed: list[int] = []
+    session.subscribe("scene_condition_changed", lambda *_a: changed.append(1))
+    before = (session.scene_condition_name, session.scene_case_name)
+
+    assert not session.set_scene_condition("nope", None, seed=True)
+
+    assert (session.scene_condition_name, session.scene_case_name) == before
+    assert changed == []
+    assert session.set_scene_condition(second, None, seed=True)
+    assert session.scene_condition_name == second
+
+
+# ----------------------------------------------------------------------
+# Model view model: the per-condition hoist table and the tagged chart points
+# ----------------------------------------------------------------------
+
+
+def _vm(example: str = RULES_EXAMPLE):
+    session = SessionState()
+    vm = ModelViewModel(session)
+    session.model.set_document(_two_conditions(example))
+    session.model.history._window = 0.0
+    failed: list[str] = []
+    edited: list[int] = []
+    vm.editFailed.connect(failed.append)
+    vm.modelEdited.connect(lambda: edited.append(1))
+    return session, vm, failed, edited
+
+
+def test_condition_hoist_rows_under_rules_flag_a_derived_daf():
+    session, vm, _failed, _edited = _vm(RULES_EXAMPLE)
+    doc = session.model.document
+    first, _second = _names(doc)
+    rows = vm.conditionHoists
+    assert [r["hoistId"] for r in rows] == ["MH", "WH", "SH"]
+    mh = rows[0]
+    entry = doc.conditions[first].hoists["MH"]
+    assert mh["usable"] is True
+    assert mh["offleadDeg"] == entry.offlead_deg and mh["sideleadDeg"] == entry.sidelead_deg
+    assert mh["daf"] == entry.daf
+    assert mh["dafDerived"] is (entry.daf is None)
+    assert mh["dafShown"] == (None if entry.daf is None else entry.daf)
+
+
+def test_condition_hoist_rows_without_rules_show_the_constant_daf():
+    _session, vm, _failed, _edited = _vm(RULES_LESS_EXAMPLE)
+    rows = {r["hoistId"]: r for r in vm.conditionHoists}
+    assert set(rows) == {"MH", "AH", "trolley"}
+    assert all(r["dafDerived"] is False for r in rows.values())
+    assert all(isinstance(r["dafShown"], float) for r in rows.values())
+
+
+def test_set_condition_hoist_slot_edits_the_selected_condition():
+    session, vm, failed, edited = _vm(RULES_EXAMPLE)
+    doc = session.model.document
+    _first, second = _names(doc)
+    vm.selectCondition(second)
+    vm.setConditionHoist("MH", 3.0, 1.0, 1.25)
+    entry = session.model.document.conditions[second].hoists["MH"]
+    assert (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (3.0, 1.0, 1.25)
+    assert failed == [] and edited == [1]
+    row = next(r for r in vm.conditionHoists if r["hoistId"] == "MH")
+    assert (row["offleadDeg"], row["daf"], row["dafDerived"]) == (3.0, 1.25, False)
+    # None (cleared) puts the derived factor back.
+    vm.setConditionHoist("MH", 3.0, 1.0, None)
+    assert session.model.document.conditions[second].hoists["MH"].daf is None
+    assert session.model.undo()
+    assert session.model.document.conditions[second].hoists["MH"].daf == 1.25
+
+
+def test_set_condition_hoist_slot_failure_signals_and_changes_nothing():
+    session, vm, failed, edited = _vm(RULES_EXAMPLE)
+    snapshot = session.model.document.model_dump_json()
+    vm.setConditionHoist("MH", -1.0, 0.0, None)
+    assert len(failed) == 1 and edited == []
+    assert session.model.document.model_dump_json() == snapshot
+
+
+def test_usable_checkbox_and_remove_slot():
+    session, vm, failed, _edited = _vm(RULES_EXAMPLE)
+    doc = session.model.document
+    first, second = _names(doc)
+    vm.selectCondition(second)
+    vm.setConditionHoistUsable("WH", False)
+    assert "WH" not in session.model.document.conditions[second].hoists
+    row = next(r for r in vm.conditionHoists if r["hoistId"] == "WH")
+    assert row["usable"] is False and row["offleadDeg"] is None
+    vm.setConditionHoistUsable("WH", True)
+    entry = session.model.document.conditions[second].hoists["WH"]
+    assert entry.offlead_deg == 0.0
+    assert _points(session.model.document, second, "WH") == _points(
+        session.model.document, first, "WH"
+    )
+    vm.removeConditionHoist("WH")
+    assert "WH" not in session.model.document.conditions[second].hoists
+    assert failed == []
+    vm.selectCondition(first)
+    vm.removeConditionHoist("WH")  # the last condition listing WH: refused
+    assert failed and "WH" in session.model.document.conditions[first].hoists
+
+
+def test_chart_point_rows_and_set_point_conditions_slot():
+    session, vm, failed, _edited = _vm(RULES_EXAMPLE)
+    doc = session.model.document
+    first, second = _names(doc)
+    vm.selectHoist("MH")
+    rows = vm.chartPoints
+    assert len(rows) == len(_points(doc, first))
+    assert rows[0]["index"] == 0 and rows[0]["conditions"] == [first, second]
+    assert (rows[0]["outreachM"], rows[0]["loadT"]) == _points(doc, first)[0]
+
+    vm.setPointConditions(0, [first])
+    assert failed == []
+    assert vm.chartPoints[0]["conditions"] == [first]
+    assert len(_points(session.model.document, second)) == len(rows) - 1
+
+    vm.setContractualMode("split")
+    split_rows = vm.chartPoints
+    assert len(split_rows) == len(_points(doc, first, split=True))
+    vm.setPointConditions(0, ["nope"])
+    assert failed
