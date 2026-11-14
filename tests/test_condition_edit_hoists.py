@@ -16,8 +16,11 @@ from PyQt6.QtCore import Qt
 from crane_statics.core.document_edit import (
     DocumentEditError,
     DocumentEditor,
+    authored_document_error,
     build_contractual_point,
+    build_payload_hoist,
 )
+from crane_statics.core.io import DocumentIOError, save_document
 from crane_statics.core.hoist_daf import daf_is_derived, entered_daf, shown_daf
 from crane_statics.core.session_model import SessionModel
 from crane_statics.data import AuthoredDocument, document_to_authored_form, normalize_document
@@ -389,6 +392,65 @@ def test_the_guard_refuses_an_edit_that_would_stop_the_document_saving(doc):
     )
     message = _refused(doc, lambda e: e.update_condition(first, edited))
     assert HOIST in message
+
+
+# The guard on a document that already does not save (a hoist just added): an edit is
+# refused when it adds a problem the document did not have, and accepted otherwise.
+
+
+def _with_new_hoist() -> tuple[CraneDocument, DocumentEditor]:
+    doc = load_example("crane_input_GT283_abs.yaml")
+    editor = DocumentEditor(doc)
+    support = next(h for h in doc.hoists if h.id == HOIST).support_node_id
+    editor.add_hoist(build_payload_hoist("NEW", support or ""))
+    return doc, editor
+
+
+def test_the_guard_refuses_a_new_problem_while_the_document_does_not_save():
+    doc, editor = _with_new_hoist()
+    assert authored_document_error(doc)  # NEW is not charted yet
+    # MH's last point in onboard_sea: the condition would list MH with no point.
+    while len(editor.contractual_points(HOIST, "normal", "onboard_sea")) > 1:
+        editor.delete_contractual_point(HOIST, 0, "normal", "onboard_sea")
+    message = _refused(doc, lambda e: e.delete_contractual_point(HOIST, 0, "normal", "onboard_sea"))
+    assert "'onboard_sea' lists hoist 'MH'" in message
+    # A point the schema rejects outright (field-level problem) is refused too.
+    message = _refused(
+        doc,
+        lambda e: e.add_contractual_point(
+            "AH", build_contractual_point(-1.0, -2.0), "normal", "onboard_sea"
+        ),
+    )
+    assert "AH" in message and "outreach_m" in message
+
+
+def test_the_guard_accepts_a_step_towards_valid_while_the_document_does_not_save():
+    doc, editor = _with_new_hoist()
+    before = authored_document_error(doc)
+    editor.add_chart_point("NEW", False, build_contractual_point(10.0, 5.0), ["onboard_sea"])
+    after = authored_document_error(doc)
+    assert _points(doc, "onboard_sea", "NEW") == [(10.0, 5.0)]
+    assert after and set(after) < set(before)
+
+
+def test_authored_document_error_lists_every_problem():
+    doc, editor = _with_new_hoist()
+    problems = authored_document_error(doc)
+    # NEW's own fields (no reeving, no chart) and each condition listing it uncharted.
+    assert any("NEW" in p and "reeving" in p for p in problems)
+    assert any("NEW" in p and "load_chart" in p for p in problems)
+    for name in doc.conditions:
+        assert any(f"condition {name!r} lists hoist 'NEW'" in p for p in problems)
+    assert len(problems) == len(set(problems))
+
+
+def test_saving_a_document_that_does_not_save_lists_every_problem(tmp_path):
+    doc, _editor = _with_new_hoist()
+    with pytest.raises(DocumentIOError) as caught:
+        save_document(doc, tmp_path / "out.yaml")
+    lines = str(caught.value).splitlines()
+    assert lines == authored_document_error(doc)
+    assert len(lines) > 1
 
 
 def test_delete_hoist_drops_its_entries_from_every_condition(doc):

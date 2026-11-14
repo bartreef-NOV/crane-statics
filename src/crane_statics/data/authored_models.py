@@ -54,12 +54,30 @@ def authored_schema_major(version: Any) -> Optional[int]:
     return int(head) if head.isdigit() else None
 
 
+_VALUE_ERROR_PREFIX = "Value error, "
+
+
+def authored_validation_problems(error: ValidationError) -> list[str]:
+    """Every problem of a pydantic ValidationError, one field-located line each, in the
+    order pydantic reports them. A validator listing several problems (one per line)
+    gives one line per problem, each with the validator's location."""
+    problems: list[str] = []
+    for item in error.errors():
+        location = "/".join(str(p) for p in item["loc"])
+        location_msg = f" at {location}" if location else ""
+        message = str(item["msg"])
+        prefix = ""
+        if message.startswith(_VALUE_ERROR_PREFIX):
+            prefix, message = _VALUE_ERROR_PREFIX, message[len(_VALUE_ERROR_PREFIX) :]
+        for line in message.splitlines() or [""]:
+            problems.append(f"Schema validation failed{location_msg}: {prefix}{line}")
+    return list(dict.fromkeys(problems))
+
+
 def format_authored_validation_error(error: ValidationError) -> str:
-    """Render a pydantic ValidationError as a single-line, field-located message."""
-    first = error.errors()[0]
-    location = "/".join(str(p) for p in first["loc"])
-    location_msg = f" at {location}" if location else ""
-    return f"Schema validation failed{location_msg}: {first['msg']}"
+    """Render a pydantic ValidationError as field-located messages, one problem per line
+    (``authored_validation_problems``)."""
+    return "\n".join(authored_validation_problems(error))
 
 
 class AuthoredSchemaBlock(BaseModel):
@@ -663,12 +681,14 @@ class AuthoredModelDefinition(BaseModel):
     @classmethod
     def _parse_hoists_by_kind(cls, value: Any) -> Any:
         """Validate each entry against its own model so errors name the real problem: the
-        ``BH`` entry is the boom hoist, every other entry a payload hoist."""
+        ``BH`` entry is the boom hoist, every other entry a payload hoist. Every entry's
+        problems are reported, one per line."""
         if not isinstance(value, dict):
             return value
         if BOOM_HOIST_ID not in value:
             raise ValueError(f"hoists must include the boom hoist '{BOOM_HOIST_ID}'")
         parsed: dict[Any, Any] = {}
+        problems: list[str] = []
         for hoist_id, hoist in value.items():
             if isinstance(hoist, dict):
                 try:
@@ -677,79 +697,159 @@ class AuthoredModelDefinition(BaseModel):
                     else:
                         hoist = AuthoredPayloadHoist.model_validate(hoist)
                 except ValidationError as error:
-                    raise ValueError(f"{hoist_id}: {format_authored_validation_error(error)}")
+                    problems.extend(
+                        f"{hoist_id}: {line}" for line in authored_validation_problems(error)
+                    )
             parsed[hoist_id] = hoist
+        if problems:
+            raise ValueError("\n".join(problems))
         return parsed
 
     @model_validator(mode="after")
     def _check_condition_hoist_charts(self) -> "AuthoredModelDefinition":
-        """Cross-check the conditions, the hoists they list and the chart points' tags."""
-        payload = {
-            hoist_id: hoist
-            for hoist_id, hoist in self.hoists.items()
-            if isinstance(hoist, AuthoredPayloadHoist)
+        """Cross-check the conditions, the hoists they list and the chart points' tags
+        (every problem, one per line: ``_condition_hoist_chart_problems``)."""
+        payload: dict[str, _Charts] = {}
+        for hoist_id, hoist in self.hoists.items():
+            if isinstance(hoist, AuthoredPayloadHoist):
+                charts = [("load_chart", [p.conditions for p in hoist.load_chart])]
+                if hoist.split is not None:
+                    charts.append(
+                        ("split.load_chart", [p.conditions for p in hoist.split.load_chart])
+                    )
+                payload[hoist_id] = charts
+        conditions = {
+            name: (str(condition.lift), list(condition.hoists))
+            for name, condition in self.conditions.items()
         }
-        for name, condition in self.conditions.items():
-            if self.rules is None and condition.lift != "onboard":
-                raise ValueError(
-                    f"conditions.{name}.lift: {condition.lift!r} requires rules; without "
-                    "rules every condition must be 'onboard'"
-                )
-            for hoist_id in condition.hoists:
-                if hoist_id == BOOM_HOIST_ID:
-                    raise ValueError(
-                        f"conditions.{name}.hoists: the boom hoist '{BOOM_HOIST_ID}' cannot be "
-                        "listed in a condition"
-                    )
-                if hoist_id not in payload:
-                    raise ValueError(
-                        f"conditions.{name}.hoists: hoist {hoist_id!r} is not a payload hoist "
-                        "defined under hoists"
-                    )
-        for hoist_id, hoist in payload.items():
-            charts = [("load_chart", hoist.load_chart)]
-            if hoist.split is not None:
-                charts.append(("split.load_chart", hoist.split.load_chart))
-            usable_in = [n for n, c in self.conditions.items() if hoist_id in c.hoists]
-            if not usable_in:
-                raise ValueError(
-                    f"hoist {hoist_id!r} is not listed in any condition; list it under "
-                    f"conditions.<name>.hoists.{hoist_id}"
-                )
-            for chart_name, chart in charts:
-                for index, point in enumerate(chart):
-                    for tag in point.conditions:
-                        if tag not in self.conditions:
-                            raise ValueError(
-                                f"hoists.{hoist_id}.{chart_name}.{index}.conditions: "
-                                f"{tag!r} is not a defined condition"
-                            )
-                        if tag not in usable_in:
-                            raise ValueError(
-                                f"hoists.{hoist_id}.{chart_name}.{index} names condition "
-                                f"{tag!r} which does not list hoist {hoist_id!r}"
-                            )
-            for name in usable_in:
-                for chart_name, chart in charts:
-                    if not any(name in point.conditions for point in chart):
-                        raise ValueError(
-                            f"condition {name!r} lists hoist {hoist_id!r} but no "
-                            f"hoists.{hoist_id}.{chart_name} point names {name!r}"
-                        )
+        problems = _condition_hoist_chart_problems(self.rules is not None, conditions, payload)
+        if problems:
+            raise ValueError("\n".join(problems))
         return self
 
     @model_validator(mode="after")
     def _check_hoist_prefixes_unique(self) -> "AuthoredModelDefinition":
-        seen: dict[str, str] = {}
-        for hoist_id in self.hoists:
-            prefix = hoist_node_prefix(hoist_id)
-            if prefix in seen:
-                raise ValueError(
-                    f"hoist {hoist_id!r} clashes with {seen[prefix]!r}: hoist IDs must "
-                    "differ ignoring case"
-                )
-            seen[prefix] = hoist_id
+        problems = _hoist_prefix_problems(list(self.hoists))
+        if problems:
+            raise ValueError("\n".join(problems))
         return self
+
+
+_Charts = list[tuple[str, list[list[str]]]]
+"""A payload hoist's charts as ``(chart name, the conditions each point names)``."""
+
+
+def _condition_hoist_chart_problems(
+    rules: bool,
+    conditions: dict[str, tuple[str, list[str]]],
+    payload: dict[str, _Charts],
+) -> list[str]:
+    """Every problem of the conditions (``name: (lift, hoist ids)``), the payload hoists
+    they list and the conditions the chart points name, in document order."""
+    problems: list[str] = []
+    for name, (lift, hoist_ids) in conditions.items():
+        if not rules and lift != "onboard":
+            problems.append(
+                f"conditions.{name}.lift: {lift!r} requires rules; without "
+                "rules every condition must be 'onboard'"
+            )
+        for hoist_id in hoist_ids:
+            if hoist_id == BOOM_HOIST_ID:
+                problems.append(
+                    f"conditions.{name}.hoists: the boom hoist '{BOOM_HOIST_ID}' cannot be "
+                    "listed in a condition"
+                )
+            elif hoist_id not in payload:
+                problems.append(
+                    f"conditions.{name}.hoists: hoist {hoist_id!r} is not a payload hoist "
+                    "defined under hoists"
+                )
+    for hoist_id, charts in payload.items():
+        usable_in = [n for n, (_lift, ids) in conditions.items() if hoist_id in ids]
+        if not usable_in:
+            problems.append(
+                f"hoist {hoist_id!r} is not listed in any condition; list it under "
+                f"conditions.<name>.hoists.{hoist_id}"
+            )
+            continue
+        for chart_name, chart in charts:
+            for index, tags in enumerate(chart):
+                for tag in tags:
+                    if tag not in conditions:
+                        problems.append(
+                            f"hoists.{hoist_id}.{chart_name}.{index}.conditions: "
+                            f"{tag!r} is not a defined condition"
+                        )
+                    elif tag not in usable_in:
+                        problems.append(
+                            f"hoists.{hoist_id}.{chart_name}.{index} names condition "
+                            f"{tag!r} which does not list hoist {hoist_id!r}"
+                        )
+        for name in usable_in:
+            for chart_name, chart in charts:
+                if not any(name in tags for tags in chart):
+                    problems.append(
+                        f"condition {name!r} lists hoist {hoist_id!r} but no "
+                        f"hoists.{hoist_id}.{chart_name} point names {name!r}"
+                    )
+    return problems
+
+
+def _hoist_prefix_problems(hoist_ids: list[str]) -> list[str]:
+    """Every hoist ID that clashes with an earlier one ignoring case."""
+    problems: list[str] = []
+    seen: dict[str, str] = {}
+    for hoist_id in hoist_ids:
+        prefix = hoist_node_prefix(hoist_id)
+        if prefix in seen:
+            problems.append(
+                f"hoist {hoist_id!r} clashes with {seen[prefix]!r}: hoist IDs must "
+                "differ ignoring case"
+            )
+        else:
+            seen[prefix] = hoist_id
+    return problems
+
+
+def _raw_tags(point: Any) -> list[str]:
+    tags = point.get("conditions") if isinstance(point, dict) else None
+    return [t for t in tags if isinstance(t, str)] if isinstance(tags, list) else []
+
+
+def _raw_chart(container: Any) -> list[list[str]]:
+    chart = container.get("load_chart") if isinstance(container, dict) else None
+    return [_raw_tags(p) for p in chart] if isinstance(chart, list) else []
+
+
+def _raw_model_definition_problems(model_definition: dict) -> list[str]:
+    """The ``AuthoredModelDefinition`` cross-checks run on the unvalidated mapping, as
+    far as it can be read: pydantic skips them when a field of it is invalid."""
+    raw_conditions = model_definition.get("conditions")
+    conditions: dict[str, tuple[str, list[str]]] = {}
+    if isinstance(raw_conditions, dict):
+        for name, condition in raw_conditions.items():
+            entry = condition if isinstance(condition, dict) else {}
+            hoists = entry.get("hoists")
+            conditions[str(name)] = (
+                entry.get("lift", "onboard"),
+                [str(h) for h in hoists] if isinstance(hoists, dict) else [],
+            )
+    raw_hoists = model_definition.get("hoists")
+    hoists = {str(k): v for k, v in raw_hoists.items()} if isinstance(raw_hoists, dict) else {}
+    hoist_ids = list(hoists)
+    payload: dict[str, _Charts] = {}
+    for hoist_id, hoist in hoists.items():
+        if hoist_id == BOOM_HOIST_ID:
+            continue
+        charts = [("load_chart", _raw_chart(hoist))]
+        split = hoist.get("split") if isinstance(hoist, dict) else None
+        if split is not None:
+            charts.append(("split.load_chart", _raw_chart(split)))
+        payload[hoist_id] = charts
+    rules = model_definition.get("rules") is not None
+    return _condition_hoist_chart_problems(rules, conditions, payload) + _hoist_prefix_problems(
+        hoist_ids
+    )
 
 
 EXAMPLE_DOCUMENT: dict = {
@@ -799,3 +899,23 @@ class AuthoredDocument(BaseModel):
     schema_: AuthoredSchemaBlock = Field(alias="schema")
     metadata: AuthoredMetadata
     model_definition: AuthoredModelDefinition
+
+
+def authored_document_problems(data: Any) -> list[str]:
+    """Every reason ``data`` is not a valid authored document, one line each (empty when
+    it is). Pydantic's own problems come first, in its order; when a field is invalid
+    pydantic skips the model-definition cross-checks, so their problems are added from
+    the unvalidated mapping, worded as pydantic words them."""
+    try:
+        AuthoredDocument.model_validate(data)
+    except ValidationError as error:
+        problems = authored_validation_problems(error)
+    else:
+        return []
+    model_definition = data.get("model_definition") if isinstance(data, dict) else None
+    if isinstance(model_definition, dict):
+        problems.extend(
+            f"Schema validation failed at model_definition: {_VALUE_ERROR_PREFIX}{line}"
+            for line in _raw_model_definition_problems(model_definition)
+        )
+    return list(dict.fromkeys(problems))

@@ -7,14 +7,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
-from pydantic import ValidationError
-
 from ..data.authored_form import document_to_authored_form, tagged_load_chart
-from ..data.authored_models import (
-    AuthoredDocument,
-    format_authored_validation_error,
-    hoist_node_prefix,
-)
+from ..data.authored_models import authored_document_problems, hoist_node_prefix
 from ..data.models import (
     Body,
     ConditionHoist,
@@ -211,15 +205,14 @@ def build_contractual_point(outreach_m: float, load_t: float) -> ContractualPoin
     return ContractualPoint(outreach_m=float(outreach_m), load_t=float(load_t))
 
 
-def authored_document_error(doc: CraneDocument) -> Optional[str]:
-    """Why ``doc`` does not save as a valid authored document; None when it does."""
+def authored_document_error(doc: CraneDocument) -> list[str]:
+    """Every reason ``doc`` does not save as a valid authored document, one line each
+    (``authored_document_problems``); empty when it saves."""
     try:
-        AuthoredDocument.model_validate(document_to_authored_form(doc))
-    except ValidationError as exc:
-        return format_authored_validation_error(exc)
+        authored = document_to_authored_form(doc)
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
-        return str(exc)
-    return None
+        return [str(exc)]
+    return authored_document_problems(authored)
 
 
 # ----------------------------------------------------------------------
@@ -404,19 +397,20 @@ class DocumentEditor:
 
     @contextmanager
     def _keeping_valid(self) -> Iterator[None]:
-        """``_atomic``, and a document that saved as a valid authored document before the
-        block still does after it: otherwise the block is undone and refused.
+        """``_atomic``, and the block adds no reason the document would not save as a
+        valid authored document (``authored_document_error``): otherwise the block is
+        undone and refused, with the new reasons.
 
-        A document that was already incomplete (a hoist added but not charted yet, a
-        document built in code) is not held to it: the edit may be a step towards valid.
+        A document that is already incomplete (a hoist added but not charted yet, a
+        document built in code) keeps its old problems: the edit may be a step towards
+        valid, but it may not add another.
         """
-        valid_before = authored_document_error(self._doc) is None
+        before = set(authored_document_error(self._doc))
         with self._atomic():
             yield
-            if valid_before:
-                error = authored_document_error(self._doc)
-                if error is not None:
-                    raise DocumentEditError(error)
+            added = [p for p in authored_document_error(self._doc) if p not in before]
+            if added:
+                raise DocumentEditError("\n".join(added))
 
     def add_hoist(self, hoist: Hoist, tension_mode: str = "fixed") -> None:
         """Add ``hoist``. A payload hoist is usable in every condition, with no lead
