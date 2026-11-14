@@ -1,13 +1,12 @@
 """SessionModel undo/redo: document, limits, Scene state, dirty flag and view-model extras."""
 
-from pathlib import Path
-
 import pytest
 
 from crane_statics.core.io import load_document
 from crane_statics.core.session_model import SessionModel
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 @pytest.fixture

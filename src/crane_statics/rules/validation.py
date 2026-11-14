@@ -7,7 +7,14 @@ from typing import Optional
 
 from ..calculation.rope_mass import derive_hook_geometry, hook_support_node_id
 from ..calculation.solver.kinematics import KinematicsAdapter, hoist_angle_bounds
-from ..data.models import CraneDocument, Hoist, VesselMotion, is_solve_hoist, payload_hoist_ids
+from ..data.models import (
+    ContractualPoint,
+    CraneDocument,
+    Hoist,
+    VesselMotion,
+    is_solve_hoist,
+    payload_hoist_ids,
+)
 
 #: Gravitational acceleration, m/s^2.
 GRAVITY_M_S2 = 9.81
@@ -49,13 +56,16 @@ def heavy_lift_a_v_excess(
     )
 
 
-def heavy_lift_tip_reach_m(doc: CraneDocument, hoist: Hoist) -> Optional[float]:
+def heavy_lift_tip_reach_m(
+    doc: CraneDocument, hoist: Hoist, condition_name: Optional[str] = None
+) -> Optional[float]:
     """The largest ``|x|`` of ``hoist``'s hook support node over its rated angles, m.
 
     The rated angles are the operating range (``kinematics.hoist_angle_bounds``, as the
     Scene and the sweep take it from ``outreach_min_m``/``outreach_max_m``) widened to
-    the angle of every contractual point (normal and split), which the sweep and the
-    limit auto-set also evaluate. A boom-local node (u, w) lies at
+    the angle of every contractual point (normal and split) of the hoist under condition
+    ``condition_name`` (None: under every condition), which the sweep and the limit
+    auto-set also evaluate. A boom-local node (u, w) lies at
     ``heel_x + R cos(a + atan2(w, u))``, so ``|x|`` peaks at an end of the range or where
     ``a + atan2(w, u)`` is a multiple of 180 deg; a fixed node does not move and a
     hanging node takes the x of the node it hangs below. The x values come from
@@ -67,7 +77,7 @@ def heavy_lift_tip_reach_m(doc: CraneDocument, hoist: Hoist) -> Optional[float]:
     try:
         kin = KinematicsAdapter(doc_dict)
         lo, hi = hoist_angle_bounds(kin, hoist.id, hoist.outreach_min_m, hoist.outreach_max_m)
-        for point in (*hoist.contractual_points, *hoist.split_contractual_points):
+        for point in _contractual_points(doc, hoist.id, condition_name):
             angle = kin.outreach_to_angle(float(point.outreach_m), hoist.id)
             if angle is not None:
                 lo, hi = min(lo, float(angle)), max(hi, float(angle))
@@ -94,6 +104,23 @@ def heavy_lift_tip_reach_m(doc: CraneDocument, hoist: Hoist) -> Optional[float]:
         return reach
     except (TypeError, ValueError, RuntimeError):
         return None
+
+
+def _contractual_points(
+    doc: CraneDocument, hoist_id: str, condition_name: Optional[str]
+) -> list[ContractualPoint]:
+    """The normal and split contractual points of ``hoist_id`` under the condition(s)."""
+    conditions = (
+        list(doc.conditions.values())
+        if condition_name is None
+        else [doc.conditions[condition_name]]
+    )
+    points: list[ContractualPoint] = []
+    for cond in conditions:
+        settings = cond.hoists.get(hoist_id)
+        if settings is not None:
+            points.extend((*settings.contractual_points, *settings.split_contractual_points))
+    return points
 
 
 def validate_rules_document(doc: CraneDocument) -> None:
@@ -136,7 +163,7 @@ def validate_rules_document(doc: CraneDocument) -> None:
 
 
 def _validate_heavy_lift_tip(doc: CraneDocument, condition_name: str) -> None:
-    """a_v at each payload hoist's largest rated boom-tip reach is within 0.07 g.
+    """a_v at each usable payload hoist's largest rated boom-tip reach is within 0.07 g.
 
     ``heavy_lift_tip_reach_m`` covers every angle a sweep, a contractual point or the
     limit auto-set evaluates, so those never exceed 0.07 g; a point outside them (the
@@ -146,10 +173,11 @@ def _validate_heavy_lift_tip(doc: CraneDocument, condition_name: str) -> None:
     if motion.pitch_angular_accel_rad_s2 == 0.0 and motion.roll_angular_accel_rad_s2 == 0.0:
         return  # a_v is |a_z|, checked above
     payload = set(payload_hoist_ids(doc))
+    usable = doc.conditions[condition_name].hoists
     for hoist in doc.hoists:
-        if hoist.id not in payload:
+        if hoist.id not in payload or hoist.id not in usable:
             continue
-        reach = heavy_lift_tip_reach_m(doc, hoist)
+        reach = heavy_lift_tip_reach_m(doc, hoist, condition_name)
         if reach is None:
             continue
         message = heavy_lift_a_v_excess(
@@ -183,7 +211,8 @@ def _validate_offboard_inputs(doc: CraneDocument) -> None:
 
 
 def _validate_hook_heights(doc: CraneDocument) -> None:
-    """Overrides must lie within each payload hoist's reachable hook heights.
+    """A condition's override lies within the reachable hook heights of each payload hoist
+    the condition lists.
 
     Reachable: from ``lowest_hook_height_m`` (the rope is sized for it) up to the
     support node's height at minimum outreach (the hook cannot pass its sheave).
@@ -208,6 +237,8 @@ def _validate_hook_heights(doc: CraneDocument) -> None:
             continue
         highest = float(lowest) + derived[0]
         for name, height in overrides.items():
+            if hoist.id not in doc.conditions[name].hoists:
+                continue  # not usable in that condition
             if height < lowest - 1e-9 or height > highest + 1e-9:
                 raise RulesValidationError(
                     f"conditions.{name}.hook_height_override_m: {height:g} m is outside the "

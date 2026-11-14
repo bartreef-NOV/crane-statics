@@ -13,9 +13,10 @@ from crane_statics.core.chart_cache import (
     empty_payload,
     plan_chart_jobs,
 )
+from tests.authored_helpers import example_path
 
 ROOT = Path(__file__).parent.parent
-EXAMPLE = ROOT / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 LIMITS: dict[str, dict] = {"boom_hoist": {"T": 5000.0}}
 
 
@@ -28,7 +29,7 @@ def test_fingerprint_changes_with_document_limits_and_names_and_restores_on_undo
     base = chart_fingerprint(doc, LIMITS, {})
     assert chart_fingerprint(doc, LIMITS, {}) == base
 
-    cp = doc.hoists[0].contractual_points[0]
+    cp = doc.conditions["default"].hoists[doc.hoists[0].id].contractual_points[0]
     original = cp.load_t
     cp.load_t = original + 1.0
     assert chart_fingerprint(doc, LIMITS, {}) != base

@@ -12,6 +12,7 @@ from typing import Any, Sequence
 from crane_statics.calculation.engine import AllowableCapacity, CraneCalculator
 from crane_statics.core.analysis_cases import _signed_candidates
 from crane_statics.core.lead_channels import compose_lead_channel_point
+from crane_statics.core.load_condition import scene_case
 from crane_statics.core.vessel_envelope import vessel_motion_cases
 from crane_statics.data.models import CraneDocument
 
@@ -35,6 +36,7 @@ def reference_capacity(
     overrides: dict[str, dict[str, Any]] | None,
     slew_step_deg: float = 15.0,
     wind_step_deg: float = 15.0,
+    condition_name: str | None = None,
 ) -> AllowableCapacity:
     """Worst-case allowable capacity found by exhaustive enumeration."""
     return reference_capacities(
@@ -48,6 +50,7 @@ def reference_capacity(
         overrides=overrides,
         slew_step_deg=slew_step_deg,
         wind_step_deg=wind_step_deg,
+        condition_name=condition_name,
     )[0]
 
 
@@ -63,17 +66,24 @@ def reference_capacities(
     overrides: dict[str, dict[str, Any]] | None,
     slew_step_deg: float = 15.0,
     wind_step_deg: float = 15.0,
+    condition_name: str | None = None,
 ) -> list[AllowableCapacity]:
-    """``reference_capacity`` for several limit sets, sharing one enumeration of solves."""
-    hoist = next(h for h in doc.hoists if h.id == hoist_id)
-    offlead = float(getattr(hoist, "offlead_deg", 0.0))
-    sidelead = float(getattr(hoist, "sidelead_deg", offlead))
-    wind_speed = float(doc.environment.max_wind_speed_m_s)
+    """``reference_capacity`` for several limit sets, sharing one enumeration of solves.
+
+    The wind speed, vessel motion and lead limits are those of ``doc``'s condition
+    ``condition_name`` (None: the first); ``calc`` should be built for that case.
+    """
+    # The wind, vessel motion and lead limits of the Scene's case of ``condition_name``.
+    case = scene_case(doc, condition_name)
+    settings = case.hoist_settings(hoist_id)
+    offlead = float(settings.offlead_deg)
+    sidelead = float(settings.sidelead_deg)
+    wind_speed = float(case.wind_speed_m_s)
     wind_angles = [0.0] if abs(wind_speed) < _WIND_ZERO else _angles(wind_step_deg)
     lead_cases = list(itertools.product(_signed_candidates(offlead), _signed_candidates(sidelead)))
 
     best: list[AllowableCapacity | None] = [None] * len(limit_sets)
-    for motion in vessel_motion_cases(doc.environment.vessel_motion):
+    for motion in vessel_motion_cases(case.vessel_motion):
         for slew in _angles(slew_step_deg):
             for wind_angle in wind_angles:
                 pt = calc.compute_analysis_point(

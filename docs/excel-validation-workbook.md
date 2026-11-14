@@ -47,7 +47,7 @@ from the authored YAML, not the YAML itself. The workbook does only the simple g
 
 - **Environment:** gravity is typed signed, as authored (-9.81); the magnitude is used.
   Then air density, and the vessel motion reference x and z, which are the lever-arm origin
-  for pitch and roll accelerations. Max wind speed is information only.
+  for pitch and roll accelerations. Wind speed and vessel motion are the first condition's (authored format 13.0.0 keeps them under `conditions`); the max wind speed is information only.
 - **Structure points and widths:**
   - boom width, which is the heel left/right spacing used by the out-of-plane split;
   - slewing bearing diameter, which is optional (blank hides the bearing line-load rows);
@@ -167,7 +167,7 @@ The rope's linear mass and length are typed on the hoist row.
 ### Hoists
 
 Columns: Active, Id, Rope id, Hook node, Support node, Falls, Hook block mass [t],
-Hook DAF, Offlead and Sidelead (document defaults), Rope linear mass [kg/m],
+Hook DAF, Offlead and Sidelead (the first condition's hoist entry), Rope linear mass [kg/m],
 Total rope length (incl. spooled) [m], Max hook travel, Lowest hook height, Splitable block,
 Split falls, Split hook mass.
 
@@ -177,7 +177,7 @@ Split falls, Split hook mass.
   takes precedence for the hook position. The sidelead force acts at this node.
 - **Columns the calculation uses:** Rope id, Hook node, Support node, Hook block mass, Rope
   linear mass and Total rope length.
-- **Information only:** Falls, Hook DAF, the offlead/sidelead defaults (the scene values
+- **Information only:** Falls, Hook DAF, the offlead/sidelead entries (the scene values
   are used), Max hook travel, Lowest hook height and the three split columns.
 - **Idle hoists:** every active hoist other than the scene hoist is idle. Its rope carries
   hook block mass x (|g| + az') / parts at the hook, and its block hangs at its hanging drop.

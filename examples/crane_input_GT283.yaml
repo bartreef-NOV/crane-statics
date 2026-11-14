@@ -1,7 +1,14 @@
-schema: {name: crane-statics, version: 12.0.0}
+schema: {name: crane-statics, version: 13.0.0}
 metadata: {name: Crane Statics Example GT283}
 model_definition:
-  environment: {gravity_m_s2: 9.81, air_density_kg_m3: 1.226, max_wind_speed_m_s: 0.01}
+  environment: {gravity_m_s2: 9.81, air_density_kg_m3: 1.226}
+  conditions:
+    default:
+      wind_speed_m_s: 0.01
+      hoists:
+        MH: {offlead_deg: 1.0, sidelead_deg: 2.5, daf: 1.1}
+        AH: {offlead_deg: 2.0, sidelead_deg: 4.5, daf: 1.3}
+        trolley: {offlead_deg: 4.0, sidelead_deg: 4.5, daf: 1.3}
   structure:
     boom_width_m: 10.0
     slewing_bearing_diameter_m: 15.0
@@ -67,13 +74,16 @@ model_definition:
       - {node: boom_sheave_4, body: boom, u_m: 109.0, w_m: -4.25, parts: 2}
       lower_block_mass_t: 50.0
       falls: 20
-      daf: 1.1
-      offlead_deg: 1.0
-      sidelead_deg: 2.5
       lowest_hook_height_m: -53.0
       load_chart:
-      - {outreach_m: 16.0, load_t: 1000.0}
-      - {outreach_m: 25.0, load_t: 1000.0}
+      - outreach_m: 16.0
+        load_t: 1000.0
+        conditions:
+        - default
+      - outreach_m: 25.0
+        load_t: 1000.0
+        conditions:
+        - default
     AH:
       rope: {linear_mass_kg_m: 5.83}
       reeving:
@@ -83,13 +93,16 @@ model_definition:
       - {node: boom_sheave_4, body: boom, u_m: 113.5, w_m: -6.0}
       lower_block_mass_t: 7.0
       falls: 6
-      daf: 1.3
-      offlead_deg: 2.0
-      sidelead_deg: 4.5
       lowest_hook_height_m: -53.0
       load_chart:
-      - {outreach_m: 23.0, load_t: 160.0}
-      - {outreach_m: 70.0, load_t: 160.0}
+      - outreach_m: 23.0
+        load_t: 160.0
+        conditions:
+        - default
+      - outreach_m: 70.0
+        load_t: 160.0
+        conditions:
+        - default
     trolley:
       rope: {linear_mass_kg_m: 4.96}
       reeving:
@@ -100,9 +113,9 @@ model_definition:
       - {node: boom_sheave_2, body: boom, u_m: 90.0, w_m: -2.0}
       lower_block_mass_t: 7.7
       falls: 1
-      daf: 1.3
-      offlead_deg: 4.0
-      sidelead_deg: 4.5
       lowest_hook_height_m: -53.0
       load_chart:
-      - {outreach_m: 72.5, load_t: 25.0}
+      - outreach_m: 72.5
+        load_t: 25.0
+        conditions:
+        - default

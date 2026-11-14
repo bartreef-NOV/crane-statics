@@ -10,9 +10,10 @@ import pytest
 from crane_statics.core import load_document
 from crane_statics.core.sweep import limit_series_layout, run_mode_sweep
 from crane_statics.data.models import CraneDocument
+from tests.authored_helpers import example_path
 
 ROOT = Path(__file__).parent.parent
-EXAMPLE = ROOT / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 HOIST = "MH"
 STEP = 10.0
 VESSEL = {"accel_x_m_s2": 0.5, "roll_deg": 2.0}
@@ -30,10 +31,11 @@ NAMES = {"platform_base": "Bearing line load", "rear_hinge": "Rear hinge Fx"}
 @pytest.fixture(scope="module")
 def doc() -> CraneDocument:
     document = load_document(EXAMPLE)
-    vm = document.environment.vessel_motion
+    condition = document.conditions["default"]
+    vm = condition.vessel_motion
     for field, value in VESSEL.items():
         setattr(vm, field, float(value))
-    document.environment.max_wind_speed_m_s = 20.0
+    condition.wind_speed_m_s = 20.0
     return document
 
 
@@ -72,7 +74,7 @@ def test_on_contractual_fires_once_before_any_curve_batch(doc: CraneDocument) ->
 
 def test_on_contractual_not_called_without_contractual_points(doc: CraneDocument) -> None:
     calls: list[Any] = []
-    hoist = next(h for h in doc.hoists if h.id == HOIST)
+    hoist = doc.conditions["default"].hoists[HOIST]
     saved = (list(hoist.contractual_points), hoist.split_contractual_points)
     hoist.contractual_points = []
     hoist.split_contractual_points = []

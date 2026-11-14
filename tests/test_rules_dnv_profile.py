@@ -5,12 +5,10 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import math
-from pathlib import Path
 
 import pytest
 
-from crane_statics.core.analysis_cases import iter_hoist_analysis_modes
-from crane_statics.core.io import load_document
+from crane_statics.core.analysis_cases import HoistAnalysisMode
 from crane_statics.data.models import ConditionSpec, RulesSpec, VesselMotion, payload_hoist_ids
 from crane_statics.rules import profile_for
 from crane_statics.rules.abs_profile import AbsProfile
@@ -20,20 +18,40 @@ from crane_statics.rules.foundation import dnv_sf1
 from crane_statics.rules.types import CaseSpec
 from crane_statics.rules.validation import RulesValidationError
 from tests import rules_reference as ref
+from tests.rules_docs import load_v13
+from tests.authored_helpers import example_path
 
 G = ref.G
-GT283 = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
+GT283 = example_path("crane_input_GT283.yaml")
 ROPE_T = 1.5
 K = 5000.0
 
 
-def _doc(cabin=False, daf=1.0, speed=0.5):
-    doc = load_document(GT283)
-    hoists = [
-        h.model_copy(update={"hook_daf": daf, "max_hoisting_speed_m_s": speed}) for h in doc.hoists
-    ]
+def _doc(cabin=False, daf=None, speed=0.5):
+    doc = load_v13(GT283)
+    hoists = [h.model_copy(update={"max_hoisting_speed_m_s": speed}) for h in doc.hoists]
     rules = RulesSpec(standard="DNV", cabin_above_slewing_bearing=cabin)
-    return doc.model_copy(update={"rules": rules, "hoists": hoists})
+    return doc.model_copy(
+        update={"rules": rules, "hoists": hoists, "conditions": _with_daf(doc, daf)}
+    )
+
+
+def _with_daf(doc, daf):
+    """``doc``'s migrated ``default`` condition with ``daf`` on every hoist entry."""
+    default = doc.conditions["default"]
+    entries = {k: v.model_copy(update={"daf": daf}) for k, v in default.hoists.items()}
+    return {"default": default.model_copy(update={"hoists": entries})}
+
+
+def _listing(doc, cond):
+    """``cond`` listing ``doc``'s hoists (from its ``default`` condition) if it lists none."""
+    if cond.hoists:
+        return cond
+    return cond.model_copy(update={"hoists": dict(doc.conditions["default"].hoists)})
+
+
+def _mode(hoist):
+    return HoistAnalysisMode("normal", float(hoist.lower_block_mass_t), {}, [])
 
 
 def _motion(roll=3.0, pitch=-2.0):
@@ -61,7 +79,7 @@ def _offboard(h_sig=2.0, v_in=0.8, v_t=0.6, **kw):
 def _hoist_mode(doc):
     hoist_id = payload_hoist_ids(doc)[0]
     hoist = next(h for h in doc.hoists if h.id == hoist_id)
-    return hoist_id, iter_hoist_analysis_modes(hoist)[0]
+    return hoist_id, _mode(hoist)
 
 
 def _setup(doc, cond, chart_max_load_t=50.0, profile=None, hook_t=None, rope_t=ROPE_T, **kw):
@@ -70,6 +88,7 @@ def _setup(doc, cond, chart_max_load_t=50.0, profile=None, hook_t=None, rope_t=R
         mode = dataclasses.replace(mode, lower_block_mass_t=hook_t)
     profile = profile or DnvProfile()
     kw.setdefault("support_x_m", 0.0)
+    cond = _listing(doc, cond)
     return profile.lift_setup(doc, cond, hoist_id, mode, K, rope_t, chart_max_load_t, **kw)
 
 
@@ -273,8 +292,27 @@ def test_manual_daf_overrides_and_keeps_computed_record():
 
 
 def test_default_daf_is_not_an_override():
-    setup = _setup(_doc(daf=1.0), _cond())
+    setup = _setup(_doc(), _cond())
     assert all(r.source == "computed" for r in setup.records)
+
+
+@pytest.mark.parametrize("daf", [1.2, 1.0])
+def test_rules_daf_override_only_when_given(daf):
+    derived = _setup(_doc(), _offboard())
+    assert not isinstance(derived.factor, LinearFactor)
+    (computed,) = [r for r in derived.records if r.quantity == "dynamic_factor"]
+
+    manual = _setup(_doc(daf=daf), _offboard())
+
+    # A given daf overrides even at 1.0: only an omitted one is derived.
+    assert manual.factor == LinearFactor(daf, ROPE_T)
+    sources = {r.source: r for r in manual.records if r.quantity == "dynamic_factor"}
+    assert sources["computed"] == computed
+    assert sources["override"].value == daf
+    assert sources["override"].inputs == {"daf": daf}
+    assert sources["override"].clause == (
+        f"{computed.clause} (overridden by conditions.c.hoists.MH.daf)"
+    )
 
 
 # --- foundation --------------------------------------------------------------------------

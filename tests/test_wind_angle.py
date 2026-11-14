@@ -1,13 +1,12 @@
 """Wind from an arbitrary angle (degrees from +X toward +Y) in the engine."""
 
-from pathlib import Path
-
 import pytest
 
 from crane_statics.calculation.engine import CraneCalculator
 from crane_statics.core import load_document
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
+EXAMPLE = example_path("crane_input_GT283.yaml")
 WIND = 20.0
 
 

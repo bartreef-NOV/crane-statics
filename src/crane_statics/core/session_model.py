@@ -10,11 +10,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from crane_statics.data import CraneDocument, Hoist, payload_hoist_ids
+from crane_statics.data.models import ConditionHoist
 
 from .edit_history import EditHistory
 from .limit_components import validate_limit_component
 from .limit_factory import DesignLimitFactory
-from .load_condition import LoadCondition, scene_case
+from .load_condition import LoadCondition, condition_cases, scene_case
 from .vessel_envelope import vessel_limit
 
 
@@ -100,6 +101,18 @@ def _scene_seed(condition: LoadCondition) -> dict[str, Any]:
     }
 
 
+def _lead_seed(condition: Optional[LoadCondition], hoist_id: str) -> dict[str, Any]:
+    """The ``SceneState`` lead angles ``hoist_id`` starts at under ``condition``: its lead
+    limits there; empty (the 0.0 defaults) when the hoist is not usable in it."""
+    if condition is None or hoist_id not in condition.usable_hoist_ids():
+        return {}
+    settings = condition.hoist_settings(hoist_id)
+    return {
+        "offlead_deg": float(settings.offlead_deg),
+        "sidelead_deg": float(settings.sidelead_deg),
+    }
+
+
 @dataclass(frozen=True, eq=False)
 class HoistSnapshot:
     """The restorable part of a hoist's runtime state (sweep caches are not kept)."""
@@ -143,10 +156,12 @@ class SessionModel:
         self.history: EditHistory[SessionSnapshot] = EditHistory()
         self._restoring = False
         self._history_extras: dict[str, tuple[Callable[[], Any], Callable[[Any], None]]] = {}
-        # The (condition, case) names the Scene runs under on a rules document; None for
+        # The (condition, case) names the Scene runs under; None for
         # either takes the first condition and its most severe case (``scene_case``).
         self.scene_condition_name: Optional[str] = None
         self.scene_case_name: Optional[str] = None
+        # Old condition name -> its current name, for the renames made this document.
+        self._condition_renames: dict[str, str] = {}
 
     def subscribe(self, event: str, listener: SessionListener) -> Callable[[], None]:
         """Register a listener and return an unsubscribe callback."""
@@ -178,23 +193,25 @@ class SessionModel:
         self.design_limits_by_id.clear()
         self.scene_condition_name = None
         self.scene_case_name = None
+        self._condition_renames.clear()
 
         if doc is not None:
-            # Not doc.environment: on a rules document its wind and motion are placeholders.
-            seed = _scene_seed(self.scene_condition())
+            # Not doc.environment: its wind and motion are placeholders. A document without
+            # conditions (runtime only: the authored format requires one) seeds nothing.
+            condition = self.scene_condition_or_none()
+            seed: dict[str, Any] = {} if condition is None else _scene_seed(condition)
             for hoist in doc.hoists:
                 self.hoist_states[hoist.id] = HoistState(
                     hoist_id=hoist.id,
                     scene_state=SceneState(
                         tackle_length_m=0.0,
-                        offlead_deg=float(hoist.offlead_deg),
-                        sidelead_deg=float(hoist.sidelead_deg),
                         wind_direction="+X",
                         crane_slewing_angle_deg=0.0,
+                        **_lead_seed(condition, hoist.id),
                         **seed,
                     ),
                 )
-            visible_payload_hoists = payload_hoist_ids(doc)
+            visible_payload_hoists = self.scene_hoist_ids()
             if visible_payload_hoists:
                 self.selected_hoist_id = visible_payload_hoists[0]
             if doc.hoists:
@@ -207,10 +224,11 @@ class SessionModel:
         self._reset_history()
 
     def scene_condition(self) -> LoadCondition:
-        """The analysis case the Scene runs under (legacy: the document's default).
+        """The analysis case the Scene runs under.
 
         A stored name the document no longer has falls back to the first condition and
-        its most severe case.
+        its most severe case. Raises ``ValueError`` without a document and ``KeyError``
+        when the document has no condition (``scene_condition_or_none`` does not).
         """
         doc = self.document
         if doc is None:
@@ -220,32 +238,103 @@ class SessionModel:
         except KeyError:
             return scene_case(doc, None, None)
 
+    def scene_condition_or_none(self) -> Optional[LoadCondition]:
+        """``scene_condition``; None without a document or without any condition."""
+        if self.document is None or not self.document.conditions:
+            return None
+        return self.scene_condition()
+
     def set_scene_condition(
         self, condition_name: Optional[str], case_name: Optional[str] = None, *, seed: bool
     ) -> bool:
         """Run the Scene under ``case_name`` of ``condition_name``; True when it changed.
 
         With ``seed`` every hoist's wind speed and vessel motion restart at the case's
-        values (+limits), as on opening the document. A legacy document has one condition:
-        nothing changes.
+        values (+limits), and its lead angles at its lead limits in the condition, as on
+        opening the document. A selected hoist the condition does not list gives way to
+        the condition's first usable one (``scene_hoist_ids``). Without a condition, or
+        for a ``condition_name`` the document does not define, nothing changes (False).
         """
         doc = self.document
-        if doc is None or doc.rules is None:
+        if doc is None or not doc.conditions:
+            return False
+        if condition_name is not None and condition_name not in doc.conditions:
             return False
         before = (self.scene_condition_name, self.scene_case_name)
         self.scene_condition_name = condition_name
         self.scene_case_name = case_name
         if seed:
-            values = _scene_seed(self.scene_condition())
-            for state in self.hoist_states.values():
-                state.scene_state = dataclasses.replace(state.scene_state, **values)
+            condition = self.scene_condition()
+            values = _scene_seed(condition)
+            for hoist_id, state in self.hoist_states.items():
+                state.scene_state = dataclasses.replace(
+                    state.scene_state, **values, **_lead_seed(condition, hoist_id)
+                )
+        self._follow_scene_hoists()
         return before != (condition_name, case_name)
+
+    def condition_renamed(self, old: str, new: str) -> None:
+        """The document's condition ``old`` is now called ``new``: a Scene running under
+        it stays under it, and ``renamed_condition`` carries the rename to the views that
+        name a condition (call it before ``mark_content_changed``)."""
+        if old == new:
+            return
+        if self.scene_condition_name == old:
+            self.scene_condition_name = new
+        for earlier, current in self._condition_renames.items():
+            if current == old:
+                self._condition_renames[earlier] = new
+        self._condition_renames[old] = new
+        self._condition_renames.pop(new, None)  # a live name again
+
+    def renamed_condition(self, name: Optional[str]) -> Optional[str]:
+        """``name``, or the name it was renamed to when the document no longer has it."""
+        doc = self.document
+        if name is None or doc is None or name in doc.conditions:
+            return name
+        return self._condition_renames.get(name, name)
+
+    def _follow_scene_hoists(self) -> None:
+        """Keep the selected hoist usable under the Scene's condition: the first usable
+        one otherwise (None when the condition lists none)."""
+        usable = self.scene_hoist_ids()
+        if self.selected_hoist_id in usable:
+            return
+        self.selected_hoist_id = usable[0] if usable else None
+        if self.selected_hoist_id is not None:
+            self._emit("hoist_selected", self.selected_hoist_id)
 
     def payload_hoist_ids(self) -> list[str]:
         return [] if self.document is None else list(payload_hoist_ids(self.document))
 
+    def usable_hoist_ids(self, condition_name: Optional[str]) -> list[str]:
+        """The payload hoists usable in condition ``condition_name`` (None: the first), in
+        document order; [] for an unknown name or without a condition."""
+        doc = self.document
+        if doc is None or not doc.conditions:
+            return []
+        try:
+            usable = condition_cases(doc, condition_name)[0].usable_hoist_ids()
+        except KeyError:
+            return []
+        return [hid for hid in self.payload_hoist_ids() if hid in usable]
+
+    def scene_hoist_ids(self) -> list[str]:
+        """The payload hoists usable under the Scene's condition, in document order."""
+        condition = self.scene_condition_or_none()
+        return [] if condition is None else self.usable_hoist_ids(condition.condition_name)
+
+    def scene_hoist_settings(self, hoist_id: Optional[str]) -> Optional[ConditionHoist]:
+        """``hoist_id``'s entry in the Scene's condition; None when it is not usable there."""
+        condition = self.scene_condition_or_none()
+        if condition is None or not hoist_id or hoist_id not in condition.usable_hoist_ids():
+            return None
+        return condition.hoist_settings(hoist_id)
+
     def select_payload_hoist(self, hoist_id: str) -> None:
-        if hoist_id not in self.payload_hoist_ids() or hoist_id not in self.hoist_states:
+        """Select ``hoist_id`` for the Scene and the Load Chart; ignored unless it is
+        usable under the Scene's condition (``scene_hoist_ids``)."""
+        if hoist_id not in self.scene_hoist_ids() or hoist_id not in self.hoist_states:
             return
         self.selected_hoist_id = hoist_id
         self._emit("hoist_selected", hoist_id)
@@ -275,15 +364,27 @@ class SessionModel:
         hoist = self.payload_hoist_by_id(hoist_id)
         return bool(hoist is not None and getattr(hoist, "splitable_block", False))
 
-    def contractual_points_for_mode(self, hoist_id: Optional[str], mode: str = "normal") -> list:
+    def contractual_points_for_mode(
+        self, hoist_id: Optional[str], mode: str = "normal", condition_name: Optional[str] = None
+    ) -> list:
+        """``hoist_id``'s contractual points in ``mode`` under condition ``condition_name``
+        (None: the Scene's); [] when the hoist is not usable there. A split mode without
+        split points shows the normal ones."""
         hoist = self.payload_hoist_by_id(hoist_id)
-        if hoist is None:
+        doc = self.document
+        if hoist is None or doc is None:
+            return []
+        if condition_name is None:
+            settings = self.scene_hoist_settings(hoist.id)
+        else:
+            spec = doc.conditions.get(condition_name)
+            settings = None if spec is None else spec.hoists.get(hoist.id)
+        if settings is None:
             return []
         if str(mode).lower() == "split" and self.is_splitable_hoist(hoist_id):
-            split_points = getattr(hoist, "split_contractual_points", None)
-            if isinstance(split_points, list) and split_points:
-                return split_points
-        return hoist.contractual_points
+            if settings.split_contractual_points:
+                return settings.split_contractual_points
+        return settings.contractual_points
 
     def chart_mode_for_hoist(self, hoist_id: Optional[str]) -> str:
         state = self.hoist_states.get(hoist_id) if hoist_id else None
@@ -458,6 +559,10 @@ class SessionModel:
                 self.selected_editor_hoist_id = snapshot.selected_editor_hoist_id
             # The Scene's wind and motion were seeded from this case: restore them together.
             self.scene_condition_name, self.scene_case_name = snapshot.scene_condition
+            usable = self.scene_hoist_ids()
+            if self.selected_hoist_id not in usable:
+                # The listeners reload on document_changed: no hoist_selected here.
+                self.selected_hoist_id = usable[0] if usable else None
             for name, (_capture, restore) in self._history_extras.items():
                 if name in snapshot.extras:
                     restore(snapshot.extras[name])

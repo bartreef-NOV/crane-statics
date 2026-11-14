@@ -103,8 +103,9 @@ JSON. Lengths m, masses t, areas m^2, angles deg. Top level:
   ``air_density_kg_m3``, ``max_wind_speed_m_s``, ``vessel_motion`` {``accel_x_m_s2``,
   ``accel_y_m_s2``, ``accel_z_m_s2``, ``roll_deg``, ``pitch_deg``,
   ``pitch_angular_accel_rad_s2``, ``roll_angular_accel_rad_s2``, ``reference_x_m``,
-  ``reference_z_m``} (the motion values are the document's +/- limits, not used by a
-  scene case; the reference point is used for pitch/roll lever arms).
+  ``reference_z_m``} (the wind speed and motion are the first condition's, the motion
+  values its +/- limits, not used by a scene case; the reference point is used for
+  pitch/roll lever arms).
 * ``structure``: ``boom_width_m``, ``slewing_bearing_diameter_m`` and ``points``:
   {``boom_heel``, ``upper_hinge``, ``rear_hinge``, ``front_hinge``, ``platform_base``}
   -> {``node_id``, ``x_m``, ``z_m``}. ``node_id`` is the runtime node the point is
@@ -136,7 +137,8 @@ JSON. Lengths m, masses t, areas m^2, angles deg. Top level:
   ``load_node_id`` (hook node; for the boom hoist the boom sheave), ``support_node_id``,
   ``falls``, ``parts_at_hook`` (rope parts meeting the hook node, which the solver
   divides the hook load by), ``lower_block_mass_t``, ``hook_daf``, ``offlead_deg``,
-  ``sidelead_deg`` (authored defaults), ``linear_mass_kg_m``, ``rope_length_m`` (total
+  ``sidelead_deg`` (the first condition's entry: its DAF, 1.0 when omitted, and lead
+  limits; 1.0/0/0 for a hoist it does not list), ``linear_mass_kg_m``, ``rope_length_m`` (total
   rope incl. spooled), ``max_hook_travel_m``, ``lowest_hook_height_m``,
   ``splitable_block``, ``split_falls``, ``split_lower_block_mass_t``, ``spool_node_id``}.
 
@@ -221,9 +223,14 @@ from crane_statics.core.analysis_services import (
     KinematicsService,
 )
 from crane_statics.core.io import load_document
+from crane_statics.core.load_condition import condition_document, scene_case
 from crane_statics.core.scene_build import SceneInputs
 from crane_statics.core.session_model import SessionModel
-from crane_statics.data.models import PRIMARY_STRUCTURE_TO_RUNTIME_NODE, CraneDocument
+from crane_statics.data.models import (
+    PRIMARY_STRUCTURE_TO_RUNTIME_NODE,
+    ConditionHoist,
+    CraneDocument,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 YAML_PATH = REPO_ROOT / "examples" / "crane_input_22689.yaml"
@@ -360,7 +367,24 @@ def _wind_area(body_id: str, wa: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _hoist_settings(entry: ConditionHoist | None) -> dict[str, float]:
+    """``hook_daf``, ``offlead_deg``, ``sidelead_deg`` of a condition entry (a hoist the
+    condition does not list, e.g. the boom hoist: 1.0, 0, 0)."""
+    if entry is None:
+        return {"hook_daf": 1.0, "offlead_deg": 0.0, "sidelead_deg": 0.0}
+    return {
+        "hook_daf": 1.0 if entry.daf is None else float(entry.daf),
+        "offlead_deg": float(entry.offlead_deg),
+        "sidelead_deg": float(entry.sidelead_deg),
+    }
+
+
 def _expanded_model_from_document(doc: CraneDocument, source: str) -> dict[str, Any]:
+    # v13: the wind speed, vessel motion and hoist settings live on the conditions. The
+    # model is the Scene's opening case (the first condition), whose document carries them.
+    case = scene_case(doc, None)
+    doc = condition_document(doc, case)
+    settings = case.spec.hoists
     dd = doc.model_dump()
     spool_by_hoist: dict[str, str | None] = {
         h["id"]: next(iter(find_winch_node_ids(dd, h["id"])), None) for h in dd["hoists"]
@@ -428,9 +452,7 @@ def _expanded_model_from_document(doc: CraneDocument, source: str) -> dict[str, 
                 "falls": h.get("falls"),
                 "parts_at_hook": max(1, int(parts)),
                 "lower_block_mass_t": float(h["lower_block_mass_t"]),
-                "hook_daf": float(h["hook_daf"]),
-                "offlead_deg": float(h["offlead_deg"]),
-                "sidelead_deg": float(h["sidelead_deg"]),
+                **_hoist_settings(settings.get(h["id"])),
                 "linear_mass_kg_m": float(h.get("linear_mass_kg_m") or 0.0),
                 "rope_length_m": h.get("rope_length_m"),
                 "max_hook_travel_m": h.get("max_hook_travel_m"),

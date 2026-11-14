@@ -7,10 +7,10 @@ from typing import Callable
 
 import pytest
 
-from crane_statics.core.io import load_document
 from scripts.excel_workbook import layout
 from scripts.excel_workbook.build import build_workbook
-from scripts.excel_workbook.reference import CASES, YAML_PATH
+from scripts.excel_workbook.reference import CASES
+from tests.excel_workbook_helpers import _document
 
 from tests.excel_workbook_helpers import (
     INPLANE_REQUIRED,
@@ -58,7 +58,7 @@ def test_zero_boom_width_is_flagged(tmp_path: Path) -> None:
     case = CASES["outofplane_wind_roll_sidelead"]
     # The app rejects a document with boom width 0; past validation the engine's split
     # raises and compute_analysis_point gives no point (no results at all).
-    doc = load_document(YAML_PATH)
+    doc = _document()
     doc.support_widths.boom_width_m = 0.0
     kwargs = dataclasses.asdict(case)
     hoist_id = kwargs.pop("hoist_id")
@@ -118,7 +118,7 @@ def test_blank_bearing_diameter_hides_bearing_rows(tmp_path: Path) -> None:
     kwargs = dataclasses.asdict(case)
     hoist_id = kwargs.pop("hoist_id")
     angle, hook = kwargs.pop("boom_angle_deg"), kwargs.pop("hook_load_kN")
-    calc = CraneCalculator(load_document(YAML_PATH))
+    calc = CraneCalculator(_document())
     pt = calc.compute_analysis_point(angle, hook, hoist_id, **kwargs)
     bearing = ("max_bearing_line_load", "min_bearing_line_load")
     for comp in bearing:

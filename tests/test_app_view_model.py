@@ -1,15 +1,14 @@
 """Application shell view model: titles, status text and file-action guards."""
 
-from pathlib import Path
-
 import pytest
 from PyQt6.QtCore import QUrl
 
 from crane_statics.qml_app.session import SessionState
 from crane_statics.core.accessibility import contrast_ratio
 from crane_statics.qml_app.viewmodels.app_vm import AppViewModel
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 @pytest.fixture

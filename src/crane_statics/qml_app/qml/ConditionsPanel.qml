@@ -2,9 +2,12 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 
-// The load conditions of a rules document: a list to pick, add, duplicate and delete
-// them, and a form for the selected one. Every edit goes through modelVm, which reports
-// a rejected value through editFailed (shown by ModelWorkspace's edit error dialog).
+// The load conditions of the document: a list to pick, add, duplicate and delete them,
+// and a form for the selected one, ending with the payload hoists usable in it and their
+// lead limits and DAF there. Without rules a condition is wind, vessel motion and its
+// hoists (the lift type, sea state and load wind inputs only mean something under a
+// standard, so they are not offered). Every edit goes through modelVm, which reports a
+// rejected value through editFailed (shown by ModelWorkspace's edit error dialog).
 RowLayout {
     id: root
     objectName: "conditionsPanel"
@@ -72,6 +75,109 @@ RowLayout {
         }
     }
 
+    readonly property int hoistColumnWidth: 84
+
+    /*  One payload hoist under the selected condition: usable there or not, and if so its
+        lead limits and DAF. Under rules an empty DAF means "derived from the standard";
+        without rules it means 1.0. Only a changed value is an edit. */
+    component HoistSettingsRow: RowLayout {
+        id: hoistRow
+
+        required property var modelData
+        readonly property string hoistId: modelData.hoistId
+        readonly property bool usable: !!modelData.usable
+
+        function shown(v) {
+            return v === null || v === undefined ? "" : Number(v).toFixed(3)
+        }
+
+        function show() {
+            offleadField.text = shown(modelData.offleadDeg)
+            sideleadField.text = shown(modelData.sideleadDeg)
+            dafField.text = shown(modelData.dafShown)
+        }
+
+        // Whether a field still holds the value it was shown with: the same text (the
+        // value rounded to the field's decimals) or the same number typed differently.
+        function unchanged(field, value) {
+            const text = field.text.trim()
+            if (text === shown(value))
+                return true
+            return text !== "" && value !== null && value !== undefined
+                && Number(text) === Number(value)
+        }
+
+        function commit() {
+            if (!usable)
+                return
+            // An untouched field passes the stored value on, not its rounded text, so
+            // editing one field never rounds another (off-lead 1.23456, DAF 1.0625).
+            const sameOff = unchanged(offleadField, modelData.offleadDeg)
+            const sameSide = unchanged(sideleadField, modelData.sideleadDeg)
+            const sameDaf = unchanged(dafField, modelData.dafShown)
+            if (!(sameOff && sameSide && sameDaf)) {
+                const off = sameOff ? modelData.offleadDeg : offleadField.value
+                const side = sameSide ? modelData.sideleadDeg : sideleadField.value
+                const daf = sameDaf ? modelData.daf
+                                    : (dafField.text.trim() === "" ? null : dafField.value)
+                // An accepted edit rebuilds the rows (this one included): nothing to do here.
+                if (modelVm.setConditionHoist(hoistId, off, side, daf))
+                    return
+            }
+            // A rejected value changes nothing: show the condition's values again.
+            show()
+        }
+
+        Layout.fillWidth: true
+        spacing: root.layoutSpacing
+        Component.onCompleted: show()
+
+        Label {
+            Layout.fillWidth: true
+            text: hoistRow.hoistId
+            elide: Text.ElideRight
+        }
+
+        CheckBox {
+            objectName: "conditionHoistUsable_" + hoistRow.hoistId
+            Layout.preferredWidth: 64
+            checked: hoistRow.usable
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Usable in this condition")
+            onToggled: {
+                // An accepted change rebuilds the rows; a refused one leaves the condition
+                // as it was: show it again.
+                if (!modelVm.setConditionHoistUsable(hoistRow.hoistId, checked))
+                    checked = Qt.binding(() => hoistRow.usable)
+            }
+        }
+
+        NumberField {
+            id: offleadField
+            objectName: "conditionHoistOfflead_" + hoistRow.hoistId
+            Layout.preferredWidth: root.hoistColumnWidth
+            enabled: hoistRow.usable
+            onEditingFinished: hoistRow.commit()
+        }
+
+        NumberField {
+            id: sideleadField
+            objectName: "conditionHoistSidelead_" + hoistRow.hoistId
+            Layout.preferredWidth: root.hoistColumnWidth
+            enabled: hoistRow.usable
+            onEditingFinished: hoistRow.commit()
+        }
+
+        NumberField {
+            id: dafField
+            objectName: "conditionHoistDaf_" + hoistRow.hoistId
+            Layout.preferredWidth: root.hoistColumnWidth
+            enabled: hoistRow.usable
+            placeholderText: hoistRow.usable && modelVm.hasRules ? qsTr("derived") : ""
+            onEditingFinished: hoistRow.commit()
+        }
+    }
+
     ColumnLayout {
         Layout.preferredWidth: 220
         Layout.fillHeight: true
@@ -120,7 +226,7 @@ RowLayout {
                 objectName: "deleteConditionButton"
                 Layout.fillWidth: true
                 text: qsTr("Delete")
-                // A rules document needs at least one condition.
+                // A document needs at least one condition.
                 enabled: modelVm.conditionNames.length > 1
                 onClicked: modelVm.deleteCondition()
             }
@@ -186,9 +292,11 @@ RowLayout {
                         }
                     }
 
+                    // Offboard lifts need rules: without them every condition is onboard.
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: root.layoutSpacing
+                        visible: modelVm.hasRules
 
                         Label {
                             Layout.fillWidth: true
@@ -225,17 +333,79 @@ RowLayout {
             }
 
             GroupBox {
+                objectName: "conditionHoistsGroup"
                 Layout.fillWidth: true
-                title: qsTr("Wind and Load")
+                title: qsTr("Hoists")
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: root.layoutSpacing
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: root.layoutSpacing
+
+                        Label { Layout.fillWidth: true; text: qsTr("Hoist"); font.bold: true }
+                        Label { Layout.preferredWidth: 64; text: qsTr("Usable"); font.bold: true }
+                        Label {
+                            Layout.preferredWidth: root.hoistColumnWidth
+                            text: qsTr("Off-lead (°)")
+                            font.bold: true
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        Label {
+                            Layout.preferredWidth: root.hoistColumnWidth
+                            text: qsTr("Side-lead (°)")
+                            font.bold: true
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        Label {
+                            Layout.preferredWidth: root.hoistColumnWidth
+                            text: qsTr("DAF")
+                            font.bold: true
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+
+                    Repeater {
+                        objectName: "conditionHoistRows"
+                        model: modelVm.conditionHoists
+
+                        HoistSettingsRow {}
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: modelVm.hasRules
+                              ? qsTr("Leave DAF empty to derive it from the standard. A hoist made usable takes the chart points of the first condition listing it.")
+                              : qsTr("An empty DAF is 1.0. A hoist made usable takes the chart points of the first condition listing it.")
+                    }
+                }
+            }
+
+            GroupBox {
+                Layout.fillWidth: true
+                title: modelVm.hasRules ? qsTr("Wind and Load") : qsTr("Wind")
 
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: root.layoutSpacing
 
                     ConditionRow { label: qsTr("Wind Speed (m/s)"); fieldKey: "wind_speed_m_s" }
-                    ConditionRow { label: qsTr("Load Wind Area (m²)"); fieldKey: "load_wind_area_m2" }
-                    ConditionRow { label: qsTr("Load Drag Coefficient"); fieldKey: "load_drag_coefficient" }
+                    // The load's wind and the hook height are inputs of the rules' cases.
                     ConditionRow {
+                        visible: modelVm.hasRules
+                        label: qsTr("Load Wind Area (m²)")
+                        fieldKey: "load_wind_area_m2"
+                    }
+                    ConditionRow {
+                        visible: modelVm.hasRules
+                        label: qsTr("Load Drag Coefficient")
+                        fieldKey: "load_drag_coefficient"
+                    }
+                    ConditionRow {
+                        visible: modelVm.hasRules
                         label: qsTr("Hook Height Override (m)")
                         fieldKey: "hook_height_override_m"
                         nullable: true
@@ -246,7 +416,7 @@ RowLayout {
             GroupBox {
                 objectName: "conditionOffboardGroup"
                 Layout.fillWidth: true
-                visible: true
+                visible: modelVm.hasRules
                 title: modelVm.condition.lift === "offboard" ? qsTr("Offboard") : qsTr("Used for offboard lifts")
 
                 ColumnLayout {

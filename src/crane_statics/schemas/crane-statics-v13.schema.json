@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.com/schemas/crane-statics-v12.schema.json",
+  "$id": "https://example.com/schemas/crane-statics-v13.schema.json",
   "title": "AuthoredDocument",
   "$defs": {
     "AuthoredBoomBody": {
@@ -193,10 +193,11 @@
     },
     "AuthoredCondition": {
       "additionalProperties": false,
-      "description": "One named in-service condition: lift type, wind, sea state and vessel motion.",
+      "description": "One named in-service condition: lift type, wind, sea state, vessel motion and the\npayload hoists usable under it with their settings.",
       "properties": {
         "lift": {
           "default": "onboard",
+          "description": "Lift type; 'offboard' requires 'rules'.",
           "enum": [
             "onboard",
             "offboard"
@@ -273,29 +274,59 @@
           ],
           "default": null,
           "title": "Hook Height Override M"
+        },
+        "hoists": {
+          "description": "Payload hoists usable in this condition, keyed by hoist ID, with their lead angles and optional DAF. The boom hoist cannot be listed.",
+          "minProperties": 1,
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9_-]*$": {
+              "$ref": "#/$defs/AuthoredConditionHoist"
+            }
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Hoists",
+          "type": "object"
         }
       },
       "required": [
-        "wind_speed_m_s"
+        "wind_speed_m_s",
+        "hoists"
       ],
       "title": "AuthoredCondition",
       "type": "object"
     },
-    "AuthoredEnvironment": {
+    "AuthoredConditionHoist": {
       "additionalProperties": false,
-      "description": "Environmental constants. Gravity and air density have defaults; the maximum\nwind speed (constant over height) is required unless the model has 'rules'.",
+      "description": "A payload hoist's settings under one condition. Listing the hoist makes it usable\nin that condition.",
+      "examples": [
+        {
+          "offlead_deg": 1.0
+        },
+        {
+          "daf": 1.1,
+          "offlead_deg": 2.0
+        }
+      ],
       "properties": {
-        "gravity_m_s2": {
-          "default": 9.81,
-          "description": "Gravity magnitude in m/s\u00b2; the runtime uses it as negative Z gravity.",
-          "exclusiveMinimum": 0,
-          "title": "Gravity M S2",
+        "offlead_deg": {
+          "description": "Off-lead angle in degrees.",
+          "minimum": 0,
+          "title": "Offlead Deg",
           "type": "number"
         },
-        "max_wind_speed_m_s": {
+        "sidelead_deg": {
+          "default": 0.0,
+          "description": "Side-lead angle in degrees.",
+          "minimum": 0,
+          "title": "Sidelead Deg",
+          "type": "number"
+        },
+        "daf": {
           "anyOf": [
             {
-              "exclusiveMinimum": 0,
+              "minimum": 1,
               "type": "number"
             },
             {
@@ -303,8 +334,26 @@
             }
           ],
           "default": null,
-          "description": "Positive maximum wind speed in m/s. Required without 'rules'; with 'rules' each condition carries its own wind speed and this must be omitted.",
-          "title": "Max Wind Speed M S"
+          "description": "Hook dynamic amplification factor. With 'rules' omit it to derive the factor from the standard (a value is a manual override); without 'rules' an omitted factor is 1.0.",
+          "title": "Daf"
+        }
+      },
+      "required": [
+        "offlead_deg"
+      ],
+      "title": "AuthoredConditionHoist",
+      "type": "object"
+    },
+    "AuthoredEnvironment": {
+      "additionalProperties": false,
+      "description": "Environmental constants: gravity and air density, both with defaults. Wind speed\nis set per condition.",
+      "properties": {
+        "gravity_m_s2": {
+          "default": 9.81,
+          "description": "Gravity magnitude in m/s\u00b2; the runtime uses it as negative Z gravity.",
+          "exclusiveMinimum": 0,
+          "title": "Gravity M S2",
+          "type": "number"
         },
         "air_density_kg_m3": {
           "default": 1.225,
@@ -440,6 +489,9 @@
       "description": "A rated operating point on the hoist capacity curve.",
       "examples": [
         {
+          "conditions": [
+            "onboard_sea"
+          ],
           "load_t": 1433.0,
           "outreach_m": 50.0
         }
@@ -456,11 +508,24 @@
           "minimum": 0,
           "title": "Load T",
           "type": "number"
+        },
+        "conditions": {
+          "description": "Names of the conditions this point applies to; each must be defined under 'conditions' and list this hoist.",
+          "items": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Conditions",
+          "type": "array",
+          "uniqueItems": true
         }
       },
       "required": [
         "outreach_m",
-        "load_t"
+        "load_t",
+        "conditions"
       ],
       "title": "AuthoredLoadChartPoint",
       "type": "object"
@@ -574,10 +639,6 @@
         "environment": {
           "$ref": "#/$defs/AuthoredEnvironment"
         },
-        "vessel_motion": {
-          "$ref": "#/$defs/AuthoredVesselMotion",
-          "description": "Vessel motion limits. Must be omitted when 'rules' is present; each condition then carries its own vessel_motion."
-        },
         "rules": {
           "anyOf": [
             {
@@ -588,10 +649,11 @@
             }
           ],
           "default": null,
-          "description": "Classification rule set. Present if and only if 'conditions' is not empty."
+          "description": "Classification rule set the conditions are assessed against. Omit to assess each condition once with its own wind, vessel motion and DAF."
         },
         "conditions": {
-          "description": "Named in-service conditions assessed under 'rules'.",
+          "description": "Named in-service conditions (at least one). Each lists the payload hoists usable under it; every payload hoist must be usable in at least one condition.",
+          "minProperties": 1,
           "patternProperties": {
             "^[A-Za-z][A-Za-z0-9_-]*$": {
               "$ref": "#/$defs/AuthoredCondition"
@@ -659,6 +721,7 @@
       },
       "required": [
         "environment",
+        "conditions",
         "structure",
         "hoists"
       ],
@@ -667,19 +730,20 @@
     },
     "AuthoredPayloadHoist": {
       "additionalProperties": false,
-      "description": "Self-contained payload hoist: its rope, its reeving path with the sheaves it\nowns, its hook mass, falls, lift factors and its load chart. The hook hangs from the\nlast reeving node unless support_node names another; the application creates the\nmanaged hook node automatically.",
+      "description": "Self-contained payload hoist: its rope, its reeving path with the sheaves it\nowns, its hook mass, falls and its load chart. Lead angles and DAF are set per\ncondition under ``conditions.<name>.hoists``. The hook hangs from the\nlast reeving node unless support_node names another; the application creates the\nmanaged hook node automatically.",
       "examples": [
         {
-          "daf": 1.1,
           "falls": 20,
           "load_chart": [
             {
+              "conditions": [
+                "onboard_sea"
+              ],
               "load_t": 1000.0,
               "outreach_m": 16.0
             }
           ],
           "lower_block_mass_t": 50.0,
-          "offlead_deg": 1.0,
           "reeving": [
             {
               "body": "platform",
@@ -739,23 +803,6 @@
           "title": "Falls",
           "type": "integer"
         },
-        "daf": {
-          "description": "Hook dynamic amplification factor.",
-          "minimum": 1,
-          "title": "Daf",
-          "type": "number"
-        },
-        "offlead_deg": {
-          "minimum": 0,
-          "title": "Offlead Deg",
-          "type": "number"
-        },
-        "sidelead_deg": {
-          "default": 0.0,
-          "minimum": 0,
-          "title": "Sidelead Deg",
-          "type": "number"
-        },
         "max_hoisting_speed_m_s": {
           "anyOf": [
             {
@@ -807,8 +854,6 @@
         "reeving",
         "lower_block_mass_t",
         "falls",
-        "daf",
-        "offlead_deg",
         "load_chart"
       ],
       "title": "AuthoredPayloadHoist",
@@ -1051,7 +1096,7 @@
           "type": "string"
         },
         "version": {
-          "pattern": "^12\\.\\d+\\.\\d+$",
+          "pattern": "^13\\.\\d+\\.\\d+$",
           "title": "Version",
           "type": "string"
         }
@@ -1311,10 +1356,19 @@
         "name": "New Crane Model"
       },
       "model_definition": {
+        "conditions": {
+          "default": {
+            "wind_speed_m_s": 20.0,
+            "hoists": {
+              "MH": {
+                "offlead_deg": 0.0
+              }
+            }
+          }
+        },
         "environment": {
           "air_density_kg_m3": 1.225,
-          "gravity_m_s2": 9.81,
-          "max_wind_speed_m_s": 20.0
+          "gravity_m_s2": 9.81
         },
         "hoists": {
           "BH": {
@@ -1329,16 +1383,17 @@
             ]
           },
           "MH": {
-            "daf": 1.0,
             "falls": 1,
             "load_chart": [
               {
+                "conditions": [
+                  "default"
+                ],
                 "load_t": 0.0,
                 "outreach_m": 0.0
               }
             ],
             "lower_block_mass_t": 0.0,
-            "offlead_deg": 0.0,
             "reeving": [
               {
                 "node": "boom_heel"
@@ -1375,7 +1430,7 @@
       },
       "schema": {
         "name": "crane-statics",
-        "version": "12.0.0"
+        "version": "13.0.0"
       }
     }
   ],

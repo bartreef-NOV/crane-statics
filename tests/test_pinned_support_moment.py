@@ -15,15 +15,15 @@ from pathlib import Path
 import pytest
 
 from crane_statics.calculation.solver import crane_solver
-from crane_statics.core import load_document
 from tests.test_acceptance import SceneHarness
+from tests.authored_helpers import load_example
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 PIN_BY_BODY = {"boom": "heel_point", "rear_leg": "rear_hinge", "front_leg": "front_hinge"}
 
 
 def _gt283_harness() -> SceneHarness:
-    harness = SceneHarness(load_document(EXAMPLES / "crane_input_GT283.yaml"), "MH")
+    harness = SceneHarness(load_example("crane_input_GT283.yaml"), "MH")
     harness.apply(boom_angle_deg=45.0)
     return harness
 
@@ -57,7 +57,7 @@ def test_pinned_supports_draw_no_reaction_moment(boom_masses_ten_degrees_low) ->
 
 def test_consistent_solver_passes_the_check_on_every_example() -> None:
     for name in ("crane_input_22689", "crane_input_13778_retracted", "crane_input_GT283"):
-        doc = load_document(EXAMPLES / f"{name}.yaml")
+        doc = load_example(f"{name}.yaml")
         harness = SceneHarness(doc, doc.hoists[0].id)
         harness.apply(boom_angle_deg=45.0)
         report = harness.report()

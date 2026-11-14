@@ -8,14 +8,14 @@ the allowable load fell back to 1000 kN, so an overloaded crane showed capacity.
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import pytest
 
 from crane_statics.calculation import CraneCalculator
 from crane_statics.core import load_document
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 @pytest.fixture(scope="module")

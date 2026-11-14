@@ -3,7 +3,6 @@
 import math
 import pytest
 from dataclasses import fields, replace
-from pathlib import Path
 import json
 import yaml
 from importlib import resources
@@ -32,6 +31,8 @@ from crane_statics.qml_app.scene.scene_renderer import CraneSceneRenderer
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
+from tests.authored_helpers import authored_daf, case_document, hoist_settings
+from tests.authored_helpers import example_path as v13_example
 
 
 class MockCanvas(QObject):
@@ -172,7 +173,7 @@ class TestA1ExampleFileLoads:
 
     def test_loads_without_error(self):
         """Example file should load through normal path."""
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -182,7 +183,7 @@ class TestA1ExampleFileLoads:
 
     def test_creates_scene_context(self):
         """Loaded document should have hoists for scene context."""
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -380,7 +381,7 @@ class TestA8WindDirectionContract:
 
     def test_omnidirectional_capacity_matches_worst_direction(self):
 
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -395,11 +396,12 @@ class TestA8WindDirectionContract:
             for dl in session.design_limits
             if dl.enabled and dl.max_kN is not None
         }
-        cp = hoist.contractual_points[0]
+        cp = hoist_settings(doc, hoist_id).contractual_points[0]
+        hook_daf = authored_daf(doc, hoist_id)
         kin = KinematicsAdapter(doc.model_dump())
         angle = kin.outreach_to_angle(float(cp.outreach_m), hoist_id)
-        calc = CraneCalculator(doc)
-        wind_speed = float(doc.environment.max_wind_speed_m_s)
+        calc = CraneCalculator(case_document(doc))
+        wind_speed = float(doc.conditions["default"].wind_speed_m_s)
 
         by_direction = []
         for wind_direction in ("+X", "-X", "+Y", "-Y"):
@@ -414,7 +416,7 @@ class TestA8WindDirectionContract:
             cap = calc.compute_allowable_load(
                 pt,
                 enabled_limits,
-                hook_daf=hoist.hook_daf,
+                hook_daf=hook_daf,
                 lower_block_mass_t=hoist.lower_block_mass_t,
             )
             by_direction.append((wind_direction, cap.max_allowable_load_kN))
@@ -424,7 +426,7 @@ class TestA8WindDirectionContract:
             float(angle),
             hoist_id,
             enabled_limits,
-            hook_daf=hoist.hook_daf,
+            hook_daf=hook_daf,
             lower_block_mass_t=hoist.lower_block_mass_t,
             wind_speed_m_s=wind_speed,
         )
@@ -443,7 +445,7 @@ class TestA8WindDirectionContract:
             payload_t → (payload + hook_mass) * gravity * daf → hook_force_kN
                     → hook_force / daf / gravity - hook_mass → payload_t (recovered)
         """
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -460,9 +462,9 @@ class TestA8WindDirectionContract:
         }
 
         kin = KinematicsAdapter(doc.model_dump())
-        cp = hoist.contractual_points[0]
+        cp = hoist_settings(doc, hoist_id).contractual_points[0]
         angle = kin.outreach_to_angle(float(cp.outreach_m), hoist_id)
-        calc = CraneCalculator(doc)
+        calc = CraneCalculator(case_document(doc))
 
         # Compute capacity at a contractual point
         pt = calc.compute_analysis_point(float(angle), 0.0, hoist_id)
@@ -471,7 +473,7 @@ class TestA8WindDirectionContract:
         cap = calc.compute_allowable_load(
             pt,
             enabled_limits,
-            hook_daf=hoist.hook_daf,
+            hook_daf=authored_daf(doc, hoist_id),
             lower_block_mass_t=hoist.lower_block_mass_t,
         )
         assert cap is not None
@@ -480,7 +482,7 @@ class TestA8WindDirectionContract:
         # Use the payload from capacity result and verify it converts to hook_force correctly
         payload_t = cap.max_allowable_load_t
         gravity = abs(float(doc.environment.gravity_m_s2))
-        hook_daf = hoist.hook_daf
+        hook_daf = authored_daf(doc, hoist_id)
         lower_block_mass_t = hoist.lower_block_mass_t
 
         expected_hook_force_kN = (payload_t + lower_block_mass_t) * gravity * hook_daf
@@ -504,7 +506,7 @@ class TestA8WindDirectionContract:
             assert cap.max_allowable_load_t < cp.load_t
 
     def test_scene_wind_overlay_hidden_for_y_directions_in_xz_canvas(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -515,7 +517,7 @@ class TestA8WindDirectionContract:
             inputs = scene_inputs(
                 doc,
                 hoist_id,
-                wind_speed_m_s=float(doc.environment.max_wind_speed_m_s),
+                wind_speed_m_s=float(doc.conditions["default"].wind_speed_m_s),
                 wind_direction=direction,
             )
             return inputs.body_loads(inputs.node_positions()).category(dl.WIND)
@@ -545,7 +547,7 @@ class TestA9InactiveHoistRopeRows:
         return str(hoist.rope_id)
 
     def test_inactive_hoists_with_hook_mass_have_rope_tension_rows(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -568,7 +570,7 @@ class TestA9InactiveHoistRopeRows:
             assert row_map[hoist.id] == pytest.approx(pt.baseline_rope_tensions[channel])
 
     def test_inactive_hoist_with_zero_hook_mass_still_shows_zero_row(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -599,22 +601,27 @@ class TestAuthoredSchemaPolicy:
 
     def _minimal_v6(self) -> dict:
         return {
-            "schema": {"name": "crane-statics", "version": "12.0.0"},
+            "schema": {"name": "crane-statics", "version": "13.0.0"},
             "metadata": {"name": "V6 Minimal"},
             "model_definition": {
                 "environment": {
                     "gravity_m_s2": 9.81,
                     "air_density_kg_m3": 1.225,
-                    "max_wind_speed_m_s": 20.0,
                 },
-                "vessel_motion": {
-                    "accel_x_m_s2": 0.0,
-                    "accel_y_m_s2": 0.0,
-                    "accel_z_m_s2": 0.0,
-                    "pitch_angular_accel_rad_s2": 0.0,
-                    "roll_angular_accel_rad_s2": 0.0,
-                    "reference_x_m": 0.0,
-                    "reference_z_m": 0.0,
+                "conditions": {
+                    "default": {
+                        "wind_speed_m_s": 20.0,
+                        "vessel_motion": {
+                            "accel_x_m_s2": 0.0,
+                            "accel_y_m_s2": 0.0,
+                            "accel_z_m_s2": 0.0,
+                            "pitch_angular_accel_rad_s2": 0.0,
+                            "roll_angular_accel_rad_s2": 0.0,
+                            "reference_x_m": 0.0,
+                            "reference_z_m": 0.0,
+                        },
+                        "hoists": {"MH": {"daf": 1.0, "offlead_deg": 0.0}},
+                    },
                 },
                 "structure": {
                     "boom_width_m": 1.0,
@@ -670,9 +677,9 @@ class TestAuthoredSchemaPolicy:
                         ],
                         "lower_block_mass_t": 0.0,
                         "falls": 2,
-                        "daf": 1.0,
-                        "offlead_deg": 0.0,
-                        "load_chart": [{"outreach_m": 60.0, "load_t": 100.0}],
+                        "load_chart": [
+                            {"outreach_m": 60.0, "load_t": 100.0, "conditions": ["default"]}
+                        ],
                     },
                 },
             },
@@ -682,13 +689,13 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "3.2.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 12 is supported"
+            ValueError, match="Only crane-statics schema major version 13 is supported"
         ):
             normalize_document(data)
 
     def test_v6_minor_version_bump_is_accepted_by_normalizer(self):
         data = self._minimal_v6()
-        data["schema"]["version"] = "12.0.0"
+        data["schema"]["version"] = "13.0.0"
         doc = normalize_document(data)
         assert doc is not None
 
@@ -696,7 +703,7 @@ class TestAuthoredSchemaPolicy:
         data = self._minimal_v6()
         data["schema"]["version"] = "5.13.0"
         with pytest.raises(
-            ValueError, match="Only crane-statics schema major version 12 is supported"
+            ValueError, match="Only crane-statics schema major version 13 is supported"
         ):
             normalize_document(data)
 
@@ -719,9 +726,10 @@ class TestAuthoredSchemaPolicy:
         assert {r.id for r in doc.ropes} == {"MH__rope", "BH__rope"}
 
         bh = next(h for h in doc.hoists if h.id == "BH")
-        assert bh.contractual_points == []
+        # v13: the boom hoist has no condition entry, so no chart and no DAF.
+        assert "BH" not in doc.conditions["default"].hoists
         assert bh.lower_block_mass_t == 0.0
-        assert bh.hook_daf == 1.0
+        assert doc.conditions["default"].hoists["MH"].daf == 1.0
 
     def test_v6_component_mass_points_and_wind_areas_can_be_omitted(self):
         data = self._minimal_v6()
@@ -741,22 +749,24 @@ class TestAuthoredSchemaPolicy:
 
     def test_v6_schema_defaults_are_applied_by_loader(self):
         data = self._minimal_v6()
-        data["model_definition"]["vessel_motion"].pop("accel_y_m_s2")
+        data["model_definition"]["conditions"]["default"]["vessel_motion"].pop("accel_y_m_s2")
 
         doc = normalize_document(data)
 
         rear_leg = next(body for body in doc.bodies if body.id == "rear_leg")
         assert rear_leg.mass_points == []
         assert len(rear_leg.wind_areas) == 1
-        assert doc.environment.vessel_motion.accel_y_m_s2 == pytest.approx(0.0)
+        assert doc.conditions["default"].vessel_motion.accel_y_m_s2 == pytest.approx(0.0)
 
-    def test_v6_rejects_zero_max_wind_speed(self, tmp_path):
+    def test_v6_rejects_environment_max_wind_speed(self, tmp_path):
+        # v13 moved the wind speed into the conditions (where 0 is a valid calm wind): the
+        # old environment field is now rejected outright.
         data = self._minimal_v6()
-        data["model_definition"]["environment"]["max_wind_speed_m_s"] = 0.0
-        path = tmp_path / "zero_wind.yaml"
+        data["model_definition"]["environment"]["max_wind_speed_m_s"] = 20.0
+        path = tmp_path / "env_wind.yaml"
         path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
-        with pytest.raises(DocumentIOError, match="Schema validation failed"):
+        with pytest.raises(DocumentIOError, match="max_wind_speed_m_s"):
             load_document(path)
 
     def test_v6_rejects_authored_hook_travel(self, tmp_path):
@@ -794,7 +804,7 @@ class TestAuthoredSchemaPolicy:
         """_minimal_v6 with a contractual outreach the 40 m boom can actually reach."""
         data = self._minimal_v6()
         data["model_definition"]["hoists"]["MH"]["load_chart"] = [
-            {"outreach_m": 30.0, "load_t": 100.0}
+            {"outreach_m": 30.0, "load_t": 100.0, "conditions": ["default"]}
         ]
         return data
 
@@ -862,7 +872,7 @@ class TestAuthoredSchemaPolicy:
         assert rear_position == pytest.approx({"x_m": 1.0, "y_m": -3.25, "z_m": 9.5})
 
     def test_mass_point_y_offset_influences_split_support_results(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -915,7 +925,7 @@ class TestAuthoredSchemaPolicy:
         assert abs(offset_platform_mx - base_platform_mx) > 1e-6
 
     def test_lateral_acceleration_splits_every_support_group_left_of_right(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -950,7 +960,7 @@ class TestAuthoredSchemaPolicy:
             assert differential > 1e-6, f"{left_entity}/{right_entity} split evenly"
 
     def test_directional_wind_areas_follow_wind_axis(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
 
@@ -1025,7 +1035,7 @@ class TestAuthoredSchemaPolicy:
         mh["split"] = {
             "lower_block_mass_t": 0.0,
             "falls": 1,
-            "load_chart": [{"outreach_m": 50.0, "load_t": 80.0}],
+            "load_chart": [{"outreach_m": 50.0, "load_t": 80.0, "conditions": ["default"]}],
         }
 
         doc = normalize_document(data)
@@ -1033,9 +1043,10 @@ class TestAuthoredSchemaPolicy:
         assert runtime_mh.splitable_block is True
         assert runtime_mh.split_falls == 1
         assert runtime_mh.split_lower_block_mass_t == pytest.approx(0.0)
-        assert len(runtime_mh.split_contractual_points) == 1
-        assert runtime_mh.split_contractual_points[0].outreach_m == pytest.approx(50.0)
-        assert runtime_mh.split_contractual_points[0].load_t == pytest.approx(80.0)
+        split_points = doc.conditions["default"].hoists["MH"].split_contractual_points
+        assert len(split_points) == 1
+        assert split_points[0].outreach_m == pytest.approx(50.0)
+        assert split_points[0].load_t == pytest.approx(80.0)
 
     def test_v6_rejects_removed_modes_wrapper(self, tmp_path):
         data = self._minimal_v6()
@@ -1058,7 +1069,7 @@ class TestAuthoredSchemaPolicy:
         data["model_definition"]["hoists"]["MH"]["split"] = {
             "lower_block_mass_t": 1.0,
             "falls": 3,
-            "load_chart": [{"outreach_m": 50.0, "load_t": 80.0}],
+            "load_chart": [{"outreach_m": 50.0, "load_t": 80.0, "conditions": ["default"]}],
         }
 
         with pytest.raises(ValueError, match="split.falls must be <= falls"):
@@ -1149,7 +1160,7 @@ class TestAuthoredSchemaPolicy:
         assert mh_rope["linear_mass_kg_m"] == pytest.approx(3.1)
 
     def test_v6_boom_hoist_linear_mass_reaches_runtime_hoist(self):
-        doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml")
+        doc = load_document(v13_example("crane_input_22689.yaml"))
         boom_hoist = next(hoist for hoist in doc.hoists if hoist.id == "BH")
         boom_rope = next(rope for rope in doc.ropes if rope.id == boom_hoist.rope_id)
 
@@ -1191,10 +1202,9 @@ class TestAuthoredSchemaPolicy:
             "reeving": [{"node": "boom_heel"}, {"node": "front_base", "parts": 2}],
             "lower_block_mass_t": 0.0,
             "falls": 2,
-            "daf": 1.0,
-            "offlead_deg": 0.0,
-            "load_chart": [{"outreach_m": 60.0, "load_t": 100.0}],
+            "load_chart": [{"outreach_m": 60.0, "load_t": 100.0, "conditions": ["default"]}],
         }
+        data["model_definition"]["conditions"]["default"]["hoists"]["AH"] = {"offlead_deg": 0.0}
         path = tmp_path / "v5_payload_extra.yaml"
         path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
@@ -1234,7 +1244,7 @@ class TestAuthoredSchemaPolicy:
 
         saved = yaml.safe_load(out_path.read_text())
         assert saved["schema"]["name"] == "crane-statics"
-        assert saved["schema"]["version"] == "12.0.0"
+        assert saved["schema"]["version"] == "13.0.0"
         assert "model_definition" in saved
         assert "ropes" not in saved["model_definition"]
         assert "nodes" not in saved["model_definition"]
@@ -1248,11 +1258,12 @@ class TestAuthoredSchemaPolicy:
             "reeving",
             "lower_block_mass_t",
             "falls",
-            "daf",
-            "offlead_deg",
             "lowest_hook_height_m",
             "load_chart",
         }
+        # v13: the DAF and lead limits live on the condition, the chart points name it.
+        assert md["conditions"]["default"]["hoists"] == {"MH": {"offlead_deg": 0.0}}
+        assert mh["load_chart"][0]["conditions"] == ["default"]
         assert "split" not in mh
         assert mh["reeving"][-1] == {"node": "hook", "body": "boom", "u_m": 0.0, "w_m": 0.0}
         assert set(md["hoists"]["BH"]) == {"reeving"}
@@ -1260,9 +1271,10 @@ class TestAuthoredSchemaPolicy:
         # Empty bodies and all-zero vessel motion are not written out.
         assert not {"boom", "rear_leg", "front_leg", "platform"} & set(md)
         assert "vessel_motion" not in md
+        assert "vessel_motion" not in md["conditions"]["default"]
 
     def test_save_emits_split_mode_without_legacy_splitable_flag(self, tmp_path):
-        doc = load_document(Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml")
+        doc = load_document(v13_example("crane_input_22689.yaml"))
         out_path = tmp_path / "saved_v6_split.yaml"
         save_document(doc, out_path)
 
@@ -1278,10 +1290,11 @@ class TestSplitModeAutosetAndChart:
     """Targeted tests for split-mode autoset and chart mode behavior."""
 
     def _example_doc(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
-        return load_document(example_path)
+        # The environment of its one condition, which a bare CraneCalculator reads.
+        return case_document(load_document(example_path))
 
     def test_opposite_wind_directions_share_one_primitive_basis(self):
         """Wind sign is applied by composition, so the sensitivities are identical.
@@ -1311,7 +1324,7 @@ class TestSplitModeAutosetAndChart:
         wind_speed = float(doc.environment.max_wind_speed_m_s)
         zero_lead_points = {}
 
-        for case in iter_wind_lead_directional_cases(hoist, wind_speed):
+        for case in iter_wind_lead_directional_cases(hoist_settings(doc, "MH"), wind_speed):
             if case.wind_direction not in zero_lead_points:
                 zero_lead_points[case.wind_direction] = calc.compute_analysis_point(
                     angle,
@@ -1398,8 +1411,7 @@ class TestSplitModeAutosetAndChart:
         normal_mh.splitable_block = False
 
         split_only_doc = doc.model_copy(deep=True)
-        split_mh = next(h for h in split_only_doc.hoists if h.id == "MH")
-        split_mh.contractual_points = []
+        split_only_doc.conditions["default"].hoists["MH"].contractual_points = []
 
         worst = compute_required_rope_capacity_kN(doc, mh.rope_id)
         normal_only = compute_required_rope_capacity_kN(normal_doc, mh.rope_id)
@@ -1429,8 +1441,7 @@ class TestSplitModeAutosetAndChart:
         normal_mh.splitable_block = False
 
         split_only_doc = doc.model_copy(deep=True)
-        split_mh = next(h for h in split_only_doc.hoists if h.id == "MH")
-        split_mh.contractual_points = []
+        split_only_doc.conditions["default"].hoists["MH"].contractual_points = []
 
         conn_id = "heel_point"
         component = "resultant"
@@ -1476,7 +1487,7 @@ class TestSplitModeAutosetAndChart:
 
     def test_scene_mode_toggle_syncs_chart_mode_and_switches_contractual_chips(self):
         doc = self._example_doc()
-        mh = next(h for h in doc.hoists if h.id == "MH")
+        mh = hoist_settings(doc, "MH")
         assert len(mh.contractual_points) > 0
         assert len(mh.split_contractual_points) > 0
 
@@ -1503,7 +1514,7 @@ class TestSplitModeAutosetAndChart:
 
     def test_scene_mode_switch_always_clears_contractual_selection(self):
         doc = self._example_doc()
-        mh = next(h for h in doc.hoists if h.id == "MH")
+        mh = hoist_settings(doc, "MH")
         if not mh.split_contractual_points:
             pytest.skip("Example split contractual points are required")
 
@@ -1610,7 +1621,7 @@ class TestResponsiveLayoutRegression:
     """Targeted UI regression tests for responsive sizing behavior."""
 
     def _example_doc(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         if not example_path.exists():
             pytest.skip("Example file not found")
         return load_document(example_path)
@@ -1692,7 +1703,7 @@ class TestResponsiveLayoutRegression:
             )
 
     def test_explicit_lateral_unit_maps_compose_offlead_and_sidelead(self):
-        example_path = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+        example_path = v13_example("crane_input_22689.yaml")
         doc = load_document(example_path)
         calc = CraneCalculator(doc)
         common = {

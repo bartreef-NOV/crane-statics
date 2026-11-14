@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Iterator, Optional
 
-from ..data.authored_models import hoist_node_prefix
+from ..data.authored_form import document_to_authored_form, tagged_load_chart
+from ..data.authored_models import authored_document_problems, hoist_node_prefix
 from ..data.models import (
     Body,
+    ConditionHoist,
     ConditionSpec,
     ContractualPoint,
     CraneDocument,
@@ -24,6 +28,7 @@ from ..data.models import (
 )
 from ..data.normalize import derive_payload_hoist_rope_geometry
 from ..rules import RulesValidationError, validate_rules_document
+from .hoist_daf import entered_daf
 
 BOOM_BODY_ID = "boom"
 CONDITION_NAME_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
@@ -134,12 +139,11 @@ def build_payload_hoist(
     splitable_block: bool = False,
     split_falls: Optional[int] = None,
     split_lower_block_mass_t: Optional[float] = None,
-    hook_daf: float = 1.0,
-    offlead_deg: float = 0.0,
-    sidelead_deg: float = 0.0,
     linear_mass_kg_m: float = 0.0,
     lowest_hook_height_m: float = 0.0,
 ) -> Hoist:
+    """A payload hoist. Its lead limits, DAF and charts are per condition
+    (``DocumentEditor.set_condition_hoist_settings``), not part of the hoist."""
     hoist_id = hoist_id.strip()
     if not hoist_id:
         raise DocumentEditError("Hoist ID cannot be empty")
@@ -163,14 +167,8 @@ def build_payload_hoist(
         split_lower_block_mass_t=(
             None if split_lower_block_mass_t is None else float(split_lower_block_mass_t)
         ),
-        hook_daf=float(hook_daf),
-        offlead_deg=float(offlead_deg),
-        sidelead_deg=float(sidelead_deg),
         linear_mass_kg_m=max(0.0, float(linear_mass_kg_m)),
         lowest_hook_height_m=float(lowest_hook_height_m),
-        split_contractual_points=(
-            [ContractualPoint(outreach_m=0.0, load_t=0.0)] if splitable_block else []
-        ),
     )
 
 
@@ -184,8 +182,37 @@ def build_segment(from_node_id: str, to_node_id: str, mult: int = 1) -> Segment:
     return Segment(from_node_id=from_node_id, to_node_id=to_node_id, mult=max(1, int(mult)))
 
 
+def _check_condition_hoist_values(
+    offlead_deg: float, sidelead_deg: float, daf: Optional[float]
+) -> None:
+    """The bounds of ``ConditionHoist``: leads >= 0, an authored DAF >= 1."""
+    if float(offlead_deg) < 0.0 or float(sidelead_deg) < 0.0:
+        raise DocumentEditError("Lead angles must be >= 0")
+    if daf is not None and float(daf) < 1.0:
+        raise DocumentEditError("DAF must be >= 1")
+
+
+@dataclass(frozen=True)
+class TaggedChartPoint:
+    """One authored load-chart point of a payload hoist and the conditions it names."""
+
+    outreach_m: float
+    load_t: float
+    conditions: tuple[str, ...]
+
+
 def build_contractual_point(outreach_m: float, load_t: float) -> ContractualPoint:
     return ContractualPoint(outreach_m=float(outreach_m), load_t=float(load_t))
+
+
+def authored_document_error(doc: CraneDocument) -> list[str]:
+    """Every reason ``doc`` does not save as a valid authored document, one line each
+    (``authored_document_problems``); empty when it saves."""
+    try:
+        authored = document_to_authored_form(doc)
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        return [str(exc)]
+    return authored_document_problems(authored)
 
 
 # ----------------------------------------------------------------------
@@ -358,22 +385,65 @@ class DocumentEditor:
 
     # -- hoists --------------------------------------------------------
 
+    @contextmanager
+    def _atomic(self) -> Iterator[None]:
+        """Put the document back exactly as it was if the block raises."""
+        saved = self._doc.model_copy(deep=True)
+        try:
+            yield
+        except BaseException:
+            self._doc.__dict__.update(saved.__dict__)
+            raise
+
+    @contextmanager
+    def _keeping_valid(self) -> Iterator[None]:
+        """``_atomic``, and the block adds no reason the document would not save as a
+        valid authored document (``authored_document_error``): otherwise the block is
+        undone and refused, with the new reasons.
+
+        A document that is already incomplete (a hoist added but not charted yet, a
+        document built in code) keeps its old problems: the edit may be a step towards
+        valid, but it may not add another.
+        """
+        before = set(authored_document_error(self._doc))
+        with self._atomic():
+            yield
+            added = [p for p in authored_document_error(self._doc) if p not in before]
+            if added:
+                raise DocumentEditError("\n".join(added))
+
     def add_hoist(self, hoist: Hoist, tension_mode: str = "fixed") -> None:
+        """Add ``hoist``. A payload hoist is usable in every condition, with no lead
+        limits (``offlead_deg`` 0.0, ``sidelead_deg`` 0.0), no DAF override and no chart
+        points yet (its settings are edited per condition: ``set_condition_hoist``). The
+        boom hoist (``tension_mode`` "solve") is listed in no condition.
+
+        Until it has chart points in each condition the document does not save (the
+        authored contract needs them): add them, or drop the conditions it is not
+        meant for with ``remove_condition_hoist``.
+
+        Everything is checked first: a rejected edit leaves the document unchanged.
+        """
         if any(h.id == hoist.id for h in self._doc.hoists):
             raise DocumentEditError(f"Hoist '{hoist.id}' already exists")
         if any(r.id == hoist.rope_id for r in self._doc.ropes):
             raise DocumentEditError(f"Generated rope '{hoist.rope_id}' already exists")
 
-        self._doc.ropes.append(
-            Rope(
-                id=hoist.rope_id,
-                segments=[],
-                tension_mode=tension_mode,
-                linear_mass_kg_m=float(hoist.linear_mass_kg_m),
+        with self._atomic():
+            self._doc.ropes.append(
+                Rope(
+                    id=hoist.rope_id,
+                    segments=[],
+                    tension_mode=tension_mode,
+                    linear_mass_kg_m=float(hoist.linear_mass_kg_m),
+                )
             )
-        )
-        self._doc.hoists.append(hoist)
-        self.sync_managed_payload_hook(hoist)
+            self._doc.hoists.append(hoist)
+            self.sync_managed_payload_hook(hoist)
+            if tension_mode == "solve":
+                return
+            for spec in self._doc.conditions.values():
+                spec.hoists[hoist.id] = ConditionHoist(offlead_deg=0.0)
 
     def update_boom_hoist(
         self,
@@ -394,36 +464,64 @@ class DocumentEditor:
         current.rope_length_m = None if rope_length_m is None else max(0.0, float(rope_length_m))
 
     def update_hoist(self, hoist_id: str, edited: Hoist) -> None:
+        """Replace payload hoist ``hoist_id`` by ``edited``.
+
+        A new id renames the hoist in every condition that lists it (same place, same
+        settings and charts); its lead limits, DAF and charts are edited per condition.
+        Everything is checked first: a rejected edit leaves the document unchanged.
+        """
         current = self._hoist(hoist_id)
         if self.is_solve_hoist(current):
             raise DocumentEditError(f"Hoist '{hoist_id}' is the boom hoist; use update_boom_hoist")
+        new_id = edited.id
+        if new_id != hoist_id and any(h.id == new_id for h in self._doc.hoists):
+            raise DocumentEditError(f"Hoist '{new_id}' already exists")
 
-        # The derived pair belongs to the document, not the edit form.
-        edited.max_hook_travel_m = current.max_hook_travel_m
-        edited.rope_length_m = current.rope_length_m
-        edited.rope_id = current.rope_id
-        edited.load_node_id = current.load_node_id
-        edited.contractual_points = [cp.model_copy(deep=True) for cp in current.contractual_points]
-        edited.split_contractual_points = [
-            cp.model_copy(deep=True) for cp in current.split_contractual_points
-        ]
-        self.sync_managed_payload_hook(edited)
+        with self._atomic():
+            # The derived pair belongs to the document, not the edit form.
+            edited.max_hook_travel_m = current.max_hook_travel_m
+            edited.rope_length_m = current.rope_length_m
+            edited.rope_id = current.rope_id
+            edited.load_node_id = current.load_node_id
+            # The hoist's lead limits, DAF and charts live in the conditions.
+            self.sync_managed_payload_hook(edited)
 
-        for index, hoist in enumerate(self._doc.hoists):
-            if hoist.id == hoist_id:
-                self._doc.hoists[index] = edited
-                break
+            for index, hoist in enumerate(self._doc.hoists):
+                if hoist.id == hoist_id:
+                    self._doc.hoists[index] = edited
+                    break
 
-        rope = self.rope_for_hoist(edited)
-        if rope is not None:
-            rope.tension_mode = "fixed"
-            rope.linear_mass_kg_m = float(edited.linear_mass_kg_m)
+            rope = self.rope_for_hoist(edited)
+            if rope is not None:
+                rope.tension_mode = "fixed"
+                rope.linear_mass_kg_m = float(edited.linear_mass_kg_m)
+
+            if new_id != hoist_id:
+                for spec in self._doc.conditions.values():
+                    if hoist_id in spec.hoists:
+                        spec.hoists = {
+                            (new_id if hid == hoist_id else hid): entry
+                            for hid, entry in spec.hoists.items()
+                        }
 
     def delete_hoist(self, hoist_id: str) -> None:
+        """Delete payload hoist ``hoist_id``, its entries in every condition and the
+        sheaves only it used. Refused when that would leave a condition listing no hoist
+        (or otherwise break a document that saves)."""
         hoist = self._hoist(hoist_id)
         if self.is_solve_hoist(hoist):
             raise DocumentEditError("Boom hoist cannot be deleted from this table")
+        for spec in self._doc.conditions.values():
+            if list(spec.hoists) == [hoist_id]:
+                raise DocumentEditError(
+                    f"Hoist '{hoist_id}' is the only hoist usable in condition "
+                    f"{spec.name!r}; make another hoist usable there first"
+                )
+        with self._keeping_valid():
+            self._delete_hoist(hoist)
 
+    def _delete_hoist(self, hoist: Hoist) -> None:
+        hoist_id = hoist.id
         rope_id = hoist.rope_id
         managed_hook_id = str(hoist.load_node_id)
         rope = self.rope_for_hoist(hoist)
@@ -433,6 +531,9 @@ class DocumentEditor:
             for end in (seg.from_node_id, seg.to_node_id)
         }
         self._doc.hoists = [h for h in self._doc.hoists if h.id != hoist_id]
+        # No condition may list a hoist the document no longer has.
+        for spec in self._doc.conditions.values():
+            spec.hoists.pop(hoist_id, None)
 
         if not any(h.rope_id == rope_id for h in self._doc.hoists):
             self._doc.ropes = [r for r in self._doc.ropes if r.id != rope_id]
@@ -544,30 +645,407 @@ class DocumentEditor:
 
     # -- contractual points --------------------------------------------
 
-    def contractual_points(self, hoist_id: str, mode: str = "normal") -> list[ContractualPoint]:
+    def _condition_hoist(self, hoist_id: str, condition_name: Optional[str]) -> ConditionHoist:
+        """``hoist_id``'s entry in condition ``condition_name`` (None: the first)."""
+        self._hoist(hoist_id)
+        if condition_name is None:
+            spec = next(iter(self._doc.conditions.values()), None)
+            if spec is None:
+                raise DocumentEditError("The document has no load condition")
+        else:
+            spec = self._doc.conditions.get(condition_name)
+            if spec is None:
+                raise DocumentEditError(f"Unknown condition {condition_name!r}")
+        settings = spec.hoists.get(hoist_id)
+        if settings is None:
+            raise DocumentEditError(f"Hoist '{hoist_id}' is not usable in condition {spec.name!r}")
+        return settings
+
+    def contractual_points(
+        self, hoist_id: str, mode: str = "normal", condition_name: Optional[str] = None
+    ) -> list[ContractualPoint]:
+        """``hoist_id``'s chart points in ``mode`` under ``condition_name`` (None: the
+        first condition), the list itself: edits apply to that condition only."""
         hoist = self._hoist(hoist_id)
+        settings = self._condition_hoist(hoist_id, condition_name)
         if mode == "split":
             if not bool(hoist.splitable_block):
                 raise DocumentEditError("Selected hoist is not splitable")
-            return hoist.split_contractual_points
-        return hoist.contractual_points
+            return settings.split_contractual_points
+        return settings.contractual_points
 
     def add_contractual_point(
-        self, hoist_id: str, point: ContractualPoint, mode: str = "normal"
+        self,
+        hoist_id: str,
+        point: ContractualPoint,
+        mode: str = "normal",
+        condition_name: Optional[str] = None,
     ) -> None:
-        self.contractual_points(hoist_id, mode).append(point)
+        """Add ``point`` to one condition's chart, before its first point of larger
+        outreach (as ``add_chart_point``). Validity-guarded: refused (``DocumentEditError``,
+        document unchanged) when a document that saved would no longer save."""
+        points = self.contractual_points(hoist_id, mode, condition_name)
+        with self._keeping_valid():
+            position = next(
+                (i for i, p in enumerate(points) if p.outreach_m > point.outreach_m),
+                len(points),
+            )
+            points.insert(position, point)
 
     def update_contractual_point(
-        self, hoist_id: str, index: int, point: ContractualPoint, mode: str = "normal"
+        self,
+        hoist_id: str,
+        index: int,
+        point: ContractualPoint,
+        mode: str = "normal",
+        condition_name: Optional[str] = None,
     ) -> None:
-        points = self.contractual_points(hoist_id, mode)
+        """Replace point ``index`` of one condition's chart in place. Validity-guarded."""
+        points = self.contractual_points(hoist_id, mode, condition_name)
         self._guard_index(index, len(points), "contractual point")
-        points[index] = point
+        with self._keeping_valid():
+            points[index] = point
 
-    def delete_contractual_point(self, hoist_id: str, index: int, mode: str = "normal") -> None:
-        points = self.contractual_points(hoist_id, mode)
+    def delete_contractual_point(
+        self,
+        hoist_id: str,
+        index: int,
+        mode: str = "normal",
+        condition_name: Optional[str] = None,
+    ) -> None:
+        """Delete point ``index`` of one condition's chart (other conditions naming an
+        equal point keep it). Validity-guarded: deleting a condition's last point of a
+        hoist is refused on a document that saves."""
+        points = self.contractual_points(hoist_id, mode, condition_name)
         self._guard_index(index, len(points), "contractual point")
-        points.pop(index)
+        with self._keeping_valid():
+            points.pop(index)
+
+    # -- condition hoists and chart-point tags -------------------------
+
+    def _payload_hoist(self, hoist_id: str) -> Hoist:
+        hoist = self._hoist(hoist_id)
+        if self.is_solve_hoist(hoist):
+            raise DocumentEditError(f"The boom hoist '{hoist_id}' cannot be listed in a condition")
+        return hoist
+
+    def _condition(self, name: str) -> ConditionSpec:
+        spec = self._doc.conditions.get(name)
+        if spec is None:
+            raise DocumentEditError(f"Unknown condition {name!r}")
+        return spec
+
+    def set_condition_hoist(
+        self,
+        condition: str,
+        hoist_id: str,
+        offlead_deg: float,
+        sidelead_deg: float,
+        daf: Optional[float],
+    ) -> None:
+        """Make payload hoist ``hoist_id`` usable in ``condition`` with these lead limits
+        and DAF (None: no override -- derived under rules, 1.0 without).
+
+        A hoist already usable there keeps its chart points. A hoist not yet usable there
+        takes a copy of the points (normal and split) of the first condition, in document
+        order, that lists it -- those points then name ``condition`` too; a hoist no
+        condition lists starts with none.
+        """
+        spec = self._condition(condition)
+        self._payload_hoist(hoist_id)
+        _check_condition_hoist_values(offlead_deg, sidelead_deg, daf)
+        with self._keeping_valid():
+            entry = spec.hoists.get(hoist_id)
+            if entry is None:
+                source = next(
+                    (
+                        s.hoists[hoist_id]
+                        for s in self._doc.conditions.values()
+                        if hoist_id in s.hoists
+                    ),
+                    None,
+                )
+                entry = ConditionHoist(
+                    offlead_deg=0.0,
+                    contractual_points=(
+                        []
+                        if source is None
+                        else [p.model_copy() for p in source.contractual_points]
+                    ),
+                    split_contractual_points=(
+                        []
+                        if source is None
+                        else [p.model_copy() for p in source.split_contractual_points]
+                    ),
+                )
+                spec.hoists[hoist_id] = entry
+            entry.offlead_deg = float(offlead_deg)
+            entry.sidelead_deg = float(sidelead_deg)
+            entry.daf = None if daf is None else float(daf)
+
+    def remove_condition_hoist(self, condition: str, hoist_id: str) -> None:
+        """Make ``hoist_id`` unusable in ``condition``: its settings and chart points there
+        go (points naming other conditions stay). Refused when ``condition`` is the last
+        condition the hoist is usable in, or when it is the condition's last hoist."""
+        spec = self._condition(condition)
+        if hoist_id not in spec.hoists:
+            raise DocumentEditError(f"Hoist '{hoist_id}' is not usable in condition {condition!r}")
+        if not any(
+            hoist_id in other.hoists
+            for name, other in self._doc.conditions.items()
+            if name != condition
+        ):
+            raise DocumentEditError(
+                f"Hoist '{hoist_id}' is usable only in condition {condition!r}; every "
+                "payload hoist must be usable in at least one condition"
+            )
+        if len(spec.hoists) == 1:
+            raise DocumentEditError(
+                f"Hoist '{hoist_id}' is the only hoist usable in condition {condition!r}; "
+                "a condition needs at least one"
+            )
+        with self._keeping_valid():
+            spec.hoists = {hid: e for hid, e in spec.hoists.items() if hid != hoist_id}
+
+    def enter_condition_hoist(
+        self,
+        condition: str,
+        hoist_id: str,
+        offlead_deg: float,
+        sidelead_deg: float,
+        daf: Optional[float],
+    ) -> None:
+        """``set_condition_hoist`` with an entered DAF (None: clear the override), stored
+        under the document's own rules (``hoist_daf.entered_daf``)."""
+        self.set_condition_hoist(
+            condition,
+            hoist_id,
+            offlead_deg,
+            sidelead_deg,
+            entered_daf(daf, rules=self._doc.rules is not None),
+        )
+
+    def entered_condition_hoist_is_current(
+        self,
+        condition: str,
+        hoist_id: str,
+        offlead_deg: float,
+        sidelead_deg: float,
+        daf: Optional[float],
+    ) -> bool:
+        """Whether ``enter_condition_hoist`` with these values would change nothing: the
+        hoist is usable in ``condition`` with exactly these settings."""
+        spec = self._doc.conditions.get(condition)
+        entry = None if spec is None else spec.hoists.get(hoist_id)
+        if entry is None:
+            return False
+        stored = entered_daf(daf, rules=self._doc.rules is not None)
+        return (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (
+            float(offlead_deg),
+            float(sidelead_deg),
+            stored,
+        )
+
+    def chart_point_is_current(
+        self,
+        hoist_id: str,
+        split: bool,
+        index: int,
+        point: ContractualPoint,
+        conditions: Optional[list[str]] = None,
+    ) -> bool:
+        """Whether ``update_chart_point`` with these values would change nothing (False
+        for a point that does not exist: the update itself reports why)."""
+        try:
+            chart = self.tagged_chart(hoist_id, split)
+        except DocumentEditError:
+            return False
+        if not 0 <= index < len(chart):
+            return False
+        current = chart[index]
+        same_conditions = conditions is None or tuple(conditions) == current.conditions
+        return same_conditions and (current.outreach_m, current.load_t) == (
+            float(point.outreach_m),
+            float(point.load_t),
+        )
+
+    def set_condition_hoist_usable(self, condition: str, hoist_id: str, usable: bool) -> bool:
+        """List ``hoist_id`` in ``condition`` (no lead limits, no DAF override, the chart
+        points of the first condition listing it: ``set_condition_hoist``) or drop it there
+        (``remove_condition_hoist``). False, and nothing changes, when it already is so."""
+        spec = self._condition(condition)
+        if (hoist_id in spec.hoists) == bool(usable):
+            self._payload_hoist(hoist_id)
+            return False
+        if usable:
+            self.set_condition_hoist(condition, hoist_id, 0.0, 0.0, None)
+        else:
+            self.remove_condition_hoist(condition, hoist_id)
+        return True
+
+    def tagged_chart(self, hoist_id: str, split: bool = False) -> list[TaggedChartPoint]:
+        """``hoist_id``'s load chart (``split``: the split-block one) as saved: each point
+        once, with the conditions it names (``authored_form.tagged_load_chart``)."""
+        hoist = self._payload_hoist(hoist_id)
+        if split and not bool(hoist.splitable_block):
+            raise DocumentEditError(f"Hoist '{hoist_id}' is not splitable")
+        return [
+            TaggedChartPoint(
+                outreach_m=float(p["outreach_m"]),
+                load_t=float(p["load_t"]),
+                conditions=tuple(p["conditions"]),
+            )
+            for p in tagged_load_chart(self._doc, hoist_id, split=split)
+        ]
+
+    def set_point_conditions(
+        self, hoist_id: str, split: bool, index: int, conditions: list[str]
+    ) -> None:
+        """Make chart point ``index`` of ``tagged_chart(hoist_id, split)`` name exactly
+        ``conditions`` (>= 1, unique, each a condition ``hoist_id`` is usable in).
+
+        A condition it stops naming loses that point; one it starts naming gains it, in
+        chart order. Refused when a condition would be left without a point in that chart.
+        """
+        chart = self.tagged_chart(hoist_id, split)
+        self._guard_index(index, len(chart), "chart point")
+        point = chart[index]
+        self._retag(
+            hoist_id,
+            split,
+            chart,
+            index,
+            conditions,
+            build_contractual_point(point.outreach_m, point.load_t),
+        )
+
+    def usable_conditions(self, hoist_id: str) -> list[str]:
+        """The conditions listing ``hoist_id``, in document order."""
+        return [name for name, spec in self._doc.conditions.items() if hoist_id in spec.hoists]
+
+    def add_chart_point(
+        self,
+        hoist_id: str,
+        split: bool,
+        point: ContractualPoint,
+        conditions: Optional[list[str]] = None,
+    ) -> None:
+        """Add ``point`` to ``hoist_id``'s load chart (``split``: the split-block one),
+        naming ``conditions`` (>= 1, unique, each a condition the hoist is usable in;
+        None: every one, ``usable_conditions``).
+
+        Each named condition takes it before its first point of larger outreach, so a
+        chart kept in outreach order stays so.
+        """
+        self.tagged_chart(hoist_id, split)  # the hoist and the chart exist
+        names = self._checked_point_conditions(
+            hoist_id, self.usable_conditions(hoist_id) if conditions is None else conditions
+        )
+        with self._keeping_valid():
+            for name in names:
+                points = self._condition_chart(name, hoist_id, split)
+                position = next(
+                    (i for i, p in enumerate(points) if p.outreach_m > point.outreach_m),
+                    len(points),
+                )
+                points.insert(position, point.model_copy())
+
+    def update_chart_point(
+        self,
+        hoist_id: str,
+        split: bool,
+        index: int,
+        point: ContractualPoint,
+        conditions: Optional[list[str]] = None,
+    ) -> None:
+        """Replace chart point ``index`` of ``tagged_chart(hoist_id, split)`` by ``point``
+        in every condition it names, at the same place in each; ``conditions`` (None: the
+        ones it names now) also retags it, as ``set_point_conditions``. One edit: refused
+        as a whole."""
+        chart = self.tagged_chart(hoist_id, split)
+        self._guard_index(index, len(chart), "chart point")
+        names = list(chart[index].conditions) if conditions is None else conditions
+        self._retag(hoist_id, split, chart, index, names, point)
+
+    def delete_chart_point(self, hoist_id: str, split: bool, index: int) -> None:
+        """Delete chart point ``index`` of ``tagged_chart(hoist_id, split)`` from every
+        condition it names. Refused when that would leave one of them without a point in
+        that chart."""
+        chart = self.tagged_chart(hoist_id, split)
+        self._guard_index(index, len(chart), "chart point")
+        self._guard_points_left(hoist_id, split, chart, index, keep=set())
+        with self._keeping_valid():
+            for name in chart[index].conditions:
+                position = sum(name in p.conditions for p in chart[:index])
+                self._condition_chart(name, hoist_id, split).pop(position)
+
+    def _condition_chart(self, condition: str, hoist_id: str, split: bool) -> list:
+        entry = self._doc.conditions[condition].hoists[hoist_id]
+        return entry.split_contractual_points if split else entry.contractual_points
+
+    def _checked_point_conditions(self, hoist_id: str, conditions: list[str]) -> list[str]:
+        """``conditions`` as names a chart point of ``hoist_id`` may carry: >= 1, unique,
+        each a condition that lists the hoist; otherwise ``DocumentEditError``."""
+        names = [str(name) for name in conditions]
+        if not names:
+            raise DocumentEditError("A chart point must name at least one condition")
+        repeated = sorted({n for n in names if names.count(n) > 1})
+        if repeated:
+            raise DocumentEditError(
+                f"A chart point names each condition once; repeated: {', '.join(repeated)}"
+            )
+        for name in names:
+            spec = self._condition(name)
+            if hoist_id not in spec.hoists:
+                raise DocumentEditError(
+                    f"Condition {name!r} does not list hoist '{hoist_id}'; make it usable "
+                    "there first"
+                )
+        return names
+
+    @staticmethod
+    def _guard_points_left(
+        hoist_id: str, split: bool, chart: list[TaggedChartPoint], index: int, keep: set[str]
+    ) -> None:
+        """Refuse when a condition point ``index`` names, and ``keep`` does not, would be
+        left without a point in ``chart``."""
+        for name in chart[index].conditions:
+            if name not in keep and sum(name in p.conditions for p in chart) == 1:
+                raise DocumentEditError(
+                    f"Condition {name!r} would have no {'split ' if split else ''}chart "
+                    f"point for hoist '{hoist_id}'"
+                )
+
+    def _retag(
+        self,
+        hoist_id: str,
+        split: bool,
+        chart: list[TaggedChartPoint],
+        index: int,
+        conditions: list[str],
+        value: ContractualPoint,
+    ) -> None:
+        """Make ``chart[index]`` name exactly ``conditions`` with the values of ``value``:
+        a condition it keeps naming has its point replaced in place, one it stops naming
+        loses it, one it starts naming gains it at the same place in chart order."""
+        names = self._checked_point_conditions(hoist_id, conditions)
+        point = chart[index]
+        wanted = set(names)
+        self._guard_points_left(hoist_id, split, chart, index, keep=wanted)
+
+        with self._keeping_valid():
+            for name in self._doc.conditions:
+                if name not in wanted and name not in point.conditions:
+                    continue
+                points = self._condition_chart(name, hoist_id, split)
+                # The k-th chart point naming a condition is its k-th point.
+                position = sum(name in p.conditions for p in chart[:index])
+                if name in point.conditions and name not in wanted:
+                    points.pop(position)
+                elif name in wanted and name not in point.conditions:
+                    points.insert(position, value.model_copy())
+                else:
+                    points[position] = value.model_copy()
 
     @staticmethod
     def _guard_index(index: int, length: int, what: str) -> None:
@@ -576,15 +1054,37 @@ class DocumentEditor:
 
     # -- load conditions -----------------------------------------------
 
+    # A condition's hoist entries carry its chart: a point names a condition by being in
+    # that condition's point list, so renaming, duplicating or deleting a condition
+    # carries its tags along with it.
+
     def add_condition(self, condition: ConditionSpec) -> None:
+        """Append ``condition``. One listing no hoists lists copies of the first
+        condition's hoist entries (settings and chart points, which then name it too):
+        a condition needs at least one usable hoist, with points."""
         conditions = self._conditions()
         self._guard_condition_name(condition.name, conditions, previous=None)
+        if not condition.hoists and conditions:
+            first = next(iter(conditions.values()))
+            condition = condition.model_copy(
+                update={
+                    "hoists": {
+                        hid: entry.model_copy(deep=True) for hid, entry in first.hoists.items()
+                    }
+                }
+            )
         self._commit_conditions({**conditions, condition.name: condition})
 
     def update_condition(self, name: str, edited: ConditionSpec) -> None:
+        """Replace condition ``name`` by ``edited`` (a new name renames it in place).
+
+        ``edited`` listing no hoists keeps the condition's current hoist entries: they are
+        edited with ``set_condition_hoist``/``remove_condition_hoist``."""
         conditions = self._conditions()
         self._guard_known_condition(name, conditions)
         self._guard_condition_name(edited.name, conditions, previous=name)
+        if not edited.hoists:
+            edited = edited.model_copy(update={"hoists": conditions[name].hoists})
         self._commit_conditions(
             {
                 (edited.name if k == name else k): (edited if k == name else v)
@@ -613,12 +1113,16 @@ class DocumentEditor:
         conditions = self._conditions()
         self._guard_known_condition(name, conditions)
         if len(conditions) == 1:
-            raise DocumentEditError("A rules document needs at least one condition")
+            raise DocumentEditError("A document needs at least one condition")
+        for hoist_id in conditions[name].hoists:
+            if not any(hoist_id in spec.hoists for key, spec in conditions.items() if key != name):
+                raise DocumentEditError(
+                    f"Hoist '{hoist_id}' is usable only in condition {name!r}; make it "
+                    "usable in another condition first"
+                )
         self._commit_conditions({k: v for k, v in conditions.items() if k != name})
 
     def _conditions(self) -> dict[str, ConditionSpec]:
-        if self._doc.rules is None:
-            raise DocumentEditError("Conditions need a rules document")
         return dict(self._doc.conditions)
 
     @staticmethod
@@ -638,9 +1142,20 @@ class DocumentEditor:
             raise DocumentEditError(f"Condition {name!r} already exists")
 
     def _commit_conditions(self, conditions: dict[str, ConditionSpec]) -> None:
+        """Make ``conditions`` the document's, if the rules (or, without rules, the
+        authored contract: every condition onboard) accept them and a document that
+        saved still does."""
+        if self._doc.rules is None:
+            for name, spec in conditions.items():
+                if spec.lift != "onboard":
+                    raise DocumentEditError(
+                        f"conditions.{name}.lift: {spec.lift!r} requires rules; without "
+                        "rules every condition must be 'onboard'"
+                    )
         candidate = self._doc.model_copy(update={"conditions": conditions})
         try:
             validate_rules_document(candidate)
         except RulesValidationError as exc:
             raise DocumentEditError(str(exc)) from exc
-        self._doc.conditions = conditions
+        with self._keeping_valid():
+            self._doc.conditions = conditions

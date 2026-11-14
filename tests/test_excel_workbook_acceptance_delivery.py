@@ -10,7 +10,8 @@ from openpyxl.worksheet.formula import ArrayFormula
 import pytest
 
 from scripts.excel_workbook import layout
-from scripts.excel_workbook.reference import CASES, YAML_PATH
+from scripts.excel_workbook.reference import CASES
+from tests.excel_workbook_helpers import YAML_PATH
 
 from tests.excel_workbook_helpers import (
     ACCEPT_TOL,

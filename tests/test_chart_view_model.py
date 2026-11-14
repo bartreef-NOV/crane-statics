@@ -10,8 +10,9 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mode_sweep
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from tests.test_chart_background import limit_rows
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 # Coarse grid: these tests check wiring and caching, not curve resolution.
 STEP = 10.0
 
@@ -326,18 +327,30 @@ class TestContractualEditing:
         chart_vm.addContractualPoint({"outreach_m": 33.0, "load_t": 120.0})
         assert chart_vm.contractualModel.count == before + 1
 
-        chart_vm.deleteContractualPoint(before)
+        added = [
+            chart_vm.contractualFields(i) for i in range(chart_vm.contractualModel.count)
+        ].index({"outreach_m": 33.0, "load_t": 120.0})
+        chart_vm.deleteContractualPoint(added)
         assert chart_vm.contractualModel.count == before
+        assert {"outreach_m": 33.0, "load_t": 120.0} not in [
+            chart_vm.contractualFields(i) for i in range(chart_vm.contractualModel.count)
+        ]
 
     def test_markers_follow_edits_in_row_order(self, chart_vm):
         before = chart_vm.contractualModel.count
 
         chart_vm.addContractualPoint({"outreach_m": 33.0, "load_t": 120.0})
         assert len(chart_vm.markers) == before + 1
-        assert chart_vm.markers[-1]["outreach"] == pytest.approx(33.0)
-        assert chart_vm.markers[-1]["status"] == "pending"
+        # The new point takes its place in outreach order (was: appended last).
+        row = next(
+            i for i, m in enumerate(chart_vm.markers) if m["outreach"] == pytest.approx(33.0)
+        )
+        assert chart_vm.markers[row]["status"] == "pending"
+        assert [m["outreach"] for m in chart_vm.markers] == sorted(
+            m["outreach"] for m in chart_vm.markers
+        )
 
-        chart_vm.deleteContractualPoint(before)
+        chart_vm.deleteContractualPoint(row)
         assert len(chart_vm.markers) == before
 
     def test_update_writes_back_to_the_document(self, chart_vm):
@@ -503,12 +516,15 @@ class TestClauseTrailExport:
         vm = ChartViewModel(session)
         vm.setOutreachStep(20.0)
         base = without_suspended_rope(rules_doc("ABS", gale()))
-        plain = base.model_copy(
-            update={"hoists": [h.model_copy(update={"hook_daf": 1.0}) for h in base.hoists]}
-        )
-        manual = base.model_copy(
-            update={"hoists": [h.model_copy(update={"hook_daf": 1.7}) for h in base.hoists]}
-        )
+
+        def with_daf(daf):
+            doc = base.model_copy(deep=True)
+            for entry in doc.conditions["gale"].hoists.values():
+                entry.daf = daf
+            return doc
+
+        plain = with_daf(None)  # derived (v12: hook_daf 1.0)
+        manual = with_daf(1.7)  # the manual override
 
         def sources() -> set:
             _t, rows = self._export(vm, tmp_path)
@@ -729,12 +745,13 @@ def _rules_chart_vm(doc) -> ChartViewModel:
 
 
 class TestConditionSelector:
-    def test_a_legacy_document_has_no_condition_to_select(self, chart_vm):
-        assert chart_vm.conditionNames == []
-        assert chart_vm.currentCondition == ""
-        assert chart_vm._wanted_job().condition is None
-        chart_vm.setCurrentCondition("default")  # ignored: nothing to select
-        assert chart_vm.currentCondition == ""
+    def test_a_rules_less_document_selects_its_default_condition(self, chart_vm):
+        # v13: its one condition is ``default`` (was: no condition to select).
+        assert chart_vm.conditionNames == ["default"]
+        assert chart_vm.currentCondition == "default"
+        assert chart_vm._wanted_job().condition == "default"
+        chart_vm.setCurrentCondition("nope")  # ignored: not a condition of the document
+        assert chart_vm.currentCondition == "default"
 
     def test_switching_the_condition_draws_its_own_chart(self):
         from tests.rules_docs import gale, rules_doc, without_suspended_rope
@@ -835,7 +852,7 @@ class TestCalculationDetails:
         from tests.rules_docs import rules_doc
         from tests.test_lift_factor import _rules, _sea
 
-        doc = _rules(rules_doc("ABS", _sea()), daf=1.0)
+        doc = _rules(rules_doc("ABS", _sea()), daf=None)  # v12 hook_daf 1.0: derived
         hoists = [
             h.model_copy(update={"max_hoisting_speed_m_s": 0.1}) if h.id == "MH" else h
             for h in doc.hoists

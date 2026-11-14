@@ -41,7 +41,7 @@ class LiveSweeps(SweepFake):
         return gates
 
     def __call__(self, doc, hoist_id, mode, *args, **kwargs):
-        job = ChartJob(hoist_id, mode)
+        job = ChartJob(hoist_id, mode, kwargs.get("condition_name"))
         if job not in self._scripts:
             return super().__call__(doc, hoist_id, mode, *args, **kwargs)
         self.calls.append(job)
@@ -125,6 +125,19 @@ def _pending(points: list) -> list[dict]:
 def _table(vm: ChartViewModel) -> list[dict]:
     model = vm.contractualModel
     return [model.record_at(index) for index in range(model.count)]
+
+
+def _empty_the_chart(vm: ChartViewModel) -> None:
+    """Leave the drawn condition without contractual points in the current mode.
+
+    The app refuses that edit (a condition needs a point per usable hoist, or the
+    document stops saving), so the state is set up on the document directly, then the
+    view model is told as an edit would tell it."""
+    vm._contractual_points()  # the hoist and mode exist
+    vm._model.contractual_points_for_mode(
+        vm._model.selected_hoist_id, vm._current_chart_mode(), vm._condition
+    ).clear()
+    vm._edit_contractual(lambda _editor, _hoist_id: None)
 
 
 def _curve_steps() -> list:
@@ -231,8 +244,7 @@ def test_split_mode_streams_its_own_contractual_points(vm, sweeps):
     # A mode without contractual points (the normal mode, emptied): no markers, no rows.
     vm.setChartMode("normal")
     normal = _visible(vm)
-    for _ in range(len(normal_points)):
-        vm.deleteContractualPoint(0)
+    _empty_the_chart(vm)
     assert vm._contractual_points() == []
     sweeps.script(normal, [], _payload([]))
     vm.draw()
@@ -268,13 +280,13 @@ def test_mid_stream_switch_leaves_nothing_behind(vm, sweeps, action):
 
     if action == "hoist":
         other = next(h for h in vm.hoistIds if h != first.hoist_id)
-        wanted = ChartJob(other, "normal")
+        wanted = ChartJob(other, "normal", first.condition)
         _hold_next(vm, sweeps, wanted)
         vm.selectHoist(other)
     elif action == "mode":
         if not vm.splitable:
             pytest.skip("Selected hoist cannot split")
-        wanted = ChartJob(first.hoist_id, "split")
+        wanted = ChartJob(first.hoist_id, "split", first.condition)
         _hold_next(vm, sweeps, wanted)
         vm.setChartMode("split")
     elif action == "edit":
@@ -419,8 +431,7 @@ def test_markers_set_the_partial_y_axis_until_the_curve_arrives(vm, sweeps):
 
 
 def test_partial_y_axis_without_curve_or_markers_keeps_the_default(vm, sweeps):
-    for _ in range(len(vm._contractual_points())):
-        vm.deleteContractualPoint(0)
+    _empty_the_chart(vm)
     assert vm._contractual_points() == []
     job = _visible(vm)
     steps = [("limits", {"MH__rope_T": [(30.0, 50000.0)]})]
@@ -457,7 +468,7 @@ def test_a_disabled_limit_takes_no_colour(vm, sweeps):
 def test_background_job_promoted_mid_stream_shows_what_it_delivered(vm, sweeps):
     visible = _visible(vm)
     background = _planned(vm)[1]
-    assert background == ChartJob(visible.hoist_id, "split")
+    assert background == ChartJob(visible.hoist_id, "split", visible.condition)
     split_points = vm._model.contractual_points_for_mode(background.hoist_id, "split")
     verdicts = _verdicts(split_points)
     steps = [("points", [(30.0, 250.0)])]

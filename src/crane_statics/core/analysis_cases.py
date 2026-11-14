@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Iterator, Optional
 
 from ..calculation.engine import candidate_wind_directions
+from ..data.models import ConditionHoist
 
 
 @dataclass(frozen=True)
@@ -35,12 +36,16 @@ def _signed_candidates(value: float) -> tuple[float, ...]:
 
 
 def iter_wind_lead_directional_cases(
-    hoist: Any,
+    settings: ConditionHoist,
     wind_speed_m_s: float,
 ) -> Iterator[DirectionalAnalysisCase]:
-    """Yield all wind and signed-lead combinations for Auto-Set worst-case evaluation."""
-    offlead_values = _signed_candidates(getattr(hoist, "offlead_deg", 0.0))
-    sidelead_values = _signed_candidates(getattr(hoist, "sidelead_deg", 0.0))
+    """Yield all wind and signed-lead combinations for Auto-Set worst-case evaluation.
+
+    ``settings`` is the hoist's entry in the condition analysed
+    (``LoadCondition.hoist_settings``): the lead limits are per condition.
+    """
+    offlead_values = _signed_candidates(settings.offlead_deg)
+    sidelead_values = _signed_candidates(settings.sidelead_deg)
     for offlead_deg in offlead_values:
         for sidelead_deg in sidelead_values:
             for wind_direction in candidate_wind_directions(wind_speed_m_s):
@@ -65,23 +70,29 @@ def _split_mode_overrides(hoist: Any) -> dict[str, dict[str, float | int | str]]
     return {str(hoist.id): payload}
 
 
-def _contractual_points(hoist: Any, mode_name: str) -> list[Any]:
-    if mode_name == "split":
-        split_points = getattr(hoist, "split_contractual_points", None)
-        if isinstance(split_points, list):
-            return split_points
+def _contractual_points(settings: Optional[ConditionHoist], mode_name: str) -> list[Any]:
+    if settings is None:
         return []
-    return list(hoist.contractual_points)
+    if mode_name == "split":
+        return list(settings.split_contractual_points)
+    return list(settings.contractual_points)
 
 
-def iter_hoist_analysis_modes(hoist: Any) -> tuple[HoistAnalysisMode, ...]:
-    """Return the valid normal and optional split modes for a hoist."""
+def iter_hoist_analysis_modes(
+    hoist: Any, settings: Optional[ConditionHoist]
+) -> tuple[HoistAnalysisMode, ...]:
+    """Return the valid normal and optional split modes for a hoist.
+
+    The modes' contractual points are the hoist's chart under one condition: ``settings``
+    is its entry there (``LoadCondition.hoist_settings``); None (the hoist is not usable
+    in the condition) gives modes without points.
+    """
     modes = [
         HoistAnalysisMode(
             name="normal",
             lower_block_mass_t=float(hoist.lower_block_mass_t),
             runtime_overrides={},
-            contractual_points=_contractual_points(hoist, "normal"),
+            contractual_points=_contractual_points(settings, "normal"),
         )
     ]
     if bool(getattr(hoist, "splitable_block", False)):
@@ -93,15 +104,21 @@ def iter_hoist_analysis_modes(hoist: Any) -> tuple[HoistAnalysisMode, ...]:
                     name="split",
                     lower_block_mass_t=float(split_hook_mass),
                     runtime_overrides=_split_mode_overrides(hoist),
-                    contractual_points=_contractual_points(hoist, "split"),
+                    contractual_points=_contractual_points(settings, "split"),
                 )
             )
     return tuple(modes)
 
 
-def analysis_mode_by_name(hoist: Any, mode_name: str) -> HoistAnalysisMode:
-    """Return one effective mode, falling back to normal when unavailable."""
-    for mode in iter_hoist_analysis_modes(hoist):
+def analysis_mode_by_name(
+    hoist: Any, mode_name: str, settings: Optional[ConditionHoist]
+) -> HoistAnalysisMode:
+    """Return one effective mode, falling back to normal when unavailable.
+
+    ``settings`` as for ``iter_hoist_analysis_modes``.
+    """
+    modes = iter_hoist_analysis_modes(hoist, settings)
+    for mode in modes:
         if mode.name == mode_name:
             return mode
-    return iter_hoist_analysis_modes(hoist)[0]
+    return modes[0]

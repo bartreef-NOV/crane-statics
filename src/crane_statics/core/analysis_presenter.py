@@ -241,15 +241,11 @@ class AnalysisPresenter:
         hook_lateral: Optional[HookLateral] = None,
     ) -> Optional[float]:
         """Compute demand for a result row at specific environmental conditions."""
-        from ..calculation.engine import CraneCalculator
-
         doc = self._session.document
         if doc is None:
             return None
-        # Rules: the Scene condition's calculator (its environment is the condition's).
-        calc = (
-            CraneCalculator(doc) if doc.rules is None else self._hoist_state.scene_calculator(doc)
-        )
+        # The Scene condition's calculator (its environment is the condition's).
+        calc = self._hoist_state.scene_calculator(doc)
         point = calc.compute_analysis_point(
             boom_angle_deg,
             0.0,

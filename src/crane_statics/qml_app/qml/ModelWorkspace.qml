@@ -53,7 +53,7 @@ Item {
 
                     TabButton { text: qsTr("Components"); Layout.fillWidth: true }
                     TabButton { text: qsTr("Hoists"); Layout.fillWidth: true }
-                    // Only a rules document has load conditions to edit.
+                    // Every document has load conditions (v13): rules-less ones a "default".
                     TabButton {
                         // Not onVisibleChanged: hiding the whole workspace (another
                         // workspace tab) clears visible too, and must keep the tab.
@@ -155,7 +155,8 @@ Item {
                 HoistsPanel {
                     onAddRequested: hoistDialog.openFor(-1, null)
                     onAddSegmentRequested: segmentDialog.openFor(-1, null)
-                    onAddContractualPointRequested: contractualDialog.openFor(-1, null)
+                    onAddChartPointRequested: chartPointDialog.openFor(-1, null)
+                    onEditChartPointRequested: row => chartPointDialog.openFor(row, modelVm.chartPointFields(row))
                 }
 
                 ConditionsPanel {}
@@ -164,9 +165,8 @@ Item {
     }
 
     /*  The dialogs only add here: an existing row is edited in its own cell, which
-        submits the same fields through the same validation. The dialogs still carry
-        the row index in their signal because the load chart workspace edits its
-        contractual points through one. */
+        submits the same fields through the same validation. The chart-point dialog
+        also edits a point, because its conditions are not a cell value. */
 
     NodeDialog {
         id: nodeDialog
@@ -202,9 +202,11 @@ Item {
         onCommitted: (index, fields) => modelVm.addRopeSegment(fields)
     }
 
-    ContractualPointDialog {
-        id: contractualDialog
-        onCommitted: (index, fields) => modelVm.addContractualPoint(fields)
+    ChartPointDialog {
+        id: chartPointDialog
+        conditionNames: modelVm.chartConditionNames
+        onCommitted: (index, fields) => index < 0 ? modelVm.addChartPoint(fields)
+                                                  : modelVm.updateChartPoint(index, fields)
     }
 
     MessageDialog {

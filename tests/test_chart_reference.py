@@ -2,32 +2,29 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 from tests.chart_reference import reference_capacity
 from crane_statics.calculation.engine import CraneCalculator
-from crane_statics.core import load_document
 from crane_statics.core.lead_channels import compose_lead_channel_point
-
-EXAMPLES = Path(__file__).parent.parent / "examples"
+from tests.authored_helpers import authored_daf, case_document, load_example
 
 
 def test_reference_equals_single_case_when_everything_is_zero() -> None:
-    doc = load_document(EXAMPLES / "crane_input_GT283.yaml")
-    doc.environment.max_wind_speed_m_s = 0.0
-    for field in type(doc.environment.vessel_motion).model_fields:
-        setattr(doc.environment.vessel_motion, field, 0.0)
+    doc = load_example("crane_input_GT283.yaml")
+    condition = doc.conditions["default"]
+    condition.wind_speed_m_s = 0.0
+    for field in type(condition.vessel_motion).model_fields:
+        setattr(condition.vessel_motion, field, 0.0)
     hoist = next(h for h in doc.hoists if h.id == "MH")
-    hoist.offlead_deg = 0.0
-    if hasattr(hoist, "sidelead_deg"):
-        hoist.sidelead_deg = 0.0
-    calc = CraneCalculator(doc)
+    condition.hoists["MH"].offlead_deg = 0.0
+    condition.hoists["MH"].sidelead_deg = 0.0
+    calc = CraneCalculator(case_document(doc))
     limits = {"boom_hoist": {"T": 1.0e9}, "heel_point": {"Fz": 5000.0}}
     kwargs: dict[str, Any] = dict(
-        hook_daf=hoist.hook_daf, lower_block_mass_t=hoist.lower_block_mass_t
+        hook_daf=authored_daf(doc, "MH"), lower_block_mass_t=hoist.lower_block_mass_t
     )
 
     pt = calc.compute_analysis_point(45.0, 0.0, "MH", wind_speed_m_s=0.0)

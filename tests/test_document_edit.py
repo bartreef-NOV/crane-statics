@@ -1,7 +1,5 @@
 """Document editing: the headless editor and the QML model view model that drives it."""
 
-from pathlib import Path
-
 import pytest
 from PyQt6.QtCore import Qt
 
@@ -21,8 +19,9 @@ from crane_statics.data.models import ConditionSpec
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
 from tests.rules_docs import GT283, gale, rules_doc
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 @pytest.fixture
@@ -208,7 +207,7 @@ class TestHoistEditing:
 
     def test_update_hoist_preserves_contractual_points(self, editor, document):
         payload = next(h for h in document.hoists if not editor.is_solve_hoist(h))
-        original = [(cp.outreach_m, cp.load_t) for cp in payload.contractual_points]
+        original = [(cp.outreach_m, cp.load_t) for cp in editor.contractual_points(payload.id)]
         assert original
 
         editor.update_hoist(
@@ -220,7 +219,8 @@ class TestHoistEditing:
 
         updated = next(h for h in document.hoists if h.id == payload.id)
         assert updated.lower_block_mass_t == 42.0
-        assert [(cp.outreach_m, cp.load_t) for cp in updated.contractual_points] == original
+        kept = editor.contractual_points(payload.id)
+        assert [(cp.outreach_m, cp.load_t) for cp in kept] == original
 
     def test_solve_hoist_cannot_be_deleted(self, editor, document):
         solve = next((h for h in document.hoists if editor.is_solve_hoist(h)), None)
@@ -255,13 +255,19 @@ class TestRopeAndContractualEditing:
 
     def test_contractual_point_round_trip(self, editor, document):
         payload = next(h for h in document.hoists if not editor.is_solve_hoist(h))
-        before = len(payload.contractual_points)
+        before = len(editor.contractual_points(payload.id))
 
+        original = [(p.outreach_m, p.load_t) for p in editor.contractual_points(payload.id)]
         editor.add_contractual_point(payload.id, build_contractual_point(30.0, 100.0))
-        assert len(payload.contractual_points) == before + 1
+        points = [(p.outreach_m, p.load_t) for p in editor.contractual_points(payload.id)]
+        assert len(points) == before + 1
+        # In outreach order, as a tagged chart point is added (was: appended last).
+        added = points.index((30.0, 100.0))
+        assert all(o <= 30.0 for o, _ in points[:added])
+        assert all(o > 30.0 for o, _ in points[added + 1 :])
 
-        editor.delete_contractual_point(payload.id, before)
-        assert len(payload.contractual_points) == before
+        editor.delete_contractual_point(payload.id, added)
+        assert [(p.outreach_m, p.load_t) for p in editor.contractual_points(payload.id)] == original
 
 
 class TestModelViewModelEditing:
@@ -358,9 +364,6 @@ class TestModelViewModelEditing:
             "Splittable",
             "Split Falls",
             "Split Lower Block Mass (t)",
-            "DAF",
-            "Offlead (deg)",
-            "Sidelead (deg)",
         ):
             column = headers.index(payload_header)
             assert (
@@ -370,6 +373,10 @@ class TestModelViewModelEditing:
                 )
                 == ""
             )
+
+        # A payload hoist's DAF and lead limits are per condition (the Conditions tab),
+        # not columns of the hoist table (were: DAF/Offlead/Sidelead of the Scene's condition).
+        assert not {"DAF", "Offlead (deg)", "Sidelead (deg)"} & set(headers)
 
         linear_mass_column = headers.index("Linear Mass (kg/m)")
         assert (
@@ -569,16 +576,28 @@ class TestEnvironmentEditing:
             document.support_widths.slewing_bearing_diameter_m
         )
 
-    def test_setting_environment_value_writes_through(self, model_vm, document):
+    # v13: the wind speed and vessel motion are the condition's, also without rules, so
+    # the environment no longer takes them (was: written through to the environment).
+    def test_wind_speed_is_not_an_environment_value(self, model_vm, document):
+        wind = document.conditions["default"].wind_speed_m_s
         model_vm.setEnvironmentValue("max_wind_speed_m_s", 33.0)
 
-        assert document.environment.max_wind_speed_m_s == pytest.approx(33.0)
-        assert model_vm._model.dirty is True
+        assert document.conditions["default"].wind_speed_m_s == wind
+        assert document.environment.max_wind_speed_m_s != pytest.approx(33.0)
+        assert model_vm._model.dirty is False
 
-    def test_setting_vessel_motion_value_writes_through(self, model_vm, document):
+    def test_vessel_motion_is_not_an_environment_value(self, model_vm, document):
         model_vm.setEnvironmentValue("pitch_angular_accel_rad_s2", 0.125)
 
-        assert document.environment.vessel_motion.pitch_angular_accel_rad_s2 == pytest.approx(0.125)
+        motion = document.conditions["default"].vessel_motion
+        assert motion.pitch_angular_accel_rad_s2 != pytest.approx(0.125)
+        assert document.environment.vessel_motion.pitch_angular_accel_rad_s2 != pytest.approx(0.125)
+
+    def test_setting_gravity_writes_through(self, model_vm, document):
+        model_vm.setEnvironmentValue("gravity_m_s2", 9.80665)
+
+        assert abs(document.environment.gravity_m_s2) == pytest.approx(9.80665)
+        assert model_vm._model.dirty is True
 
     def test_setting_support_width_writes_through(self, model_vm, document):
         model_vm.setEnvironmentValue("boom_width_m", 4.5)
@@ -661,7 +680,8 @@ class TestContractualModeEditing:
         if hoist_id is None:
             pytest.skip("No splitable hoist in example")
         model_vm.selectHoist(hoist_id)
-        hoist = next(h for h in model_vm._model.document.hoists if h.id == hoist_id)
+        doc = model_vm._model.document
+        hoist = doc.conditions["default"].hoists[hoist_id]
 
         model_vm.setContractualMode("split")
 
@@ -674,11 +694,11 @@ class TestContractualModeEditing:
             pytest.skip("No splitable hoist in example")
         model_vm.selectHoist(hoist_id)
         model_vm.setContractualMode("split")
-        hoist = next(h for h in model_vm._model.document.hoists if h.id == hoist_id)
+        hoist = model_vm._model.document.conditions["default"].hoists[hoist_id]
         normal_before = len(hoist.contractual_points)
         split_before = len(hoist.split_contractual_points)
 
-        model_vm.addContractualPoint({"outreach_m": 40.0, "load_t": 60.0})
+        model_vm.addChartPoint({"outreach_m": 40.0, "load_t": 60.0})
 
         assert len(hoist.split_contractual_points) == split_before + 1
         assert len(hoist.contractual_points) == normal_before
@@ -756,9 +776,11 @@ class TestConditionEdits:
         self._refused(doc, lambda e: e.duplicate_condition("nope"))
         self._refused(doc, lambda e: e.delete_condition("nope"))
 
-    def test_no_rules_refused(self):
+    def test_conditions_are_editable_without_rules(self):
+        # v13: a rules-less document has conditions too (was: condition edits refused).
         doc = load_document(GT283)
-        self._refused(doc, lambda e: e.add_condition(gale("a")))
+        DocumentEditor(doc).add_condition(gale("a"))
+        assert list(doc.conditions) == ["default", "a"]
 
     def test_offboard_without_wave_inputs_refused(self):
         doc = rules_doc("ABS", gale("a"))
@@ -833,7 +855,7 @@ def _offboard_doc():
         v_in_m_s=0.6,
         v_t_m_s=0.3,
     )
-    return _rules(rules_doc("ABS", a, gale("b")), daf=1.0)
+    return _rules(rules_doc("ABS", a, gale("b")), daf=None)  # v12 hook_daf 1.0: derived
 
 
 class TestConditionViewModel:
@@ -960,11 +982,148 @@ class TestConditionViewModel:
         vm._model.set_document(rules_doc("DNV", gale("x"), gale("b")))
         assert vm.selectedCondition == "x"
 
-    def test_condition_properties_are_empty_without_rules(self):
-        vm = _condition_vm(load_document(GT283))
-        assert vm.conditionNames == []
-        assert vm.condition == {}
-        assert vm.selectedCondition == ""
-        _edited, failed = self._signals(vm)
+    def test_condition_properties_show_default_without_rules(self):
+        # v13: a rules-less document has its one condition ``default``, editable like any
+        # other (was: no condition properties and adding one refused).
+        doc = load_document(GT283)
+        vm = _condition_vm(doc)
+        assert vm.conditionNames == ["default"]
+        assert vm.condition["name"] == "default"
+        assert vm.condition["wind_speed_m_s"] == doc.conditions["default"].wind_speed_m_s
+        assert vm.selectedCondition == "default"
+        edited, failed = self._signals(vm)
         vm.addCondition()
-        assert failed
+        assert not failed and edited
+        assert len(vm.conditionNames) == 2
+
+
+# --- hoist edits and the condition-owned hoist settings (interim Model edit path) ------
+
+
+def _two_condition_gt283():
+    """GT283 migrated: ``default`` lists MH, AH, trolley; ``calm`` lists trolley then AH."""
+    from tests.rules_docs import load_v13, with_condition
+
+    gt = load_v13(GT283)
+    default = gt.conditions["default"].hoists
+    # calm's AH chart is only default's last point, at its own lead limit.
+    calm_ah = default["AH"].model_copy(
+        update={"offlead_deg": 7.0, "contractual_points": default["AH"].contractual_points[-1:]}
+    )
+    return with_condition(gt, "calm", {"trolley": default["trolley"], "AH": calm_ah})
+
+
+def _payload_hoist_like(doc, hoist_id: str, new_id: str):
+    current = next(h for h in doc.hoists if h.id == hoist_id)
+    return build_payload_hoist(
+        new_id,
+        str(current.support_node_id),
+        falls=int(current.falls or 1),
+        lower_block_mass_t=float(current.lower_block_mass_t),
+        linear_mass_kg_m=float(current.linear_mass_kg_m),
+        lowest_hook_height_m=float(current.lowest_hook_height_m or 0.0),
+    )
+
+
+class TestConditionHoistEdits:
+    def test_rename_rekeys_every_condition_in_place(self):
+        doc = _two_condition_gt283()
+        before = {name: spec.hoists["AH"].model_dump() for name, spec in doc.conditions.items()}
+        DocumentEditor(doc).update_hoist("AH", _payload_hoist_like(doc, "AH", "AH2"))
+        assert list(doc.conditions["default"].hoists) == ["MH", "AH2", "trolley"]
+        assert list(doc.conditions["calm"].hoists) == ["trolley", "AH2"]
+        # Same settings and charts in each condition, under the new id.
+        assert doc.conditions["default"].hoists["AH2"].model_dump() == before["default"]
+        assert doc.conditions["calm"].hoists["AH2"].model_dump() == before["calm"]
+
+    def test_rename_onto_an_existing_hoist_changes_nothing(self):
+        doc = _two_condition_gt283()
+        snapshot = doc.model_dump_json()
+        editor = DocumentEditor(doc)
+        with pytest.raises(DocumentEditError):
+            editor.update_hoist("AH", _payload_hoist_like(doc, "AH", "MH"))
+        assert doc.model_dump_json() == snapshot
+
+    def test_an_added_hoist_takes_its_settings_per_condition(self):
+        doc = _two_condition_gt283()
+        editor = DocumentEditor(doc)
+        editor.add_hoist(_payload_hoist_like(doc, "AH", "NEW"))
+        # Task 6: a new payload hoist is usable in every condition with no lead limits
+        # and no DAF override; its settings are then set per condition (was: the add
+        # form's DAF and leads went to one condition, the others did not list it).
+        editor.set_condition_hoist("calm", "NEW", 2.0, 0.0, 1.2)
+        entry = doc.conditions["calm"].hoists["NEW"]
+        assert (entry.offlead_deg, entry.daf, entry.contractual_points) == (2.0, 1.2, [])
+        other = doc.conditions["default"].hoists["NEW"]
+        assert (other.offlead_deg, other.sidelead_deg, other.daf) == (0.0, 0.0, None)
+        assert other.contractual_points == []
+
+
+def _model_vm(doc):
+    session = SessionState()
+    vm = ModelViewModel(session)
+    session.model.set_document(doc)
+    session.model.history._window = 0.0  # no time-based merging between test steps
+    return session, vm
+
+
+def _row(vm, hoist_id: str) -> int:
+    return [h["id"] for h in vm.hoistList].index(hoist_id)
+
+
+class TestModelHoistEditsPerCondition:
+    def test_rename_via_the_form_is_one_clean_undo_step(self):
+        session, vm = _model_vm(_two_condition_gt283())
+        failed: list[str] = []
+        vm.editFailed.connect(failed.append)
+        fields = vm.hoistFields(_row(vm, "AH"))
+        fields["id"] = "AH2"
+        assert vm.updateHoist(_row(vm, "AH"), fields) and failed == []
+        doc = session.model.document
+        assert "AH" not in doc.conditions["default"].hoists
+        assert list(doc.conditions["calm"].hoists) == ["trolley", "AH2"]
+        blocking, _warnings = __import__(
+            "crane_statics.core.model_health", fromlist=["x"]
+        ).collect_model_health_issues(doc)
+        assert blocking == []
+        assert session.model.undo()
+        doc = session.model.document
+        assert [h.id for h in doc.hoists].count("AH") == 1
+        assert list(doc.conditions["default"].hoists) == ["MH", "AH", "trolley"]
+
+    def test_invalid_form_edit_changes_nothing_and_signals_only_the_failure(self):
+        session, vm = _model_vm(_two_condition_gt283())
+        snapshot = session.model.document.model_dump_json()
+        failed: list[str] = []
+        content: list[int] = []
+        vm.editFailed.connect(failed.append)
+        vm.modelEdited.connect(lambda: content.append(1))
+        session.content_changed.connect(lambda: content.append(2))
+        fields = vm.hoistFields(_row(vm, "AH"))
+        vm.addHoist({**fields, "id": "MH"})  # an existing id
+        assert not vm.updateHoist(_row(vm, "AH"), {**fields, "id": "trolley"})
+        assert len(failed) == 2 and content == []
+        assert session.model.document.model_dump_json() == snapshot
+        assert not session.model.can_undo
+
+    def test_the_chart_table_is_the_saved_chart_whatever_the_scene_condition(self):
+        """The chart table lists each authored point once with its conditions (was: the
+        Scene's condition's own points, edited there only)."""
+        session, vm = _model_vm(_two_condition_gt283())
+        vm.selectHoist("AH")
+        doc = session.model.document
+        default_points = list(doc.conditions["default"].hoists["AH"].contractual_points)
+        calm_points = list(doc.conditions["calm"].hoists["AH"].contractual_points)
+        rows = vm.chartPoints
+        assert [r["conditions"] for r in rows] == [["default"]] * (len(default_points) - 1) + [
+            ["default", "calm"]
+        ]
+
+        session.model.set_scene_condition("calm", None, seed=True)
+        assert vm.chartPoints == rows
+        assert vm.contractualModel.rowCount() == len(default_points)
+        # Deleting the first point drops it from default only, the one condition naming it.
+        vm.deleteChartPoint(0)
+        doc = session.model.document
+        assert doc.conditions["default"].hoists["AH"].contractual_points == default_points[1:]
+        assert doc.conditions["calm"].hoists["AH"].contractual_points == calm_points

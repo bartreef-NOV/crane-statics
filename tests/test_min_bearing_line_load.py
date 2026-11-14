@@ -1,7 +1,6 @@
 """Bearing uplift limit: the negated minimum line load, entered as a positive magnitude."""
 
 import math
-from pathlib import Path
 
 import pytest
 
@@ -23,8 +22,9 @@ from crane_statics.core.io import load_document
 from crane_statics.core.limit_components import KNOWN_LIMIT_COMPONENTS, LimitComponent
 from crane_statics.core.limit_factory import DesignLimitFactory
 from crane_statics.core.session_model import SessionModel
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 class _FakePoint:

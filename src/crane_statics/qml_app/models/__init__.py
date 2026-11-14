@@ -2,7 +2,7 @@
 
 from .table_models import Column, RecordTableModel
 from .document_models import (
-    contractual_columns,
+    chart_point_columns,
     hoist_columns,
     mass_point_columns,
     node_columns,
@@ -13,7 +13,7 @@ from .document_models import (
 __all__ = [
     "Column",
     "RecordTableModel",
-    "contractual_columns",
+    "chart_point_columns",
     "hoist_columns",
     "mass_point_columns",
     "node_columns",

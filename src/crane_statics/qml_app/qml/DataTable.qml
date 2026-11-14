@@ -169,13 +169,15 @@ Item {
                         id: headerCell
                         required property string display
                         required property int column
-                        implicitWidth: 100
+                        // Wide enough for its title, so a narrow column does not elide it.
+                        implicitWidth: Math.max(100, headerLabel.implicitWidth + 16)
                         implicitHeight: root.tableRowHeight
                         color: root.headerColor
                         border.color: root.gridColor
                         border.width: 1
 
                         Label {
+                            id: headerLabel
                             anchors.fill: parent
                             anchors.leftMargin: 8
                             anchors.rightMargin: 8
@@ -213,7 +215,9 @@ Item {
                     // Every column takes its content width; with a stretch column, that
                     // one also takes whatever width the others leave over.
                     columnWidthProvider: function (column) {
-                        const natural = table.implicitColumnWidth(column)
+                        // The cells' width, or the header's when its title is wider.
+                        const natural = Math.max(table.implicitColumnWidth(column),
+                                                 header.implicitColumnWidth(column))
                         if (column !== root.stretchColumn)
                             return natural
                         let others = 0

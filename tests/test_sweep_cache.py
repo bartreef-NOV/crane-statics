@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from crane_statics.core import load_document
 from crane_statics.core.sweep_cache import (
@@ -12,8 +11,9 @@ from crane_statics.core.sweep_cache import (
     compute_fingerprint,
     limit_signature,
 )
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 class _Counter:
@@ -29,16 +29,16 @@ class _Counter:
 def test_compute_fingerprint_ignores_contractual_points_only() -> None:
     doc = load_document(EXAMPLE)
     base = compute_fingerprint(doc)
-    hoist = doc.hoists[0]
+    hoist = doc.conditions["default"].hoists[doc.hoists[0].id]
     hoist.contractual_points[0].load_t += 1.0
     assert compute_fingerprint(doc) == base
     if hoist.split_contractual_points:
         hoist.split_contractual_points[0].load_t += 1.0
         assert compute_fingerprint(doc) == base
-    doc.environment.max_wind_speed_m_s += 1.0
+    doc.conditions["default"].wind_speed_m_s += 1.0
     changed_wind = compute_fingerprint(doc)
     assert changed_wind != base
-    doc.environment.vessel_motion.accel_x_m_s2 += 0.5
+    doc.conditions["default"].vessel_motion.accel_x_m_s2 += 0.5
     assert compute_fingerprint(doc) != changed_wind
 
 

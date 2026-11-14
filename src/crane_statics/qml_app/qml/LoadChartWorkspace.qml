@@ -112,7 +112,7 @@ Item {
                     onClicked: chartVm.setChartMode("split")
                 }
 
-                // Rules documents only: the load condition the chart is drawn for.
+                // The load condition the chart is drawn for (a rules-less document has one, "default").
                 Label {
                     text: qsTr("Condition")
                     visible: conditionSelector.visible

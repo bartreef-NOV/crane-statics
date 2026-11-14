@@ -45,7 +45,7 @@ def wind_area_columns(body_id: str) -> list[Column]:
 
 
 def hoist_columns(is_boom_hoist: Callable[[Any], bool] | None = None) -> list[Column]:
-    """Column definitions for hoist table."""
+    """Column definitions for hoist table (``HoistFormatter.table_columns``)."""
     return _to_qml(HoistFormatter.table_columns(is_boom_hoist))
 
 
@@ -54,6 +54,6 @@ def rope_segment_columns() -> list[Column]:
     return _to_qml(ComponentTableFormatter.rope_segment_columns())
 
 
-def contractual_columns() -> list[Column]:
-    """Column definitions for contractual point table."""
-    return _to_qml(ComponentTableFormatter.contractual_columns())
+def chart_point_columns() -> list[Column]:
+    """Column definitions for a hoist's load-chart table (each point with its conditions)."""
+    return _to_qml(ComponentTableFormatter.chart_point_columns())

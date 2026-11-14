@@ -1,7 +1,6 @@
 """Load chart view model: probe solves and limit results are reused across redraws."""
 
 import gc
-from pathlib import Path
 
 import pytest
 
@@ -19,8 +18,9 @@ from tests.test_chart_background import (
     pump_events,
     wait_idle,
 )
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 STEP = 10.0
 
 
@@ -177,7 +177,7 @@ def test_a_document_edit_rebuilds_probes(vm, probes):
     old_cache = vm._compute_cache
     _reset(probes)
 
-    vm._model.document.environment.max_wind_speed_m_s += 1.0
+    vm._model.document.conditions["default"].wind_speed_m_s += 1.0
     vm._model.mark_content_changed()
     wait_idle(vm, timeout=120.0)
 
@@ -210,7 +210,8 @@ def test_background_precompute_still_fills_the_result_cache(vm):
 
     fingerprint = vm._wanted_key().fingerprint
     for job in jobs:
-        assert vm._cache.get(ChartKey(job.hoist_id, job.mode, STEP, fingerprint)) is not None
+        key = ChartKey(job.hoist_id, job.mode, STEP, fingerprint, job.condition)
+        assert vm._cache.get(key) is not None
 
 
 def _probes_when_visible_done(vm: ChartViewModel, probes: Counter) -> list[int]:

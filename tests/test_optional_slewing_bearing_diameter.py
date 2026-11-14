@@ -5,7 +5,6 @@ result anywhere downstream (limit catalog, demand extraction, result rows).
 """
 
 import math
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -20,8 +19,9 @@ from crane_statics.core.io import load_document
 from crane_statics.core.limit_factory import DesignLimitFactory
 from crane_statics.core.session_model import SessionModel
 from crane_statics.data.models import SupportWidths
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 @pytest.fixture

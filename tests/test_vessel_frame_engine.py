@@ -18,9 +18,10 @@ import pytest
 from crane_statics.calculation.engine import CraneCalculator
 from crane_statics.calculation.solver import crane_solver
 from crane_statics.core import load_document
+from tests.authored_helpers import case_document, example_path, hoist_settings
 
 ROOT = Path(__file__).parent.parent
-EXAMPLE = ROOT / "examples" / "crane_input_GT283.yaml"
+EXAMPLE = example_path("crane_input_GT283.yaml")
 G = 9.81
 SPLIT_SUFFIXES = ("_left", "_right")
 OUT_OF_PLANE_PLATFORM = {"Fy", "Mx"}
@@ -29,10 +30,13 @@ NO_IDLE_HOOKS = {"AH": {"lower_block_mass_t": 0.0}, "trolley": {"lower_block_mas
 
 @pytest.fixture(scope="module")
 def calc():
-    return CraneCalculator(load_document(EXAMPLE))
+    # The environment of GT283's one condition, which a bare calculator reads.
+    return CraneCalculator(case_document(load_document(EXAMPLE)))
 
 
 def _point(calc, **kwargs):
+    # v12 defaulted the offlead to the hoist's authored limit; v13 keeps it on the condition.
+    kwargs.setdefault("offlead_deg", hoist_settings(calc.doc, "MH").offlead_deg)
     p = calc.compute_analysis_point(boom_angle_deg=45.0, hook_load_kN=0.0, hoist_id="MH", **kwargs)
     assert p is not None
     return p

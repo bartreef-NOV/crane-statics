@@ -11,7 +11,9 @@ from typing import Any, Optional
 
 from pydantic import ValidationError
 
-from crane_statics.data import CraneDocument
+from crane_statics.core.document_edit import TaggedChartPoint
+from crane_statics.core.hoist_daf import daf_is_derived, shown_daf
+from crane_statics.data import CraneDocument, payload_hoist_ids
 from crane_statics.data.models import ConditionSpec
 from crane_statics.qml_app.contracts import EnvironmentSettings
 
@@ -67,29 +69,25 @@ def environment_settings(doc: Optional[CraneDocument]) -> dict:
     return EnvironmentSettings.from_dict(env_dict).to_dict()
 
 
-# Settings a rules document takes from its load conditions (``doc.conditions``) instead:
-# its environment carries runtime placeholders for them, which no analysis reads.
-CONDITION_ENVIRONMENT_KEYS = {"max_wind_speed_m_s", *VESSEL_MOTION_KEYS}
+# The environment values a document takes from itself. The wind speed and vessel motion
+# it takes from its load conditions (``doc.conditions``): its environment carries runtime
+# placeholders for them, which no analysis reads and nothing edits.
+EDITABLE_ENVIRONMENT_KEYS = ("gravity_m_s2", "air_density_kg_m3")
 
 
 def environment_from_conditions(doc: Optional[CraneDocument]) -> bool:
-    """Whether wind speed and vessel motion come from the load conditions (rules)."""
-    return doc is not None and doc.rules is not None
+    """Whether wind speed and vessel motion come from the load conditions: for every
+    document (with or without rules)."""
+    return doc is not None
 
 
 def set_environment_value(doc: CraneDocument, key: str, value: float) -> bool:
-    """Set one scalar setting; False when the key is unknown or the value is unchanged.
-
-    On a rules document the wind speed and vessel motion are per condition: setting the
-    placeholder is refused (False).
-    """
-    if key in CONDITION_ENVIRONMENT_KEYS and environment_from_conditions(doc):
-        return False
+    """Set one scalar setting (gravity, air density, a support width); False when the key
+    is not one (the per-condition wind speed and vessel motion included) or the value is
+    unchanged."""
     target: Any
-    if key in ENVIRONMENT_KEYS:
+    if key in EDITABLE_ENVIRONMENT_KEYS:
         target = doc.environment
-    elif key in VESSEL_MOTION_KEYS:
-        target = doc.environment.vessel_motion
     elif key in SUPPORT_WIDTH_KEYS:
         target = doc.support_widths
     else:
@@ -110,7 +108,7 @@ def clear_support_width(doc: CraneDocument, key: str) -> bool:
 
 
 # ----------------------------------------------------------------------
-# Load conditions (rules documents)
+# Load conditions
 # ----------------------------------------------------------------------
 
 CONDITION_SCALAR_KEYS: tuple[str, ...] = (
@@ -128,8 +126,8 @@ NEW_CONDITION_PREFIX = "condition_"
 
 
 def editable_conditions(doc: Optional[CraneDocument]) -> dict[str, ConditionSpec]:
-    """The load conditions a rules document carries, in order; none without rules."""
-    if doc is None or doc.rules is None:
+    """The load conditions of the document, in order (with or without rules)."""
+    if doc is None:
         return {}
     return dict(doc.conditions)
 
@@ -259,7 +257,9 @@ def wind_area_fields(area: Any) -> dict[str, Any]:
 
 
 def hoist_fields(hoist: Any, *, is_boom_hoist: bool) -> dict[str, Any]:
-    return {
+    """One hoist as a flat form dict (its DAF and lead limits are per condition:
+    ``condition_hoist_rows``)."""
+    fields = {
         "id": hoist.id,
         "is_boom_hoist": is_boom_hoist,
         "support_node_id": hoist.support_node_id or hoist.load_node_id,
@@ -275,10 +275,8 @@ def hoist_fields(hoist: Any, *, is_boom_hoist: bool) -> dict[str, Any]:
             if hoist.split_lower_block_mass_t is not None
             else hoist.lower_block_mass_t
         ),
-        "hook_daf": float(hoist.hook_daf),
-        "offlead_deg": float(hoist.offlead_deg),
-        "sidelead_deg": float(hoist.sidelead_deg),
     }
+    return fields
 
 
 def rope_segment_fields(segment: Any) -> dict[str, Any]:
@@ -289,8 +287,13 @@ def rope_segment_fields(segment: Any) -> dict[str, Any]:
     }
 
 
-def contractual_fields(point: Any) -> dict[str, Any]:
-    return {"outreach_m": float(point.outreach_m), "load_t": float(point.load_t)}
+def chart_point_fields(point: TaggedChartPoint) -> dict[str, Any]:
+    """One load-chart point as the chart-point form dict, with the conditions it names."""
+    return {
+        "outreach_m": float(point.outreach_m),
+        "load_t": float(point.load_t),
+        "conditions": list(point.conditions),
+    }
 
 
 # ----------------------------------------------------------------------
@@ -350,10 +353,85 @@ def hoist_kwargs(fields: dict) -> dict:
         "split_lower_block_mass_t": (
             float(fields.get("split_lower_block_mass_t", 0.0)) if splitable else None
         ),
-        "hook_daf": float(fields.get("hook_daf", 1.0)),
-        "offlead_deg": float(fields.get("offlead_deg", 0.0)),
-        "sidelead_deg": float(fields.get("sidelead_deg", 0.0)),
     }
+
+
+def chart_point_conditions(fields: dict) -> Optional[list[str]]:
+    """The condition names a submitted chart-point form carries; None when it carries
+    none (the editor's default applies)."""
+    names = fields.get("conditions")
+    if names is None:
+        return None
+    return [str(name) for name in names]
+
+
+# ----------------------------------------------------------------------
+# Per-condition hoist table and the tagged load chart
+# ----------------------------------------------------------------------
+
+
+def condition_hoist_rows(doc: Optional[CraneDocument], spec: Optional[ConditionSpec]) -> list:
+    """One row per payload hoist (document order) for the hoist table of condition ``spec``.
+
+    ``usable``: the condition lists the hoist; then ``offleadDeg``/``sideleadDeg`` are its
+    lead limits there and ``daf`` the authored factor (None: no override). ``dafDerived``
+    is True under rules when the factor is derived from the standard (``dafShown`` None,
+    the view shows a placeholder); otherwise ``dafShown`` is the factor that applies. A
+    row of a hoist the condition does not list carries None for the values.
+    """
+    if doc is None or spec is None:
+        return []
+    rows = []
+    for hoist_id in payload_hoist_ids(doc):
+        entry = spec.hoists.get(hoist_id)
+        if entry is None:
+            rows.append(
+                {
+                    "hoistId": hoist_id,
+                    "usable": False,
+                    "offleadDeg": None,
+                    "sideleadDeg": None,
+                    "daf": None,
+                    "dafShown": None,
+                    "dafDerived": False,
+                }
+            )
+            continue
+        derived = daf_is_derived(doc, entry.daf)
+        rows.append(
+            {
+                "hoistId": hoist_id,
+                "usable": True,
+                "offleadDeg": float(entry.offlead_deg),
+                "sideleadDeg": float(entry.sidelead_deg),
+                "daf": None if entry.daf is None else float(entry.daf),
+                "dafShown": None if derived else shown_daf(entry.daf),
+                "dafDerived": derived,
+            }
+        )
+    return rows
+
+
+def entered_daf_value(value: Any) -> Optional[float]:
+    """A DAF entered in the per-condition hoist table as a number; None, "" or an
+    undefined QML value clear the override (the editor stores it: ``enter_condition_hoist``)."""
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
+def chart_point_rows(points: list[TaggedChartPoint]) -> list[dict[str, Any]]:
+    """One row per authored load-chart point: its index, outreach, load and the names of
+    the conditions it applies to (``DocumentEditor.tagged_chart``)."""
+    return [
+        {
+            "index": index,
+            "outreachM": float(point.outreach_m),
+            "loadT": float(point.load_t),
+            "conditions": list(point.conditions),
+        }
+        for index, point in enumerate(points)
+    ]
 
 
 def segment_kwargs(fields: dict) -> dict:

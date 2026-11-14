@@ -92,16 +92,80 @@ def _authored_reeving(
 _ROPE_STIFFNESS_KEYS = ("ea_kN", "elastic_modulus_kN_mm2", "metallic_area_mm2")
 
 
+def _authored_condition_hoist(entry: dict[str, Any]) -> dict[str, Any]:
+    """A condition's hoist entry; sidelead 0.0 and an unset DAF are left out."""
+    out: dict[str, Any] = {"offlead_deg": float(entry.get("offlead_deg", 0.0))}
+    if entry.get("sidelead_deg"):
+        out["sidelead_deg"] = float(entry["sidelead_deg"])
+    if entry.get("daf") is not None:
+        out["daf"] = float(entry["daf"])
+    return out
+
+
+def _tagged_chart(conditions: dict[str, Any], hoist_id: str, key: str) -> list[dict[str, Any]]:
+    """One authored load chart for ``hoist_id`` from the per-condition point lists at ``key``.
+
+    The merged chart keeps every condition's own point order, so re-reading it gives each
+    condition back exactly its points. Conditions are merged in order: each point of a
+    condition reuses the first equal point after the condition's previous one, else it is
+    inserted after that previous point, before the first later point of larger outreach.
+    A point shared by several conditions is thus written once naming all of them, and
+    where conditions order their points differently the conflicting points are written
+    separately per condition."""
+    chart: list[dict[str, Any]] = []
+    for name, cond in conditions.items():
+        entry = (cond.get("hoists") or {}).get(hoist_id)
+        if entry is None:
+            continue
+        last = -1  # index in chart of this condition's previous point
+        for cp in entry.get(key) or []:
+            outreach, load = float(cp.get("outreach_m", 0.0)), float(cp.get("load_t", 0.0))
+            match = next(
+                (
+                    i
+                    for i in range(last + 1, len(chart))
+                    if (chart[i]["outreach_m"], chart[i]["load_t"]) == (outreach, load)
+                ),
+                None,
+            )
+            if match is None:
+                match = next(
+                    (i for i in range(last + 1, len(chart)) if chart[i]["outreach_m"] > outreach),
+                    len(chart),
+                )
+                chart.insert(match, {"outreach_m": outreach, "load_t": load, "conditions": []})
+            chart[match]["conditions"].append(str(name))
+            last = match
+    return chart
+
+
+def tagged_load_chart(
+    doc: CraneDocument, hoist_id: str, *, split: bool = False
+) -> list[dict[str, Any]]:
+    """``hoist_id``'s load chart as saved: one ``{outreach_m, load_t, conditions}`` per
+    authored point, merged from the conditions' own point lists (``_tagged_chart``).
+
+    The points naming a condition, in chart order, are exactly that condition's points in
+    its own order, so the k-th chart point naming it is its k-th point."""
+    key = "split_contractual_points" if split else "contractual_points"
+    conditions = {
+        name: {"hoists": {hoist_id: spec.hoists[hoist_id].model_dump()}}
+        for name, spec in doc.conditions.items()
+        if hoist_id in spec.hoists
+    }
+    return _tagged_chart(conditions, hoist_id, key)
+
+
 def _authored_rules(data: dict[str, Any]) -> dict[str, Any]:
-    """The rules and conditions blocks; empty for documents without rules."""
+    """The rules block (only when set) and the conditions block."""
     rules = data.get("rules")
-    if not rules:
-        return {}
-    rules_out: dict[str, Any] = {"standard": rules["standard"]}
-    if rules.get("crane_class") is not None:
-        rules_out["crane_class"] = rules["crane_class"]
-    if rules.get("cabin_above_slewing_bearing"):
-        rules_out["cabin_above_slewing_bearing"] = True
+    rules_out: dict[str, Any] = {}
+    if rules:
+        rules_out["standard"] = rules["standard"]
+        if rules.get("crane_class") is not None:
+            rules_out["crane_class"] = rules["crane_class"]
+        if rules.get("cabin_above_slewing_bearing"):
+            rules_out["cabin_above_slewing_bearing"] = True
     conditions_out: dict[str, Any] = {}
     for name, cond in (data.get("conditions") or {}).items():
         item: dict[str, Any] = {}
@@ -123,8 +187,12 @@ def _authored_rules(data: dict[str, Any]) -> dict[str, Any]:
             item["load_drag_coefficient"] = float(cond["load_drag_coefficient"])
         if cond.get("hook_height_override_m") is not None:
             item["hook_height_override_m"] = float(cond["hook_height_override_m"])
+        item["hoists"] = {
+            str(hoist_id): _authored_condition_hoist(entry)
+            for hoist_id, entry in (cond.get("hoists") or {}).items()
+        }
         conditions_out[str(name)] = item
-    return {"rules": rules_out, "conditions": conditions_out}
+    return {**({"rules": rules_out} if rules_out else {}), "conditions": conditions_out}
 
 
 def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
@@ -317,8 +385,6 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
             continue
 
         lower_block_mass = float(hoist.get("lower_block_mass_t", 0.0))
-        hook_offlead = float(hoist.get("offlead_deg", 0.0))
-        hook_sidelead = float(hoist.get("sidelead_deg", hook_offlead))
         load_node_id = str(hoist.get("load_node_id") or "")
         support_node_id = str(hoist.get("support_node_id") or "")
         if not support_node_id and load_node_id:
@@ -332,15 +398,7 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         if falls is None:
             falls = _infer_falls_from_segments(rope["segments"], support_node_id, load_node_id)
 
-        def _chart(points: list[dict[str, Any]]) -> list[dict[str, float]]:
-            return [
-                {
-                    "outreach_m": float(cp.get("outreach_m", 0.0)),
-                    "load_t": float(cp.get("load_t", 0.0)),
-                }
-                for cp in points
-            ]
-
+        conditions = data.get("conditions") or {}
         hoist_out: dict[str, Any] = {}
 
         rope_out = {}
@@ -363,21 +421,17 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
             hoist_out["support_node"] = support_name
         hoist_out["lower_block_mass_t"] = lower_block_mass
         hoist_out["falls"] = int(falls)
-        hoist_out["daf"] = float(hoist.get("hook_daf", 1.0))
-        hoist_out["offlead_deg"] = hook_offlead
-        if hook_sidelead:
-            hoist_out["sidelead_deg"] = hook_sidelead
         if hoist.get("max_hoisting_speed_m_s") is not None:
             hoist_out["max_hoisting_speed_m_s"] = float(hoist["max_hoisting_speed_m_s"])
         hoist_out["lowest_hook_height_m"] = float(hoist.get("lowest_hook_height_m") or 0.0)
-        hoist_out["load_chart"] = _chart(hoist.get("contractual_points", []))
+        hoist_out["load_chart"] = _tagged_chart(conditions, hid, "contractual_points")
         if bool(hoist.get("splitable_block", False)):
             split_falls = hoist.get("split_falls")
             split_mass = hoist.get("split_lower_block_mass_t")
             hoist_out["split"] = {
                 "lower_block_mass_t": float(lower_block_mass if split_mass is None else split_mass),
                 "falls": int(falls if split_falls is None else split_falls),
-                "load_chart": _chart(hoist.get("split_contractual_points", [])),
+                "load_chart": _tagged_chart(conditions, hid, "split_contractual_points"),
             }
         authored_payload_hoists[hid] = hoist_out
 
@@ -385,7 +439,6 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
         raise ValueError("Cannot export authored form: boom hoist data could not be assembled")
 
     env = data.get("environment", {})
-    vm = env.get("vessel_motion", {})
     metadata = data.get("metadata", {})
 
     def _primary_xy(node_id: str) -> dict[str, float]:
@@ -411,17 +464,8 @@ def document_to_authored_form(doc: CraneDocument) -> dict[str, Any]:
             "air_density_kg_m3": float(env.get("air_density_kg_m3", DEFAULT_AIR_DENSITY_KG_M3)),
         },
     }
-    rules_out = _authored_rules(data)
-    if rules_out:
-        # Each condition carries its own wind speed and vessel motion.
-        model_definition.update(rules_out)
-    else:
-        model_definition["environment"]["max_wind_speed_m_s"] = float(
-            env.get("max_wind_speed_m_s", 20.0)
-        )
-        vessel_motion_out = {key: float(vm.get(key, 0.0)) for key in DEFAULT_VESSEL_MOTION}
-        if any(vessel_motion_out.values()):
-            model_definition["vessel_motion"] = vessel_motion_out
+    # Each condition carries its own wind speed, vessel motion and hoist settings.
+    model_definition.update(_authored_rules(data))
     model_definition["structure"] = structure_out
     for body_id in CANONICAL_BODIES:
         section = {

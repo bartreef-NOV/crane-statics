@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Mapping, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional, Protocol
 
 from crane_statics.core.results import ResultRow
 from crane_statics.data import CraneDocument
@@ -245,6 +245,20 @@ class ConnectionFormatter:
 # ============================================================================
 
 
+class HoistRecord(Protocol):
+    """The hoist fields the hoist table reads (``data.models.Hoist``)."""
+
+    id: str
+    support_node_id: Optional[str]
+    falls: Optional[int]
+    lower_block_mass_t: float
+    linear_mass_kg_m: float
+    splitable_block: Optional[bool]
+    split_falls: Optional[int]
+    split_lower_block_mass_t: Optional[float]
+    lowest_hook_height_m: Optional[float]
+
+
 class HoistFormatter:
     """Formats hoist entities and table columns."""
 
@@ -310,26 +324,25 @@ class HoistFormatter:
         return HoistFormatter.display_name(rope_id, doc)
 
     @staticmethod
-    def table_columns(
-        is_boom_hoist: Optional[Callable[[Any], bool]] = None,
-    ) -> list[Column]:
-        """Column definitions for hoist table.
+    def table_columns(is_boom_hoist: Optional[Callable[[Any], bool]] = None) -> list[Column]:
+        """Column definitions for hoist table (``HoistRecord`` rows).
 
         The two hoist kinds share the table but not the authored fields: the boom
         hoist owns no hook of its own. Columns that do not apply to a row read
-        blank there and refuse to be edited.
+        blank there and refuse to be edited. A payload hoist's DAF and lead limits
+        are per condition (the Conditions tab), not columns of this table.
         """
 
-        def is_boom(hoist: Any) -> bool:
+        def is_boom(hoist: HoistRecord) -> bool:
             return bool(is_boom_hoist and is_boom_hoist(hoist))
 
-        def payload_value(getter: Callable[[Any], Any]) -> Callable[[Any], Any]:
+        def payload_value(getter: Callable[[HoistRecord], Any]) -> Callable[[HoistRecord], Any]:
             return lambda hoist: None if is_boom(hoist) else getter(hoist)
 
-        def payload_only(hoist: Any) -> bool:
+        def payload_only(hoist: HoistRecord) -> bool:
             return not is_boom(hoist)
 
-        def split_only(hoist: Any) -> bool:
+        def split_only(hoist: HoistRecord) -> bool:
             return not is_boom(hoist) and bool(hoist.splitable_block)
 
         return [
@@ -385,27 +398,6 @@ class HoistFormatter:
                 decimals=3,
                 field="split_lower_block_mass_t",
                 editable=split_only,
-            ),
-            Column(
-                "DAF",
-                payload_value(lambda h: h.hook_daf),
-                decimals=3,
-                field="hook_daf",
-                editable=payload_only,
-            ),
-            Column(
-                "Offlead (deg)",
-                payload_value(lambda h: h.offlead_deg),
-                decimals=3,
-                field="offlead_deg",
-                editable=payload_only,
-            ),
-            Column(
-                "Sidelead (deg)",
-                payload_value(lambda h: h.sidelead_deg),
-                decimals=3,
-                field="sidelead_deg",
-                editable=payload_only,
             ),
             Column(
                 "Lowest Hook Height (m)",
@@ -727,12 +719,22 @@ class ComponentTableFormatter:
         ]
 
     @staticmethod
-    def contractual_columns() -> list[Column]:
-        """Column definitions for contractual point table."""
+    def chart_point_columns() -> list[Column]:
+        """Column definitions for a hoist's load-chart table: one row per authored point
+        (``core.document_edit.TaggedChartPoint``), with the conditions it applies to."""
         return [
             Column("Outreach (m)", lambda c: c.outreach_m, decimals=3, field="outreach_m"),
             Column("Load (t)", lambda c: c.load_t, decimals=3, field="load_t"),
+            Column("Conditions", lambda c: ChartPointFormatter.conditions_text(c.conditions)),
         ]
+
+
+class ChartPointFormatter:
+    """Display text for the conditions a load-chart point names."""
+
+    @staticmethod
+    def conditions_text(conditions: Iterable[str]) -> str:
+        return ", ".join(str(name) for name in conditions)
 
 
 class ProvenanceFormatter:

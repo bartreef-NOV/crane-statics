@@ -13,9 +13,10 @@ from crane_statics.core import load_document
 from crane_statics.core.demand_extraction import extract_connection_component_response
 from crane_statics.data.models import MassPoint
 from tests.test_vessel_frame_engine import _all_point_masses
+from tests.authored_helpers import example_path
 
 ROOT = Path(__file__).parent.parent
-EXAMPLE_22689 = ROOT / "examples" / "crane_input_22689.yaml"
+EXAMPLE_22689 = example_path("crane_input_22689.yaml")
 G = 9.81
 LEVEL = {
     "wind_speed_m_s": 0.0,
@@ -278,7 +279,7 @@ def test_wind_speed_zero_gives_zero_and_no_error(angle, direction):
 
 # --- Task 4: near-singular statics fail clearly, with a reason -----------------------------
 
-EXAMPLES = sorted((ROOT / "examples").glob("*.yaml"))
+EXAMPLES = [example_path(p) for p in sorted((ROOT / "examples").glob("*.yaml"))]
 
 
 def test_is_ill_conditioned_flags_singular_and_near_singular():

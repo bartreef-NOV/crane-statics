@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import pytest
 
-from crane_statics.calculation.engine import get_calculator
 from crane_statics.core.governing_case import governing_case
 from crane_statics.data.models import CraneDocument, VesselMotion
 from crane_statics.qml_app.session import SessionState
@@ -40,13 +39,15 @@ def _vms(doc: CraneDocument) -> tuple[SessionState, SceneViewModel, ChartViewMod
 
 def _abs_doc() -> CraneDocument:
     """ABS, an onboard gale first and an offboard sea condition second (EA 90000 kN)."""
-    return _rules(rules_doc("ABS", gale(wind=30.0), _sea()), daf=1.0)
+    return _rules(rules_doc("ABS", gale(wind=30.0), _sea()), daf=None)  # v12 hook_daf 1.0: derived
 
 
 def _dnv_doc() -> CraneDocument:
     doc = rules_doc("DNV", gale(wind=30.0), gale("calm", wind=36.0, motion=CALM))
-    hoists = [h.model_copy(update={"hook_daf": 1.0}) for h in doc.hoists]
-    return doc.model_copy(update={"hoists": hoists})
+    for condition in doc.conditions.values():
+        for entry in condition.hoists.values():
+            entry.daf = None  # no manual override: the standard derives the factor
+    return doc
 
 
 def _governing_utilization(scene: SceneViewModel, limit_id: str) -> float:
@@ -149,25 +150,31 @@ def test_the_scene_follows_the_chart_condition_at_its_most_severe_case() -> None
     chart.shutdown()
 
 
-def test_a_legacy_scene_is_untouched() -> None:
+def test_a_rules_less_scene_runs_under_its_default_condition() -> None:
+    # v13: a rules-less document has one condition, ``default``, which the Scene runs
+    # under (was: no condition and the document environment, "legacy scene untouched").
     from tests.test_chart_view_model import EXAMPLE
     from crane_statics.core.io import load_document
 
     doc = load_document(EXAMPLE)
     session, scene, chart = _vms(doc)
     model = session.model
-    assert chart.conditionNames == []
-    assert model.scene_condition().spec is None
-    assert scene._hoist_state.scene_document() is doc
-    assert scene._hoist_state.scene_calculator(doc) is get_calculator(doc)
+    assert chart.conditionNames == ["default"]
+    condition = model.scene_condition()
+    assert condition.spec is doc.conditions["default"] and condition.case is None
+    scene_doc = scene._hoist_state.scene_document()
+    assert scene_doc is not None
+    assert scene_doc.environment.max_wind_speed_m_s == doc.conditions["default"].wind_speed_m_s
+    assert scene._hoist_state.scene_calculator(doc).doc is scene_doc
     kinematics = scene._kinematics.kinematics()
-    assert kinematics is not None and kinematics.doc == doc.model_dump()
+    assert kinematics is not None and kinematics.doc == scene_doc.model_dump()
     before = model.get_active_hoist_state()
     assert before is not None
     wind = before.scene_state.wind_speed_m_s
-    scene.follow_chart_condition("default")  # no-op on a legacy document
+    scene.follow_chart_condition("default")  # already the Scene's condition
     assert before.scene_state.wind_speed_m_s == wind
-    assert not model.set_scene_condition("x", None, seed=True)
+    # Re-selecting the active condition is no change (was: any name refused on a legacy doc).
+    assert not model.set_scene_condition("default", None, seed=True)
     chart.shutdown()
 
 
@@ -224,9 +231,10 @@ def test_a_rules_document_does_not_offer_its_placeholder_environment() -> None:
     assert not set_environment_value(rules, "max_wind_speed_m_s", 99.0)
     assert not set_environment_value(rules, "roll_deg", 9.0)
     assert set_environment_value(rules, "gravity_m_s2", 9.80665)  # not per condition
+    # v13: a rules-less document keeps its wind on its ``default`` condition too.
     legacy = load_document(EXAMPLE)
-    assert not environment_from_conditions(legacy)
-    assert set_environment_value(legacy, "max_wind_speed_m_s", 99.0)
+    assert environment_from_conditions(legacy)
+    assert not set_environment_value(legacy, "max_wind_speed_m_s", 99.0)
 
 
 def test_the_scene_condition_label_names_the_condition_and_case() -> None:
@@ -248,10 +256,97 @@ def test_the_scene_condition_label_names_the_condition_and_case() -> None:
     chart.shutdown()
 
 
-def test_the_scene_condition_label_is_empty_for_a_legacy_document() -> None:
+def test_renaming_the_shown_condition_keeps_the_chart_and_scene_on_it() -> None:
+    from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
+    from tests.authored_helpers import load_example
+
+    doc = load_example("crane_input_GT283_abs.yaml")
+    session, scene, chart = _vms(doc)
+    model_vm = ModelViewModel(session)
+    model_vm.refresh()
+    chart.setCurrentCondition("offboard_supply")
+    chart._cancel_all()
+    assert session.model.scene_condition().condition_name == "offboard_supply"
+
+    model_vm.selectCondition("offboard_supply")
+    model_vm.renameCondition("renamed")
+    chart._cancel_all()
+
+    assert list(doc.conditions) == ["onboard_sea", "renamed"]
+    assert session.model.scene_condition_name == "renamed"
+    assert session.model.scene_condition().condition_name == "renamed"
+    assert chart.currentCondition == "renamed"
+    assert scene.sceneConditionLabel.startswith("Condition: renamed")
+
+    # Renaming another condition leaves them where they are.
+    model_vm.selectCondition("onboard_sea")
+    model_vm.renameCondition("sea")
+    chart._cancel_all()
+    assert session.model.scene_condition_name == "renamed"
+    assert chart.currentCondition == "renamed"
+    chart.shutdown()
+
+
+def test_the_scene_condition_label_names_default_for_a_rules_less_document() -> None:
     from tests.test_chart_view_model import EXAMPLE
     from crane_statics.core.io import load_document
 
     _session, scene, chart = _vms(load_document(EXAMPLE))
-    assert scene.sceneConditionLabel == ""
+    # v13: its one condition is ``default`` (was: no condition, an empty label).
+    assert scene.sceneConditionLabel == "Condition: default"
     chart.shutdown()
+
+
+def test_scene_hoist_falls_back_to_first_usable_when_condition_changes() -> None:
+    """The Scene's hoist is always usable under its condition: switching to a condition
+    that does not list it selects that condition's first usable hoist, whose lead limits
+    there seed the Scene; a hoist the condition does not list cannot be selected."""
+    from crane_statics.core.analysis_services import HoistStateService
+    from crane_statics.core.session_model import SessionModel
+    from tests.rules_docs import GT283, load_v13, with_condition
+
+    gt = load_v13(GT283)
+    default = gt.conditions["default"].hoists
+    ah = default["AH"].model_copy(update={"offlead_deg": 3.0})
+    doc = with_condition(gt, "calm", {"trolley": default["trolley"], "AH": ah})
+    session = SessionModel()
+    selected: list[str] = []
+    session.subscribe("hoist_selected", selected.append)
+    session.set_document(doc)
+    assert session.selected_hoist_id == HOIST
+    assert session.scene_hoist_ids() == ["MH", "AH", "trolley"]
+
+    assert session.set_scene_condition("calm", None, seed=True)
+    # Document order, not the condition's listing order.
+    assert session.scene_hoist_ids() == ["AH", "trolley"]
+    assert session.selected_hoist_id == "AH" and selected == ["AH"]
+    assert session.hoist_states["AH"].scene_state.offlead_deg == 3.0
+    session.select_payload_hoist(HOIST)
+    assert session.selected_hoist_id == "AH"
+    # The Scene's services never raise for a hoist the condition does not list.
+    service = HoistStateService(session)
+    mh = session.editor_hoist_by_id(HOIST)
+    assert service.dynamic_factor(mh).payload_t(100.0, 0.0, 9.81) == pytest.approx(100.0 / 9.81)
+    assert service.hook_lateral(HOIST) is None and service.demand_scales(HOIST) is None
+    assert session.contractual_points_for_mode(HOIST) == []
+
+    assert session.set_scene_condition("default", None, seed=True)
+    assert session.selected_hoist_id == "AH"  # still usable there: kept
+
+
+def test_a_document_without_conditions_opens_without_a_scene_hoist() -> None:
+    """Runtime tolerates a document without conditions: nothing is usable, nothing raises."""
+    from crane_statics.core.analysis_services import HoistStateService
+    from crane_statics.core.session_model import SessionModel
+    from tests.rules_docs import GT283, load_v13
+
+    doc = load_v13(GT283).model_copy(update={"conditions": {}})
+    session = SessionModel()
+    session.set_document(doc)
+    assert session.selected_hoist_id is None and session.scene_hoist_ids() == []
+    assert session.scene_condition_or_none() is None
+    assert not session.set_scene_condition("default", None, seed=True)
+    service = HoistStateService(session)
+    assert service.amplified_rope_hoist_id(HOIST) is None
+    assert not service.hook_force_follows_scene_state()
+    assert service.scene_document() is doc

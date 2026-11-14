@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-from pathlib import Path
 from typing import Any, Callable
 
 import pytest
@@ -14,8 +13,9 @@ from crane_statics.core.io import load_document
 from crane_statics.qml_app.scene.scene_renderer import CraneSceneRenderer
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 LABEL = "Governing case: MH__rope at 30.0 m"
 # The ± vessel-motion limits the test document gets (Model field -> value).
 VESSEL_LIMITS = {
@@ -46,7 +46,7 @@ class MockCanvas(QObject):
 def _document():
     doc = load_document(EXAMPLE)
     for name, value in VESSEL_LIMITS.items():
-        setattr(doc.environment.vessel_motion, name, value)
+        setattr(doc.conditions["default"].vessel_motion, name, value)
     return doc
 
 

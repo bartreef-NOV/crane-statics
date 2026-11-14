@@ -55,6 +55,7 @@ target-version = ["py311"]
 
 [tool.mypy]
 python_version = "3.11"
+mypy_path = "src"
 warn_return_any = true
 warn_unused_configs = true
 warn_unused_ignores = true

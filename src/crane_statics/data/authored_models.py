@@ -12,6 +12,10 @@ acceptance; any "<major>.x.y" document validates against it.
     bump AUTHORED_SCHEMA_VERSION's minor/patch and regenerate the same file.
   - Breaking (removed/renamed/required-ified field, narrowed bound, stricter
     extra): bump AUTHORED_SCHEMA_MAJOR_VERSION and ship a new file.
+v13 was breaking (removed fields): payload-hoist daf/offlead_deg/sidelead_deg,
+environment.max_wind_speed_m_s and top-level vessel_motion moved into the now
+required conditions, and load-chart points gained a required ``conditions``
+list. v12 files are converted with scripts/migrate_authored_v13.py.
 Enforcing that distinction automatically (diffing generated schemas across
 versions) is not built; treat it as a review discipline for now.
 """
@@ -30,8 +34,8 @@ from pydantic import (
 )
 
 AUTHORED_SCHEMA_NAME = "crane-statics"
-AUTHORED_SCHEMA_MAJOR_VERSION = 12
-AUTHORED_SCHEMA_VERSION = "12.0.0"
+AUTHORED_SCHEMA_MAJOR_VERSION = 13
+AUTHORED_SCHEMA_VERSION = "13.0.0"
 """Current minor.patch written on save; informational provenance only — the
 major-only pattern below is what's actually enforced on load."""
 
@@ -50,12 +54,30 @@ def authored_schema_major(version: Any) -> Optional[int]:
     return int(head) if head.isdigit() else None
 
 
+_VALUE_ERROR_PREFIX = "Value error, "
+
+
+def authored_validation_problems(error: ValidationError) -> list[str]:
+    """Every problem of a pydantic ValidationError, one field-located line each, in the
+    order pydantic reports them. A validator listing several problems (one per line)
+    gives one line per problem, each with the validator's location."""
+    problems: list[str] = []
+    for item in error.errors():
+        location = "/".join(str(p) for p in item["loc"])
+        location_msg = f" at {location}" if location else ""
+        message = str(item["msg"])
+        prefix = ""
+        if message.startswith(_VALUE_ERROR_PREFIX):
+            prefix, message = _VALUE_ERROR_PREFIX, message[len(_VALUE_ERROR_PREFIX) :]
+        for line in message.splitlines() or [""]:
+            problems.append(f"Schema validation failed{location_msg}: {prefix}{line}")
+    return list(dict.fromkeys(problems))
+
+
 def format_authored_validation_error(error: ValidationError) -> str:
-    """Render a pydantic ValidationError as a single-line, field-located message."""
-    first = error.errors()[0]
-    location = "/".join(str(p) for p in first["loc"])
-    location_msg = f" at {location}" if location else ""
-    return f"Schema validation failed{location_msg}: {first['msg']}"
+    """Render a pydantic ValidationError as field-located messages, one problem per line
+    (``authored_validation_problems``)."""
+    return "\n".join(authored_validation_problems(error))
 
 
 class AuthoredSchemaBlock(BaseModel):
@@ -92,8 +114,8 @@ class AuthoredVesselMotion(BaseModel):
 
 
 class AuthoredEnvironment(BaseModel):
-    """Environmental constants. Gravity and air density have defaults; the maximum
-    wind speed (constant over height) is required unless the model has 'rules'."""
+    """Environmental constants: gravity and air density, both with defaults. Wind speed
+    is set per condition."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -101,12 +123,6 @@ class AuthoredEnvironment(BaseModel):
         default=DEFAULT_GRAVITY_M_S2,
         gt=0,
         description="Gravity magnitude in m/s²; the runtime uses it as negative Z gravity.",
-    )
-    max_wind_speed_m_s: Optional[float] = Field(
-        default=None,
-        gt=0,
-        description="Positive maximum wind speed in m/s. Required without 'rules'; with "
-        "'rules' each condition carries its own wind speed and this must be omitted.",
     )
     air_density_kg_m3: float = Field(default=DEFAULT_AIR_DENSITY_KG_M3, gt=0)
 
@@ -121,12 +137,35 @@ class AuthoredRules(BaseModel):
     cabin_above_slewing_bearing: bool = False
 
 
+class AuthoredConditionHoist(BaseModel):
+    """A payload hoist's settings under one condition. Listing the hoist makes it usable
+    in that condition."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"examples": [{"offlead_deg": 1.0}, {"offlead_deg": 2.0, "daf": 1.1}]},
+    )
+
+    offlead_deg: float = Field(ge=0, description="Off-lead angle in degrees.")
+    sidelead_deg: float = Field(default=0.0, ge=0, description="Side-lead angle in degrees.")
+    daf: Optional[float] = Field(
+        default=None,
+        ge=1,
+        description="Hook dynamic amplification factor. With 'rules' omit it to derive the "
+        "factor from the standard (a value is a manual override); without 'rules' an omitted "
+        "factor is 1.0.",
+    )
+
+
 class AuthoredCondition(BaseModel):
-    """One named in-service condition: lift type, wind, sea state and vessel motion."""
+    """One named in-service condition: lift type, wind, sea state, vessel motion and the
+    payload hoists usable under it with their settings."""
 
     model_config = ConfigDict(extra="forbid")
 
-    lift: Literal["onboard", "offboard"] = "onboard"
+    lift: Literal["onboard", "offboard"] = Field(
+        default="onboard", description="Lift type; 'offboard' requires 'rules'."
+    )
     wind_speed_m_s: float = Field(ge=0, description="Wind speed in m/s.")
     vessel_motion: AuthoredVesselMotion = Field(default_factory=AuthoredVesselMotion)
     significant_wave_height_m: Optional[float] = Field(default=None, ge=0)
@@ -135,6 +174,11 @@ class AuthoredCondition(BaseModel):
     load_wind_area_m2: float = Field(default=0.0, ge=0)
     load_drag_coefficient: float = Field(default=1.0, gt=0)
     hook_height_override_m: Optional[float] = None
+    hoists: dict[IdName, AuthoredConditionHoist] = Field(
+        min_length=1,
+        description="Payload hoists usable in this condition, keyed by hoist ID, with their "
+        "lead angles and optional DAF. The boom hoist cannot be listed.",
+    )
 
 
 class AuthoredGlobalPosition2D(BaseModel):
@@ -385,11 +429,27 @@ class AuthoredLoadChartPoint(BaseModel):
 
     model_config = ConfigDict(
         extra="forbid",
-        json_schema_extra={"examples": [{"outreach_m": 50.0, "load_t": 1433.0}]},
+        json_schema_extra={
+            "examples": [{"outreach_m": 50.0, "load_t": 1433.0, "conditions": ["onboard_sea"]}]
+        },
     )
 
     outreach_m: float = Field(ge=0, description="Horizontal outreach in metres.")
     load_t: float = Field(ge=0, description="Permitted payload in tonnes.")
+    conditions: list[IdName] = Field(
+        min_length=1,
+        json_schema_extra={"uniqueItems": True},
+        description="Names of the conditions this point applies to; each must be defined "
+        "under 'conditions' and list this hoist.",
+    )
+
+    @field_validator("conditions")
+    @classmethod
+    def _check_unique_conditions(cls, value: list[str]) -> list[str]:
+        repeated = sorted({name for name in value if value.count(name) > 1})
+        if repeated:
+            raise ValueError(f"conditions must be unique; repeated: {', '.join(repeated)}")
+        return value
 
 
 class AuthoredRopeStiffness(BaseModel):
@@ -464,7 +524,8 @@ class AuthoredSplitMode(BaseModel):
 
 class AuthoredPayloadHoist(BaseModel):
     """Self-contained payload hoist: its rope, its reeving path with the sheaves it
-    owns, its hook mass, falls, lift factors and its load chart. The hook hangs from the
+    owns, its hook mass, falls and its load chart. Lead angles and DAF are set per
+    condition under ``conditions.<name>.hoists``. The hook hangs from the
     last reeving node unless support_node names another; the application creates the
     managed hook node automatically."""
 
@@ -486,9 +547,9 @@ class AuthoredPayloadHoist(BaseModel):
                     ],
                     "lower_block_mass_t": 50.0,
                     "falls": 20,
-                    "daf": 1.1,
-                    "offlead_deg": 1.0,
-                    "load_chart": [{"outreach_m": 16.0, "load_t": 1000.0}],
+                    "load_chart": [
+                        {"outreach_m": 16.0, "load_t": 1000.0, "conditions": ["onboard_sea"]}
+                    ],
                 }
             ]
         },
@@ -502,9 +563,6 @@ class AuthoredPayloadHoist(BaseModel):
     )
     lower_block_mass_t: float = Field(ge=0, description="Hook block mass.")
     falls: int = Field(ge=1, description="Rope falls between the support sheave and the hook.")
-    daf: float = Field(ge=1, description="Hook dynamic amplification factor.")
-    offlead_deg: float = Field(ge=0)
-    sidelead_deg: float = Field(default=0.0, ge=0)
     max_hoisting_speed_m_s: Optional[float] = Field(
         default=None, gt=0, description="Maximum hoisting speed of the payload hoist in m/s."
     )
@@ -577,18 +635,15 @@ class AuthoredModelDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     environment: AuthoredEnvironment
-    vessel_motion: AuthoredVesselMotion = Field(
-        default_factory=AuthoredVesselMotion,
-        description="Vessel motion limits. Must be omitted when 'rules' is present; each "
-        "condition then carries its own vessel_motion.",
-    )
     rules: Optional[AuthoredRules] = Field(
         default=None,
-        description="Classification rule set. Present if and only if 'conditions' is not empty.",
+        description="Classification rule set the conditions are assessed against. Omit to "
+        "assess each condition once with its own wind, vessel motion and DAF.",
     )
     conditions: dict[IdName, AuthoredCondition] = Field(
-        default_factory=dict,
-        description="Named in-service conditions assessed under 'rules'.",
+        min_length=1,
+        description="Named in-service conditions (at least one). Each lists the payload hoists "
+        "usable under it; every payload hoist must be usable in at least one condition.",
     )
     structure: AuthoredStructure
     boom: AuthoredBoomBody = Field(
@@ -626,12 +681,14 @@ class AuthoredModelDefinition(BaseModel):
     @classmethod
     def _parse_hoists_by_kind(cls, value: Any) -> Any:
         """Validate each entry against its own model so errors name the real problem: the
-        ``BH`` entry is the boom hoist, every other entry a payload hoist."""
+        ``BH`` entry is the boom hoist, every other entry a payload hoist. Every entry's
+        problems are reported, one per line."""
         if not isinstance(value, dict):
             return value
         if BOOM_HOIST_ID not in value:
             raise ValueError(f"hoists must include the boom hoist '{BOOM_HOIST_ID}'")
         parsed: dict[Any, Any] = {}
+        problems: list[str] = []
         for hoist_id, hoist in value.items():
             if isinstance(hoist, dict):
                 try:
@@ -640,43 +697,159 @@ class AuthoredModelDefinition(BaseModel):
                     else:
                         hoist = AuthoredPayloadHoist.model_validate(hoist)
                 except ValidationError as error:
-                    raise ValueError(f"{hoist_id}: {format_authored_validation_error(error)}")
+                    problems.extend(
+                        f"{hoist_id}: {line}" for line in authored_validation_problems(error)
+                    )
             parsed[hoist_id] = hoist
+        if problems:
+            raise ValueError("\n".join(problems))
         return parsed
 
     @model_validator(mode="after")
-    def _check_rules_and_conditions(self) -> "AuthoredModelDefinition":
-        if self.rules is not None and not self.conditions:
-            raise ValueError("rules requires at least one entry in conditions")
-        if self.rules is None and self.conditions:
-            raise ValueError("conditions requires rules")
-        if self.rules is None:
-            if self.environment.max_wind_speed_m_s is None:
-                raise ValueError("environment.max_wind_speed_m_s is required without rules")
-            return self
-        if self.vessel_motion != AuthoredVesselMotion():
-            raise ValueError(
-                "vessel_motion must be omitted with rules; set vessel_motion per condition"
-            )
-        if self.environment.max_wind_speed_m_s is not None:
-            raise ValueError(
-                "environment.max_wind_speed_m_s must be omitted with rules; "
-                "set wind_speed_m_s per condition"
-            )
+    def _check_condition_hoist_charts(self) -> "AuthoredModelDefinition":
+        """Cross-check the conditions, the hoists they list and the chart points' tags
+        (every problem, one per line: ``_condition_hoist_chart_problems``)."""
+        payload: dict[str, _Charts] = {}
+        for hoist_id, hoist in self.hoists.items():
+            if isinstance(hoist, AuthoredPayloadHoist):
+                charts = [("load_chart", [p.conditions for p in hoist.load_chart])]
+                if hoist.split is not None:
+                    charts.append(
+                        ("split.load_chart", [p.conditions for p in hoist.split.load_chart])
+                    )
+                payload[hoist_id] = charts
+        conditions = {
+            name: (str(condition.lift), list(condition.hoists))
+            for name, condition in self.conditions.items()
+        }
+        problems = _condition_hoist_chart_problems(self.rules is not None, conditions, payload)
+        if problems:
+            raise ValueError("\n".join(problems))
         return self
 
     @model_validator(mode="after")
     def _check_hoist_prefixes_unique(self) -> "AuthoredModelDefinition":
-        seen: dict[str, str] = {}
-        for hoist_id in self.hoists:
-            prefix = hoist_node_prefix(hoist_id)
-            if prefix in seen:
-                raise ValueError(
-                    f"hoist {hoist_id!r} clashes with {seen[prefix]!r}: hoist IDs must "
-                    "differ ignoring case"
-                )
-            seen[prefix] = hoist_id
+        problems = _hoist_prefix_problems(list(self.hoists))
+        if problems:
+            raise ValueError("\n".join(problems))
         return self
+
+
+_Charts = list[tuple[str, list[list[str]]]]
+"""A payload hoist's charts as ``(chart name, the conditions each point names)``."""
+
+
+def _condition_hoist_chart_problems(
+    rules: bool,
+    conditions: dict[str, tuple[str, list[str]]],
+    payload: dict[str, _Charts],
+) -> list[str]:
+    """Every problem of the conditions (``name: (lift, hoist ids)``), the payload hoists
+    they list and the conditions the chart points name, in document order."""
+    problems: list[str] = []
+    for name, (lift, hoist_ids) in conditions.items():
+        if not rules and lift != "onboard":
+            problems.append(
+                f"conditions.{name}.lift: {lift!r} requires rules; without "
+                "rules every condition must be 'onboard'"
+            )
+        for hoist_id in hoist_ids:
+            if hoist_id == BOOM_HOIST_ID:
+                problems.append(
+                    f"conditions.{name}.hoists: the boom hoist '{BOOM_HOIST_ID}' cannot be "
+                    "listed in a condition"
+                )
+            elif hoist_id not in payload:
+                problems.append(
+                    f"conditions.{name}.hoists: hoist {hoist_id!r} is not a payload hoist "
+                    "defined under hoists"
+                )
+    for hoist_id, charts in payload.items():
+        usable_in = [n for n, (_lift, ids) in conditions.items() if hoist_id in ids]
+        if not usable_in:
+            problems.append(
+                f"hoist {hoist_id!r} is not listed in any condition; list it under "
+                f"conditions.<name>.hoists.{hoist_id}"
+            )
+            continue
+        for chart_name, chart in charts:
+            for index, tags in enumerate(chart):
+                for tag in tags:
+                    if tag not in conditions:
+                        problems.append(
+                            f"hoists.{hoist_id}.{chart_name}.{index}.conditions: "
+                            f"{tag!r} is not a defined condition"
+                        )
+                    elif tag not in usable_in:
+                        problems.append(
+                            f"hoists.{hoist_id}.{chart_name}.{index} names condition "
+                            f"{tag!r} which does not list hoist {hoist_id!r}"
+                        )
+        for name in usable_in:
+            for chart_name, chart in charts:
+                if not any(name in tags for tags in chart):
+                    problems.append(
+                        f"condition {name!r} lists hoist {hoist_id!r} but no "
+                        f"hoists.{hoist_id}.{chart_name} point names {name!r}"
+                    )
+    return problems
+
+
+def _hoist_prefix_problems(hoist_ids: list[str]) -> list[str]:
+    """Every hoist ID that clashes with an earlier one ignoring case."""
+    problems: list[str] = []
+    seen: dict[str, str] = {}
+    for hoist_id in hoist_ids:
+        prefix = hoist_node_prefix(hoist_id)
+        if prefix in seen:
+            problems.append(
+                f"hoist {hoist_id!r} clashes with {seen[prefix]!r}: hoist IDs must "
+                "differ ignoring case"
+            )
+        else:
+            seen[prefix] = hoist_id
+    return problems
+
+
+def _raw_tags(point: Any) -> list[str]:
+    tags = point.get("conditions") if isinstance(point, dict) else None
+    return [t for t in tags if isinstance(t, str)] if isinstance(tags, list) else []
+
+
+def _raw_chart(container: Any) -> list[list[str]]:
+    chart = container.get("load_chart") if isinstance(container, dict) else None
+    return [_raw_tags(p) for p in chart] if isinstance(chart, list) else []
+
+
+def _raw_model_definition_problems(model_definition: dict) -> list[str]:
+    """The ``AuthoredModelDefinition`` cross-checks run on the unvalidated mapping, as
+    far as it can be read: pydantic skips them when a field of it is invalid."""
+    raw_conditions = model_definition.get("conditions")
+    conditions: dict[str, tuple[str, list[str]]] = {}
+    if isinstance(raw_conditions, dict):
+        for name, condition in raw_conditions.items():
+            entry = condition if isinstance(condition, dict) else {}
+            hoists = entry.get("hoists")
+            conditions[str(name)] = (
+                entry.get("lift", "onboard"),
+                [str(h) for h in hoists] if isinstance(hoists, dict) else [],
+            )
+    raw_hoists = model_definition.get("hoists")
+    hoists = {str(k): v for k, v in raw_hoists.items()} if isinstance(raw_hoists, dict) else {}
+    hoist_ids = list(hoists)
+    payload: dict[str, _Charts] = {}
+    for hoist_id, hoist in hoists.items():
+        if hoist_id == BOOM_HOIST_ID:
+            continue
+        charts = [("load_chart", _raw_chart(hoist))]
+        split = hoist.get("split") if isinstance(hoist, dict) else None
+        if split is not None:
+            charts.append(("split.load_chart", _raw_chart(split)))
+        payload[hoist_id] = charts
+    rules = model_definition.get("rules") is not None
+    return _condition_hoist_chart_problems(rules, conditions, payload) + _hoist_prefix_problems(
+        hoist_ids
+    )
 
 
 EXAMPLE_DOCUMENT: dict = {
@@ -686,7 +859,9 @@ EXAMPLE_DOCUMENT: dict = {
         "environment": {
             "gravity_m_s2": DEFAULT_GRAVITY_M_S2,
             "air_density_kg_m3": DEFAULT_AIR_DENSITY_KG_M3,
-            "max_wind_speed_m_s": 20.0,
+        },
+        "conditions": {
+            "default": {"wind_speed_m_s": 20.0, "hoists": {"MH": {"offlead_deg": 0.0}}},
         },
         "structure": {
             "boom_width_m": 1.0,
@@ -707,9 +882,7 @@ EXAMPLE_DOCUMENT: dict = {
                 ],
                 "lower_block_mass_t": 0.0,
                 "falls": 1,
-                "daf": 1.0,
-                "offlead_deg": 0.0,
-                "load_chart": [{"outreach_m": 0.0, "load_t": 0.0}],
+                "load_chart": [{"outreach_m": 0.0, "load_t": 0.0, "conditions": ["default"]}],
             },
         },
     },
@@ -726,3 +899,23 @@ class AuthoredDocument(BaseModel):
     schema_: AuthoredSchemaBlock = Field(alias="schema")
     metadata: AuthoredMetadata
     model_definition: AuthoredModelDefinition
+
+
+def authored_document_problems(data: Any) -> list[str]:
+    """Every reason ``data`` is not a valid authored document, one line each (empty when
+    it is). Pydantic's own problems come first, in its order; when a field is invalid
+    pydantic skips the model-definition cross-checks, so their problems are added from
+    the unvalidated mapping, worded as pydantic words them."""
+    try:
+        AuthoredDocument.model_validate(data)
+    except ValidationError as error:
+        problems = authored_validation_problems(error)
+    else:
+        return []
+    model_definition = data.get("model_definition") if isinstance(data, dict) else None
+    if isinstance(model_definition, dict):
+        problems.extend(
+            f"Schema validation failed at model_definition: {_VALUE_ERROR_PREFIX}{line}"
+            for line in _raw_model_definition_problems(model_definition)
+        )
+    return list(dict.fromkeys(problems))

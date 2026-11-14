@@ -1,7 +1,5 @@
 """Undo/redo across the real view models: Scene, Model and shell."""
 
-from pathlib import Path
-
 import pytest
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -11,8 +9,9 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.app_vm import AppViewModel
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 class _Canvas(QObject):
@@ -78,13 +77,13 @@ def test_slider_drag_is_one_undo_step(vms):
 def test_model_edit_undo_redo(vms):
     app, model, scene = vms
     doc = model._model.document
-    before = doc.environment.max_wind_speed_m_s
-    model.setEnvironmentValue("max_wind_speed_m_s", before + 3.0)
+    before = doc.environment.air_density_kg_m3
+    model.setEnvironmentValue("air_density_kg_m3", before + 0.3)
 
     app.undo()
-    assert model._model.document.environment.max_wind_speed_m_s == before
+    assert model._model.document.environment.air_density_kg_m3 == before
     app.redo()
-    assert model._model.document.environment.max_wind_speed_m_s == before + 3.0
+    assert model._model.document.environment.air_density_kg_m3 == before + 0.3
 
 
 def test_undo_signals_history_changes(vms):
@@ -92,7 +91,7 @@ def test_undo_signals_history_changes(vms):
     seen = []
     app.historyChanged.connect(lambda: seen.append(app.canUndo))
     model.setEnvironmentValue(
-        "max_wind_speed_m_s", model._model.document.environment.max_wind_speed_m_s + 1.0
+        "air_density_kg_m3", model._model.document.environment.air_density_kg_m3 + 0.1
     )
     app.undo()
     assert seen[-2:] == [True, False]
@@ -102,11 +101,11 @@ def test_save_marks_clean_state(vms, tmp_path):
     app, model, _scene = vms
     from PyQt6.QtCore import QUrl
 
-    value = model._model.document.environment.max_wind_speed_m_s
-    model.setEnvironmentValue("max_wind_speed_m_s", value + 1.0)
+    value = model._model.document.environment.air_density_kg_m3
+    model.setEnvironmentValue("air_density_kg_m3", value + 0.1)
     assert app.saveAs(QUrl.fromLocalFile(str(tmp_path / "x.yaml")))
     assert not app.dirty
-    model.setEnvironmentValue("max_wind_speed_m_s", value + 2.0)
+    model.setEnvironmentValue("air_density_kg_m3", value + 0.2)
     assert app.dirty
     app.undo()
     assert not app.dirty
@@ -117,7 +116,7 @@ def test_save_marks_clean_state(vms, tmp_path):
 def test_opening_a_document_clears_history(vms):
     app, model, _scene = vms
     model.setEnvironmentValue(
-        "max_wind_speed_m_s", model._model.document.environment.max_wind_speed_m_s + 1.0
+        "air_density_kg_m3", model._model.document.environment.air_density_kg_m3 + 0.1
     )
     app.openPath(str(EXAMPLE))
     assert not app.canUndo and not app.canRedo

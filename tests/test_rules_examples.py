@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from crane_statics.core import load_document
 from crane_statics.core.load_condition import condition_names
 from crane_statics.core.sweep import run_mode_sweep
+from tests.authored_helpers import load_example
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 
@@ -18,23 +18,28 @@ CASES = [
     ("crane_input_22689_abs.yaml", "ABS", "offshore"),
     ("crane_input_13778_retracted_dnv.yaml", "DNV", None),
 ]
-NEW = {"crane_input_22689_abs.yaml", "crane_input_13778_retracted_dnv.yaml"}
+# The condition names of the examples added with the rules (22689_abs: the user's own
+# conditions, two offboard sea states; was onboard_sea and offboard_supply).
+NEW = {
+    "crane_input_22689_abs.yaml": ("onboard_sea", "offboard_hs05", "offboard_hs10"),
+    "crane_input_13778_retracted_dnv.yaml": ("onboard_sea", "offboard_supply"),
+}
 PAYLOAD_HOIST = "MH"
 
 
 @pytest.mark.parametrize("name, standard, crane_class", CASES, ids=[c[0] for c in CASES])
 def test_example_loads_with_rules(name: str, standard: str, crane_class: object) -> None:
-    doc = load_document(EXAMPLES / name)
+    doc = load_example(name)
     assert doc.rules is not None
     assert doc.rules.standard == standard
     assert doc.rules.crane_class == crane_class
     if name in NEW:
-        assert condition_names(doc) == ("onboard_sea", "offboard_supply")
+        assert condition_names(doc) == NEW[name]
 
 
 @pytest.mark.parametrize("name, standard, crane_class", CASES, ids=[c[0] for c in CASES])
 def test_example_sweeps_every_condition(name: str, standard: str, crane_class: object) -> None:
-    doc = load_document(EXAMPLES / name)
+    doc = load_example(name)
     hoist = next(h for h in doc.hoists if h.id == PAYLOAD_HOIST)
     for condition in condition_names(doc):
         payload = run_mode_sweep(

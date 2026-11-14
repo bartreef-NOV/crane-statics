@@ -11,6 +11,7 @@ from crane_statics.qml_app.qt_compat import pyqtProperty
 from crane_statics.core.document_edit import (
     DocumentEditError,
     DocumentEditor,
+    TaggedChartPoint,
     build_contractual_point,
     build_mass_point,
     build_node,
@@ -23,9 +24,13 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.data import payload_hoist_ids
 
 from ..models.document_forms import (
+    chart_point_conditions,
+    chart_point_fields,
+    chart_point_rows,
     clear_support_width,
     condition_fields,
-    contractual_fields,
+    entered_daf_value,
+    condition_hoist_rows,
     editable_conditions,
     environment_from_conditions,
     environment_settings,
@@ -48,7 +53,7 @@ from ..models.document_forms import (
 )
 from ..models.list_models import DictListModel
 from ..models.document_models import (
-    contractual_columns,
+    chart_point_columns,
     hoist_columns,
     mass_point_columns,
     node_columns,
@@ -88,6 +93,9 @@ class ModelViewModel(QObject):
         self._selected_body_id: str = COMPONENT_ORDER[0]
         self._contractual_mode: str = "normal"
         self._selected_condition: Optional[str] = None
+        # The selected hoist's load chart in the current mode, as saved: each point once
+        # with the conditions it names (``DocumentEditor.tagged_chart``).
+        self._chart_points: list[TaggedChartPoint] = []
 
         self._nodes_model = RecordTableModel(
             node_columns(self._selected_body_id), self, commit=self._commit_node_cell
@@ -105,7 +113,7 @@ class ModelViewModel(QObject):
             rope_segment_columns(), self, commit=self._commit_rope_segment_cell
         )
         self._contractual_model = RecordTableModel(
-            contractual_columns(), self, commit=self._commit_contractual_cell
+            chart_point_columns(), self, commit=self._commit_chart_point_cell
         )
         self._primary_structure_model = DictListModel(PRIMARY_ROLES, self)
 
@@ -239,7 +247,6 @@ class ModelViewModel(QObject):
 
     @pyqtSlot()
     def refresh(self) -> None:
-        doc = self._model.document
         available = self.bodyIds
         if available and self._selected_body_id not in available:
             self.selectBody(available[0])
@@ -249,6 +256,7 @@ class ModelViewModel(QObject):
         elif not hoist_ids:
             self._model.selected_editor_hoist_id = None
 
+        doc = self._model.document
         self._hoists_model.set_records([] if doc is None else doc.hoists)
         self._refresh_component_tables()
         self._refresh_hoist_tables()
@@ -287,12 +295,16 @@ class ModelViewModel(QObject):
             else [seg for _idx, seg in editor.visible_rope_segments(hoist)]
         )
         self._rope_segments_model.set_records(segments)
-        if hoist is None:
-            self._contractual_model.set_records([])
-        elif self._contractual_mode == "split" and self.hoistSplitable:
-            self._contractual_model.set_records(hoist.split_contractual_points)
-        else:
-            self._contractual_model.set_records(hoist.contractual_points)
+        # The boom hoist has no hook, so no load chart.
+        self._chart_points = (
+            []
+            if editor is None or hoist is None or self._is_boom_hoist(hoist)
+            else editor.tagged_chart(hoist.id, self._split_chart())
+        )
+        self._contractual_model.set_records(self._chart_points)
+
+    def _split_chart(self) -> bool:
+        return self._contractual_mode == "split" and self.hoistSplitable
 
     # ------------------------------------------------------------------
     # Model health
@@ -320,7 +332,8 @@ class ModelViewModel(QObject):
 
     @pyqtProperty(bool, notify=environmentChanged)
     def environmentFromConditions(self) -> bool:
-        """True on a rules document: wind and vessel motion are set per load condition."""
+        """True with a document: every document sets wind and vessel motion per load
+        condition (on the Conditions tab)."""
         return environment_from_conditions(self._model.document)
 
     @pyqtSlot(str, float)
@@ -342,8 +355,15 @@ class ModelViewModel(QObject):
         self.modelEdited.emit()
 
     # ------------------------------------------------------------------
-    # Load conditions (rules documents)
+    # Load conditions
     # ------------------------------------------------------------------
+
+    @pyqtProperty(bool, notify=conditionsChanged)
+    def hasRules(self) -> bool:
+        """Whether the document names a standard: only then do conditions carry the lift
+        type, sea state and load wind inputs, and an unset DAF is derived."""
+        doc = self._model.document
+        return doc is not None and doc.rules is not None
 
     @pyqtProperty(list, notify=conditionsChanged)
     def conditionNames(self) -> list:
@@ -383,7 +403,7 @@ class ModelViewModel(QObject):
         if spec is not None and new_name == spec.name:
             return
         self._edit_selected_condition(
-            lambda spec: with_condition_name(spec, new_name), select=new_name
+            lambda spec: with_condition_name(spec, new_name), select=new_name, renamed=True
         )
 
     @pyqtSlot()
@@ -418,18 +438,105 @@ class ModelViewModel(QObject):
             return
         self._apply_edit(lambda editor: editor.delete_condition(name))
 
+    # -- the selected condition's hoists -------------------------------
+
+    @pyqtProperty(list, notify=conditionsChanged)
+    def conditionHoists(self) -> list:
+        """One row per payload hoist for the selected condition (``condition_hoist_rows``)."""
+        return condition_hoist_rows(self._model.document, self._selected_spec())
+
+    @pyqtSlot(str, float, float, "QVariant", result=bool)
+    def setConditionHoist(
+        self, hoist_id: str, offlead_deg: float, sidelead_deg: float, daf: Any
+    ) -> bool:
+        """Make ``hoist_id`` usable in the selected condition with these lead limits and
+        DAF (None/empty: no override, derived under rules); False when refused or when
+        nothing would change (then no edit and no undo step)."""
+        name = self._selected_condition
+        editor = self._editor()
+        if name is None or editor is None:
+            self.editFailed.emit("Select a condition first")
+            return False
+        off, side, entered = float(offlead_deg), float(sidelead_deg), entered_daf_value(daf)
+        if editor.entered_condition_hoist_is_current(name, hoist_id, off, side, entered):
+            return False
+        return self._apply_edit(
+            lambda editor: editor.enter_condition_hoist(name, hoist_id, off, side, entered)
+        )
+
+    @pyqtSlot(str, bool, result=bool)
+    def setConditionHoistUsable(self, hoist_id: str, usable: bool) -> bool:
+        """The table's "usable" checkbox (``DocumentEditor.set_condition_hoist_usable``);
+        True when the condition changed."""
+        name = self._selected_condition
+        if name is None:
+            self.editFailed.emit("Select a condition first")
+            return False
+        spec = self._selected_spec()
+        if spec is not None and (hoist_id in spec.hoists) == bool(usable):
+            return False  # already so: no edit, no undo step
+        return self._apply_edit(
+            lambda editor: editor.set_condition_hoist_usable(name, hoist_id, bool(usable))
+        )
+
+    @pyqtSlot(str)
+    def removeConditionHoist(self, hoist_id: str) -> None:
+        name = self._selected_condition
+        if name is None:
+            self.editFailed.emit("Select a condition first")
+            return
+        self._apply_edit(lambda editor: editor.remove_condition_hoist(name, hoist_id))
+
+    # -- the selected hoist's load chart, with each point's conditions --
+
+    @pyqtProperty(list, notify=selectedHoistChanged)
+    def chartPoints(self) -> list:
+        """The selected hoist's chart in the current mode as saved: each point once with
+        the conditions it names (``chart_point_rows``); [] for the boom hoist. The rows
+        of ``contractualModel``."""
+        return chart_point_rows(self._chart_points)
+
+    @pyqtProperty(list, notify=selectedHoistChanged)
+    def chartConditionNames(self) -> list:
+        """The conditions the selected hoist is usable in (document order): the ones a
+        chart point of it can name, and those a new point names unless told otherwise."""
+        editor = self._editor()
+        hoist = self._hoist()
+        if editor is None or hoist is None or self._is_boom_hoist(hoist):
+            return []
+        return editor.usable_conditions(hoist.id)
+
+    @pyqtSlot(int, list)
+    def setPointConditions(self, index: int, conditions: list) -> None:
+        """Make chart point ``index`` (of ``chartPoints``) name exactly ``conditions``."""
+        hoist_id = self._model.selected_editor_hoist_id
+        if hoist_id is None:
+            self.editFailed.emit("Select a hoist first")
+            return
+        split = self._split_chart()
+        names = [str(name) for name in conditions]
+        self._apply_edit(
+            lambda editor: editor.set_point_conditions(hoist_id, split, int(index), names)
+        )
+
     def _selected_spec(self):
         return editable_conditions(self._model.document).get(self._selected_condition or "")
 
-    def _edit_selected_condition(self, edit, select: Optional[str] = None) -> None:
-        """Replace the selected condition by ``edit(spec)``; on success select ``select``."""
+    def _edit_selected_condition(
+        self, edit, select: Optional[str] = None, renamed: bool = False
+    ) -> None:
+        """Replace the selected condition by ``edit(spec)``; on success select ``select``
+        (``renamed``: the edit renames it, which the session follows)."""
         spec = self._selected_spec()
         if spec is None:
             self.editFailed.emit("Select a condition first")
             return
 
         def mutate(editor: DocumentEditor) -> None:
-            editor.update_condition(spec.name, edit(spec))
+            edited = edit(spec)
+            editor.update_condition(spec.name, edited)
+            if renamed:
+                self._model.condition_renamed(spec.name, edited.name)
             if select is not None:
                 self._selected_condition = select
 
@@ -538,12 +645,12 @@ class ModelViewModel(QObject):
             lambda fields: self.updateRopeSegment(row, fields),
         )
 
-    def _commit_contractual_cell(self, row: int, field: str, value: Any) -> bool:
+    def _commit_chart_point_cell(self, row: int, field: str, value: Any) -> bool:
         return self._commit_cell(
-            self.contractualFields(row),
+            self.chartPointFields(row),
             field,
             value,
-            lambda fields: self.updateContractualPoint(row, fields),
+            lambda fields: self.updateChartPoint(row, fields),
         )
 
     # -- nodes ---------------------------------------------------------
@@ -663,6 +770,7 @@ class ModelViewModel(QObject):
 
     @pyqtSlot("QVariantMap")
     def addHoist(self, fields: dict) -> None:
+        # Usable in every condition with no lead limits: set them in the Conditions tab.
         self._apply_edit(
             lambda editor: editor.add_hoist(build_payload_hoist(**hoist_kwargs(fields)))
         )
@@ -737,42 +845,63 @@ class ModelViewModel(QObject):
         hoist_id = self._model.selected_editor_hoist_id
         self._apply_edit(lambda editor: editor.delete_rope_segment(hoist_id, row))
 
-    # -- contractual points --------------------------------------------
+    # -- load-chart points (each naming its conditions) ----------------
 
     @pyqtSlot(int, result="QVariantMap")
-    def contractualFields(self, row: int) -> dict[str, Any]:
-        point = self._contractual_model.record_at(row)
-        if point is None:
+    def chartPointFields(self, row: int) -> dict[str, Any]:
+        """Chart point ``row`` of ``contractualModel``: outreach, load and conditions."""
+        if not 0 <= row < len(self._chart_points):
             return {}
-        return contractual_fields(point)
+        return chart_point_fields(self._chart_points[row])
+
+    def _chart_edit(self, mutate) -> bool:
+        hoist_id = self._model.selected_editor_hoist_id
+        if hoist_id is None:
+            self.editFailed.emit("Select a hoist first")
+            return False
+        split = self._split_chart()
+        return self._apply_edit(lambda editor: mutate(editor, hoist_id, split))
 
     @pyqtSlot("QVariantMap")
-    def addContractualPoint(self, fields: dict) -> None:
-        hoist_id = self._model.selected_editor_hoist_id
-        mode = self._contractual_mode
-        self._apply_edit(
-            lambda editor: editor.add_contractual_point(
-                hoist_id,
-                build_contractual_point(fields.get("outreach_m", 0.0), fields.get("load_t", 0.0)),
-                mode,
+    def addChartPoint(self, fields: dict) -> None:
+        """Add a point to the selected hoist's chart in the current mode, naming the
+        form's ``conditions`` (none given: every condition the hoist is usable in)."""
+        conditions = chart_point_conditions(fields)
+        self._chart_edit(
+            lambda editor, hoist_id, split: editor.add_chart_point(
+                hoist_id, split, _chart_point(fields), conditions
             )
         )
 
     @pyqtSlot(int, "QVariantMap", result="bool")
-    def updateContractualPoint(self, row: int, fields: dict) -> bool:
+    def updateChartPoint(self, row: int, fields: dict) -> bool:
+        """Replace chart point ``row`` in every condition it names; the form's
+        ``conditions`` (if given) also retag it. Values it already has are no edit (no undo
+        step)."""
+        conditions = chart_point_conditions(fields)
+        editor = self._editor()
         hoist_id = self._model.selected_editor_hoist_id
-        mode = self._contractual_mode
-        return self._apply_edit(
-            lambda editor: editor.update_contractual_point(
-                hoist_id,
-                row,
-                build_contractual_point(fields.get("outreach_m", 0.0), fields.get("load_t", 0.0)),
-                mode,
+        if (
+            editor is not None
+            and hoist_id is not None
+            and editor.chart_point_is_current(
+                hoist_id, self._split_chart(), int(row), _chart_point(fields), conditions
+            )
+        ):
+            return True
+        return self._chart_edit(
+            lambda editor, hoist_id, split: editor.update_chart_point(
+                hoist_id, split, int(row), _chart_point(fields), conditions
             )
         )
 
     @pyqtSlot(int)
-    def deleteContractualPoint(self, row: int) -> None:
-        hoist_id = self._model.selected_editor_hoist_id
-        mode = self._contractual_mode
-        self._apply_edit(lambda editor: editor.delete_contractual_point(hoist_id, row, mode))
+    def deleteChartPoint(self, row: int) -> None:
+        """Delete chart point ``row`` from every condition it names."""
+        self._chart_edit(
+            lambda editor, hoist_id, split: editor.delete_chart_point(hoist_id, split, int(row))
+        )
+
+
+def _chart_point(fields: dict):
+    return build_contractual_point(fields.get("outreach_m", 0.0), fields.get("load_t", 0.0))

@@ -52,7 +52,7 @@ depend on the load being lifted.
 - **The Scene follows the selected condition and case.** The Scene is a single state, so it
   runs under the chart's selected condition and the governing case's own case rather than
   taking its own rules inputs.
-- **Manual `daf` override.** A `hook_daf` other than the default 1.0 replaces the standard's
+- **Manual `daf` override.** A hoist `daf` (in the condition's `hoists` entry since schema `13.0.0`) other than the default replaces the standard's
   factor for every case of every condition. Both values are always computed, and the details
   and CSV show the override record with `source=override` next to the computed one.
 - **Schema `11.1.0`** (minor bump): `rules`, `conditions`, per-hoist `rope` and

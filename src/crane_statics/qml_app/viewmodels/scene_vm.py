@@ -227,7 +227,7 @@ class SceneViewModel(QObject):
         On a rules document the hook force of a payload depends on those (the suspended
         rope and the per-angle factor), so it follows them: an Auto load is recomputed, a
         set payload (``_hook_load_t``) is converted again. A governing case being applied
-        sets its force itself and is left alone. Legacy documents keep the stored force.
+        sets its force itself and is left alone. Without rules the stored force is kept.
         """
         state = self._model.get_active_hoist_state()
         follows = self._hoist_state.hook_force_follows_scene_state()
@@ -304,7 +304,8 @@ class SceneViewModel(QObject):
 
     @pyqtProperty(list, notify=hoistsChanged)
     def hoistIds(self) -> list:
-        return self._model.payload_hoist_ids()
+        """The payload hoists usable under the Scene's condition (the picker's choices)."""
+        return self._model.scene_hoist_ids()
 
     @pyqtProperty(str, notify=hoistsChanged)
     def selectedHoistId(self) -> str:
@@ -836,14 +837,15 @@ class SceneViewModel(QObject):
 
     @pyqtProperty(str, notify=sceneConditionChanged)
     def sceneConditionLabel(self) -> str:
-        """``Condition: gale / Case II``, what the Scene runs under; empty for legacy."""
+        """``Condition: gale / Case II``, what the Scene runs under; empty without a
+        condition."""
         return self._scene_condition_label
 
     def _refresh_scene_condition_label(self) -> None:
         doc = self._model.document
         label = ""
-        if doc is not None and doc.rules is not None:
-            condition = self._model.scene_condition()
+        condition = self._model.scene_condition_or_none()
+        if doc is not None and condition is not None:
             case = condition.case.name if condition.case is not None else None
             label = ProvenanceFormatter.scene_condition_label(condition.condition_name, case)
         if label != self._scene_condition_label:
@@ -902,10 +904,11 @@ class SceneViewModel(QObject):
         """Run the Scene under ``condition_name`` (the Load Chart's), at its most severe case.
 
         The wind and vessel-motion inputs restart at the condition's values; like a user
-        edit this ends a governing case shown (Restore stays available). Legacy: no-op.
+        edit this ends a governing case shown (Restore stays available). Without a
+        document or a condition: no-op.
         """
         doc = self._model.document
-        if doc is None or doc.rules is None:
+        if doc is None or not doc.conditions:
             return
         try:
             target = scene_case(doc, condition_name, None)

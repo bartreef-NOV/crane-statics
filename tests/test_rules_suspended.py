@@ -15,8 +15,7 @@ from crane_statics.calculation.rope_mass import (
     rope_mass_at_nodes,
 )
 from crane_statics.calculation.solver.kinematics import KinematicsAdapter
-from crane_statics.core import load_document
-from crane_statics.core.analysis_cases import analysis_mode_by_name
+from crane_statics.core.analysis_cases import HoistAnalysisMode, analysis_mode_by_name
 from crane_statics.core.analysis_services import AnalysisCalculator, HoistStateService
 from crane_statics.core.lift_factor import LiftFactors
 from crane_statics.core.load_condition import condition_cases
@@ -26,7 +25,14 @@ from crane_statics.data.models import ConditionSpec, CraneDocument, VesselMotion
 from crane_statics.rules import validate_rules_document
 from crane_statics.rules.factors import LinearFactor
 from crane_statics.rules.suspended import suspended_rope_mass_t
-from tests.rules_docs import GT283, legacy_equivalent, rules_doc, without_foundation_factors
+from tests.rules_docs import (
+    first_settings,
+    GT283,
+    legacy_equivalent,
+    load_v13,
+    rules_doc,
+    without_foundation_factors,
+)
 
 HOIST = "MH"
 HOOK_T = 50.0  # GT283 MH hook block
@@ -62,7 +68,7 @@ GOLDEN = {
 
 
 def _doc_dict() -> dict:
-    return load_document(GT283).model_dump()
+    return load_v13(GT283).model_dump()
 
 
 def _positions(doc_dict: dict, angle: float = GOLDEN_ANGLE, tackle_m: float | None = None):
@@ -166,7 +172,7 @@ def _vertical(point, force_kN: float) -> float:
 
 
 def test_daf_1_total_vertical_reaction_equals_the_legacy_one_at_the_same_payload() -> None:
-    doc = load_document(GT283)
+    doc = load_v13(GT283)
     doc_dict = doc.model_dump()
     calc = CraneCalculator(doc)
     angle = GOLDEN_ANGLE
@@ -214,15 +220,14 @@ def _deck(**kw) -> ConditionSpec:
 
 
 def _no_lead(doc: CraneDocument) -> CraneDocument:
-    hoists = [
-        (
-            h.model_copy(update={"offlead_deg": 0.0, "sidelead_deg": 0.0, "hook_daf": DAF})
-            if h.id == HOIST
-            else h
-        )
-        for h in doc.hoists
-    ]
-    return doc.model_copy(update={"hoists": hoists})
+    """``doc`` with MH at no lead and the manual DAF ``DAF`` in every condition."""
+    update = {"offlead_deg": 0.0, "sidelead_deg": 0.0, "daf": DAF}
+    conditions = {}
+    for name, cond in doc.conditions.items():
+        hoists = dict(cond.hoists)
+        hoists[HOIST] = hoists[HOIST].model_copy(update=update)
+        conditions[name] = cond.model_copy(update={"hoists": hoists})
+    return doc.model_copy(update={"conditions": conditions})
 
 
 def _abs_deck_doc(**kw) -> CraneDocument:
@@ -232,22 +237,15 @@ def _abs_deck_doc(**kw) -> CraneDocument:
 
 
 def _split_doc(doc: CraneDocument) -> CraneDocument:
-    hoists = [
-        (
-            h.model_copy(
-                update={
-                    "splitable_block": True,
-                    "split_falls": 10,
-                    "split_lower_block_mass_t": 30.0,
-                    "split_contractual_points": h.contractual_points,
-                }
-            )
-            if h.id == HOIST
-            else h
-        )
-        for h in doc.hoists
-    ]
-    return doc.model_copy(update={"hoists": hoists})
+    split = {"splitable_block": True, "split_falls": 10, "split_lower_block_mass_t": 30.0}
+    hoists = [h.model_copy(update=split) if h.id == HOIST else h for h in doc.hoists]
+    conditions = {}
+    for name, cond in doc.conditions.items():
+        entries = dict(cond.hoists)
+        mh = entries[HOIST]
+        entries[HOIST] = mh.model_copy(update={"split_contractual_points": mh.contractual_points})
+        conditions[name] = cond.model_copy(update={"hoists": entries})
+    return doc.model_copy(update={"hoists": hoists, "conditions": conditions})
 
 
 def test_lift_setup_carries_the_suspended_rope_as_the_factor_extra_mass() -> None:
@@ -258,29 +256,40 @@ def test_lift_setup_carries_the_suspended_rope_as_the_factor_extra_mass() -> Non
     lift = LiftFactors(doc, None)
     for angle in (GOLDEN_ANGLE, 75.0):
         positions = _positions(doc_dict, angle)
-        normal = lift.setup(condition, HOIST, analysis_mode_by_name(hoist, "normal"), angle)
+        normal = lift.setup(
+            condition,
+            HOIST,
+            analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST)),
+            angle,
+        )
         assert normal.factor == LinearFactor(DAF, suspended_rope_mass_t(doc_dict, HOIST, positions))
-        split = lift.setup(condition, HOIST, analysis_mode_by_name(hoist, "split"), angle)
+        split = lift.setup(
+            condition,
+            HOIST,
+            analysis_mode_by_name(hoist, "split", first_settings(doc, HOIST)),
+            angle,
+        )
         split_mult = falls_override_effective_mult(doc_dict, {HOIST: 10})
         assert split.factor == LinearFactor(
             DAF, suspended_rope_mass_t(doc_dict, HOIST, positions, split_mult)
         )
     # The rope hangs at the hook position the tackle length gives.
-    mode = analysis_mode_by_name(hoist, "normal")
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))
     short = lift.setup(condition, HOIST, mode, GOLDEN_ANGLE, tackle_length_m=10.0)
     expected = suspended_rope_mass_t(doc_dict, HOIST, _positions(doc_dict, GOLDEN_ANGLE, 10.0))
     assert short.factor == LinearFactor(DAF, expected)
     assert expected == pytest.approx(10.0 * 20 * 9.17 / 1000.0, rel=1e-9)
 
 
-def test_legacy_lift_setup_has_no_suspended_rope() -> None:
-    doc = load_document(GT283)
+def test_rules_less_lift_setup_has_no_suspended_rope() -> None:
+    doc = load_v13(GT283)
     hoist = next(h for h in doc.hoists if h.id == HOIST)
     condition = condition_cases(doc, None)[0]
-    setup = LiftFactors(doc, None).setup(
-        condition, HOIST, analysis_mode_by_name(hoist, "normal"), GOLDEN_ANGLE
-    )
-    assert setup.factor == ConstantDynamicFactor(hoist.hook_daf)
+    mode = HoistAnalysisMode("normal", float(hoist.lower_block_mass_t), {}, [])
+    setup = LiftFactors(doc, None).setup(condition, HOIST, mode, GOLDEN_ANGLE)
+    daf = condition.hoist_settings(HOIST).daf
+    assert daf == 1.1  # GT283's authored constant
+    assert setup.factor == ConstantDynamicFactor(daf)  # no suspended rope in the factor
 
 
 # --- the sweep -----------------------------------------------------------------------------

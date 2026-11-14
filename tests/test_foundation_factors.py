@@ -7,7 +7,6 @@ The factored demand of a platform-base limit is ``dead * baseline + live(LL) * s
 from __future__ import annotations
 
 import math
-from pathlib import Path
 from typing import Optional
 
 import pytest
@@ -26,9 +25,10 @@ from crane_statics.core.limit_factory import DesignLimitFactory
 from crane_statics.core.session_model import SessionModel
 from crane_statics.core.sweep import run_mode_sweep
 from tests import rules_reference as ref
-from tests.rules_docs import gale, rules_doc
+from tests.rules_docs import first_settings, gale, rules_doc
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 G = 9.81
 DAF = 1.3
 HOOK_T = 2.0
@@ -183,18 +183,19 @@ def test_retaining_limits_only_on_an_abs_document() -> None:
 
 
 def test_core_scales_follow_the_lift_setup() -> None:
-    from crane_statics.core.lift_factor import legacy_lift_setup
+    from crane_statics.core.lift_factor import rules_less_lift_setup
 
     doc = rules_doc("ABS", gale())
     hoist = next(h for h in doc.hoists if h.id == "MH")
-    assert demand_scales(legacy_lift_setup(hoist), lambda h: h) is None
+    settings = doc.conditions["gale"].hoists["MH"]
+    assert demand_scales(rules_less_lift_setup(settings), lambda h: h) is None
 
     from crane_statics.core.lift_factor import LiftFactors
     from crane_statics.core.load_condition import condition_cases
     from crane_statics.core.analysis_cases import analysis_mode_by_name
 
     condition = condition_cases(doc, None)[0]
-    mode = analysis_mode_by_name(hoist, "normal")
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, hoist.id))
     setup = LiftFactors(doc, CraneCalculator(doc)).setup(condition, "MH", mode, 45.0)
     scales = demand_scales(setup, lambda h: h)
     assert scales is not None
@@ -360,7 +361,7 @@ def test_dnv_without_cabin_has_no_foundation_scale() -> None:
     hoist = next(h for h in doc.hoists if h.id == "MH")
     lift = LiftFactors(doc, CraneCalculator(doc))
     for condition in condition_cases(doc, None):
-        mode = analysis_mode_by_name(hoist, "normal")
+        mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, hoist.id))
         setup = lift.setup(condition, "MH", mode, 45.0)
         assert setup.foundation is NEUTRAL_FOUNDATION
         assert lift.demand_scales(condition, "MH", mode, 45.0, setup) is None
@@ -468,7 +469,9 @@ def test_auto_set_values_match_the_hand_factored_demand(monkeypatch) -> None:
         result = compute_required_connection_capacity_kN(doc, entity, "Fz")
         assert result.required_kN is not None and result.governing_hoist_id is not None
         hoist = next(h for h in doc.hoists if h.id == result.governing_hoist_id)
-        mode = analysis_mode_by_name(hoist, str(result.governing_mode))
+        mode = analysis_mode_by_name(
+            hoist, str(result.governing_mode), first_settings(doc, hoist.id)
+        )
         cp = mode.contractual_points[int(result.governing_cp_index or 0)]
         angle = float(result.governing_angle_deg or 0.0)
         pt = calc.compute_analysis_point(
@@ -506,7 +509,7 @@ def test_dnv_sf1_envelope_scales_dead_and_live_terms() -> None:
         update={"rules": doc.rules.model_copy(update={"cabin_above_slewing_bearing": True})}
     )
     hoist = next(h for h in doc.hoists if h.id == "MH")
-    mode = analysis_mode_by_name(hoist, "normal")
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, hoist.id))
     g = abs(float(doc.environment.gravity_m_s2))
     sf1 = ref.dnv_sf1(chart_max_load_t(mode) * g)
     lift = LiftFactors(doc, CraneCalculator(doc))

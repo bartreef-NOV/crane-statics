@@ -11,13 +11,15 @@ from crane_statics.core.io import DocumentIOError, save_document
 
 def _minimal_v6() -> dict:
     return {
-        "schema": {"name": "crane-statics", "version": "12.0.0"},
+        "schema": {"name": "crane-statics", "version": "13.0.0"},
         "metadata": {"name": "V6 Minimal"},
         "model_definition": {
             "environment": {
                 "gravity_m_s2": 9.81,
                 "air_density_kg_m3": 1.225,
-                "max_wind_speed_m_s": 20.0,
+            },
+            "conditions": {
+                "default": {"wind_speed_m_s": 20.0, "hoists": {"MH": {"offlead_deg": 0.0}}},
             },
             "structure": {
                 "boom_width_m": 1.0,
@@ -38,9 +40,7 @@ def _minimal_v6() -> dict:
                     ],
                     "lower_block_mass_t": 0.0,
                     "falls": 1,
-                    "daf": 1.0,
-                    "offlead_deg": 0.0,
-                    "load_chart": [{"outreach_m": 0.0, "load_t": 0.0}],
+                    "load_chart": [{"outreach_m": 0.0, "load_t": 0.0, "conditions": ["default"]}],
                 },
             },
         },
@@ -173,7 +173,10 @@ def test_v11_file_is_rejected_with_rename_hint(tmp_path):
 
 def test_signed_vessel_motion_round_trips(tmp_path):
     data = _minimal_v6()
-    data["model_definition"]["vessel_motion"] = {"accel_x_m_s2": -1.0, "roll_deg": -3.0}
+    data["model_definition"]["conditions"]["default"]["vessel_motion"] = {
+        "accel_x_m_s2": -1.0,
+        "roll_deg": -3.0,
+    }
     path = tmp_path / "model.yaml"
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
@@ -182,7 +185,29 @@ def test_signed_vessel_motion_round_trips(tmp_path):
     save_document(doc, out)
     saved = yaml.safe_load(out.read_text(encoding="utf-8"))
 
-    vm = saved["model_definition"]["vessel_motion"]
+    vm = saved["model_definition"]["conditions"]["default"]["vessel_motion"]
     assert vm["accel_x_m_s2"] == -1.0
     assert vm["roll_deg"] == -3.0
-    assert load_document(out).environment.vessel_motion.roll_deg == -3.0
+    assert load_document(out).conditions["default"].vessel_motion.roll_deg == -3.0
+
+
+def test_rules_less_document_saves_its_condition_hoist_settings(tmp_path):
+    data = _minimal_v6()
+    data["model_definition"]["conditions"]["default"]["hoists"]["MH"] = {
+        "offlead_deg": 1.5,
+        "daf": 1.1,
+    }
+    path = tmp_path / "model.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    doc = load_document(path)
+    out = tmp_path / "out.yaml"
+    save_document(doc, out)
+    saved = yaml.safe_load(out.read_text(encoding="utf-8"))["model_definition"]
+
+    assert doc.rules is None
+    assert saved["conditions"]["default"]["hoists"] == {"MH": {"offlead_deg": 1.5, "daf": 1.1}}
+    assert saved["hoists"]["MH"]["load_chart"] == [
+        {"outreach_m": 0.0, "load_t": 0.0, "conditions": ["default"]}
+    ]
+    assert "max_wind_speed_m_s" not in saved["environment"]

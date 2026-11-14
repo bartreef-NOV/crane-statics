@@ -18,10 +18,13 @@ from .chart_envelope import ProbeSet
 # (limit id, sorted (component, value) pairs): what a limit's result depends on.
 LimitSignature = tuple[str, tuple[tuple[str, float], ...]]
 
-# Fields no probe solve or limit result depends on: the contractual points, and the limits
-# saved with the document (the session's own limits are what is analysed).
+# Fields no probe solve or limit result depends on: the contractual points (each
+# condition's, per hoist), and the limits saved with the document (the session's own
+# limits are what is analysed).
 _CONTRACTUAL: dict[str, Any] = {
-    "hoists": {"__all__": {"contractual_points", "split_contractual_points"}},
+    "conditions": {
+        "__all__": {"hoists": {"__all__": {"contractual_points", "split_contractual_points"}}}
+    },
     "saved_limits": True,
 }
 
