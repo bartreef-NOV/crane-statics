@@ -24,7 +24,8 @@ RowLayout {
 
     signal addRequested()
     signal addSegmentRequested()
-    signal addContractualPointRequested()
+    signal addChartPointRequested()
+    signal editChartPointRequested(int row)
 
     spacing: root.layoutSpacing
 
@@ -224,21 +225,6 @@ RowLayout {
 
                     IntRow { label: qsTr("Falls"); fieldKey: "falls" }
                     NumberRow { label: qsTr("Lower Block Mass (t)"); fieldKey: "lower_block_mass_t" }
-                    NumberRow { label: qsTr("DAF"); fieldKey: "hook_daf" }
-                }
-            }
-
-            GroupBox {
-                Layout.fillWidth: true
-                visible: root.isPayload
-                title: qsTr("Leads")
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    spacing: root.layoutSpacing
-
-                    NumberRow { label: qsTr("Offlead (deg)"); fieldKey: "offlead_deg" }
-                    NumberRow { label: qsTr("Sidelead (deg)"); fieldKey: "sidelead_deg" }
                 }
             }
 
@@ -335,16 +321,35 @@ RowLayout {
                 Item { Layout.fillWidth: true }
             }
 
+            // The chart as saved: each point once, with the conditions it applies to.
             DataTable {
+                id: chartTable
+                objectName: "chartPointTable"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 220
+                Layout.preferredHeight: 260
                 visible: root.isPayload
                 title: qsTr("Load Chart")
-                emptyText: qsTr("No contractual points for this hoist.")
+                emptyText: qsTr("No load-chart points for this hoist.")
                 editable: true
+                stretchColumn: 2
                 model: modelVm.contractualModel
-                onAddRequested: root.addContractualPointRequested()
-                onDeleteRequested: row => modelVm.deleteContractualPoint(row)
+                toolbarExtras: Button {
+                    objectName: "chartPointConditionsButton"
+                    text: qsTr("Conditions…")
+                    enabled: chartTable.hasSelection
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Choose the conditions the selected point applies to")
+                    onClicked: root.editChartPointRequested(chartTable.currentRow)
+                }
+                onAddRequested: root.addChartPointRequested()
+                onDeleteRequested: row => modelVm.deleteChartPoint(row)
+            }
+
+            Label {
+                Layout.fillWidth: true
+                visible: root.isPayload
+                wrapMode: Text.WordWrap
+                text: qsTr("Off-lead, side-lead and DAF are set per condition in the Conditions tab.")
             }
         }
     }

@@ -197,6 +197,8 @@ def test_chart_legend_handles_long_labels_and_toggles_visibility(qml_engine):
         "dialogs/HoistDialog.qml",
         "dialogs/SegmentDialog.qml",
         "dialogs/ContractualPointDialog.qml",
+        "dialogs/ChartPointDialog.qml",
+        "HoistsPanel.qml",
     ],
 )
 def test_component_loads_without_warnings(qml_engine, qml_file):
@@ -1210,4 +1212,155 @@ def test_conditions_tab_for_every_document(qml_engine, tmp_path):
     fresh = component.create()
     assert fresh is not None, component.errorString()
     assert fresh.findChild(QObject, "conditionsTabButton").property("visible") is True
+    assert warnings == []
+
+
+# --- per-condition hoist settings and the tagged load chart (schema v13) -------------
+
+RULES_LESS_EXAMPLE = EXAMPLE.parent / "crane_input_GT283.yaml"
+
+
+def _panel(qml_engine, qml_file: str, document):
+    engine, app_vm, model_vm, warnings = qml_engine
+    app_vm.openPath(str(document))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / qml_file)))
+    panel = component.create()
+    assert panel is not None, component.errorString()
+    return panel, model_vm, warnings
+
+
+def _named(root, name: str):
+    """The item called ``name`` under ``root``, also inside Repeater delegates (whose
+    QObject parent is None: only the visual item tree reaches them)."""
+    found = root.findChild(QObject, name)
+    if found is not None:
+        return found
+    pending = [root]
+    while pending:
+        item = pending.pop()
+        if item.objectName() == name:
+            return item
+        if isinstance(item, QQuickItem):
+            pending.extend(item.childItems())
+    return None
+
+
+def test_conditions_panel_edits_the_hoists_of_the_selected_condition(qml_engine):
+    panel, model_vm, warnings = _panel(qml_engine, "ConditionsPanel.qml", RULES_EXAMPLE)
+    name = model_vm.selectedCondition
+    rows = model_vm.conditionHoists
+    hoist = rows[0]["hoistId"]
+    assert rows[0]["usable"] and rows[0]["dafDerived"]
+    daf = _named(panel, f"conditionHoistDaf_{hoist}")
+    offlead = _named(panel, f"conditionHoistOfflead_{hoist}")
+    # Under rules an unset DAF is derived: empty, with a placeholder saying so.
+    assert daf.property("text") == "" and daf.property("placeholderText") == "derived"
+    assert offlead.property("text") == f"{rows[0]['offleadDeg']:.3f}"
+
+    edited: list[int] = []
+    model_vm.modelEdited.connect(lambda: edited.append(1))
+    _evaluate_in(offlead, "editingFinished()")  # unchanged: not an edit
+    assert edited == []
+    offlead = _named(panel, f"conditionHoistOfflead_{hoist}")
+    offlead.setProperty("text", "4.5")
+    _evaluate_in(offlead, "editingFinished()")
+    entry = model_vm._model.document.conditions[name].hoists[hoist]
+    assert (entry.offlead_deg, entry.daf) == (4.5, None)
+    daf = _named(panel, f"conditionHoistDaf_{hoist}")
+    daf.setProperty("text", "1.25")
+    _evaluate_in(daf, "editingFinished()")
+    assert model_vm._model.document.conditions[name].hoists[hoist].daf == 1.25
+    assert edited == [1, 1]
+    assert warnings == []
+
+
+def test_conditions_panel_usable_checkbox_lists_and_drops_a_hoist(qml_engine):
+    panel, model_vm, warnings = _panel(qml_engine, "ConditionsPanel.qml", RULES_EXAMPLE)
+    names = model_vm.conditionNames
+    model_vm.selectCondition(names[-1])
+    hoist = model_vm.conditionHoists[-1]["hoistId"]
+    usable = _named(panel, f"conditionHoistUsable_{hoist}")
+    assert usable.property("checked") is True
+    usable.setProperty("checked", False)
+    _evaluate_in(usable, "toggled()")
+    assert hoist not in model_vm._model.document.conditions[names[-1]].hoists
+    usable = _named(panel, f"conditionHoistUsable_{hoist}")
+    assert usable.property("checked") is False
+    assert _named(panel, f"conditionHoistOfflead_{hoist}").property("enabled") is False
+    assert warnings == []
+
+
+def test_conditions_panel_without_rules_offers_wind_motion_and_hoists_only(qml_engine):
+    panel, model_vm, warnings = _panel(qml_engine, "ConditionsPanel.qml", RULES_LESS_EXAMPLE)
+    assert model_vm.conditionNames == ["default"] and model_vm.hasRules is False
+    assert panel.findChild(QObject, "conditionLiftBox").property("visible") is False
+    assert panel.findChild(QObject, "conditionOffboardGroup").property("visible") is False
+    for key in ("load_wind_area_m2", "load_drag_coefficient", "hook_height_override_m"):
+        assert panel.findChild(QObject, f"conditionField_{key}").property("visible") is False
+    assert panel.findChild(QObject, "conditionField_wind_speed_m_s").property("visible")
+    assert panel.findChild(QObject, "conditionField_roll_deg").property("visible")
+    # The DAF is the constant 1.0 there, shown as a number.
+    hoist = model_vm.conditionHoists[0]["hoistId"]
+    daf = _named(panel, f"conditionHoistDaf_{hoist}")
+    shown = model_vm.conditionHoists[0]["dafShown"]
+    assert daf.property("text") == f"{shown:.3f}" and daf.property("placeholderText") == ""
+    assert warnings == []
+
+
+def test_hoist_dialog_and_form_carry_no_daf_or_leads(qml_engine):
+    engine, app_vm, model_vm, warnings = qml_engine
+    app_vm.openPath(str(EXAMPLE))
+    for qml_file in ("dialogs/HoistDialog.qml", "HoistsPanel.qml"):
+        component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / qml_file)))
+        view = component.create()
+        assert view is not None, component.errorString()
+        for key in ("hook_daf", "offlead_deg", "sidelead_deg"):
+            assert view.findChild(QObject, f"hoistField_{key}") is None, (qml_file, key)
+    dialog_source = (QML_DIR / "dialogs" / "HoistDialog.qml").read_text(encoding="utf-8")
+    assert "hook_daf" not in dialog_source and "offlead_deg" not in dialog_source
+    assert warnings == []
+
+
+def test_chart_point_dialog_submits_the_ticked_conditions(qml_engine):
+    engine, _app_vm, _model_vm, warnings = qml_engine
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_DIR / "dialogs" / "ChartPointDialog.qml"))
+    )
+    dialog = component.create()
+    assert dialog is not None, component.errorString()
+    dialog.setProperty("conditionNames", ["a", "b", "c"])
+    committed: list = []
+    dialog.committed.connect(lambda index, fields: committed.append((index, fields.toVariant())))
+
+    _evaluate_in(dialog, "openFor(-1, null)")  # a new point: every condition ticked
+    assert dialog.property("checkedNames").toVariant() == ["a", "b", "c"]
+    _evaluate_in(dialog, 'setChecked("b", false)')
+    _evaluate_in(dialog, "accepted()")
+    assert committed[-1][0] == -1 and committed[-1][1]["conditions"] == ["a", "c"]
+
+    _evaluate_in(dialog, 'openFor(2, {"outreach_m": 12.5, "load_t": 3, "conditions": ["c"]})')
+    _evaluate_in(dialog, 'setChecked("a", true)')
+    _evaluate_in(dialog, "accepted()")
+    index, fields = committed[-1]
+    assert index == 2
+    assert (fields["outreach_m"], fields["load_t"], fields["conditions"]) == (12.5, 3.0, ["a", "c"])
+    assert warnings == []
+
+
+def test_hoists_panel_chart_table_shows_each_points_conditions(qml_engine):
+    panel, model_vm, warnings = _panel(qml_engine, "HoistsPanel.qml", RULES_EXAMPLE)
+    table = panel.findChild(QObject, "chartPointTable")
+    assert table is not None and table.property("visible") is not None
+    model = model_vm.contractualModel
+    names = model_vm.conditionNames
+    assert model.headerData(2, Qt.Orientation.Horizontal) == "Conditions"
+    assert model.data(model.index(0, 2)) == ", ".join(names)
+    requested: list[int] = []
+    panel.editChartPointRequested.connect(requested.append)
+    button = panel.findChild(QObject, "chartPointConditionsButton")
+    assert button.property("enabled") is False  # no row selected
+    table.setProperty("currentRow", 0)
+    assert button.property("enabled") is True
+    _evaluate_in(button, "clicked()")
+    assert requested == [0]
     assert warnings == []

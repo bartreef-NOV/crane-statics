@@ -3,7 +3,8 @@ import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import ".."
 
-/*  Adds a payload hoist. An existing hoist is edited in the Hoists panel's form. */
+/*  Adds a payload hoist. An existing hoist is edited in the Hoists panel's form; its
+    lead limits and DAF belong to each condition (the Conditions tab). */
 Dialog {
     id: root
 
@@ -21,9 +22,6 @@ Dialog {
         splitFallsSpin.value = values && values.split_falls ? values.split_falls : fallsSpin.value
         splitLowerBlockMassField.setValue(values && values.split_lower_block_mass_t !== undefined && values.split_lower_block_mass_t !== null
                                     ? values.split_lower_block_mass_t : lowerBlockMassField.value)
-        dafField.setValue(values && values.hook_daf !== undefined ? values.hook_daf : 1)
-        offleadField.setValue(values && values.offlead_deg !== undefined ? values.offlead_deg : 0)
-        sideleadField.setValue(values && values.sidelead_deg !== undefined ? values.sidelead_deg : 0)
         lowestHookHeightField.setValue(values && values.lowest_hook_height_m !== undefined ? values.lowest_hook_height_m : 0)
         open()
     }
@@ -42,9 +40,6 @@ Dialog {
         "splitable_block": splitableCheck.checked,
         "split_falls": splitFallsSpin.value,
         "split_lower_block_mass_t": splitLowerBlockMassField.value,
-        "hook_daf": dafField.value,
-        "offlead_deg": offleadField.value,
-        "sidelead_deg": sideleadField.value,
         "lowest_hook_height_m": lowestHookHeightField.value
     })
 
@@ -95,16 +90,15 @@ Dialog {
         Label { text: qsTr("Split Lower Block Mass (t):"); visible: splitableCheck.checked }
         NumberField { id: splitLowerBlockMassField; Layout.preferredWidth: 200; visible: splitableCheck.checked }
 
-        Label { text: qsTr("DAF:") }
-        NumberField { id: dafField; Layout.preferredWidth: 200 }
-
-        Label { text: qsTr("Offlead (deg):") }
-        NumberField { id: offleadField; Layout.preferredWidth: 200 }
-
-        Label { text: qsTr("Sidelead (deg):") }
-        NumberField { id: sideleadField; Layout.preferredWidth: 200 }
-
         Label { text: qsTr("Lowest Hook Height (m):") }
         NumberField { id: lowestHookHeightField; Layout.preferredWidth: 200 }
+
+        Label {
+            objectName: "hoistDialogConditionsNote"
+            Layout.columnSpan: 2
+            Layout.maximumWidth: 360
+            wrapMode: Text.WordWrap
+            text: qsTr("The new hoist is usable in every condition. Set its off-lead, side-lead and DAF per condition in the Conditions tab, and its load chart in the Hoists tab.")
+        }
     }
 }

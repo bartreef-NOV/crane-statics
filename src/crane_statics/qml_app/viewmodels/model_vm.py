@@ -444,17 +444,17 @@ class ModelViewModel(QObject):
         """One row per payload hoist for the selected condition (``condition_hoist_rows``)."""
         return condition_hoist_rows(self._model.document, self._selected_spec())
 
-    @pyqtSlot(str, float, float, "QVariant")
+    @pyqtSlot(str, float, float, "QVariant", result=bool)
     def setConditionHoist(
         self, hoist_id: str, offlead_deg: float, sidelead_deg: float, daf: Any
-    ) -> None:
+    ) -> bool:
         """Make ``hoist_id`` usable in the selected condition with these lead limits and
-        DAF (None/empty: no override, derived under rules)."""
+        DAF (None/empty: no override, derived under rules); False when refused."""
         name = self._selected_condition
         if name is None:
             self.editFailed.emit("Select a condition first")
-            return
-        self._apply_edit(
+            return False
+        return self._apply_edit(
             lambda editor: editor.enter_condition_hoist(
                 name,
                 hoist_id,
@@ -464,17 +464,18 @@ class ModelViewModel(QObject):
             )
         )
 
-    @pyqtSlot(str, bool)
-    def setConditionHoistUsable(self, hoist_id: str, usable: bool) -> None:
-        """The table's "usable" checkbox (``DocumentEditor.set_condition_hoist_usable``)."""
+    @pyqtSlot(str, bool, result=bool)
+    def setConditionHoistUsable(self, hoist_id: str, usable: bool) -> bool:
+        """The table's "usable" checkbox (``DocumentEditor.set_condition_hoist_usable``);
+        True when the condition changed."""
         name = self._selected_condition
         if name is None:
             self.editFailed.emit("Select a condition first")
-            return
+            return False
         spec = self._selected_spec()
         if spec is not None and (hoist_id in spec.hoists) == bool(usable):
-            return  # already so: no edit, no undo step
-        self._apply_edit(
+            return False  # already so: no edit, no undo step
+        return self._apply_edit(
             lambda editor: editor.set_condition_hoist_usable(name, hoist_id, bool(usable))
         )
 
