@@ -318,6 +318,58 @@ RowLayout {
             }
 
             GroupBox {
+                objectName: "conditionHoistsGroup"
+                Layout.fillWidth: true
+                title: qsTr("Hoists")
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: root.layoutSpacing
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: root.layoutSpacing
+
+                        Label { Layout.fillWidth: true; text: qsTr("Hoist"); font.bold: true }
+                        Label { Layout.preferredWidth: 64; text: qsTr("Usable"); font.bold: true }
+                        Label {
+                            Layout.preferredWidth: root.hoistColumnWidth
+                            text: qsTr("Off-lead (°)")
+                            font.bold: true
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        Label {
+                            Layout.preferredWidth: root.hoistColumnWidth
+                            text: qsTr("Side-lead (°)")
+                            font.bold: true
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        Label {
+                            Layout.preferredWidth: root.hoistColumnWidth
+                            text: qsTr("DAF")
+                            font.bold: true
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+
+                    Repeater {
+                        objectName: "conditionHoistRows"
+                        model: modelVm.conditionHoists
+
+                        HoistSettingsRow {}
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: modelVm.hasRules
+                              ? qsTr("Leave DAF empty to derive it from the standard. A hoist made usable takes the chart points of the first condition listing it.")
+                              : qsTr("An empty DAF is 1.0. A hoist made usable takes the chart points of the first condition listing it.")
+                    }
+                }
+            }
+
+            GroupBox {
                 Layout.fillWidth: true
                 title: modelVm.hasRules ? qsTr("Wind and Load") : qsTr("Wind")
 
@@ -391,58 +443,6 @@ RowLayout {
                     ConditionRow { label: qsTr("Pitch angle (°)"); fieldKey: "pitch_deg" }
                     ConditionRow { label: qsTr("Motion Reference X (m)"); fieldKey: "reference_x_m" }
                     ConditionRow { label: qsTr("Motion Reference Z (m)"); fieldKey: "reference_z_m" }
-                }
-            }
-
-            GroupBox {
-                objectName: "conditionHoistsGroup"
-                Layout.fillWidth: true
-                title: qsTr("Hoists")
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    spacing: root.layoutSpacing
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: root.layoutSpacing
-
-                        Label { Layout.fillWidth: true; text: qsTr("Hoist"); font.bold: true }
-                        Label { Layout.preferredWidth: 64; text: qsTr("Usable"); font.bold: true }
-                        Label {
-                            Layout.preferredWidth: root.hoistColumnWidth
-                            text: qsTr("Off-lead (°)")
-                            font.bold: true
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        Label {
-                            Layout.preferredWidth: root.hoistColumnWidth
-                            text: qsTr("Side-lead (°)")
-                            font.bold: true
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        Label {
-                            Layout.preferredWidth: root.hoistColumnWidth
-                            text: qsTr("DAF")
-                            font.bold: true
-                            horizontalAlignment: Text.AlignRight
-                        }
-                    }
-
-                    Repeater {
-                        objectName: "conditionHoistRows"
-                        model: modelVm.conditionHoists
-
-                        HoistSettingsRow {}
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: modelVm.hasRules
-                              ? qsTr("Leave DAF empty to derive it from the standard. A hoist made usable takes the chart points of the first condition listing it.")
-                              : qsTr("An empty DAF is 1.0. A hoist made usable takes the chart points of the first condition listing it.")
-                    }
                 }
             }
 

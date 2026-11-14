@@ -184,6 +184,7 @@ RowLayout {
 
     ScrollView {
         id: formScroll
+        objectName: "hoistFormScroll"
         Layout.fillWidth: true
         Layout.fillHeight: true
         clip: true

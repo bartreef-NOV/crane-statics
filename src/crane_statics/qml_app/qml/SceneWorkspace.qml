@@ -42,7 +42,7 @@ Item {
             Layout.minimumHeight: 320
             spacing: root.layoutSpacing
 
-            // The condition and case the Scene runs under (rules documents only).
+            // The condition and case the Scene runs under (every document has one; empty without a document).
             Label {
                 objectName: "sceneConditionLabel"
                 Layout.fillWidth: true
