@@ -988,7 +988,8 @@ def _basis_from_invariants(
         pitch_raw=_normalize_channel_raw(pt_raw, pt_ref),
         hook_sensitivity_raw=hook_sensitivity_raw,
         offlead_lateral_sensitivity_raw=offlead_lateral_sensitivity_raw,
-        default_offlead_deg=float(hoist_data.get("offlead_deg", 0.0)),
+        # v13: hoists carry no lead limits; callers pass the case's offlead explicitly.
+        default_offlead_deg=0.0,
         rope_ids=rope_ids,
         active_hoist_id=hoist_id,
         active_rope_id=active_rope_id,
