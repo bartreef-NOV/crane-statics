@@ -1,4 +1,4 @@
-schema: {name: crane-statics, version: 12.0.0}
+schema: {name: crane-statics, version: 13.0.0}
 metadata: {name: Crane Statics Example GT283 (DNV)}
 model_definition:
   environment: {gravity_m_s2: 9.81, air_density_kg_m3: 1.226}
@@ -17,6 +17,10 @@ model_definition:
         reference_x_m: 0.0
         reference_z_m: 0.0
       load_wind_area_m2: 50.0
+      hoists:
+        MH: {offlead_deg: 1.0, sidelead_deg: 2.5}
+        AH: {offlead_deg: 2.0, sidelead_deg: 4.5}
+        trolley: {offlead_deg: 4.0, sidelead_deg: 4.5}
     offboard_hs1:
       lift: offboard
       wind_speed_m_s: 15.0
@@ -34,6 +38,10 @@ model_definition:
       v_in_m_s: 0.8
       v_t_m_s: 0.6
       load_wind_area_m2: 50.0
+      hoists:
+        MH: {offlead_deg: 1.0, sidelead_deg: 2.5}
+        AH: {offlead_deg: 2.0, sidelead_deg: 4.5}
+        trolley: {offlead_deg: 4.0, sidelead_deg: 4.5}
   structure:
     boom_width_m: 10.0
     slewing_bearing_diameter_m: 15.0
@@ -99,14 +107,19 @@ model_definition:
       - {node: boom_sheave_4, body: boom, u_m: 109.0, w_m: -4.25, parts: 2}
       lower_block_mass_t: 50.0
       falls: 20
-      daf: 1.0
-      offlead_deg: 1.0
-      sidelead_deg: 2.5
       max_hoisting_speed_m_s: 0.25
       lowest_hook_height_m: -53.0
       load_chart:
-      - {outreach_m: 16.0, load_t: 1000.0}
-      - {outreach_m: 25.0, load_t: 1000.0}
+      - outreach_m: 16.0
+        load_t: 1000.0
+        conditions:
+        - onboard
+        - offboard_hs1
+      - outreach_m: 25.0
+        load_t: 1000.0
+        conditions:
+        - onboard
+        - offboard_hs1
     AH:
       rope: {linear_mass_kg_m: 5.83, ea_kN: 61000.0}
       reeving:
@@ -116,14 +129,19 @@ model_definition:
       - {node: boom_sheave_4, body: boom, u_m: 113.5, w_m: -6.0}
       lower_block_mass_t: 7.0
       falls: 6
-      daf: 1.0
-      offlead_deg: 2.0
-      sidelead_deg: 4.5
       max_hoisting_speed_m_s: 0.5
       lowest_hook_height_m: -53.0
       load_chart:
-      - {outreach_m: 23.0, load_t: 160.0}
-      - {outreach_m: 70.0, load_t: 160.0}
+      - outreach_m: 23.0
+        load_t: 160.0
+        conditions:
+        - onboard
+        - offboard_hs1
+      - outreach_m: 70.0
+        load_t: 160.0
+        conditions:
+        - onboard
+        - offboard_hs1
     trolley:
       rope: {linear_mass_kg_m: 4.96, ea_kN: 51000.0}
       reeving:
@@ -134,10 +152,11 @@ model_definition:
       - {node: boom_sheave_2, body: boom, u_m: 90.0, w_m: -2.0}
       lower_block_mass_t: 7.7
       falls: 1
-      daf: 1.0
-      offlead_deg: 4.0
-      sidelead_deg: 4.5
       max_hoisting_speed_m_s: 0.8
       lowest_hook_height_m: -53.0
       load_chart:
-      - {outreach_m: 72.5, load_t: 25.0}
+      - outreach_m: 72.5
+        load_t: 25.0
+        conditions:
+        - onboard
+        - offboard_hs1

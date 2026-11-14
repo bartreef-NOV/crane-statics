@@ -1,17 +1,15 @@
-"""Authored v13 documents for the tests: examples and inline v12 dicts on the current format.
+"""Authored v13 documents for the tests: the examples and inline v12 dicts on the current
+format.
 
-The shipped ``examples/*.yaml`` may still be on schema v12. ``example_path`` hands out a
-v13 copy of an example (the file itself once it is already v13), and ``v13`` converts an
-inline authored dict. Both go through ``crane_statics.data.migrate_v13.migrate_document``
-and are idempotent: a document already on schema 13 is returned untouched.
+The shipped ``examples/*.yaml`` are on schema v13 (``scripts/migrate_authored_v13.py``).
+``v13`` converts an inline authored v12 dict through
+``crane_statics.data.migrate_v13.migrate_document``; it is idempotent: a document already on
+schema 13 is returned untouched.
 """
 
 from __future__ import annotations
 
-import functools
 from copy import deepcopy
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -20,7 +18,7 @@ import yaml
 from crane_statics.core.io import _StrictIntSafeLoader, load_document
 from crane_statics.core.load_condition import condition_document, scene_case
 from crane_statics.data.authored_models import AUTHORED_SCHEMA_MAJOR_VERSION, authored_schema_major
-from crane_statics.data.migrate_v13 import migrate_document, migrate_file
+from crane_statics.data.migrate_v13 import migrate_document
 from crane_statics.data.models import ConditionHoist, CraneDocument
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
@@ -54,40 +52,13 @@ def read_yaml(path: Union[str, Path]) -> dict[str, Any]:
     return data
 
 
-def _is_v13(path: Path) -> bool:
-    return authored_schema_major(read_yaml(path)["schema"]["version"]) == 13
-
-
-@functools.lru_cache(maxsize=None)
-def _examples_dir() -> Path:
-    """``examples/`` itself once every example is v13; otherwise a per-process temporary
-    copy of it with the v12 files migrated (all files, so siblings resolve too)."""
-    sources = sorted(EXAMPLES.glob("*.yaml"))
-    if all(_is_v13(p) for p in sources):
-        return EXAMPLES
-    target = Path(tempfile.mkdtemp(prefix="crane_statics_v13_examples_"))
-    for source in sources:
-        copy = target / source.name
-        shutil.copyfile(source, copy)
-        if not _is_v13(copy):
-            migrate_file(copy)
-    return target
-
-
 def example_path(example: Union[str, Path]) -> Path:
-    """A v13 file of ``example`` (a file name under ``examples/`` or a path to one).
-
-    While ``examples/`` holds v12 files this is the example's migrated copy in a
-    per-process temporary directory (same file name, next to the other examples); once
-    they are v13 it is the example itself. Treat the result as read-only.
-    """
+    """The file of ``example`` (a file name under ``examples/`` or a path to one). Treat
+    it as read-only: tests that edit a document work on a loaded copy or under tmp_path."""
     path = Path(example)
     if not path.is_absolute() and path.parent == Path("."):
         path = EXAMPLES / path
-    path = path.resolve()
-    if path.parent != EXAMPLES:
-        return path  # already a migrated copy, or a file outside examples/
-    return _examples_dir() / path.name
+    return path.resolve()
 
 
 def example_dict(example: Union[str, Path]) -> dict[str, Any]:

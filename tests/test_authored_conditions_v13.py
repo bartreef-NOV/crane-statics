@@ -120,10 +120,12 @@ def test_version_is_13():
 
 
 @pytest.mark.parametrize("example", EXAMPLES, ids=lambda p: p.name)
-def test_migrated_examples_validate(example):
+def test_examples_are_migrated_and_validate(example):
+    # The shipped examples are v13 files (were: v12 files migrated on the fly here).
     with open(example, encoding="utf-8-sig") as f:
         data = yaml.safe_load(f)
-    AuthoredDocument.model_validate(migrate_document(data))
+    assert data["schema"]["version"] == AUTHORED_SCHEMA_VERSION
+    AuthoredDocument.model_validate(data)
 
 
 def test_migrated_inline_documents_validate():

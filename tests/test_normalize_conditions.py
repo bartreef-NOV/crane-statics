@@ -9,7 +9,6 @@ import yaml
 from crane_statics.core.io import _StrictIntSafeLoader
 from crane_statics.data import normalize_document
 from crane_statics.data.authored_form import document_to_authored_form
-from crane_statics.data.migrate_v13 import migrate_document
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 
@@ -66,8 +65,10 @@ def _two_condition_doc() -> dict:
 
 
 def _migrated_example(name: str) -> dict:
+    """An example's authored dict (the shipped examples are v13 files)."""
     with open(EXAMPLES / name, "r", encoding="utf-8-sig") as f:
-        return migrate_document(yaml.load(f, Loader=_StrictIntSafeLoader))
+        data: dict = yaml.load(f, Loader=_StrictIntSafeLoader)
+    return data
 
 
 def _pairs(points) -> list[tuple[float, float]]:

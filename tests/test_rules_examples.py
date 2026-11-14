@@ -18,7 +18,12 @@ CASES = [
     ("crane_input_22689_abs.yaml", "ABS", "offshore"),
     ("crane_input_13778_retracted_dnv.yaml", "DNV", None),
 ]
-NEW = {"crane_input_22689_abs.yaml", "crane_input_13778_retracted_dnv.yaml"}
+# The condition names of the examples added with the rules (22689_abs: the user's own
+# conditions, two offboard sea states; was onboard_sea and offboard_supply).
+NEW = {
+    "crane_input_22689_abs.yaml": ("onboard_sea", "offboard_hs05", "offboard_hs10"),
+    "crane_input_13778_retracted_dnv.yaml": ("onboard_sea", "offboard_supply"),
+}
 PAYLOAD_HOIST = "MH"
 
 
@@ -29,7 +34,7 @@ def test_example_loads_with_rules(name: str, standard: str, crane_class: object)
     assert doc.rules.standard == standard
     assert doc.rules.crane_class == crane_class
     if name in NEW:
-        assert condition_names(doc) == ("onboard_sea", "offboard_supply")
+        assert condition_names(doc) == NEW[name]
 
 
 @pytest.mark.parametrize("name, standard, crane_class", CASES, ids=[c[0] for c in CASES])

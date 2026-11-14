@@ -32,10 +32,14 @@ HOIST = "MH"
 
 
 def _two_conditions(example: str) -> CraneDocument:
-    """``example`` with at least two conditions (a rules-less one gets a duplicate)."""
+    """``example`` with exactly two conditions: a rules-less one gets a duplicate of its
+    ``default``, one with more (22689_abs has three) keeps its first two."""
     doc = load_example(example)
+    editor = DocumentEditor(doc)
     if len(doc.conditions) < 2:
-        DocumentEditor(doc).duplicate_condition(next(iter(doc.conditions)))
+        editor.duplicate_condition(next(iter(doc.conditions)))
+    for name in list(doc.conditions)[2:]:
+        editor.delete_condition(name)
     return doc
 
 
