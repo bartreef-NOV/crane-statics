@@ -12,12 +12,8 @@ from typing import Callable
 
 import pytest
 
-from crane_statics.core.document_edit import (
-    DocumentEditError,
-    DocumentEditor,
-    entered_daf,
-    shown_daf,
-)
+from crane_statics.core.document_edit import DocumentEditError, DocumentEditor
+from crane_statics.core.hoist_daf import daf_is_derived, entered_daf, shown_daf, submitted_daf
 from crane_statics.core.session_model import SessionModel
 from crane_statics.data import AuthoredDocument, document_to_authored_form, normalize_document
 from crane_statics.data.models import ConditionSpec, CraneDocument
@@ -88,6 +84,20 @@ def test_daf_entry_and_display_rule():
     assert entered_daf(1.2, rules=False) == 1.2
     # Under rules an entered 1.0 is an explicit override of the derived factor.
     assert entered_daf(1.0, rules=True) == 1.0
+    # A form submitting the number it shows keeps what is stored.
+    assert submitted_daf(1.0, 1.0, rules=True) == 1.0
+    assert submitted_daf(None, 1.0, rules=True) is None
+    assert submitted_daf(1.3, 1.3, rules=False) == 1.3
+    assert submitted_daf(1.3, 1.0, rules=False) is None
+    assert submitted_daf(1.3, 1.0, rules=True) == 1.0
+    assert submitted_daf(None, 1.2, rules=True) == 1.2
+
+
+def test_daf_is_derived_only_under_rules_without_an_override():
+    rules = load_example(RULES_EXAMPLE)
+    rules_less = load_example(RULES_LESS_EXAMPLE)
+    assert daf_is_derived(rules, None) and not daf_is_derived(rules, 1.0)
+    assert not daf_is_derived(rules_less, None) and not daf_is_derived(rules_less, 1.2)
 
 
 # ----------------------------------------------------------------------
@@ -338,7 +348,45 @@ def test_add_hoist_makes_it_usable_in_every_condition_with_zero_offlead(doc):
     for spec in doc.conditions.values():
         entry = spec.hoists["NEW"]
         assert (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (0.0, 0.0, None)
-        assert entry.contractual_points == []
+        assert entry.contractual_points == [] and entry.split_contractual_points == []
+        assert "BH" not in spec.hoists
+
+
+def test_set_condition_hoist_usable(doc):
+    first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    assert not editor.set_condition_hoist_usable(second, HOIST, True)  # already usable
+    assert editor.set_condition_hoist_usable(second, HOIST, False)
+    assert HOIST not in doc.conditions[second].hoists
+    assert not editor.set_condition_hoist_usable(second, HOIST, False)
+    assert editor.set_condition_hoist_usable(second, HOIST, True)
+    entry = doc.conditions[second].hoists[HOIST]
+    assert (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (0.0, 0.0, None)
+    assert _points(doc, second) == _points(doc, first)
+    _exports_valid(doc)
+    _refused(doc, lambda e: e.set_condition_hoist_usable(second, "BH", True))
+    _refused(doc, lambda e: e.set_condition_hoist_usable(second, "nope", False))
+
+
+def test_enter_condition_hoist_stores_the_daf_under_the_documents_rules():
+    rules = _two_conditions(RULES_EXAMPLE)
+    DocumentEditor(rules).enter_condition_hoist(_names(rules)[1], HOIST, 1.0, 0.0, 1.0)
+    assert rules.conditions[_names(rules)[1]].hoists[HOIST].daf == 1.0  # explicit override
+    rules_less = _two_conditions(RULES_LESS_EXAMPLE)
+    DocumentEditor(rules_less).enter_condition_hoist(_names(rules_less)[1], HOIST, 1.0, 0.0, 1.0)
+    assert rules_less.conditions[_names(rules_less)[1]].hoists[HOIST].daf is None
+
+
+def test_the_guard_refuses_an_edit_that_would_stop_the_document_saving(doc):
+    from crane_statics.data.models import ConditionHoist
+
+    first, _second = _names(doc)
+    # A hoist entry without chart points: the authored contract rejects it.
+    edited = doc.conditions[first].model_copy(
+        update={"hoists": {HOIST: ConditionHoist(offlead_deg=0.0)}}
+    )
+    message = _refused(doc, lambda e: e.update_condition(first, edited))
+    assert HOIST in message
 
 
 def test_delete_hoist_drops_its_entries_from_every_condition(doc):
@@ -560,3 +608,44 @@ def test_chart_point_rows_and_set_point_conditions_slot():
     assert len(split_rows) == len(_points(doc, first, split=True))
     vm.setPointConditions(0, ["nope"])
     assert failed
+
+
+def test_explicit_daf_one_through_the_slot():
+    # Under rules an entered 1.0 overrides the derived factor; without rules it is the
+    # default factor and stored as no override.
+    session, vm, failed, _edited = _vm(RULES_EXAMPLE)
+    vm.setConditionHoist("MH", 0.0, 0.0, 1.0)
+    first = _names(session.model.document)[0]
+    assert session.model.document.conditions[first].hoists["MH"].daf == 1.0
+    row = next(r for r in vm.conditionHoists if r["hoistId"] == "MH")
+    assert (row["daf"], row["dafShown"], row["dafDerived"]) == (1.0, 1.0, False)
+    vm.setConditionHoist("MH", 0.0, 0.0, "")
+    assert session.model.document.conditions[first].hoists["MH"].daf is None
+
+    session, vm, failed, _edited = _vm(RULES_LESS_EXAMPLE)
+    vm.setConditionHoist("MH", 0.0, 0.0, 1.0)
+    first = _names(session.model.document)[0]
+    assert session.model.document.conditions[first].hoists["MH"].daf is None
+    assert failed == []
+
+
+@pytest.mark.parametrize("stored", [1.0, None], ids=["explicit-1.0", "derived"])
+def test_an_unrelated_hoist_form_edit_keeps_the_condition_daf(stored):
+    """Regression: an explicit DAF 1.0 under rules was reset to None (derived) by any
+    edit of the hoist form, which shows a DAF number and submits it back."""
+    session, vm, failed, _edited = _vm(RULES_EXAMPLE)
+    first = _names(session.model.document)[0]
+    vm.setConditionHoist("MH", 0.0, 0.0, stored)
+    row = [h["id"] for h in vm.hoistList].index("MH")
+    mass = vm.hoistFields(row)["lower_block_mass_t"]
+
+    assert vm.setHoistField(row, "lower_block_mass_t", mass + 1.0)
+
+    doc = session.model.document
+    assert next(h for h in doc.hoists if h.id == "MH").lower_block_mass_t == mass + 1.0
+    entry = doc.conditions[first].hoists["MH"]
+    assert (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (0.0, 0.0, stored)
+    assert failed == []
+    # Changing the DAF number in the form still sets it.
+    assert vm.setHoistField(row, "hook_daf", 1.4)
+    assert session.model.document.conditions[first].hoists["MH"].daf == 1.4
