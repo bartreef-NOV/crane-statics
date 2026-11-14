@@ -1029,6 +1029,7 @@ def test_nearest_point_between_samples(qml_engine):
 
 def test_environment_panel_hides_the_condition_settings_of_every_document(qml_engine, tmp_path):
     from crane_statics.core.io import save_document
+    from crane_statics.qml_app.models.document_forms import VESSEL_MOTION_KEYS
     from tests.rules_docs import gale, rules_doc
 
     engine, app_vm, _model_vm, warnings = qml_engine
@@ -1038,11 +1039,16 @@ def test_environment_panel_hides_the_condition_settings_of_every_document(qml_en
     component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_DIR / "EnvironmentPanel.qml")))
     panel = component.create()
     assert panel is not None
-    assert panel.findChild(QObject, "vesselMotionGroup").property("visible") is False
+    # The per-condition settings (wind, vessel motion, its reference point) have no row.
+    condition_keys = ["max_wind_speed_m_s", *VESSEL_MOTION_KEYS]
+    assert panel.findChild(QObject, "vesselMotionGroup") is None
+    for key in condition_keys:
+        assert panel.findChild(QObject, f"envField_{key}") is None, key
+    for key in ("gravity_m_s2", "air_density_kg_m3", "boom_width_m"):
+        assert panel.findChild(QObject, f"envField_{key}") is not None, key
     assert panel.findChild(QObject, "conditionEnvironmentNote").property("visible") is True
     # v13: a rules-less document keeps them on its ``default`` condition too (was: shown).
     app_vm.openPath(str(EXAMPLE))
-    assert panel.findChild(QObject, "vesselMotionGroup").property("visible") is False
     assert panel.findChild(QObject, "conditionEnvironmentNote").property("visible") is True
     assert warnings == []
 

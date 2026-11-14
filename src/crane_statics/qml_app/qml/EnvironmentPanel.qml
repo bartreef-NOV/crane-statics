@@ -149,13 +149,7 @@ ColumnLayout {
             anchors.fill: parent
             spacing: root.layoutSpacing
 
-            EnvRow {
-                label: qsTr("Max Wind Speed (m/s)")
-                fieldKey: "max_wind_speed_m_s"
-                visible: !modelVm.environmentFromConditions
-            }
-
-            // A rules document sets these per load condition; its environment values are
+            // Every document sets these per load condition; its environment values are
             // placeholders no analysis reads, so they are not offered for editing.
             Label {
                 objectName: "conditionEnvironmentNote"
@@ -165,26 +159,6 @@ ColumnLayout {
                 wrapMode: Text.WordWrap
                 text: qsTr("Wind speed and vessel motion are set per load condition: edit them on the Conditions tab.")
             }
-        }
-    }
-
-    GroupBox {
-        objectName: "vesselMotionGroup"
-        Layout.fillWidth: true
-        visible: !modelVm.environmentFromConditions
-        title: qsTr("Vessel Motion (± limits)")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: root.layoutSpacing
-
-            EnvRow { label: qsTr("Surge (m/s²)"); fieldKey: "accel_x_m_s2" }
-            EnvRow { label: qsTr("Sway (m/s²)"); fieldKey: "accel_y_m_s2" }
-            EnvRow { label: qsTr("Heave (m/s²)"); fieldKey: "accel_z_m_s2" }
-            EnvRow { label: qsTr("Roll (rad/s²)"); fieldKey: "roll_angular_accel_rad_s2" }
-            EnvRow { label: qsTr("Pitch (rad/s²)"); fieldKey: "pitch_angular_accel_rad_s2" }
-            EnvRow { label: qsTr("Roll angle (°)"); fieldKey: "roll_deg" }
-            EnvRow { label: qsTr("Pitch angle (°)"); fieldKey: "pitch_deg" }
         }
     }
 
@@ -211,16 +185,6 @@ ColumnLayout {
 
             EnvRow { label: qsTr("Gravity (m/s²)"); fieldKey: "gravity_m_s2" }
             EnvRow { label: qsTr("Air Density (kg/m³)"); fieldKey: "air_density_kg_m3" }
-            EnvRow {
-                label: qsTr("Vessel Motion Reference X (m)")
-                fieldKey: "reference_x_m"
-                visible: !modelVm.environmentFromConditions
-            }
-            EnvRow {
-                label: qsTr("Vessel Motion Reference Z (m)")
-                fieldKey: "reference_z_m"
-                visible: !modelVm.environmentFromConditions
-            }
         }
     }
 }

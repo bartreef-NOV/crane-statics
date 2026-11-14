@@ -332,7 +332,8 @@ class ModelViewModel(QObject):
 
     @pyqtProperty(bool, notify=environmentChanged)
     def environmentFromConditions(self) -> bool:
-        """True on a rules document: wind and vessel motion are set per load condition."""
+        """True with a document: every document sets wind and vessel motion per load
+        condition (on the Conditions tab)."""
         return environment_from_conditions(self._model.document)
 
     @pyqtSlot(str, float)
@@ -354,7 +355,7 @@ class ModelViewModel(QObject):
         self.modelEdited.emit()
 
     # ------------------------------------------------------------------
-    # Load conditions (rules documents)
+    # Load conditions
     # ------------------------------------------------------------------
 
     @pyqtProperty(bool, notify=conditionsChanged)
