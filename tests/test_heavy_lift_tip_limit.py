@@ -34,10 +34,11 @@ from crane_statics.rules.validation import (
     tip_vertical_accel_g,
 )
 from tests.rules_docs import first_settings, load_v13
+from tests.authored_helpers import example_path
 
 ROOT = Path(__file__).parent.parent
-ABS_EXAMPLE = ROOT / "examples" / "crane_input_GT283_abs.yaml"
-LEGACY_EXAMPLE = ROOT / "examples" / "crane_input_22689.yaml"
+ABS_EXAMPLE = example_path("crane_input_GT283_abs.yaml")
+LEGACY_EXAMPLE = example_path("crane_input_22689.yaml")
 EXCESS = "0.07 g for heavy_lift"
 A_Z = 0.3
 

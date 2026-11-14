@@ -14,9 +14,10 @@ from crane_statics.core.sweep import run_mode_sweep
 from crane_statics.core.sweep_cache import ComputeCache, ComputeScope, LimitResult
 from crane_statics.core.sweep_cache import compute_fingerprint, limit_signature
 from crane_statics.data.models import CraneDocument
+from tests.authored_helpers import example_path
 
 ROOT = Path(__file__).parent.parent
-EXAMPLE = ROOT / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 HOIST = "MH"
 STEP = 10.0
 VESSEL = {"accel_x_m_s2": 0.5, "roll_deg": 2.0}

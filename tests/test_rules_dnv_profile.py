@@ -20,9 +20,10 @@ from crane_statics.rules.types import CaseSpec
 from crane_statics.rules.validation import RulesValidationError
 from tests import rules_reference as ref
 from tests.rules_docs import load_v13
+from tests.authored_helpers import example_path
 
 G = ref.G
-GT283 = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
+GT283 = example_path("crane_input_GT283.yaml")
 ROPE_T = 1.5
 K = 5000.0
 

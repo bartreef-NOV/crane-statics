@@ -24,8 +24,9 @@ from crane_statics.core.sweep_cache import (
     limit_signature,
 )
 from crane_statics.data.models import CraneDocument
+from tests.authored_helpers import authored_daf, case_document, example_path, hoist_settings
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 HOIST = "MH"
 STEP = 10.0
 # MH__rope binds at short outreach, the bearing line load at mid outreach and rear_hinge Fx
@@ -43,13 +44,14 @@ _SCENE_FIELDS = set(SceneState.__dataclass_fields__)
 @pytest.fixture(scope="module")
 def doc() -> CraneDocument:
     document = load_document(EXAMPLE)
-    vm = document.environment.vessel_motion
+    condition = document.conditions["default"]
+    vm = condition.vessel_motion
     vm.accel_x_m_s2 = 0.5
     vm.accel_z_m_s2 = 0.8
     vm.pitch_angular_accel_rad_s2 = 0.05
     vm.roll_deg = 2.0
     vm.pitch_deg = 1.5
-    document.environment.max_wind_speed_m_s = 20.0
+    condition.wind_speed_m_s = 20.0
     return document
 
 
@@ -75,7 +77,9 @@ def _chart_result(
     def missing() -> LimitResult:
         raise AssertionError(f"sweep did not evaluate {lid} at {outreach} m")
 
-    return scope.limit_result(angle, limit_signature(lid, LIMITS[lid]), missing)
+    # The sweep caches each case's solves under the case name (v13: always, "default" here).
+    case_scope = scope.for_case("default")
+    return case_scope.limit_result(angle, limit_signature(lid, LIMITS[lid]), missing)
 
 
 def _binding_outreach(payload: dict[str, Any], lid: str) -> float:
@@ -92,8 +96,8 @@ def _scene_load_kN(doc: CraneDocument, case: GoverningCase) -> float:
     """The case solved as the Scene solves it: exact inputs, no envelope."""
     f = case.scene_fields
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, case.mode_name)
-    calc = CraneCalculator(doc)
+    mode = analysis_mode_by_name(hoist, case.mode_name, hoist_settings(doc, HOIST))
+    calc = CraneCalculator(case_document(doc))
     point = calc.compute_analysis_point(
         f["boom_angle_deg"],
         0.0,
@@ -117,7 +121,7 @@ def _scene_load_kN(doc: CraneDocument, case: GoverningCase) -> float:
     cap = calc.compute_allowable_load(
         point,
         {case.limit_id: LIMITS[case.limit_id]},
-        hook_daf=hoist.hook_daf,
+        hook_daf=authored_daf(doc, HOIST),
         lower_block_mass_t=mode.lower_block_mass_t,
     )
     return float(cap.max_allowable_load_kN)
@@ -138,7 +142,7 @@ def test_case_hook_load_equals_chart_point(
     assert set(case.scene_fields) == _SCENE_FIELDS
     assert case.scene_fields["hook_load_auto"] is False
     assert case.scene_fields["wind_direction"] in {"+X", "-X", "+Y", "-Y"}
-    assert case.scene_fields["wind_speed_m_s"] == doc.environment.max_wind_speed_m_s
+    assert case.scene_fields["wind_speed_m_s"] == doc.conditions["default"].wind_speed_m_s
     assert case.scene_fields["hook_load_kN"] == pytest.approx(chart, rel=1e-6)
     scene = _scene_load_kN(doc, case)
     if lid in _MAGNITUDE:
@@ -206,7 +210,7 @@ def test_tackle_length_is_mode_value(doc: CraneDocument, mode_name: str) -> None
 def test_inapplicable_split_mode_returns_none(doc: CraneDocument) -> None:
     """WH has no split block: like run_mode_sweep, split gives nothing (not a normal case)."""
     wh = next(h for h in doc.hoists if h.id == "WH")
-    assert analysis_mode_by_name(wh, "split").name == "normal"
+    assert analysis_mode_by_name(wh, "split", hoist_settings(doc, "WH")).name == "normal"
     assert run_mode_sweep(doc, "WH", "split", {}, STEP, {}) is None
     limits = {"WH__rope": {"T": 100000.0}}
     lo, hi = float(wh.outreach_min_m or 0.0), float(wh.outreach_max_m or 0.0)

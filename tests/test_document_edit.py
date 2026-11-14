@@ -21,8 +21,9 @@ from crane_statics.data.models import ConditionSpec
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
 from tests.rules_docs import GT283, gale, rules_doc
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 @pytest.fixture
@@ -833,7 +834,7 @@ def _offboard_doc():
         v_in_m_s=0.6,
         v_t_m_s=0.3,
     )
-    return _rules(rules_doc("ABS", a, gale("b")), daf=1.0)
+    return _rules(rules_doc("ABS", a, gale("b")), daf=None)  # v12 hook_daf 1.0: derived
 
 
 class TestConditionViewModel:

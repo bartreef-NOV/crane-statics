@@ -15,8 +15,9 @@ from crane_statics.rules.stiffness import (
     worst_case_tackle_length_m,
 )
 from tests.rules_reference import hook_stiffness
+from tests.authored_helpers import example_path
 
-GT283 = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
+GT283 = example_path("crane_input_GT283.yaml")
 ANGLE_DEG = 45.0
 EA_MH_KN = 90000.0
 EA_BH_KN = 150000.0

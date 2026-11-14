@@ -13,9 +13,10 @@ from crane_statics.core.chart_cache import (
     empty_payload,
     plan_chart_jobs,
 )
+from tests.authored_helpers import example_path
 
 ROOT = Path(__file__).parent.parent
-EXAMPLE = ROOT / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 LIMITS: dict[str, dict] = {"boom_hoist": {"T": 5000.0}}
 
 

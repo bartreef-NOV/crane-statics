@@ -38,7 +38,13 @@ from crane_statics.data.models import ConditionHoist, ConditionSpec, VesselMotio
 from crane_statics.rules import validate_rules_document
 from crane_statics.rules.abs_profile import AbsProfile
 from tests import rules_reference as ref
-from tests.rules_docs import GT283, rules_doc, without_live_lateral, without_suspended_rope
+from tests.rules_docs import (
+    GT283,
+    first_settings,
+    rules_doc,
+    without_live_lateral,
+    without_suspended_rope,
+)
 
 ROOT = Path(__file__).parent.parent
 HOIST = "MH"
@@ -111,6 +117,8 @@ def test_no_hook_lateral_leaves_the_gt283_golden_unchanged(calc: CraneCalculator
         vessel_pitch_deg=0.0,
         crane_slewing_angle_deg=0.0,
     )
+    # The golden has the MH offlead limit that v12 read from the hoist by default.
+    kwargs["offlead_deg"] = first_settings(calc.doc, HOIST).offlead_deg
     plain = _point(calc, **kwargs)
     with_none = _point(calc, hook_lateral=None, **kwargs)
     golden = json.loads((ROOT / "tests" / "golden" / "gt283_mh_45deg.json").read_text())
@@ -289,7 +297,7 @@ def test_envelope_without_hook_lateral_is_unchanged(calc: CraneCalculator) -> No
 def test_abs_default_load_area_is_applied_at_the_chart_maximum_live_load() -> None:
     doc = rules_doc("ABS", ConditionSpec(name="c", wind_speed_m_s=10.3))
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, "normal")
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))
     rope_t, chart_t = 4.0, 300.0
     setup = AbsProfile().lift_setup(
         doc, doc.conditions["c"], HOIST, mode, 0.0, rope_t, chart_t, support_x_m=0.0
@@ -312,8 +320,10 @@ def test_abs_entered_load_area_is_used_as_entered() -> None:
     )
     doc = rules_doc("ABS", cond)
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, "normal")
-    setup = AbsProfile().lift_setup(doc, cond, HOIST, mode, 0.0, 4.0, 300.0, support_x_m=0.0)
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))
+    setup = AbsProfile().lift_setup(
+        doc, doc.conditions["c"], HOIST, mode, 0.0, 4.0, 300.0, support_x_m=0.0
+    )
     assert setup.lateral.wind_area_m2 == 12.0
     assert setup.lateral.wind_force_per_speed_sq * 10.3**2 == pytest.approx(
         ref.abs_wind_pressure(10.3, 1.2) * 12.0, rel=1e-12
@@ -327,7 +337,7 @@ def test_rules_hook_lateral_from_the_lift_setup() -> None:
     doc = rules_doc("ABS", cond)
     condition = condition_cases(doc, "c")[0]
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, "normal")
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))
     lift = LiftFactors(doc, CraneCalculator(doc))
     setup = lift.setup(condition, HOIST, mode, ANGLE)
     support_z = lift.support_z_m(HOIST, ANGLE)
@@ -361,7 +371,7 @@ def test_abs_horizontal_acceleration_is_taken_at_the_boom_tip() -> None:
     doc = rules_doc("ABS", cond)
     condition = condition_cases(doc, "c")[0]
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, "normal")
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))
     lift = LiftFactors(doc, CraneCalculator(doc))
     setup = lift.setup(condition, HOIST, mode, ANGLE)
     # The support node's height, read independently of the factor code.
@@ -488,8 +498,7 @@ DAF = 1.3
 def _abs_sweep_doc(motion: VesselMotion = ABS_MOTION):
     cond = ConditionSpec(name="sea", wind_speed_m_s=0.0, vessel_motion=motion)
     doc = without_suspended_rope(rules_doc("ABS", cond))
-    hoists = [h.model_copy(update={"hook_daf": DAF}) if h.id == HOIST else h for h in doc.hoists]
-    doc = doc.model_copy(update={"hoists": hoists})
+    doc.conditions["sea"].hoists[HOIST].daf = DAF
     validate_rules_document(doc)
     return doc
 
@@ -519,6 +528,7 @@ def test_abs_sweep_capacity_drops_by_the_hand_derived_lateral(
     monkeypatch.setattr(sweep_module, "hook_lateral", lambda *_a, **_k: None)
     without = _curve(doc)
     hoist = next(h for h in doc.hoists if h.id == HOIST)
+    settings = doc.conditions["sea"].hoists[HOIST]
     kin = KinematicsAdapter(doc.model_dump())
     calc = CraneCalculator(doc)
     checked = 0
@@ -537,7 +547,7 @@ def test_abs_sweep_capacity_drops_by_the_hand_derived_lateral(
         assert pt is not None and pt.offlead_lateral_unit_rope_tensions is not None
         s_hook = pt.sensitivity_rope_tensions["boom_hoist"]
         r_x = abs(pt.offlead_lateral_unit_rope_tensions["boom_hoist"])
-        s_lead = s_hook + math.sin(math.radians(hoist.offlead_deg)) * r_x
+        s_lead = s_hook + math.sin(math.radians(settings.offlead_deg)) * r_x
         h0 = DAF * (payload_t + hoist.lower_block_mass_t) * G
         expected_h = h0 * s_lead / (s_lead + r * r_x)
         expected_t = expected_h / (DAF * G) - hoist.lower_block_mass_t
@@ -596,8 +606,9 @@ def test_dnv_case_ii_incline_and_load_wind_reach_the_sweep(monkeypatch) -> None:
         assert got.min_fraction == 0.0
 
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, "normal")
-    s_lead = math.sin(math.radians(hoist.offlead_deg))
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))
+    settings = doc.conditions["sea"].hoists[HOIST]
+    s_lead = math.sin(math.radians(settings.offlead_deg))
     kin = KinematicsAdapter(doc.model_dump())
     lift = LiftFactors(doc, CraneCalculator(doc))
     for outreach, payload_t in with_lateral.items():
@@ -623,8 +634,8 @@ def test_dnv_case_ii_incline_and_load_wind_reach_the_sweep(monkeypatch) -> None:
                 probes,
                 limits,
                 vessel=condition.vessel_motion,
-                offlead_deg=hoist.offlead_deg,
-                sidelead_deg=hoist.sidelead_deg,
+                offlead_deg=settings.offlead_deg,
+                sidelead_deg=settings.sidelead_deg,
                 hook_daf=factor,
                 lower_block_mass_t=hoist.lower_block_mass_t,
             ).max_allowable_load_kN
@@ -783,11 +794,11 @@ def _abs_setup(
     hoists = [h.model_copy(update={"max_hoisting_speed_m_s": 0.5}) for h in doc.hoists]
     doc = doc.model_copy(update={"hoists": hoists})
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    hoist = hoist.model_copy(update={"hook_daf": 1.0})
-    doc = doc.model_copy(update={"hoists": [hoist if h.id == HOIST else h for h in doc.hoists]})
-    mode = analysis_mode_by_name(hoist, "normal")
+    # No manual DAF override (v12: hook_daf 1.0), so the standard derives the factor.
+    doc.conditions["c"].hoists[HOIST].daf = None
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))
     setup = AbsProfile().lift_setup(
-        doc, cond, HOIST, mode, 5000.0, 0.0, 300.0, support_x_m=support_x_m
+        doc, doc.conditions["c"], HOIST, mode, 5000.0, 0.0, 300.0, support_x_m=support_x_m
     )
     return setup, mode
 
@@ -846,7 +857,7 @@ def test_lift_setup_passes_the_support_node_x_at_each_angle() -> None:
     doc = rules_doc("ABS", cond)
     condition = condition_cases(doc, "c")[0]
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, "normal")
+    mode = analysis_mode_by_name(hoist, "normal", first_settings(doc, HOIST))
     lift = LiftFactors(doc, CraneCalculator(doc))
     doc_dict = doc.model_dump()
     support = next(h for h in doc_dict["hoists"] if h["id"] == HOIST)["support_node_id"]

@@ -27,8 +27,9 @@ from crane_statics.core.session_model import SessionModel
 from crane_statics.core.sweep import run_mode_sweep
 from tests import rules_reference as ref
 from tests.rules_docs import gale, rules_doc
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 G = 9.81
 DAF = 1.3
 HOOK_T = 2.0

@@ -26,8 +26,9 @@ from crane_statics.core.chart_envelope import (
 from crane_statics.core.demand_extraction import extract_connection_component_response
 from crane_statics.core.lead_channels import compose_lead_channel_point
 from crane_statics.data.models import CraneDocument
+from tests.authored_helpers import authored_daf, case_document, example_path, hoist_settings
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
+EXAMPLE = example_path("crane_input_GT283.yaml")
 BOOM_ANGLE_DEG = 45.0
 HOIST = "MH"
 # Model vessel-motion limits, all nonzero (engine keyword -> limit).
@@ -51,7 +52,7 @@ REF_WIND_STEP = 45.0
 
 def _document(*, offset_boom_mass: bool) -> CraneDocument:
     doc = load_document(EXAMPLE)
-    vm = doc.environment.vessel_motion
+    vm = doc.conditions["default"].vessel_motion
     vm.accel_x_m_s2 = LIMITS["accel_x_m_s2"]
     vm.accel_y_m_s2 = LIMITS["accel_y_m_s2"]
     vm.accel_z_m_s2 = LIMITS["accel_z_m_s2"]
@@ -67,7 +68,8 @@ def _document(*, offset_boom_mass: bool) -> CraneDocument:
         mp.y_m = 1.7
         if mp.local_x_m is not None:
             mp.local_y_m = 1.7
-    return doc
+    # The environment of the one condition, which the bare calculators below read.
+    return case_document(doc)
 
 
 def _cases(seed: int) -> list[tuple[dict[str, Any], float, float]]:
@@ -203,7 +205,7 @@ def test_unknown_hoist_gives_no_probes() -> None:
 def test_probes_are_zero_lead_points() -> None:
     """The authored offlead must not be in the probes: envelope_capacity adds both signs."""
     doc = _document(offset_boom_mass=False)
-    assert _hoist(doc).offlead_deg != 0.0
+    assert hoist_settings(doc, HOIST).offlead_deg != 0.0
     calc = CraneCalculator(doc)
     probes = build_probes(calc, HOIST, BOOM_ANGLE_DEG, 0.0, None)
     assert probes is not None
@@ -234,6 +236,7 @@ def test_vessel_limits_skip_probes_of_unused_channels() -> None:
     used = [p is not lean.zero for p in lean.motion]
     assert used == [False, False, True, False, False]
     hoist = _hoist(doc)
+    settings = hoist_settings(doc, HOIST)
     for limits in ENVELOPE_LIMITS:
         caps = [
             envelope_capacity(
@@ -241,9 +244,9 @@ def test_vessel_limits_skip_probes_of_unused_channels() -> None:
                 probes,
                 limits,
                 vessel=vm,
-                offlead_deg=hoist.offlead_deg,
-                sidelead_deg=hoist.sidelead_deg,
-                hook_daf=hoist.hook_daf,
+                offlead_deg=settings.offlead_deg,
+                sidelead_deg=settings.sidelead_deg,
+                hook_daf=authored_daf(doc, HOIST),
                 lower_block_mass_t=hoist.lower_block_mass_t,
             )
             for probes in (full, lean)
@@ -264,15 +267,16 @@ def test_probes_for_other_vessel_limits_are_rejected() -> None:
     assert lean.solved == (False, False, True, False, False)
     full_vessel = _envelope_document().environment.vessel_motion
     hoist = _hoist(doc)
+    settings = hoist_settings(doc, HOIST)
     with pytest.raises(ValueError, match="unsolved channels"):
         envelope_capacity(
             calc,
             lean,
             ENVELOPE_LIMITS[0],
             vessel=full_vessel,
-            offlead_deg=hoist.offlead_deg,
-            sidelead_deg=hoist.sidelead_deg,
-            hook_daf=hoist.hook_daf,
+            offlead_deg=settings.offlead_deg,
+            sidelead_deg=settings.sidelead_deg,
+            hook_daf=authored_daf(doc, HOIST),
             lower_block_mass_t=hoist.lower_block_mass_t,
         )
 
@@ -305,12 +309,14 @@ def _envelope_document(
 ) -> CraneDocument:
     """GT283 at 20 m/s wind with the given vessel limits (default: all seven nonzero)."""
     doc = _document(offset_boom_mass=offset_boom_mass)
-    doc.environment.max_wind_speed_m_s = WIND_M_S
+    # The condition (the reference reads it) and the environment of its case alike.
+    condition = doc.conditions["default"]
+    condition.wind_speed_m_s = WIND_M_S
     if vessel_limits is not None:
-        vm = doc.environment.vessel_motion
+        vm = condition.vessel_motion
         for field in _VESSEL_FIELDS:
             setattr(vm, field, float(vessel_limits.get(field, 0.0)))
-    return doc
+    return case_document(doc)
 
 
 def _hoist(doc: CraneDocument) -> Any:
@@ -327,6 +333,7 @@ def _fast(
     lower_block_mass_t: float | None = None,
 ) -> AllowableCapacity:
     hoist = _hoist(doc)
+    settings = hoist_settings(doc, HOIST)
     probes = build_probes(calc, HOIST, angle, float(doc.environment.max_wind_speed_m_s), overrides)
     assert probes is not None
     return envelope_capacity(
@@ -334,9 +341,9 @@ def _fast(
         probes,
         limits,
         vessel=doc.environment.vessel_motion,
-        offlead_deg=hoist.offlead_deg,
-        sidelead_deg=hoist.sidelead_deg,
-        hook_daf=hoist.hook_daf,
+        offlead_deg=settings.offlead_deg,
+        sidelead_deg=settings.sidelead_deg,
+        hook_daf=authored_daf(doc, HOIST),
         lower_block_mass_t=(
             hoist.lower_block_mass_t if lower_block_mass_t is None else lower_block_mass_t
         ),
@@ -363,6 +370,7 @@ def _compare_with_reference(
 ) -> None:
     calc = CraneCalculator(doc)
     hoist = _hoist(doc)
+    settings = hoist_settings(doc, HOIST)
     mass = float(hoist.lower_block_mass_t if lower_block_mass_t is None else lower_block_mass_t)
     refs = reference_capacities(
         calc,
@@ -370,7 +378,7 @@ def _compare_with_reference(
         HOIST,
         angle,
         ENVELOPE_LIMITS,
-        hook_daf=hoist.hook_daf,
+        hook_daf=authored_daf(doc, HOIST),
         lower_block_mass_t=mass,
         overrides=overrides,
         slew_step_deg=slew_step_deg,
@@ -387,7 +395,8 @@ def test_envelope_never_exceeds_the_reference(angle: float) -> None:
     """All seven vessel limits, 20 m/s wind and the example's nonzero leads."""
     doc = _envelope_document()
     hoist = _hoist(doc)
-    assert hoist.offlead_deg != 0.0 and hoist.sidelead_deg != 0.0
+    settings = hoist_settings(doc, HOIST)
+    assert settings.offlead_deg != 0.0 and settings.sidelead_deg != 0.0
     vm = doc.environment.vessel_motion
     assert all(getattr(vm, field) != 0.0 for field in _VESSEL_FIELDS)
     _compare_with_reference(doc, angle, slew_step_deg=REF_SLEW_STEP, wind_step_deg=REF_WIND_STEP)
@@ -412,7 +421,7 @@ def test_envelope_with_split_mode_overrides() -> None:
     split = _hoist(doc).model_copy(
         update={"splitable_block": True, "split_falls": 10, "split_lower_block_mass_t": 30.0}
     )
-    mode = analysis_mode_by_name(split, "split")
+    mode = analysis_mode_by_name(split, "split", hoist_settings(doc, HOIST))
     assert mode.name == "split" and mode.runtime_overrides
     _compare_with_reference(
         doc,
@@ -424,10 +433,10 @@ def test_envelope_with_split_mode_overrides() -> None:
     )
 
 
-def _lead_cases(hoist: Any) -> list[tuple[float, float]]:
+def _lead_cases(settings: Any) -> list[tuple[float, float]]:
     return list(
         itertools.product(
-            _signed_candidates(hoist.offlead_deg), _signed_candidates(hoist.sidelead_deg)
+            _signed_candidates(settings.offlead_deg), _signed_candidates(settings.sidelead_deg)
         )
     )
 
@@ -437,6 +446,7 @@ def test_zero_limits_and_no_wind_equal_the_single_solve() -> None:
     doc.environment.max_wind_speed_m_s = 0.0
     calc = CraneCalculator(doc)
     hoist = _hoist(doc)
+    settings = hoist_settings(doc, HOIST)
     pt = calc.compute_analysis_point(
         BOOM_ANGLE_DEG, 0.0, HOIST, wind_speed_m_s=0.0, offlead_deg=0.0, sidelead_deg=0.0
     )
@@ -447,10 +457,10 @@ def test_zero_limits_and_no_wind_equal_the_single_solve() -> None:
                 calc.compute_allowable_load(
                     compose_lead_channel_point(pt, off, side),
                     limits,
-                    hook_daf=hoist.hook_daf,
+                    hook_daf=authored_daf(doc, HOIST),
                     lower_block_mass_t=hoist.lower_block_mass_t,
                 )
-                for off, side in _lead_cases(hoist)
+                for off, side in _lead_cases(settings)
             ),
             key=lambda cap: cap.max_allowable_load_kN,
         )

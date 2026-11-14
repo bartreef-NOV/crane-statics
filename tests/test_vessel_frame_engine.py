@@ -18,9 +18,10 @@ import pytest
 from crane_statics.calculation.engine import CraneCalculator
 from crane_statics.calculation.solver import crane_solver
 from crane_statics.core import load_document
+from tests.authored_helpers import example_path
 
 ROOT = Path(__file__).parent.parent
-EXAMPLE = ROOT / "examples" / "crane_input_GT283.yaml"
+EXAMPLE = example_path("crane_input_GT283.yaml")
 G = 9.81
 SPLIT_SUFFIXES = ("_left", "_right")
 OUT_OF_PLANE_PLATFORM = {"Fy", "Mx"}

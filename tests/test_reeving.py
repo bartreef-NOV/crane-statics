@@ -8,12 +8,15 @@ import yaml
 
 from crane_statics.core.io import DocumentIOError, load_document, save_document
 from crane_statics.data import normalize_document
+from tests.authored_helpers import copy_hoist, example_path, v13
 
-EXAMPLES = sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
+EXAMPLES = [
+    example_path(p) for p in sorted((Path(__file__).parent.parent / "examples").glob("*.yaml"))
+]
 
 
 def _authored() -> dict:
-    return {
+    return v13({
         "schema": {"name": "crane-statics", "version": "12.0.0"},
         "metadata": {"name": "Reeving"},
         "model_definition": {
@@ -45,7 +48,7 @@ def _authored() -> dict:
                 },
             },
         },
-    }
+    })
 
 
 def _nodes(doc) -> dict:
@@ -117,7 +120,7 @@ def test_duplicate_local_node_definition_is_rejected():
 def test_hoist_ids_differing_only_by_case_are_rejected():
     data = _authored()
     hoists = data["model_definition"]["hoists"]
-    hoists["mh"] = deepcopy(hoists["MH"])
+    copy_hoist(data["model_definition"], "MH", "mh")
 
     with pytest.raises(ValueError, match="differ ignoring case"):
         normalize_document(data)
@@ -143,7 +146,7 @@ def test_shared_node_is_written_by_global_id_and_round_trips(tmp_path):
     data = _authored()
     md = data["model_definition"]
     md["platform"] = {"nodes": {"shared": {"x_m": -2.0, "z_m": 5.0}}}
-    md["hoists"]["AH"] = deepcopy(md["hoists"]["MH"])
+    copy_hoist(md, "MH", "AH")
     md["hoists"]["AH"]["reeving"][0] = {"node": "shared"}
     md["hoists"]["MH"]["reeving"][0] = {"node": "shared"}
     path = tmp_path / "shared.yaml"

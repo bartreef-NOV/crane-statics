@@ -12,8 +12,9 @@ from crane_statics.core.sweep_cache import (
     compute_fingerprint,
     limit_signature,
 )
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 class _Counter:

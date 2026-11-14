@@ -17,6 +17,7 @@ import pytest
 from crane_statics.core import drawn_loads as dl
 from crane_statics.core import load_document
 from tests.test_acceptance import SceneHarness
+from tests.authored_helpers import load_example
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 EXAMPLE_NAMES = ("crane_input_22689", "crane_input_13778_retracted", "crane_input_GT283")
@@ -33,7 +34,7 @@ WITH_ANGULAR = dict(TILTED_SLEWED, pitch_accel_rad_s2=0.02, roll_accel_rad_s2=-0
 
 
 def _harness(name: str, hoist_id: str | None = None, **scene) -> SceneHarness:
-    doc = load_document(EXAMPLES / f"{name}.yaml")
+    doc = load_example(f"{name}.yaml")
     harness = SceneHarness(doc, hoist_id or doc.hoists[0].id)
     harness.apply(boom_angle_deg=45.0, **scene)
     return harness

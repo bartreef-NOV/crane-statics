@@ -9,8 +9,9 @@ import pytest
 from crane_statics.core import load_document
 from crane_statics.core.sweep import run_capacity_sweep
 from crane_statics.core.vessel_envelope import vessel_motion_cases
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
+EXAMPLE = example_path("crane_input_GT283.yaml")
 LIMITS = {"boom_hoist": {"T": 5000.0}}
 
 

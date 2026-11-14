@@ -29,9 +29,10 @@ from tests.rules_docs import (
     rules_doc,
     without_suspended_rope,
 )
+from tests.authored_helpers import example_path, load_example
 
 ROOT = Path(__file__).parent.parent
-EXAMPLE = ROOT / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 HOIST = "MH"
 LIMITS: dict[str, dict] = {"boom_hoist": {"T": 5000.0}}
 STEP = 10.0
@@ -339,7 +340,7 @@ def test_rules_records_are_the_setup_the_capacity_was_computed_with() -> None:
     outreach, records, warnings, _case = payload["provenance"][len(payload["provenance"]) // 2]
     (case,) = condition_cases(doc, "gale")
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, "normal")
+    mode = analysis_mode_by_name(hoist, "normal", case.hoist_settings(HOIST))
     angle = KinematicsAdapter(doc.model_dump()).outreach_to_angle(outreach, HOIST)
     calc = CraneCalculator(condition_document(doc, case))
     assert angle is not None
@@ -368,7 +369,7 @@ def _case_setup(doc: CraneDocument, case, outreach: float):
     from crane_statics.core.load_condition import condition_document
 
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, "normal")
+    mode = analysis_mode_by_name(hoist, "normal", case.hoist_settings(HOIST))
     angle = KinematicsAdapter(doc.model_dump()).outreach_to_angle(outreach, HOIST)
     assert angle is not None
     calc = CraneCalculator(condition_document(doc, case))
@@ -450,7 +451,7 @@ def test_every_curve_point_has_a_trail(example: str) -> None:
     """The shipped rules examples: every curve outreach has a non-empty clause trail."""
     from crane_statics.data import payload_hoist_ids
 
-    doc = load_document(ROOT / "examples" / example)
+    doc = load_example(example)
     for hoist_id in payload_hoist_ids(doc):
         payload = run_mode_sweep(doc, hoist_id, "normal", RULES_LIMITS, RULES_STEP, {})
         assert payload is not None and payload["curve_data"], hoist_id

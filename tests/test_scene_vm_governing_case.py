@@ -14,8 +14,9 @@ from crane_statics.core.io import load_document
 from crane_statics.qml_app.scene.scene_renderer import CraneSceneRenderer
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 LABEL = "Governing case: MH__rope at 30.0 m"
 # The ± vessel-motion limits the test document gets (Model field -> value).
 VESSEL_LIMITS = {

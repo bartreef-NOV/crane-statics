@@ -18,6 +18,7 @@ from crane_statics.core import drawn_loads as dl
 from crane_statics.core import load_document
 from crane_statics.data import normalize_document
 from tests.test_acceptance import scene_inputs_at_drawn_tackle
+from tests.authored_helpers import example_path, load_example
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 EXAMPLE_NAMES = ["crane_input_22689", "crane_input_13778_retracted", "crane_input_GT283"]
@@ -50,7 +51,7 @@ def _assert_free_bodies_close(inputs) -> None:
 @pytest.mark.parametrize("angle", [30.0, 45.0, 60.0])
 @pytest.mark.parametrize("name", EXAMPLE_NAMES)
 def test_every_free_body_closes_on_every_example(name: str, angle: float) -> None:
-    doc = load_document(EXAMPLES / f"{name}.yaml")
+    doc = load_example(f"{name}.yaml")
     inputs = scene_inputs_at_drawn_tackle(doc, doc.hoists[0].id, angle=angle, wind_speed_m_s=0.0)
     assert inputs.analysis_point is not None
     _assert_free_bodies_close(inputs)
@@ -58,7 +59,7 @@ def test_every_free_body_closes_on_every_example(name: str, angle: float) -> Non
 
 @pytest.mark.parametrize("name", EXAMPLE_NAMES)
 def test_every_free_body_closes_with_wind_on_every_example(name: str) -> None:
-    doc = load_document(EXAMPLES / f"{name}.yaml")
+    doc = load_example(f"{name}.yaml")
     wind = float(doc.environment.max_wind_speed_m_s)
     inputs = scene_inputs_at_drawn_tackle(
         doc, doc.hoists[0].id, angle=45.0, wind_speed_m_s=wind, wind_direction="+X"
@@ -68,7 +69,7 @@ def test_every_free_body_closes_with_wind_on_every_example(name: str) -> None:
 
 
 def test_renaming_a_sheave_does_not_change_the_statics() -> None:
-    text = (EXAMPLES / "crane_input_GT283.yaml").read_text(encoding="utf-8")
+    text = example_path("crane_input_GT283.yaml").read_text(encoding="utf-8")
     sheave = "- {node: boom_sheave_3, body: boom, u_m: 103.9, w_m: 1.6, parts: 2}"
     assert text.count(sheave) == 1
     renamed = text.replace(sheave, sheave.replace("boom_sheave_3", "sheave_three"))

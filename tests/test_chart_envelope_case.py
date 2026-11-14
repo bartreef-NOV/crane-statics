@@ -15,6 +15,7 @@ from crane_statics.core.chart_envelope import (
     envelope_capacity_case,
 )
 from crane_statics.data.models import CraneDocument
+from tests.authored_helpers import authored_daf, hoist_settings
 from tests.test_chart_envelope import (
     BOOM_ANGLE_DEG,
     ENVELOPE_LIMITS,
@@ -41,6 +42,7 @@ def _envelope(
     calc: CraneCalculator, doc: CraneDocument, limits: dict[str, dict]
 ) -> tuple[AllowableCapacity, EnvelopeCase | None]:
     hoist = _hoist(doc)
+    settings = hoist_settings(doc, HOIST)
     probes = build_probes(calc, HOIST, BOOM_ANGLE_DEG, WIND_M_S, None)
     assert probes is not None
     return envelope_capacity_case(
@@ -48,9 +50,9 @@ def _envelope(
         probes,
         limits,
         vessel=doc.environment.vessel_motion,
-        offlead_deg=hoist.offlead_deg,
-        sidelead_deg=hoist.sidelead_deg,
-        hook_daf=hoist.hook_daf,
+        offlead_deg=settings.offlead_deg,
+        sidelead_deg=settings.sidelead_deg,
+        hook_daf=authored_daf(doc, HOIST),
         lower_block_mass_t=hoist.lower_block_mass_t,
     )
 
@@ -60,6 +62,7 @@ def _scene_capacity(
 ) -> AllowableCapacity:
     """The case solved directly, as the Scene would: no superposition, no envelope."""
     hoist = _hoist(doc)
+    settings = hoist_settings(doc, HOIST)
     v = case.vessel_inputs
     point = calc.compute_analysis_point(
         BOOM_ANGLE_DEG,
@@ -80,7 +83,7 @@ def _scene_capacity(
     )
     assert point is not None
     return calc.compute_allowable_load(
-        point, limits, hook_daf=hoist.hook_daf, lower_block_mass_t=hoist.lower_block_mass_t
+        point, limits, hook_daf=authored_daf(doc, HOIST), lower_block_mass_t=hoist.lower_block_mass_t
     )
 
 
@@ -89,8 +92,9 @@ def _assert_case_shape(case: EnvelopeCase | None, doc: CraneDocument) -> Envelop
     assert set(case.vessel_inputs) == _VESSEL_FIELDS
     assert case.wind_axis in _WIND_AXES
     hoist = _hoist(doc)
-    assert abs(case.offlead_deg) == pytest.approx(abs(hoist.offlead_deg))
-    assert abs(case.sidelead_deg) == pytest.approx(abs(hoist.sidelead_deg))
+    settings = hoist_settings(doc, HOIST)
+    assert abs(case.offlead_deg) == pytest.approx(abs(settings.offlead_deg))
+    assert abs(case.sidelead_deg) == pytest.approx(abs(settings.sidelead_deg))
     return case
 
 
@@ -147,6 +151,7 @@ def test_no_wind_gives_no_wind_axis() -> None:
     doc = _envelope_document()
     calc = CraneCalculator(doc)
     hoist = _hoist(doc)
+    settings = hoist_settings(doc, HOIST)
     probes = build_probes(calc, HOIST, BOOM_ANGLE_DEG, 0.0, None)
     assert probes is not None
     for limits in (ENVELOPE_LIMITS[0], _MAGNITUDE[0][1]):
@@ -155,9 +160,9 @@ def test_no_wind_gives_no_wind_axis() -> None:
             probes,
             limits,
             vessel=doc.environment.vessel_motion,
-            offlead_deg=hoist.offlead_deg,
-            sidelead_deg=hoist.sidelead_deg,
-            hook_daf=hoist.hook_daf,
+            offlead_deg=settings.offlead_deg,
+            sidelead_deg=settings.sidelead_deg,
+            hook_daf=authored_daf(doc, HOIST),
             lower_block_mass_t=hoist.lower_block_mass_t,
         )
         assert case is not None and case.wind_axis == ""
@@ -175,13 +180,14 @@ def test_envelope_capacity_is_the_first_element() -> None:
     doc = _envelope_document()
     calc = CraneCalculator(doc)
     hoist = _hoist(doc)
+    settings = hoist_settings(doc, HOIST)
     probes = build_probes(calc, HOIST, BOOM_ANGLE_DEG, WIND_M_S, None)
     assert probes is not None
     kwargs = dict(
         vessel=doc.environment.vessel_motion,
-        offlead_deg=hoist.offlead_deg,
-        sidelead_deg=hoist.sidelead_deg,
-        hook_daf=hoist.hook_daf,
+        offlead_deg=settings.offlead_deg,
+        sidelead_deg=settings.sidelead_deg,
+        hook_daf=authored_daf(doc, HOIST),
         lower_block_mass_t=hoist.lower_block_mass_t,
     )
     for limits in [*ENVELOPE_LIMITS, _MAGNITUDE[0][1]]:

@@ -19,8 +19,9 @@ from tests.test_chart_background import (
     pump_events,
     wait_idle,
 )
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 STEP = 10.0
 
 

@@ -7,12 +7,8 @@ from typing import Literal, Optional
 
 import pytest
 
-import yaml
-
 from crane_statics.core import governing_case, lift_factor, limit_auto_set, sweep
-from crane_statics.core.io import _StrictIntSafeLoader
 from crane_statics.data import normalize_document
-from crane_statics.data.migrate_v13 import migrate_document
 from crane_statics.data.models import (
     ConditionHoist,
     ConditionSpec,
@@ -20,18 +16,18 @@ from crane_statics.data.models import (
     RulesSpec,
     VesselMotion,
 )
+from tests.authored_helpers import example_path, read_yaml, v13
 
-GT283 = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
+#: The GT283 example on schema v13 (a migrated copy while ``examples/`` is still v12).
+GT283 = example_path("crane_input_GT283.yaml")
 MOTION = VesselMotion(
     accel_x_m_s2=0.8, roll_deg=4.0, pitch_deg=2.5, reference_x_m=3.0, reference_z_m=-2.0
 )
 
 
 def load_v13(path: Path) -> CraneDocument:
-    """The v12 example at ``path``, migrated to v13 and normalized."""
-    with open(path, "r", encoding="utf-8-sig") as f:
-        data = yaml.load(f, Loader=_StrictIntSafeLoader)
-    return normalize_document(migrate_document(data))
+    """The example at ``path`` on schema v13 (migrated when still v12), normalized."""
+    return normalize_document(v13(read_yaml(path)))
 
 
 def _copied(hoists: dict[str, ConditionHoist]) -> dict[str, ConditionHoist]:
@@ -54,6 +50,15 @@ def with_condition(
     first = next(iter(doc.conditions.values()))
     added = first.model_copy(deep=True, update={"name": name, "hoists": _copied(hoists)})
     return doc.model_copy(update={"conditions": {**doc.conditions, name: added}})
+
+
+def listing_example_hoists(doc: CraneDocument, condition: ConditionSpec) -> ConditionSpec:
+    """``condition`` listing (copies of) ``doc``'s first-condition hoist settings when it
+    lists none itself: a condition built in a test has no hoist usable otherwise."""
+    if condition.hoists:
+        return condition
+    first = next(iter(doc.conditions.values()))
+    return condition.model_copy(update={"hoists": _copied(first.hoists)})
 
 
 def gale(name: str = "gale", wind: float = 30.0, motion: VesselMotion = MOTION) -> ConditionSpec:

@@ -11,8 +11,9 @@ import yaml
 from crane_statics.core import load_document, save_document
 from crane_statics.core.io import DocumentIOError
 from crane_statics.core.limit_factory import DesignLimitFactory
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 ROPE_LIMIT = "MH__rope_T"
 
 

@@ -16,10 +16,11 @@ from crane_statics.core.analysis_cases import analysis_mode_by_name
 from crane_statics.core.chart_envelope import build_probes, envelope_capacity
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep
 from crane_statics.data.models import CraneDocument
+from tests.authored_helpers import authored_daf, case_document, example_path, hoist_settings
 
 ROOT = Path(__file__).parent.parent
-GT283 = ROOT / "examples" / "crane_input_GT283.yaml"
-EXAMPLE_22689 = ROOT / "examples" / "crane_input_22689.yaml"
+GT283 = example_path("crane_input_GT283.yaml")
+EXAMPLE_22689 = example_path("crane_input_22689.yaml")
 HOIST = "MH"
 LIMITS: dict[str, dict] = {"boom_hoist": {"T": 5000.0}}
 ORACLE_LIMITS: dict[str, dict] = {
@@ -32,7 +33,7 @@ BENCHMARK_S = 0.37
 
 
 def _set_vessel(doc: CraneDocument, values: dict[str, float]) -> CraneDocument:
-    vm = doc.environment.vessel_motion
+    vm = doc.conditions["default"].vessel_motion
     for field, value in values.items():
         setattr(vm, field, float(value))
     return doc
@@ -67,13 +68,14 @@ def _curve(result: dict, mode: str = "normal") -> list[tuple[float, float]]:
 def test_sweep_matches_reference_curve() -> None:
     """Realistic wind, all seven vessel limits and the example's leads, against brute force."""
     doc = _set_vessel(load_document(GT283), SEVEN_LIMITS)
-    doc.environment.max_wind_speed_m_s = 20.0
+    doc.conditions["default"].wind_speed_m_s = 20.0
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    assert hoist.offlead_deg != 0.0 and hoist.sidelead_deg != 0.0
+    settings = hoist_settings(doc, HOIST)
+    assert settings.offlead_deg != 0.0 and settings.sidelead_deg != 0.0
 
     curve = _curve(run_capacity_sweep(doc, HOIST, ORACLE_LIMITS, 10.0, {}))
     assert len(curve) >= 3
-    calc = CraneCalculator(doc)
+    calc = CraneCalculator(case_document(doc))
     kin = KinematicsAdapter(doc.model_dump())
     picks = [curve[0], curve[len(curve) // 2], curve[-1]]
     for outreach, load_t in picks:
@@ -85,7 +87,7 @@ def test_sweep_matches_reference_curve() -> None:
             HOIST,
             angle,
             ORACLE_LIMITS,
-            hook_daf=hoist.hook_daf,
+            hook_daf=authored_daf(doc, HOIST),
             lower_block_mass_t=hoist.lower_block_mass_t,
             overrides=None,
             slew_step_deg=15.0,
@@ -118,13 +120,13 @@ def test_sweep_meets_the_benchmark() -> None:
 def test_zero_limits_and_wind_give_the_single_solve_curve() -> None:
     """No vessel limits, no wind and no leads: the curve is today's single-solve capacity."""
     doc = load_document(GT283)
-    doc.environment.max_wind_speed_m_s = 0.0
+    doc.conditions["default"].wind_speed_m_s = 0.0
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    hoist.offlead_deg = 0.0
-    hoist.sidelead_deg = 0.0
+    hoist_settings(doc, HOIST).offlead_deg = 0.0
+    hoist_settings(doc, HOIST).sidelead_deg = 0.0
     curve = _curve(run_capacity_sweep(doc, HOIST, LIMITS, 2.0, {}))
     assert len(curve) >= 2
-    calc = CraneCalculator(doc)
+    calc = CraneCalculator(case_document(doc))
     kin = KinematicsAdapter(doc.model_dump())
     for outreach, load_t in (curve[0], curve[-1]):
         angle = kin.outreach_to_angle(outreach, HOIST)
@@ -132,7 +134,7 @@ def test_zero_limits_and_wind_give_the_single_solve_curve() -> None:
         pt = calc.compute_analysis_point(angle, 0.0, HOIST, wind_speed_m_s=0.0)
         assert pt is not None
         expected = calc.compute_allowable_load(
-            pt, LIMITS, hook_daf=hoist.hook_daf, lower_block_mass_t=hoist.lower_block_mass_t
+            pt, LIMITS, hook_daf=authored_daf(doc, HOIST), lower_block_mass_t=hoist.lower_block_mass_t
         )
         assert load_t == pytest.approx(expected.max_allowable_load_t, rel=1e-9)
 
@@ -145,23 +147,25 @@ def test_cancelled_sweep_raises() -> None:
 
 def _envelope_t(doc: CraneDocument, outreach: float, mode_name: str) -> float:
     hoist = next(h for h in doc.hoists if h.id == HOIST)
-    mode = analysis_mode_by_name(hoist, mode_name)
+    settings = hoist_settings(doc, HOIST)
+    mode = analysis_mode_by_name(hoist, mode_name, settings)
     assert mode.name == mode_name
-    calc = CraneCalculator(doc)
+    condition = doc.conditions["default"]
+    calc = CraneCalculator(case_document(doc))
     angle = KinematicsAdapter(doc.model_dump()).outreach_to_angle(outreach, HOIST)
     assert angle is not None
     probes = build_probes(
-        calc, HOIST, angle, float(doc.environment.max_wind_speed_m_s), mode.runtime_overrides
+        calc, HOIST, angle, float(condition.wind_speed_m_s), mode.runtime_overrides
     )
     assert probes is not None
     cap = envelope_capacity(
         calc,
         probes,
         LIMITS,
-        vessel=doc.environment.vessel_motion,
-        offlead_deg=hoist.offlead_deg,
-        sidelead_deg=hoist.sidelead_deg,
-        hook_daf=hoist.hook_daf,
+        vessel=condition.vessel_motion,
+        offlead_deg=settings.offlead_deg,
+        sidelead_deg=settings.sidelead_deg,
+        hook_daf=authored_daf(doc, HOIST),
         lower_block_mass_t=mode.lower_block_mass_t,
     )
     return float(cap.max_allowable_load_t)
@@ -190,8 +194,8 @@ def test_limit_series_only_for_hook_load_responsive_limits() -> None:
 def test_limit_series_for_limits_that_respond_only_through_the_leads() -> None:
     """platform_base Fy takes hook load only via the leads: with GT283's leads it has a series."""
     doc = load_document(GT283)
-    hoist = next(h for h in doc.hoists if h.id == HOIST)
-    assert hoist.offlead_deg != 0.0 and hoist.sidelead_deg != 0.0
+    settings = hoist_settings(doc, HOIST)
+    assert settings.offlead_deg != 0.0 and settings.sidelead_deg != 0.0
     limits: dict[str, Any] = {**LIMITS, "platform_base": {"Fy": 1.0e4}}
 
     result = run_capacity_sweep(doc, HOIST, limits, 4.0, {})
@@ -199,8 +203,8 @@ def test_limit_series_for_limits_that_respond_only_through_the_leads() -> None:
     assert set(series) == {"boom_hoist", "platform_base"}
     assert series["platform_base"][3]
 
-    hoist.offlead_deg = 0.0
-    hoist.sidelead_deg = 0.0
+    settings.offlead_deg = 0.0
+    settings.sidelead_deg = 0.0
     result = run_capacity_sweep(doc, HOIST, limits, 4.0, {})
     series = {row[0]: row for row in result["modes"]["normal"]["limit_series"]}
     assert set(series) == {"boom_hoist"}

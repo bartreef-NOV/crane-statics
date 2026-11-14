@@ -13,8 +13,9 @@ from crane_statics.core.scene_build import SceneDisplay, derive_boom_axes
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.scene.scene_renderer import CraneSceneRenderer
 from crane_statics.qml_app.viewmodels.scene_vm import SceneViewModel
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 def _hook_guide_anchor(renderer):

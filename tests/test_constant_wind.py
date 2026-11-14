@@ -7,11 +7,12 @@ from crane_statics.calculation.solver import crane_solver
 from crane_statics.calculation.solver.kinematics import KinematicsAdapter
 from crane_statics.core import load_document
 from crane_statics.data.models import WindArea
+from tests.authored_helpers import load_example
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 EXPECTED = (
     0.5
-    * load_document(EXAMPLES / "crane_input_GT283.yaml").environment.air_density_kg_m3
+    * load_example("crane_input_GT283.yaml").environment.air_density_kg_m3
     * 1.2
     * 10.0
     * 20.0**2
@@ -20,7 +21,7 @@ EXPECTED = (
 
 
 def _doc_with_wind_at(z_m: float):
-    doc = load_document(EXAMPLES / "crane_input_GT283.yaml")
+    doc = load_example("crane_input_GT283.yaml")
     for body in doc.bodies:
         body.wind_areas = []
         if body.id == "rear_leg":

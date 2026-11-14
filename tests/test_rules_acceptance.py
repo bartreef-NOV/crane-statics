@@ -42,12 +42,18 @@ from crane_statics.calculation.solver.kinematics import KinematicsAdapter
 from crane_statics.data.models import ConditionSpec, ContractualPoint, CraneDocument, VesselMotion
 from crane_statics.rules import RulesValidationError, validate_rules_document
 from tests import rules_reference as ref
-from tests.rules_docs import legacy_equivalent, without_live_lateral, without_suspended_rope
+from tests.authored_helpers import case_document, example_path
+from tests.rules_docs import (
+    legacy_equivalent,
+    listing_example_hoists,
+    without_live_lateral,
+    without_suspended_rope,
+)
 
 ROOT = Path(__file__).parent.parent
 EXAMPLES = ROOT / "examples"
-ABS_EXAMPLE = EXAMPLES / "crane_input_GT283_abs.yaml"
-DNV_EXAMPLE = EXAMPLES / "crane_input_GT283_dnv.yaml"
+ABS_EXAMPLE = example_path("crane_input_GT283_abs.yaml")
+DNV_EXAMPLE = example_path("crane_input_GT283_dnv.yaml")
 LEGACY_EXAMPLES = ("crane_input_22689", "crane_input_GT283", "crane_input_13778_retracted")
 
 G = 9.81
@@ -100,14 +106,20 @@ def case_doc(
             update: dict[str, object] = {
                 "outreach_min_m": OUTREACH_M,
                 "outreach_max_m": OUTREACH_M,
-                "contractual_points": [
-                    ContractualPoint(load_t=rated_load_t, outreach_m=OUTREACH_M)
-                ],
             }
             if lower_block_mass_t is not None:
                 update["lower_block_mass_t"] = lower_block_mass_t
             h = h.model_copy(update=update)
         hoists.append(h)
+    # The condition takes the example's hoist settings, with MH's chart the one rated point.
+    entries = {
+        hid: entry.model_copy(deep=True)
+        for hid, entry in next(iter(doc.conditions.values())).hoists.items()
+    }
+    entries[HOOK] = entries[HOOK].model_copy(
+        update={"contractual_points": [ContractualPoint(load_t=rated_load_t, outreach_m=OUTREACH_M)]}
+    )
+    condition = condition.model_copy(update={"hoists": entries})
     doc = doc.model_copy(
         update={"rules": rules, "conditions": {condition.name: condition}, "hoists": hoists}
     )
@@ -138,7 +150,7 @@ def allowable_hook_force_kN(
     From ``doc`` without rules, whose MH factor is 1.0: ``F = (P + hook) * g``.
     """
     legacy = legacy_equivalent(doc, max(wind_m_s, 1e-6), motion)
-    assert next(h for h in legacy.hoists if h.id == HOOK).hook_daf == 1.0
+    assert legacy.conditions["default"].hoists[HOOK].daf in (None, 1.0)
     return (capacity_t(sweep(legacy, limits)) + lower_block_mass_t(doc)) * G
 
 
@@ -354,7 +366,9 @@ def test_abs_heavy_lift_rejects_a_v_above_0_07_g_at_the_boom_tip() -> None:
     doc = load_document(ABS_EXAMPLE)
     assert doc.rules is not None
     motion = VesselMotion(accel_z_m_s2=0.6, pitch_angular_accel_rad_s2=0.02)
-    cond = ConditionSpec(name="mild", wind_speed_m_s=10.0, vessel_motion=motion)
+    cond = listing_example_hoists(
+        doc, ConditionSpec(name="mild", wind_speed_m_s=10.0, vessel_motion=motion)
+    )
     doc = doc.model_copy(
         update={
             "rules": doc.rules.model_copy(update={"crane_class": "heavy_lift"}),
@@ -376,15 +390,12 @@ def test_payload_hoist_without_hook_mass_or_load_chart_sweeps(example: Path) -> 
     runs and warns instead of failing."""
     doc = without_suspended_rope(load_document(example))
     hoists = [
-        (
-            h.model_copy(update={"lower_block_mass_t": 0.0, "contractual_points": []})
-            if h.id == "AH"
-            else h
-        )
+        (h.model_copy(update={"lower_block_mass_t": 0.0}) if h.id == "AH" else h)
         for h in doc.hoists
     ]
     doc = doc.model_copy(update={"hoists": hoists})
     name = next(n for n, c in doc.conditions.items() if c.lift == "onboard")
+    doc.conditions[name].hoists["AH"].contractual_points = []
     limits = {"AH_rope_T": {"T": 1.0e4}}
     payload = run_mode_sweep(doc, "AH", "normal", limits, 10.0, {}, condition_name=name)
     assert payload is not None and payload["provenance"]
@@ -582,7 +593,7 @@ def test_dnv_sf1_rows(cabin: bool, swl_kN: float, expected_sf1: Optional[float])
     without one SF1 does not apply and there are no factored rows."""
     cond = ConditionSpec(name="onboard", wind_speed_m_s=10.0)
     doc = case_doc(DNV_EXAMPLE, cond, rated_load_t=swl_kN / G, cabin=cabin)
-    rated_kN = float(next(h for h in doc.hoists if h.id == HOOK).contractual_points[0].load_t) * G
+    rated_kN = float(doc.conditions["onboard"].hoists[HOOK].contractual_points[0].load_t) * G
     assert rated_kN == swl_kN  # exact: the 2500 kN boundary is hit, not approached
     if swl_kN == 2200.0:
         # SWL excludes the hook block (4.1.2.1): with it the load would be above 2500 kN.
@@ -608,8 +619,9 @@ SWEEP_GOLDEN = ROOT / "tests" / "golden" / "legacy_example_sweeps.json"
 
 
 def _legacy_sweeps(name: str) -> dict[str, dict]:
-    doc = load_document(EXAMPLES / f"{name}.yaml")
-    assert doc.rules is None and not doc.conditions
+    doc = load_document(example_path(f"{name}.yaml"))
+    # v13: a rules-less document has its one condition ``default`` (was: no conditions).
+    assert doc.rules is None and list(doc.conditions) == ["default"]
     session = SessionModel()
     session.set_document(doc)
     limits = {
@@ -670,7 +682,7 @@ def test_legacy_22689_reproduces_its_workbook_golden() -> None:
     golden = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
     assert YAML_PATH.name == "crane_input_22689.yaml"
     for name, entry in golden["cases"].items():
-        live = app_results(YAML_PATH, CASES[name])
+        live = app_results(example_path(YAML_PATH), CASES[name])
         assert set(live) == set(entry["app_results"]), name
         for key, value in entry["app_results"].items():
             assert math.isclose(value, live[key], rel_tol=0.0, abs_tol=1e-9), (name, key)
@@ -678,13 +690,16 @@ def test_legacy_22689_reproduces_its_workbook_golden() -> None:
 
 def test_legacy_gt283_reproduces_its_point_golden() -> None:
     golden = json.loads((ROOT / "tests" / "golden" / "gt283_mh_45deg.json").read_text())
-    calc = CraneCalculator(load_document(EXAMPLES / "crane_input_GT283.yaml"))
+    doc = case_document(load_document(example_path("crane_input_GT283.yaml")))
+    calc = CraneCalculator(doc)
     point = calc.compute_analysis_point(
         boom_angle_deg=45.0,
         hook_load_kN=0.0,
         hoist_id="MH",
         wind_speed_m_s=10.0,
         wind_direction="+X",
+        # v12 defaulted to the hoist's authored offlead; v13 keeps it on the condition.
+        offlead_deg=doc.conditions["default"].hoists["MH"].offlead_deg,
     )
     assert point is not None
 

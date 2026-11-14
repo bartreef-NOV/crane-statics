@@ -8,9 +8,10 @@ from crane_statics.core.io import DocumentIOError, load_document
 from crane_statics.data.models import ConditionSpec, RulesSpec, VesselMotion, payload_hoist_ids
 from crane_statics.rules import RulesValidationError, validate_rules_document
 from tests.rules_docs import load_v13
+from tests.authored_helpers import example_path
 
 G = 9.81
-GT283 = Path(__file__).parent.parent / "examples" / "crane_input_GT283.yaml"
+GT283 = example_path("crane_input_GT283.yaml")
 
 
 def _base():

@@ -10,8 +10,9 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.core.sweep import SweepCancelled, run_capacity_sweep, run_mode_sweep
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from tests.test_chart_background import limit_rows
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 # Coarse grid: these tests check wiring and caching, not curve resolution.
 STEP = 10.0
 
@@ -835,7 +836,7 @@ class TestCalculationDetails:
         from tests.rules_docs import rules_doc
         from tests.test_lift_factor import _rules, _sea
 
-        doc = _rules(rules_doc("ABS", _sea()), daf=1.0)
+        doc = _rules(rules_doc("ABS", _sea()), daf=None)  # v12 hook_daf 1.0: derived
         hoists = [
             h.model_copy(update={"max_hoisting_speed_m_s": 0.1}) if h.id == "MH" else h
             for h in doc.hoists

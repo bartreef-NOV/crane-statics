@@ -13,8 +13,9 @@ import pytest
 
 from crane_statics.calculation import CraneCalculator
 from crane_statics.core import load_document
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 def _platform_reaction(calc: CraneCalculator, overrides=None) -> dict[str, float]:

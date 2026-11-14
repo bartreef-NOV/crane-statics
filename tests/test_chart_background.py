@@ -15,8 +15,9 @@ from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels import chart_vm as chart_vm_module
 from crane_statics.qml_app.viewmodels.chart_vm import ChartViewModel
 from tests.qt_helpers import pump_events, wait_until
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 STEP = 10.0
 
 

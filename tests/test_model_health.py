@@ -13,8 +13,9 @@ from crane_statics.core.model_health import (
 )
 from crane_statics.qml_app.session import SessionState
 from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
+from tests.authored_helpers import example_path
 
-EXAMPLE = Path(__file__).parent.parent / "examples" / "crane_input_22689.yaml"
+EXAMPLE = example_path("crane_input_22689.yaml")
 
 
 @pytest.fixture
