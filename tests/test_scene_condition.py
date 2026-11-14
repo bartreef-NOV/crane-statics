@@ -173,6 +173,8 @@ def test_a_rules_less_scene_runs_under_its_default_condition() -> None:
     wind = before.scene_state.wind_speed_m_s
     scene.follow_chart_condition("default")  # already the Scene's condition
     assert before.scene_state.wind_speed_m_s == wind
+    # Re-selecting the active condition is no change (was: any name refused on a legacy doc).
+    assert not model.set_scene_condition("default", None, seed=True)
     chart.shutdown()
 
 

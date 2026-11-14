@@ -1206,4 +1206,8 @@ def test_conditions_tab_for_every_document(qml_engine, tmp_path):
     app_vm.openPath(str(EXAMPLE))
     assert tab.property("offered") is True
     assert tabs.property("currentIndex") == 2
+    # Shown afresh on the rules-less document, the tab is visible as on the rules one.
+    fresh = component.create()
+    assert fresh is not None, component.errorString()
+    assert fresh.findChild(QObject, "conditionsTabButton").property("visible") is True
     assert warnings == []

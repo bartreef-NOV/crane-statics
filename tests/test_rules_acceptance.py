@@ -152,7 +152,7 @@ def allowable_hook_force_kN(
     From ``doc`` without rules, whose MH factor is 1.0: ``F = (P + hook) * g``.
     """
     legacy = legacy_equivalent(doc, max(wind_m_s, 1e-6), motion)
-    assert legacy.conditions["default"].hoists[HOOK].daf in (None, 1.0)
+    assert legacy.conditions["default"].hoists[HOOK].daf is None
     return (capacity_t(sweep(legacy, limits)) + lower_block_mass_t(doc)) * G
 
 
