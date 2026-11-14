@@ -560,6 +560,28 @@ def test_set_scene_condition_rejects_an_unknown_name():
     assert session.scene_condition_name == second
 
 
+def test_a_renamed_condition_is_followed_by_the_scene_and_renamed_condition():
+    doc = _two_conditions(RULES_EXAMPLE)
+    first, second = _names(doc)
+    session = SessionModel()
+    session.set_document(doc)
+    assert session.set_scene_condition(second, None, seed=True)
+
+    for old, new in ((second, "b"), ("b", "c")):
+        renamed = doc.conditions[old].model_copy(update={"name": new})
+        DocumentEditor(doc).update_condition(old, renamed)
+        session.condition_renamed(old, new)
+
+    assert session.scene_condition_name == "c"
+    assert session.scene_condition().condition_name == "c"
+    assert session.renamed_condition(second) == "c" and session.renamed_condition("b") == "c"
+    assert session.renamed_condition(first) == first  # still in the document
+    assert session.renamed_condition("unknown") == "unknown"
+    assert session.renamed_condition(None) is None
+    session.set_document(doc)  # another document: no renames carried over
+    assert session.renamed_condition(second) == second
+
+
 # ----------------------------------------------------------------------
 # Model view model: the per-condition hoist table and the tagged chart points
 # ----------------------------------------------------------------------

@@ -403,7 +403,7 @@ class ModelViewModel(QObject):
         if spec is not None and new_name == spec.name:
             return
         self._edit_selected_condition(
-            lambda spec: with_condition_name(spec, new_name), select=new_name
+            lambda spec: with_condition_name(spec, new_name), select=new_name, renamed=True
         )
 
     @pyqtSlot()
@@ -522,15 +522,21 @@ class ModelViewModel(QObject):
     def _selected_spec(self):
         return editable_conditions(self._model.document).get(self._selected_condition or "")
 
-    def _edit_selected_condition(self, edit, select: Optional[str] = None) -> None:
-        """Replace the selected condition by ``edit(spec)``; on success select ``select``."""
+    def _edit_selected_condition(
+        self, edit, select: Optional[str] = None, renamed: bool = False
+    ) -> None:
+        """Replace the selected condition by ``edit(spec)``; on success select ``select``
+        (``renamed``: the edit renames it, which the session follows)."""
         spec = self._selected_spec()
         if spec is None:
             self.editFailed.emit("Select a condition first")
             return
 
         def mutate(editor: DocumentEditor) -> None:
-            editor.update_condition(spec.name, edit(spec))
+            edited = edit(spec)
+            editor.update_condition(spec.name, edited)
+            if renamed:
+                self._model.condition_renamed(spec.name, edited.name)
             if select is not None:
                 self._selected_condition = select
 

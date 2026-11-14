@@ -478,12 +478,13 @@ class ChartViewModel(QObject):
         self.draw()
 
     def _refresh_conditions(self) -> None:
-        """Follow the document's conditions; a selection that no longer exists becomes
-        the first condition."""
+        """Follow the document's conditions: a renamed selection keeps its condition
+        (``SessionModel.renamed_condition``), one that no longer exists becomes the first."""
         doc = self._model.document
         rules = None if doc is None else doc.rules
         names = [] if doc is None else list(condition_names(doc))
-        condition = self._condition if self._condition in names else (names[0] if names else None)
+        current = self._model.renamed_condition(self._condition)
+        condition = current if current in names else (names[0] if names else None)
         notes = ProvenanceFormatter.standing_notes(None if rules is None else str(rules.standard))
         if names != self._condition_names or condition != self._condition:
             followed = condition != self._condition

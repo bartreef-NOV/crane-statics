@@ -160,6 +160,8 @@ class SessionModel:
         # either takes the first condition and its most severe case (``scene_case``).
         self.scene_condition_name: Optional[str] = None
         self.scene_case_name: Optional[str] = None
+        # Old condition name -> its current name, for the renames made this document.
+        self._condition_renames: dict[str, str] = {}
 
     def subscribe(self, event: str, listener: SessionListener) -> Callable[[], None]:
         """Register a listener and return an unsubscribe callback."""
@@ -191,6 +193,7 @@ class SessionModel:
         self.design_limits_by_id.clear()
         self.scene_condition_name = None
         self.scene_case_name = None
+        self._condition_renames.clear()
 
         if doc is not None:
             # Not doc.environment: its wind and motion are placeholders. A document without
@@ -269,6 +272,27 @@ class SessionModel:
                 )
         self._follow_scene_hoists()
         return before != (condition_name, case_name)
+
+    def condition_renamed(self, old: str, new: str) -> None:
+        """The document's condition ``old`` is now called ``new``: a Scene running under
+        it stays under it, and ``renamed_condition`` carries the rename to the views that
+        name a condition (call it before ``mark_content_changed``)."""
+        if old == new:
+            return
+        if self.scene_condition_name == old:
+            self.scene_condition_name = new
+        for earlier, current in self._condition_renames.items():
+            if current == old:
+                self._condition_renames[earlier] = new
+        self._condition_renames[old] = new
+        self._condition_renames.pop(new, None)  # a live name again
+
+    def renamed_condition(self, name: Optional[str]) -> Optional[str]:
+        """``name``, or the name it was renamed to when the document no longer has it."""
+        doc = self.document
+        if name is None or doc is None or name in doc.conditions:
+            return name
+        return self._condition_renames.get(name, name)
 
     def _follow_scene_hoists(self) -> None:
         """Keep the selected hoist usable under the Scene's condition: the first usable

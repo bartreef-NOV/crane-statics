@@ -256,6 +256,37 @@ def test_the_scene_condition_label_names_the_condition_and_case() -> None:
     chart.shutdown()
 
 
+def test_renaming_the_shown_condition_keeps_the_chart_and_scene_on_it() -> None:
+    from crane_statics.qml_app.viewmodels.model_vm import ModelViewModel
+    from tests.authored_helpers import load_example
+
+    doc = load_example("crane_input_GT283_abs.yaml")
+    session, scene, chart = _vms(doc)
+    model_vm = ModelViewModel(session)
+    model_vm.refresh()
+    chart.setCurrentCondition("offboard_supply")
+    chart._cancel_all()
+    assert session.model.scene_condition().condition_name == "offboard_supply"
+
+    model_vm.selectCondition("offboard_supply")
+    model_vm.renameCondition("renamed")
+    chart._cancel_all()
+
+    assert list(doc.conditions) == ["onboard_sea", "renamed"]
+    assert session.model.scene_condition_name == "renamed"
+    assert session.model.scene_condition().condition_name == "renamed"
+    assert chart.currentCondition == "renamed"
+    assert scene.sceneConditionLabel.startswith("Condition: renamed")
+
+    # Renaming another condition leaves them where they are.
+    model_vm.selectCondition("onboard_sea")
+    model_vm.renameCondition("sea")
+    chart._cancel_all()
+    assert session.model.scene_condition_name == "renamed"
+    assert chart.currentCondition == "renamed"
+    chart.shutdown()
+
+
 def test_the_scene_condition_label_names_default_for_a_rules_less_document() -> None:
     from tests.test_chart_view_model import EXAMPLE
     from crane_statics.core.io import load_document
