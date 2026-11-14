@@ -139,6 +139,23 @@ def _tagged_chart(conditions: dict[str, Any], hoist_id: str, key: str) -> list[d
     return chart
 
 
+def tagged_load_chart(
+    doc: CraneDocument, hoist_id: str, *, split: bool = False
+) -> list[dict[str, Any]]:
+    """``hoist_id``'s load chart as saved: one ``{outreach_m, load_t, conditions}`` per
+    authored point, merged from the conditions' own point lists (``_tagged_chart``).
+
+    The points naming a condition, in chart order, are exactly that condition's points in
+    its own order, so the k-th chart point naming it is its k-th point."""
+    key = "split_contractual_points" if split else "contractual_points"
+    conditions = {
+        name: {"hoists": {hoist_id: spec.hoists[hoist_id].model_dump()}}
+        for name, spec in doc.conditions.items()
+        if hoist_id in spec.hoists
+    }
+    return _tagged_chart(conditions, hoist_id, key)
+
+
 def _authored_rules(data: dict[str, Any]) -> dict[str, Any]:
     """The rules block (only when set) and the conditions block."""
     rules = data.get("rules")

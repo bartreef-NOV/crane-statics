@@ -249,11 +249,13 @@ class SessionModel:
         With ``seed`` every hoist's wind speed and vessel motion restart at the case's
         values (+limits), and its lead angles at its lead limits in the condition, as on
         opening the document. A selected hoist the condition does not list gives way to
-        the condition's first usable one (``scene_hoist_ids``). Without a condition
-        nothing changes.
+        the condition's first usable one (``scene_hoist_ids``). Without a condition, or
+        for a ``condition_name`` the document does not define, nothing changes (False).
         """
         doc = self.document
         if doc is None or not doc.conditions:
+            return False
+        if condition_name is not None and condition_name not in doc.conditions:
             return False
         before = (self.scene_condition_name, self.scene_case_name)
         self.scene_condition_name = condition_name

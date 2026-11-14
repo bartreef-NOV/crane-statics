@@ -1097,7 +1097,11 @@ class TestConditionHoistEdits:
         )
         entry = doc.conditions["calm"].hoists["NEW"]
         assert (entry.offlead_deg, entry.daf, entry.contractual_points) == (2.0, 1.2, [])
-        assert "NEW" not in doc.conditions["default"].hoists
+        # Task 6: a new payload hoist is usable in every condition, the others with no
+        # lead limits and no DAF override (was: not listed in ``default`` at all).
+        other = doc.conditions["default"].hoists["NEW"]
+        assert (other.offlead_deg, other.sidelead_deg, other.daf) == (0.0, 0.0, None)
+        assert other.contractual_points == []
 
 
 def _model_vm(doc):
