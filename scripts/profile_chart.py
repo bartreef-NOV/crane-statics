@@ -36,7 +36,7 @@ def main() -> None:
     parser.add_argument("--doc", type=Path, default=ROOT / "examples" / "crane_input_GT283.yaml")
     parser.add_argument("--hoist", default="MH")
     parser.add_argument("--step", type=float, default=2.0, help="outreach step [m]")
-    parser.add_argument("--wind", type=float, help="max wind speed [m/s]")
+    parser.add_argument("--wind", type=float, help="first condition's wind speed [m/s]")
     parser.add_argument("--no-vessel", action="store_true", help="leave vessel motion unset")
     parser.add_argument("--tool", choices=["time", "cprofile", "pyinstrument"], default="time")
     parser.add_argument("--repeat", type=int, default=5, help="runs for --tool time")
@@ -45,11 +45,13 @@ def main() -> None:
     args = parser.parse_args()
 
     doc = load_document(args.doc)
+    # The analysis reads wind and vessel motion from the conditions: set the first one's.
+    condition = next(iter(doc.conditions.values()))
     if not args.no_vessel:
         for field, value in VESSEL_LIMITS.items():
-            setattr(doc.environment.vessel_motion, field, value)
+            setattr(condition.vessel_motion, field, value)
     if args.wind is not None:
-        doc.environment.max_wind_speed_m_s = args.wind
+        condition.wind_speed_m_s = args.wind
 
     def sweep() -> dict:
         return run_capacity_sweep(doc, args.hoist, LIMITS, args.step, {})
