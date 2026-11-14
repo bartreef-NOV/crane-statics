@@ -117,7 +117,9 @@ def case_doc(
         for hid, entry in next(iter(doc.conditions.values())).hoists.items()
     }
     entries[HOOK] = entries[HOOK].model_copy(
-        update={"contractual_points": [ContractualPoint(load_t=rated_load_t, outreach_m=OUTREACH_M)]}
+        update={
+            "contractual_points": [ContractualPoint(load_t=rated_load_t, outreach_m=OUTREACH_M)]
+        }
     )
     condition = condition.model_copy(update={"hoists": entries})
     doc = doc.model_copy(

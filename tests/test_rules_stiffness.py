@@ -1,7 +1,6 @@
 """Vertical hook stiffness by virtual work: C = 1 / sum(t^2 * L / EA)."""
 
 import math
-from pathlib import Path
 
 import pytest
 

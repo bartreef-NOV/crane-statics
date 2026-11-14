@@ -5,7 +5,6 @@ result anywhere downstream (limit catalog, demand extraction, result rows).
 """
 
 import math
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError

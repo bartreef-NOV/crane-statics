@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 
 from crane_statics.core import drawn_loads as dl
-from crane_statics.core import load_document
 from tests.test_acceptance import SceneHarness
 from tests.authored_helpers import load_example
 

@@ -1,7 +1,5 @@
 """Application shell view model: titles, status text and file-action guards."""
 
-from pathlib import Path
-
 import pytest
 from PyQt6.QtCore import QUrl
 

@@ -7,7 +7,6 @@ that weight as a lateral force Fy = -m*g, inventing a side load on the platform.
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import pytest
 

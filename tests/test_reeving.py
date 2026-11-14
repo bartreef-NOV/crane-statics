@@ -1,6 +1,5 @@
 """Hoist-centric authored input: reeving expansion, validation and save round trips."""
 
-from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -16,39 +15,41 @@ EXAMPLES = [
 
 
 def _authored() -> dict:
-    return v13({
-        "schema": {"name": "crane-statics", "version": "12.0.0"},
-        "metadata": {"name": "Reeving"},
-        "model_definition": {
-            "environment": {
-                "max_wind_speed_m_s": 20.0,
-            },
-            "structure": {
-                "boom_width_m": 1.0,
-                "boom_heel": {"x_m": 8.5, "z_m": 8.0},
-                "upper_hinge": {"x_m": -11.0, "z_m": 52.3},
-                "rear_hinge": {"x_m": -11.0, "z_m": 7.7},
-                "front_hinge": {"x_m": 6.87, "z_m": 7.7},
-            },
-            "hoists": {
-                "BH": {
-                    "reeving": [{"node": "boom_heel"}, {"node": "rear_top", "parts": 4}],
+    return v13(
+        {
+            "schema": {"name": "crane-statics", "version": "12.0.0"},
+            "metadata": {"name": "Reeving"},
+            "model_definition": {
+                "environment": {
+                    "max_wind_speed_m_s": 20.0,
                 },
-                "MH": {
-                    "reeving": [
-                        {"node": "winch", "body": "platform", "x_m": -5.0, "z_m": 3.0},
-                        {"node": "sheave", "body": "rear_leg", "x_m": -9.0, "z_m": 40.0},
-                        {"node": "tip", "body": "boom", "u_m": 100.0, "w_m": -1.0, "parts": 2},
-                    ],
-                    "lower_block_mass_t": 5.0,
-                    "falls": 4,
-                    "daf": 1.1,
-                    "offlead_deg": 1.0,
-                    "load_chart": [{"outreach_m": 30.0, "load_t": 100.0}],
+                "structure": {
+                    "boom_width_m": 1.0,
+                    "boom_heel": {"x_m": 8.5, "z_m": 8.0},
+                    "upper_hinge": {"x_m": -11.0, "z_m": 52.3},
+                    "rear_hinge": {"x_m": -11.0, "z_m": 7.7},
+                    "front_hinge": {"x_m": 6.87, "z_m": 7.7},
+                },
+                "hoists": {
+                    "BH": {
+                        "reeving": [{"node": "boom_heel"}, {"node": "rear_top", "parts": 4}],
+                    },
+                    "MH": {
+                        "reeving": [
+                            {"node": "winch", "body": "platform", "x_m": -5.0, "z_m": 3.0},
+                            {"node": "sheave", "body": "rear_leg", "x_m": -9.0, "z_m": 40.0},
+                            {"node": "tip", "body": "boom", "u_m": 100.0, "w_m": -1.0, "parts": 2},
+                        ],
+                        "lower_block_mass_t": 5.0,
+                        "falls": 4,
+                        "daf": 1.1,
+                        "offlead_deg": 1.0,
+                        "load_chart": [{"outreach_m": 30.0, "load_t": 100.0}],
+                    },
                 },
             },
-        },
-    })
+        }
+    )
 
 
 def _nodes(doc) -> dict:
@@ -119,7 +120,6 @@ def test_duplicate_local_node_definition_is_rejected():
 
 def test_hoist_ids_differing_only_by_case_are_rejected():
     data = _authored()
-    hoists = data["model_definition"]["hoists"]
     copy_hoist(data["model_definition"], "MH", "mh")
 
     with pytest.raises(ValueError, match="differ ignoring case"):

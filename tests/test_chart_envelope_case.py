@@ -62,7 +62,6 @@ def _scene_capacity(
 ) -> AllowableCapacity:
     """The case solved directly, as the Scene would: no superposition, no envelope."""
     hoist = _hoist(doc)
-    settings = hoist_settings(doc, HOIST)
     v = case.vessel_inputs
     point = calc.compute_analysis_point(
         BOOM_ANGLE_DEG,
@@ -83,7 +82,10 @@ def _scene_capacity(
     )
     assert point is not None
     return calc.compute_allowable_load(
-        point, limits, hook_daf=authored_daf(doc, HOIST), lower_block_mass_t=hoist.lower_block_mass_t
+        point,
+        limits,
+        hook_daf=authored_daf(doc, HOIST),
+        lower_block_mass_t=hoist.lower_block_mass_t,
     )
 
 
@@ -91,7 +93,6 @@ def _assert_case_shape(case: EnvelopeCase | None, doc: CraneDocument) -> Envelop
     assert case is not None
     assert set(case.vessel_inputs) == _VESSEL_FIELDS
     assert case.wind_axis in _WIND_AXES
-    hoist = _hoist(doc)
     settings = hoist_settings(doc, HOIST)
     assert abs(case.offlead_deg) == pytest.approx(abs(settings.offlead_deg))
     assert abs(case.sidelead_deg) == pytest.approx(abs(settings.sidelead_deg))

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from crane_statics.core import load_document
 from crane_statics.core.sweep_cache import (

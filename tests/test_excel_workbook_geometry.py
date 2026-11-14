@@ -9,12 +9,11 @@ import pytest
 from crane_statics.calculation.rope_mass import active_hook_positions
 from crane_statics.calculation.solver.kinematics import KinematicsAdapter
 from crane_statics.calculation.vessel_frame import VesselInputs, crane_frame_motion
-from crane_statics.core.io import load_document
 from scripts.excel_workbook import layout
 from scripts.excel_workbook.build import build_workbook
 from scripts.excel_workbook.recalc import recalculate
 from scripts.excel_workbook.reference import CASES
-from tests.excel_workbook_helpers import YAML_PATH, _document
+from tests.excel_workbook_helpers import _document
 
 from tests.excel_workbook_helpers import CASE_NAMES, LAYOUT, _Book, _model
 

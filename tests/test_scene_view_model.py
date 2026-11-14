@@ -3,7 +3,6 @@
 import dataclasses
 import math
 import re
-from pathlib import Path
 
 import pytest
 from PyQt6.QtCore import QObject, pyqtSignal

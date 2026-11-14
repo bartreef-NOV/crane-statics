@@ -1,7 +1,5 @@
 """Undo/redo across the real view models: Scene, Model and shell."""
 
-from pathlib import Path
-
 import pytest
 from PyQt6.QtCore import QObject, pyqtSignal
 

@@ -1,7 +1,5 @@
 """SessionModel undo/redo: document, limits, Scene state, dirty flag and view-model extras."""
 
-from pathlib import Path
-
 import pytest
 
 from crane_statics.core.io import load_document

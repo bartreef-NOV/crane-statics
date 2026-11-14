@@ -1,7 +1,6 @@
 """Load chart view model: probe solves and limit results are reused across redraws."""
 
 import gc
-from pathlib import Path
 
 import pytest
 

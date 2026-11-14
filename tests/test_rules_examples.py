@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from crane_statics.core import load_document
 from crane_statics.core.load_condition import condition_names
 from crane_statics.core.sweep import run_mode_sweep
 from tests.authored_helpers import load_example

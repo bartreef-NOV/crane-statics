@@ -15,7 +15,6 @@ import yaml
 
 from crane_statics.calculation import CraneCalculator
 from crane_statics.core import drawn_loads as dl
-from crane_statics.core import load_document
 from crane_statics.data import normalize_document
 from tests.test_acceptance import scene_inputs_at_drawn_tackle
 from tests.authored_helpers import example_path, load_example

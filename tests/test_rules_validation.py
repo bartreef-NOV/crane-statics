@@ -1,7 +1,5 @@
 """Document validation for ABS/DNV rules documents."""
 
-from pathlib import Path
-
 import pytest
 
 from crane_statics.core.io import DocumentIOError, load_document

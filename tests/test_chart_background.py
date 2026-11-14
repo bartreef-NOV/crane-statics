@@ -2,7 +2,6 @@
 
 import gc
 import threading
-from pathlib import Path
 
 import pytest
 from PyQt6 import sip
@@ -154,7 +153,9 @@ def vm(sweeps):
 
 
 def _visible(vm: ChartViewModel) -> ChartJob:
-    return ChartJob(vm.selectedHoistId, vm.chartMode, vm._wanted_job().condition)
+    wanted = vm._wanted_job()
+    assert wanted is not None
+    return ChartJob(vm.selectedHoistId, vm.chartMode, wanted.condition)
 
 
 def _planned(vm: ChartViewModel) -> list[ChartJob]:

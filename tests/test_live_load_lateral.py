@@ -38,6 +38,7 @@ from crane_statics.data.models import ConditionHoist, ConditionSpec, VesselMotio
 from crane_statics.rules import validate_rules_document
 from crane_statics.rules.abs_profile import AbsProfile
 from tests import rules_reference as ref
+from tests.authored_helpers import hoist_settings
 from tests.rules_docs import (
     GT283,
     first_settings,
@@ -118,7 +119,7 @@ def test_no_hook_lateral_leaves_the_gt283_golden_unchanged(calc: CraneCalculator
         crane_slewing_angle_deg=0.0,
     )
     # The golden has the MH offlead limit that v12 read from the hoist by default.
-    kwargs["offlead_deg"] = first_settings(calc.doc, HOIST).offlead_deg
+    kwargs["offlead_deg"] = hoist_settings(calc.doc, HOIST).offlead_deg
     plain = _point(calc, **kwargs)
     with_none = _point(calc, hook_lateral=None, **kwargs)
     golden = json.loads((ROOT / "tests" / "golden" / "gt283_mh_45deg.json").read_text())

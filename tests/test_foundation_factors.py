@@ -7,7 +7,6 @@ The factored demand of a platform-base limit is ``dead * baseline + live(LL) * s
 from __future__ import annotations
 
 import math
-from pathlib import Path
 from typing import Optional
 
 import pytest
@@ -470,7 +469,9 @@ def test_auto_set_values_match_the_hand_factored_demand(monkeypatch) -> None:
         result = compute_required_connection_capacity_kN(doc, entity, "Fz")
         assert result.required_kN is not None and result.governing_hoist_id is not None
         hoist = next(h for h in doc.hoists if h.id == result.governing_hoist_id)
-        mode = analysis_mode_by_name(hoist, str(result.governing_mode), first_settings(doc, hoist.id))
+        mode = analysis_mode_by_name(
+            hoist, str(result.governing_mode), first_settings(doc, hoist.id)
+        )
         cp = mode.contractual_points[int(result.governing_cp_index or 0)]
         angle = float(result.governing_angle_deg or 0.0)
         pt = calc.compute_analysis_point(

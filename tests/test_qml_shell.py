@@ -1,7 +1,5 @@
 """QML front end: every view loads warning-free and the model tables populate."""
 
-from pathlib import Path
-
 import pytest
 from PyQt6.QtCore import QMetaObject, QObject, QPoint, Qt, QUrl
 from PyQt6.QtTest import QTest

@@ -61,6 +61,7 @@ def _document() -> CraneDocument:
     which a bare ``CraneCalculator`` or solver reads."""
     return case_document(load_document(YAML_PATH))
 
+
 CASE_NAMES = {"base", "inplane_wind_accel", "outofplane_wind_roll_sidelead", "idle_hoist"}
 
 

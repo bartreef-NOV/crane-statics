@@ -1,7 +1,6 @@
 """Bearing uplift limit: the negated minimum line load, entered as a positive magnitude."""
 
 import math
-from pathlib import Path
 
 import pytest
 

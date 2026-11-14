@@ -8,7 +8,6 @@ the allowable load fell back to 1000 kN, so an overloaded crane showed capacity.
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import pytest
 

@@ -5,7 +5,6 @@ import pytest
 from crane_statics.calculation.engine import AnalysisPoint, CraneCalculator
 from crane_statics.calculation.solver import crane_solver
 from crane_statics.calculation.solver.kinematics import KinematicsAdapter
-from crane_statics.core import load_document
 from crane_statics.data.models import WindArea
 from tests.authored_helpers import load_example
 

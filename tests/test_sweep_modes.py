@@ -506,7 +506,8 @@ def test_conditions_with_different_leads_chart_differently() -> None:
     def curve(name: str) -> list:
         payload = run_mode_sweep(doc, "MH", "normal", GT_LIMITS, GT_STEP, {}, condition_name=name)
         assert payload is not None
-        return payload["curve_data"]
+        points: list = payload["curve_data"]
+        return points
 
     base, leaned = curve("default"), curve("leaning")
     assert [x for x, _ in base] == [x for x, _ in leaned]

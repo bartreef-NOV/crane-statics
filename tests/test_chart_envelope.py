@@ -6,7 +6,6 @@ import copy
 import itertools
 import math
 import random
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -370,7 +369,6 @@ def _compare_with_reference(
 ) -> None:
     calc = CraneCalculator(doc)
     hoist = _hoist(doc)
-    settings = hoist_settings(doc, HOIST)
     mass = float(hoist.lower_block_mass_t if lower_block_mass_t is None else lower_block_mass_t)
     refs = reference_capacities(
         calc,
@@ -394,7 +392,6 @@ def _compare_with_reference(
 def test_envelope_never_exceeds_the_reference(angle: float) -> None:
     """All seven vessel limits, 20 m/s wind and the example's nonzero leads."""
     doc = _envelope_document()
-    hoist = _hoist(doc)
     settings = hoist_settings(doc, HOIST)
     assert settings.offlead_deg != 0.0 and settings.sidelead_deg != 0.0
     vm = doc.environment.vessel_motion

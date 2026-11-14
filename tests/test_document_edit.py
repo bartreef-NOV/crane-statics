@@ -1,7 +1,5 @@
 """Document editing: the headless editor and the QML model view model that drives it."""
 
-from pathlib import Path
-
 import pytest
 from PyQt6.QtCore import Qt
 
@@ -586,9 +584,7 @@ class TestEnvironmentEditing:
 
         motion = document.conditions["default"].vessel_motion
         assert motion.pitch_angular_accel_rad_s2 != pytest.approx(0.125)
-        assert document.environment.vessel_motion.pitch_angular_accel_rad_s2 != pytest.approx(
-            0.125
-        )
+        assert document.environment.vessel_motion.pitch_angular_accel_rad_s2 != pytest.approx(0.125)
 
     def test_setting_gravity_writes_through(self, model_vm, document):
         model_vm.setEnvironmentValue("gravity_m_s2", 9.80665)

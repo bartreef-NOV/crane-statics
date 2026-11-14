@@ -1,7 +1,5 @@
 """Wind from an arbitrary angle (degrees from +X toward +Y) in the engine."""
 
-from pathlib import Path
-
 import pytest
 
 from crane_statics.calculation.engine import CraneCalculator

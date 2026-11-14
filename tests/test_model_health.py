@@ -1,7 +1,5 @@
 """Model health checks used by the QML status row."""
 
-from pathlib import Path
-
 import pytest
 
 from crane_statics.core.io import create_default_document, load_document

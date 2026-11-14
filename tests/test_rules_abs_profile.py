@@ -5,7 +5,6 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import math
-from pathlib import Path
 
 import pytest
 
