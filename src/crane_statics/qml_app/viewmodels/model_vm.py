@@ -9,6 +9,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from crane_statics.qml_app.qt_compat import pyqtProperty
 
 from crane_statics.core.document_edit import (
+    ConditionHoistValues,
     DocumentEditError,
     DocumentEditor,
     build_contractual_point,
@@ -89,6 +90,9 @@ class ModelViewModel(QObject):
         self._selected_body_id: str = COMPONENT_ORDER[0]
         self._contractual_mode: str = "normal"
         self._selected_condition: Optional[str] = None
+        # The condition whose hoist settings and charts the hoist tables show (the Scene's
+        # at the last refresh): edits from those tables go to it.
+        self._shown_condition: Optional[str] = None
 
         self._nodes_model = RecordTableModel(
             node_columns(self._selected_body_id), self, commit=self._commit_node_cell
@@ -100,7 +104,7 @@ class ModelViewModel(QObject):
             wind_area_columns(self._selected_body_id), self, commit=self._commit_wind_area_cell
         )
         self._hoists_model = RecordTableModel(
-            hoist_columns(self._is_boom_hoist, self._scene_settings),
+            hoist_columns(self._is_boom_hoist, self._shown_settings),
             self,
             commit=self._commit_hoist_cell,
         )
@@ -113,6 +117,14 @@ class ModelViewModel(QObject):
         self._primary_structure_model = DictListModel(PRIMARY_ROLES, self)
 
         self._session.document_changed.connect(self._on_document_changed)
+        self._session.scene_condition_changed.connect(self._on_scene_condition_changed)
+
+    def _on_scene_condition_changed(self) -> None:
+        """The hoist tables show the Scene's condition: follow it."""
+        self._refresh_hoist_records()
+        self._refresh_hoist_tables()
+        self.hoistsChanged.emit()
+        self.selectedHoistChanged.emit()
 
     def _on_document_changed(self, _doc) -> None:
         if not self._model.restoring:
@@ -242,7 +254,6 @@ class ModelViewModel(QObject):
 
     @pyqtSlot()
     def refresh(self) -> None:
-        doc = self._model.document
         available = self.bodyIds
         if available and self._selected_body_id not in available:
             self.selectBody(available[0])
@@ -252,7 +263,7 @@ class ModelViewModel(QObject):
         elif not hoist_ids:
             self._model.selected_editor_hoist_id = None
 
-        self._hoists_model.set_records([] if doc is None else doc.hoists)
+        self._refresh_hoist_records()
         self._refresh_component_tables()
         self._refresh_hoist_tables()
         self._refresh_primary_structure()
@@ -281,6 +292,13 @@ class ModelViewModel(QObject):
         self._mass_points_model.set_records([] if body is None else body.mass_points)
         self._wind_areas_model.set_records([] if body is None else body.wind_areas)
 
+    def _refresh_hoist_records(self) -> None:
+        """Re-read the hoist rows under the Scene's current condition."""
+        condition = self._model.scene_condition_or_none()
+        self._shown_condition = None if condition is None else condition.condition_name
+        doc = self._model.document
+        self._hoists_model.set_records([] if doc is None else doc.hoists)
+
     def _refresh_hoist_tables(self) -> None:
         editor = self._editor()
         hoist = self._hoist()
@@ -291,7 +309,7 @@ class ModelViewModel(QObject):
         )
         self._rope_segments_model.set_records(segments)
         # The hoist's chart under the Scene's condition (none when not usable there).
-        settings = None if hoist is None else self._scene_settings(hoist)
+        settings = None if hoist is None else self._shown_settings(hoist)
         if settings is None:
             self._contractual_model.set_records([])
         elif self._contractual_mode == "split" and self.hoistSplitable:
@@ -299,17 +317,16 @@ class ModelViewModel(QObject):
         else:
             self._contractual_model.set_records(settings.contractual_points)
 
-    def _scene_settings(self, hoist: Any) -> Any:
-        """``hoist``'s entry in the Scene's condition (``ConditionHoist``), or None.
+    def _shown_settings(self, hoist: Any) -> Any:
+        """``hoist``'s entry (``ConditionHoist``) in the condition the tables show, or None.
 
         The hoist DAF/lead columns and the contractual table show and edit the condition
-        the Scene runs under; Task 6 gives the conditions their own hoist editor.
+        the Scene runs under (``_shown_condition``, followed on every change); Task 6
+        gives the conditions their own hoist editor.
         """
-        return self._model.scene_hoist_settings(getattr(hoist, "id", None))
-
-    def _scene_condition_name(self) -> Optional[str]:
-        condition = self._model.scene_condition_or_none()
-        return None if condition is None else condition.condition_name
+        doc = self._model.document
+        spec = None if doc is None else doc.conditions.get(self._shown_condition or "")
+        return None if spec is None else spec.hoists.get(getattr(hoist, "id", ""))
 
     # ------------------------------------------------------------------
     # Model health
@@ -670,7 +687,7 @@ class ModelViewModel(QObject):
         if hoist is None:
             return {}
         return hoist_fields(
-            hoist, is_boom_hoist=self._is_boom_hoist(hoist), settings=self._scene_settings(hoist)
+            hoist, is_boom_hoist=self._is_boom_hoist(hoist), settings=self._shown_settings(hoist)
         )
 
     def _is_boom_hoist(self, hoist: Any) -> bool:
@@ -682,23 +699,18 @@ class ModelViewModel(QObject):
 
     @pyqtSlot("QVariantMap")
     def addHoist(self, fields: dict) -> None:
-        settings = condition_hoist_kwargs(fields) or {"offlead_deg": 0.0, "sidelead_deg": 0.0}
-        condition_name = self._scene_condition_name()
-
-        def mutate(editor: DocumentEditor) -> None:
-            hoist = build_payload_hoist(**hoist_kwargs(fields))
-            editor.add_hoist(hoist)
-            if condition_name is not None:
-                # Usable under the Scene's condition, with the form's DAF and leads.
-                editor.add_condition_hoist(
-                    hoist.id,
-                    condition_name,
-                    offlead_deg=settings["offlead_deg"],
-                    sidelead_deg=settings["sidelead_deg"],
-                    daf=settings.get("daf"),
-                )
-
-        self._apply_edit(mutate)
+        # Usable under the condition shown, with the form's DAF and leads (none without
+        # a condition).
+        condition_name = self._shown_condition
+        values = condition_hoist_kwargs(fields) or {"offlead_deg": 0.0, "sidelead_deg": 0.0}
+        settings = None if condition_name is None else ConditionHoistValues(**values)
+        self._apply_edit(
+            lambda editor: editor.add_hoist(
+                build_payload_hoist(**hoist_kwargs(fields)),
+                settings=settings,
+                condition_name=condition_name,
+            )
+        )
 
     @pyqtSlot(int, "QVariantMap", result="bool")
     def updateHoist(self, row: int, fields: dict) -> bool:
@@ -719,16 +731,19 @@ class ModelViewModel(QObject):
                     ),
                 )
             )
-        settings = condition_hoist_kwargs(fields)
-        condition_name = self._scene_condition_name()
-        usable = self._scene_settings(current) is not None
-
-        def mutate(editor: DocumentEditor) -> None:
-            editor.update_hoist(current.id, build_payload_hoist(**hoist_kwargs(fields)))
-            if settings is not None and usable:
-                editor.set_condition_hoist_settings(current.id, condition_name, **settings)
-
-        return self._apply_edit(mutate)
+        # The form carries DAF and leads only for a hoist the condition shown lists.
+        values = condition_hoist_kwargs(fields)
+        condition_name = self._shown_condition
+        shown = self._shown_settings(current) is not None
+        settings = ConditionHoistValues(**values) if values is not None and shown else None
+        return self._apply_edit(
+            lambda editor: editor.update_hoist(
+                current.id,
+                build_payload_hoist(**hoist_kwargs(fields)),
+                settings=settings,
+                condition_name=condition_name,
+            )
+        )
 
     @pyqtSlot(int, str, "QVariant", result="bool")
     def setHoistField(self, row: int, field: str, value: Any) -> bool:
@@ -788,7 +803,7 @@ class ModelViewModel(QObject):
     def addContractualPoint(self, fields: dict) -> None:
         hoist_id = self._model.selected_editor_hoist_id
         mode = self._contractual_mode
-        condition_name = self._scene_condition_name()
+        condition_name = self._shown_condition
         self._apply_edit(
             lambda editor: editor.add_contractual_point(
                 hoist_id,
@@ -802,7 +817,7 @@ class ModelViewModel(QObject):
     def updateContractualPoint(self, row: int, fields: dict) -> bool:
         hoist_id = self._model.selected_editor_hoist_id
         mode = self._contractual_mode
-        condition_name = self._scene_condition_name()
+        condition_name = self._shown_condition
         return self._apply_edit(
             lambda editor: editor.update_contractual_point(
                 hoist_id,
@@ -817,7 +832,7 @@ class ModelViewModel(QObject):
     def deleteContractualPoint(self, row: int) -> None:
         hoist_id = self._model.selected_editor_hoist_id
         mode = self._contractual_mode
-        condition_name = self._scene_condition_name()
+        condition_name = self._shown_condition
         self._apply_edit(
             lambda editor: editor.delete_contractual_point(hoist_id, row, mode, condition_name)
         )

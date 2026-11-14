@@ -83,6 +83,7 @@ def test_session_state_stays_a_signal_seam():
         "document_changed",
         "hoist_selected",
         "notification",
+        "scene_condition_changed",
     ]
     assert isinstance(SessionState().model, SessionModel)
 

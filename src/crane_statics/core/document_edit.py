@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Iterator, Optional
 
 from ..data.authored_models import hoist_node_prefix
 from ..data.models import (
@@ -188,6 +190,21 @@ def _check_condition_hoist_values(
         raise DocumentEditError("DAF must be >= 1")
 
 
+@dataclass(frozen=True)
+class ConditionHoistValues:
+    """A payload hoist's lead limits and DAF (None: no override) under one condition, as a
+    hoist edit sets them; its charts there are not part of it."""
+
+    offlead_deg: float
+    sidelead_deg: float
+    daf: Optional[float] = None
+
+    def check(self) -> None:
+        """Raise ``DocumentEditError`` unless the values are within ``ConditionHoist``'s
+        bounds."""
+        _check_condition_hoist_values(self.offlead_deg, self.sidelead_deg, self.daf)
+
+
 def build_contractual_point(outreach_m: float, load_t: float) -> ContractualPoint:
     return ContractualPoint(outreach_m=float(outreach_m), load_t=float(load_t))
 
@@ -362,22 +379,71 @@ class DocumentEditor:
 
     # -- hoists --------------------------------------------------------
 
-    def add_hoist(self, hoist: Hoist, tension_mode: str = "fixed") -> None:
+    @contextmanager
+    def _atomic(self) -> Iterator[None]:
+        """Put the document back exactly as it was if the block raises."""
+        saved = self._doc.model_copy(deep=True)
+        try:
+            yield
+        except BaseException:
+            self._doc.__dict__.update(saved.__dict__)
+            raise
+
+    def _settings_target(
+        self, hoist_id: str, condition_name: Optional[str], settings: ConditionHoistValues
+    ) -> ConditionSpec:
+        """The condition ``settings`` go to (None: the first), after checking them."""
+        settings.check()
+        if condition_name is None:
+            spec = next(iter(self._doc.conditions.values()), None)
+            if spec is None:
+                raise DocumentEditError("The document has no load condition")
+            return spec
+        spec = self._doc.conditions.get(condition_name)
+        if spec is None:
+            raise DocumentEditError(f"Unknown condition {condition_name!r}")
+        return spec
+
+    def add_hoist(
+        self,
+        hoist: Hoist,
+        tension_mode: str = "fixed",
+        *,
+        settings: Optional[ConditionHoistValues] = None,
+        condition_name: Optional[str] = None,
+    ) -> None:
+        """Add ``hoist``; with ``settings`` it is usable in ``condition_name`` (None: the
+        first condition) with those lead limits and DAF and no charts yet.
+
+        Everything is checked first: a rejected edit leaves the document unchanged.
+        """
         if any(h.id == hoist.id for h in self._doc.hoists):
             raise DocumentEditError(f"Hoist '{hoist.id}' already exists")
         if any(r.id == hoist.rope_id for r in self._doc.ropes):
             raise DocumentEditError(f"Generated rope '{hoist.rope_id}' already exists")
+        target = None
+        if settings is not None:
+            if tension_mode == "solve":
+                raise DocumentEditError("The boom hoist cannot be usable in a condition")
+            target = self._settings_target(hoist.id, condition_name, settings)
 
-        self._doc.ropes.append(
-            Rope(
-                id=hoist.rope_id,
-                segments=[],
-                tension_mode=tension_mode,
-                linear_mass_kg_m=float(hoist.linear_mass_kg_m),
+        with self._atomic():
+            self._doc.ropes.append(
+                Rope(
+                    id=hoist.rope_id,
+                    segments=[],
+                    tension_mode=tension_mode,
+                    linear_mass_kg_m=float(hoist.linear_mass_kg_m),
+                )
             )
-        )
-        self._doc.hoists.append(hoist)
-        self.sync_managed_payload_hook(hoist)
+            self._doc.hoists.append(hoist)
+            self.sync_managed_payload_hook(hoist)
+            if target is not None and settings is not None:
+                target.hoists[hoist.id] = ConditionHoist(
+                    offlead_deg=float(settings.offlead_deg),
+                    sidelead_deg=float(settings.sidelead_deg),
+                    daf=None if settings.daf is None else float(settings.daf),
+                )
 
     def update_boom_hoist(
         self,
@@ -397,28 +463,67 @@ class DocumentEditor:
         current.linear_mass_kg_m = max(0.0, float(linear_mass_kg_m))
         current.rope_length_m = None if rope_length_m is None else max(0.0, float(rope_length_m))
 
-    def update_hoist(self, hoist_id: str, edited: Hoist) -> None:
+    def update_hoist(
+        self,
+        hoist_id: str,
+        edited: Hoist,
+        *,
+        settings: Optional[ConditionHoistValues] = None,
+        condition_name: Optional[str] = None,
+    ) -> None:
+        """Replace payload hoist ``hoist_id`` by ``edited``.
+
+        A new id renames the hoist in every condition that lists it (same place, same
+        settings and charts). ``settings`` sets its lead limits and DAF under
+        ``condition_name`` (None: the first condition), which must list it; its charts
+        there are kept. Everything is checked first: a rejected edit leaves the document
+        unchanged.
+        """
         current = self._hoist(hoist_id)
         if self.is_solve_hoist(current):
             raise DocumentEditError(f"Hoist '{hoist_id}' is the boom hoist; use update_boom_hoist")
+        new_id = edited.id
+        if new_id != hoist_id and any(h.id == new_id for h in self._doc.hoists):
+            raise DocumentEditError(f"Hoist '{new_id}' already exists")
+        target = None
+        if settings is not None:
+            target = self._settings_target(hoist_id, condition_name, settings)
+            if hoist_id not in target.hoists:
+                raise DocumentEditError(
+                    f"Hoist '{hoist_id}' is not usable in condition {target.name!r}"
+                )
 
-        # The derived pair belongs to the document, not the edit form.
-        edited.max_hook_travel_m = current.max_hook_travel_m
-        edited.rope_length_m = current.rope_length_m
-        edited.rope_id = current.rope_id
-        edited.load_node_id = current.load_node_id
-        # The hoist's lead limits, DAF and charts live in the conditions: untouched here.
-        self.sync_managed_payload_hook(edited)
+        with self._atomic():
+            # The derived pair belongs to the document, not the edit form.
+            edited.max_hook_travel_m = current.max_hook_travel_m
+            edited.rope_length_m = current.rope_length_m
+            edited.rope_id = current.rope_id
+            edited.load_node_id = current.load_node_id
+            # The hoist's lead limits, DAF and charts live in the conditions.
+            self.sync_managed_payload_hook(edited)
 
-        for index, hoist in enumerate(self._doc.hoists):
-            if hoist.id == hoist_id:
-                self._doc.hoists[index] = edited
-                break
+            for index, hoist in enumerate(self._doc.hoists):
+                if hoist.id == hoist_id:
+                    self._doc.hoists[index] = edited
+                    break
 
-        rope = self.rope_for_hoist(edited)
-        if rope is not None:
-            rope.tension_mode = "fixed"
-            rope.linear_mass_kg_m = float(edited.linear_mass_kg_m)
+            rope = self.rope_for_hoist(edited)
+            if rope is not None:
+                rope.tension_mode = "fixed"
+                rope.linear_mass_kg_m = float(edited.linear_mass_kg_m)
+
+            if new_id != hoist_id:
+                for spec in self._doc.conditions.values():
+                    if hoist_id in spec.hoists:
+                        spec.hoists = {
+                            (new_id if hid == hoist_id else hid): entry
+                            for hid, entry in spec.hoists.items()
+                        }
+            if target is not None and settings is not None:
+                entry = target.hoists[new_id]
+                entry.offlead_deg = float(settings.offlead_deg)
+                entry.sidelead_deg = float(settings.sidelead_deg)
+                entry.daf = None if settings.daf is None else float(settings.daf)
 
     def delete_hoist(self, hoist_id: str) -> None:
         hoist = self._hoist(hoist_id)
@@ -608,33 +713,6 @@ class DocumentEditor:
         points = self.contractual_points(hoist_id, mode, condition_name)
         self._guard_index(index, len(points), "contractual point")
         points.pop(index)
-
-    def add_condition_hoist(
-        self,
-        hoist_id: str,
-        condition_name: str,
-        *,
-        offlead_deg: float,
-        sidelead_deg: float,
-        daf: Optional[float],
-    ) -> None:
-        """Make payload hoist ``hoist_id`` usable in ``condition_name``, without charts yet."""
-        hoist = self._hoist(hoist_id)
-        if self.is_solve_hoist(hoist):
-            raise DocumentEditError("The boom hoist cannot be usable in a condition")
-        spec = self._doc.conditions.get(condition_name)
-        if spec is None:
-            raise DocumentEditError(f"Unknown condition {condition_name!r}")
-        if hoist_id in spec.hoists:
-            raise DocumentEditError(
-                f"Hoist '{hoist_id}' is already usable in condition {condition_name!r}"
-            )
-        _check_condition_hoist_values(offlead_deg, sidelead_deg, daf)
-        spec.hoists[hoist_id] = ConditionHoist(
-            offlead_deg=float(offlead_deg),
-            sidelead_deg=float(sidelead_deg),
-            daf=None if daf is None else float(daf),
-        )
 
     def set_condition_hoist_settings(
         self,

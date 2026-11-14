@@ -266,7 +266,10 @@ class SessionModel:
                     state.scene_state, **values, **_lead_seed(condition, hoist_id)
                 )
         self._follow_scene_hoists()
-        return before != (condition_name, case_name)
+        changed = before != (condition_name, case_name)
+        if changed:
+            self._emit("scene_condition_changed")
+        return changed
 
     def _follow_scene_hoists(self) -> None:
         """Keep the selected hoist usable under the Scene's condition: the first usable

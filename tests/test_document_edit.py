@@ -968,3 +968,179 @@ class TestConditionViewModel:
         _edited, failed = self._signals(vm)
         vm.addCondition()
         assert failed
+
+
+# --- hoist edits and the condition-owned hoist settings (interim Model edit path) ------
+
+
+def _two_condition_gt283():
+    """GT283 migrated: ``default`` lists MH, AH, trolley; ``calm`` lists trolley then AH."""
+    from tests.rules_docs import load_v13, with_condition
+
+    gt = load_v13(GT283)
+    default = gt.conditions["default"].hoists
+    # calm's AH chart is only default's last point, at its own lead limit.
+    calm_ah = default["AH"].model_copy(
+        update={"offlead_deg": 7.0, "contractual_points": default["AH"].contractual_points[-1:]}
+    )
+    return with_condition(gt, "calm", {"trolley": default["trolley"], "AH": calm_ah})
+
+
+def _payload_hoist_like(doc, hoist_id: str, new_id: str):
+    current = next(h for h in doc.hoists if h.id == hoist_id)
+    return build_payload_hoist(
+        new_id,
+        str(current.support_node_id),
+        falls=int(current.falls or 1),
+        lower_block_mass_t=float(current.lower_block_mass_t),
+        linear_mass_kg_m=float(current.linear_mass_kg_m),
+        lowest_hook_height_m=float(current.lowest_hook_height_m or 0.0),
+    )
+
+
+class TestConditionHoistEdits:
+    def test_rename_rekeys_every_condition_in_place(self):
+        from crane_statics.core.document_edit import ConditionHoistValues
+
+        doc = _two_condition_gt283()
+        before = {name: spec.hoists["AH"].model_dump() for name, spec in doc.conditions.items()}
+        DocumentEditor(doc).update_hoist(
+            "AH",
+            _payload_hoist_like(doc, "AH", "AH2"),
+            settings=ConditionHoistValues(offlead_deg=3.0, sidelead_deg=1.0, daf=None),
+            condition_name="calm",
+        )
+        assert list(doc.conditions["default"].hoists) == ["MH", "AH2", "trolley"]
+        assert list(doc.conditions["calm"].hoists) == ["trolley", "AH2"]
+        assert doc.conditions["default"].hoists["AH2"].model_dump() == before["default"]
+        calm = doc.conditions["calm"].hoists["AH2"]
+        assert (calm.offlead_deg, calm.sidelead_deg, calm.daf) == (3.0, 1.0, None)
+        points = [p.model_dump() for p in calm.contractual_points]
+        assert points == before["calm"]["contractual_points"]
+
+    @pytest.mark.parametrize(
+        "values",
+        [
+            {"offlead_deg": -1.0, "sidelead_deg": 0.0, "daf": None},
+            {"offlead_deg": 1.0, "sidelead_deg": -0.5, "daf": None},
+            {"offlead_deg": 1.0, "sidelead_deg": 0.0, "daf": 0.5},
+        ],
+    )
+    def test_invalid_settings_leave_the_document_unchanged(self, values):
+        from crane_statics.core.document_edit import ConditionHoistValues
+
+        doc = _two_condition_gt283()
+        snapshot = doc.model_dump_json()
+        editor = DocumentEditor(doc)
+        settings = ConditionHoistValues(**values)
+        new = _payload_hoist_like(doc, "AH", "NEW")
+        with pytest.raises(DocumentEditError):
+            editor.add_hoist(new, settings=settings, condition_name="default")
+        assert doc.model_dump_json() == snapshot
+        with pytest.raises(DocumentEditError):
+            editor.update_hoist(
+                "AH",
+                _payload_hoist_like(doc, "AH", "AH2"),
+                settings=settings,
+                condition_name="calm",
+            )
+        assert doc.model_dump_json() == snapshot
+
+    def test_rename_onto_an_existing_hoist_or_unknown_condition_changes_nothing(self):
+        from crane_statics.core.document_edit import ConditionHoistValues
+
+        doc = _two_condition_gt283()
+        snapshot = doc.model_dump_json()
+        editor = DocumentEditor(doc)
+        with pytest.raises(DocumentEditError):
+            editor.update_hoist("AH", _payload_hoist_like(doc, "AH", "MH"))
+        settings = ConditionHoistValues(offlead_deg=1.0, sidelead_deg=0.0, daf=None)
+        with pytest.raises(DocumentEditError):
+            editor.update_hoist(
+                "AH", _payload_hoist_like(doc, "AH", "AH"), settings=settings, condition_name="x"
+            )
+        with pytest.raises(DocumentEditError):
+            # MH is not usable in calm: no settings to edit there.
+            editor.update_hoist(
+                "MH", _payload_hoist_like(doc, "MH", "MH"), settings=settings, condition_name="calm"
+            )
+        assert doc.model_dump_json() == snapshot
+
+    def test_add_hoist_with_settings_makes_it_usable_in_that_condition(self):
+        from crane_statics.core.document_edit import ConditionHoistValues
+
+        doc = _two_condition_gt283()
+        DocumentEditor(doc).add_hoist(
+            _payload_hoist_like(doc, "AH", "NEW"),
+            settings=ConditionHoistValues(offlead_deg=2.0, sidelead_deg=0.0, daf=1.2),
+            condition_name="calm",
+        )
+        entry = doc.conditions["calm"].hoists["NEW"]
+        assert (entry.offlead_deg, entry.daf, entry.contractual_points) == (2.0, 1.2, [])
+        assert "NEW" not in doc.conditions["default"].hoists
+
+
+def _model_vm(doc):
+    session = SessionState()
+    vm = ModelViewModel(session)
+    session.model.set_document(doc)
+    session.model.history._window = 0.0  # no time-based merging between test steps
+    return session, vm
+
+
+def _row(vm, hoist_id: str) -> int:
+    return [h["id"] for h in vm.hoistList].index(hoist_id)
+
+
+class TestModelHoistEditsPerCondition:
+    def test_rename_via_the_form_is_one_clean_undo_step(self):
+        session, vm = _model_vm(_two_condition_gt283())
+        failed: list[str] = []
+        vm.editFailed.connect(failed.append)
+        fields = vm.hoistFields(_row(vm, "AH"))
+        fields["id"] = "AH2"
+        assert vm.updateHoist(_row(vm, "AH"), fields) and failed == []
+        doc = session.model.document
+        assert "AH" not in doc.conditions["default"].hoists
+        assert list(doc.conditions["calm"].hoists) == ["trolley", "AH2"]
+        blocking, _warnings = __import__(
+            "crane_statics.core.model_health", fromlist=["x"]
+        ).collect_model_health_issues(doc)
+        assert blocking == []
+        assert session.model.undo()
+        doc = session.model.document
+        assert [h.id for h in doc.hoists].count("AH") == 1
+        assert list(doc.conditions["default"].hoists) == ["MH", "AH", "trolley"]
+
+    def test_invalid_form_daf_changes_nothing_and_signals_only_the_failure(self):
+        session, vm = _model_vm(_two_condition_gt283())
+        snapshot = session.model.document.model_dump_json()
+        failed: list[str] = []
+        content: list[int] = []
+        vm.editFailed.connect(failed.append)
+        vm.modelEdited.connect(lambda: content.append(1))
+        session.content_changed.connect(lambda: content.append(2))
+        fields = vm.hoistFields(_row(vm, "AH"))
+        vm.addHoist({**fields, "id": "NEW", "hook_daf": 0.5})
+        assert not vm.updateHoist(_row(vm, "AH"), {**fields, "offlead_deg": -2.0})
+        assert len(failed) == 2 and content == []
+        assert session.model.document.model_dump_json() == snapshot
+        assert not session.model.can_undo
+
+    def test_tables_follow_the_scene_condition_and_edits_target_it(self):
+        session, vm = _model_vm(_two_condition_gt283())
+        vm.selectHoist("AH")
+        doc = session.model.document
+        default_points = list(doc.conditions["default"].hoists["AH"].contractual_points)
+        calm_points = list(doc.conditions["calm"].hoists["AH"].contractual_points)
+        assert vm.hoistFields(_row(vm, "AH"))["offlead_deg"] == 2.0
+
+        session.model.set_scene_condition("calm", None, seed=True)
+        # The tables now show calm: its lead limit, its chart.
+        assert vm.hoistFields(_row(vm, "AH"))["offlead_deg"] == 7.0
+        assert vm.contractualModel.rowCount() == len(calm_points) == 1
+        assert vm.contractualFields(0)["outreach_m"] == calm_points[0].outreach_m
+        vm.deleteContractualPoint(0)
+        doc = session.model.document
+        assert doc.conditions["calm"].hoists["AH"].contractual_points == calm_points[1:]
+        assert doc.conditions["default"].hoists["AH"].contractual_points == default_points
