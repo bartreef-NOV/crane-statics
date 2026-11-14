@@ -13,7 +13,8 @@ from crane_statics.core.io import load_document
 from scripts.excel_workbook import layout
 from scripts.excel_workbook.build import build_workbook
 from scripts.excel_workbook.recalc import recalculate
-from scripts.excel_workbook.reference import CASES, YAML_PATH
+from scripts.excel_workbook.reference import CASES
+from tests.excel_workbook_helpers import YAML_PATH, _document
 
 from tests.excel_workbook_helpers import CASE_NAMES, LAYOUT, _Book, _model
 
@@ -22,7 +23,7 @@ from tests.excel_workbook_helpers import CASE_NAMES, LAYOUT, _Book, _model
 def test_node_positions_match_kinematics(case_book: Callable[[str], "_Book"], name: str) -> None:
     case = CASES[name]
     book = case_book(name)
-    doc = load_document(YAML_PATH).model_dump()
+    doc = _document().model_dump()
     expected = active_hook_positions(
         doc,
         case.hoist_id,

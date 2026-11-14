@@ -13,7 +13,6 @@ import pytest
 from scripts.excel_workbook.recalc import recalculate
 from scripts.excel_workbook.reference import (
     CASES,
-    YAML_PATH,
     app_results,
     expanded_model,
     scene_reaction_arrows,
@@ -21,6 +20,7 @@ from scripts.excel_workbook.reference import (
 
 from tests.excel_workbook_helpers import (
     CASE_NAMES,
+    YAML_PATH,
     _golden,
     _num,
 )

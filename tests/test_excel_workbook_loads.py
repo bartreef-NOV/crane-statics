@@ -9,7 +9,8 @@ import pytest
 from crane_statics.calculation.rope_mass import rope_mass_at_nodes
 from scripts.excel_workbook import layout
 from scripts.excel_workbook.build import build_workbook
-from scripts.excel_workbook.reference import CASES, YAML_PATH, app_results
+from scripts.excel_workbook.reference import CASES, app_results
+from tests.excel_workbook_helpers import YAML_PATH
 
 from tests.excel_workbook_helpers import (
     LAYOUT,

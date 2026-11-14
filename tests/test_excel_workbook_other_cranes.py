@@ -8,7 +8,8 @@ import pytest
 
 from scripts.excel_workbook import layout
 from scripts.excel_workbook.build import build_workbook
-from scripts.excel_workbook.reference import REPO_ROOT, app_results, expanded_model
+from scripts.excel_workbook.reference import app_results, expanded_model
+from tests.authored_helpers import example_path
 
 from tests.excel_workbook_helpers import (
     ACCEPT_TOL,
@@ -28,7 +29,7 @@ BEARING_ROWS = {
 
 @pytest.mark.parametrize("yaml_name", sorted(OTHER_CRANES))
 def test_other_crane_matches_app(tmp_path: Path, yaml_name: str) -> None:
-    yaml_path = REPO_ROOT / "examples" / yaml_name
+    yaml_path = example_path(yaml_name)
     case = OTHER_CRANES[yaml_name]
     model = expanded_model(yaml_path)
     lay = fit_layout(model)

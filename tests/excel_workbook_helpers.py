@@ -38,16 +38,28 @@ from crane_statics.core.io import load_document
 from scripts.excel_workbook import layout
 from scripts.excel_workbook.build import build_workbook
 from scripts.excel_workbook.recalc import recalculate
+from crane_statics.data.models import CraneDocument
+from scripts.excel_workbook.reference import YAML_PATH as _EXAMPLE_YAML
 from scripts.excel_workbook.reference import (
     CASES,
     GOLDEN_PATH,
     SceneCase,
-    YAML_PATH,
     _scene_inputs,
     _solve,
     app_results,
     expanded_model,
 )
+from tests.authored_helpers import case_document, example_path
+
+#: The 22689 example the workbook is built from, on schema v13 (a migrated copy while
+#: ``examples/`` is still v12).
+YAML_PATH = example_path(_EXAMPLE_YAML)
+
+
+def _document() -> CraneDocument:
+    """The 22689 document with its one condition's environment (wind, vessel motion),
+    which a bare ``CraneCalculator`` or solver reads."""
+    return case_document(load_document(YAML_PATH))
 
 CASE_NAMES = {"base", "inplane_wind_accel", "outofplane_wind_roll_sidelead", "idle_hoist"}
 
@@ -130,7 +142,7 @@ def _solver_loads(
     ``compute_analysis_point`` give it (the app composes the same linear terms from unit
     channels). Returns the positions and the document too.
     """
-    doc = load_document(YAML_PATH).model_dump()
+    doc = _document().model_dump()
     if mutate is not None:
         mutate(doc)
     positions = active_hook_positions(
@@ -296,7 +308,7 @@ def _app_inplane(
     from crane_statics.core.demand_extraction import extract_connection_component_response
     from crane_statics.data.models import CraneDocument
 
-    doc_dict = load_document(YAML_PATH).model_dump()
+    doc_dict = _document().model_dump()
     if mutate is not None:
         mutate(doc_dict)
     doc = CraneDocument.model_validate(doc_dict)
@@ -332,7 +344,7 @@ def _solver_statics(
     case: SceneCase, mutate: Callable[[dict[str, Any]], None] | None = None
 ) -> dict[str, float]:
     """``crane_solver._run_statics`` at ``case``, with the inputs ``_solver_loads`` uses."""
-    doc = load_document(YAML_PATH).model_dump()
+    doc = _document().model_dump()
     if mutate is not None:
         mutate(doc)
     positions = active_hook_positions(
@@ -477,7 +489,7 @@ def _engine_oop(case: SceneCase) -> dict[str, Any]:
     """
     from crane_statics.calculation.engine import CraneCalculator
 
-    doc = load_document(YAML_PATH)
+    doc = _document()
     calc = CraneCalculator(doc)
     kwargs = dataclasses.asdict(case)
     hoist_id = kwargs.pop("hoist_id")
