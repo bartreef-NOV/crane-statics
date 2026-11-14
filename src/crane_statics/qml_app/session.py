@@ -13,7 +13,7 @@ class SessionState(QObject):
     """The session's change events, as Qt signals.
 
     This is the whole seam between the pure :class:`SessionModel` and the view
-    models: seven signals, plus the ``model`` the view models read and write
+    models: six signals, plus the ``model`` the view models read and write
     directly. It deliberately does not mirror the model's members. A mirror buys
     no encapsulation here -- ``SessionModel``'s state is public and mutable, and
     the view models already write straight through it -- while costing a second
@@ -27,7 +27,6 @@ class SessionState(QObject):
     hoist_selected = pyqtSignal(str)
     design_limits_changed = pyqtSignal(list)
     notification = pyqtSignal(str, str)
-    scene_condition_changed = pyqtSignal()
 
     def __init__(
         self, model: Optional[SessionModel] = None, parent: Optional[QObject] = None
@@ -41,6 +40,5 @@ class SessionState(QObject):
             ("hoist_selected", self.hoist_selected),
             ("design_limits_changed", self.design_limits_changed),
             ("notification", self.notification),
-            ("scene_condition_changed", self.scene_condition_changed),
         ):
             self.model.subscribe(event, signal.emit)

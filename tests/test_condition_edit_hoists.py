@@ -551,14 +551,11 @@ def test_set_scene_condition_rejects_an_unknown_name():
     first, second = _names(doc)
     session = SessionModel()
     session.set_document(doc)
-    changed: list[int] = []
-    session.subscribe("scene_condition_changed", lambda *_a: changed.append(1))
     before = (session.scene_condition_name, session.scene_case_name)
 
     assert not session.set_scene_condition("nope", None, seed=True)
 
     assert (session.scene_condition_name, session.scene_case_name) == before
-    assert changed == []
     assert session.set_scene_condition(second, None, seed=True)
     assert session.scene_condition_name == second
 
