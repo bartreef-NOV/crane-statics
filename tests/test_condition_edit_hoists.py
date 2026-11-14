@@ -11,9 +11,14 @@ from __future__ import annotations
 from typing import Callable
 
 import pytest
+from PyQt6.QtCore import Qt
 
-from crane_statics.core.document_edit import DocumentEditError, DocumentEditor
-from crane_statics.core.hoist_daf import daf_is_derived, entered_daf, shown_daf, submitted_daf
+from crane_statics.core.document_edit import (
+    DocumentEditError,
+    DocumentEditor,
+    build_contractual_point,
+)
+from crane_statics.core.hoist_daf import daf_is_derived, entered_daf, shown_daf
 from crane_statics.core.session_model import SessionModel
 from crane_statics.data import AuthoredDocument, document_to_authored_form, normalize_document
 from crane_statics.data.models import ConditionSpec, CraneDocument
@@ -84,13 +89,6 @@ def test_daf_entry_and_display_rule():
     assert entered_daf(1.2, rules=False) == 1.2
     # Under rules an entered 1.0 is an explicit override of the derived factor.
     assert entered_daf(1.0, rules=True) == 1.0
-    # A form submitting the number it shows keeps what is stored.
-    assert submitted_daf(1.0, 1.0, rules=True) == 1.0
-    assert submitted_daf(None, 1.0, rules=True) is None
-    assert submitted_daf(1.3, 1.3, rules=False) == 1.3
-    assert submitted_daf(1.3, 1.0, rules=False) is None
-    assert submitted_daf(1.3, 1.0, rules=True) == 1.0
-    assert submitted_daf(None, 1.2, rules=True) == 1.2
 
 
 def test_daf_is_derived_only_under_rules_without_an_override():
@@ -632,12 +630,16 @@ def test_explicit_daf_one_through_the_slot():
 @pytest.mark.parametrize("stored", [1.0, None], ids=["explicit-1.0", "derived"])
 def test_an_unrelated_hoist_form_edit_keeps_the_condition_daf(stored):
     """Regression: an explicit DAF 1.0 under rules was reset to None (derived) by any
-    edit of the hoist form, which shows a DAF number and submits it back."""
+    edit of the hoist form. The form no longer carries the DAF or the lead limits at
+    all (they are edited per condition), so it cannot touch them."""
     session, vm, failed, _edited = _vm(RULES_EXAMPLE)
-    first = _names(session.model.document)[0]
+    first, second = _names(session.model.document)
     vm.setConditionHoist("MH", 0.0, 0.0, stored)
     row = [h["id"] for h in vm.hoistList].index("MH")
-    mass = vm.hoistFields(row)["lower_block_mass_t"]
+    fields = vm.hoistFields(row)
+    assert not {"hook_daf", "offlead_deg", "sidelead_deg"} & set(fields)
+    mass = fields["lower_block_mass_t"]
+    others = session.model.document.conditions[second].hoists["MH"].model_dump()
 
     assert vm.setHoistField(row, "lower_block_mass_t", mass + 1.0)
 
@@ -645,7 +647,233 @@ def test_an_unrelated_hoist_form_edit_keeps_the_condition_daf(stored):
     assert next(h for h in doc.hoists if h.id == "MH").lower_block_mass_t == mass + 1.0
     entry = doc.conditions[first].hoists["MH"]
     assert (entry.offlead_deg, entry.sidelead_deg, entry.daf) == (0.0, 0.0, stored)
+    assert doc.conditions[second].hoists["MH"].model_dump() == others
+    # A DAF key sent with the form (an old caller) is not a field of the hoist: ignored.
+    assert vm.updateHoist(row, {**vm.hoistFields(row), "hook_daf": 1.4, "offlead_deg": 9.0})
+    entry = session.model.document.conditions[first].hoists["MH"]
+    assert (entry.offlead_deg, entry.daf) == (0.0, stored)
     assert failed == []
-    # Changing the DAF number in the form still sets it.
-    assert vm.setHoistField(row, "hook_daf", 1.4)
-    assert session.model.document.conditions[first].hoists["MH"].daf == 1.4
+
+
+# ----------------------------------------------------------------------
+# Load-chart points carrying their conditions: add / update / delete
+# ----------------------------------------------------------------------
+
+
+def test_add_chart_point_goes_to_each_named_condition_in_outreach_order(doc):
+    first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    before_first, before_second = _points(doc, first), _points(doc, second)
+    outreach = (before_first[0][0] + before_first[1][0]) / 2.0
+
+    editor.add_chart_point(HOIST, False, build_contractual_point(outreach, 7.5), [second])
+
+    assert _points(doc, first) == before_first
+    assert _points(doc, second) == [before_second[0], (outreach, 7.5), *before_second[1:]]
+    chart = editor.tagged_chart(HOIST)
+    assert (chart[1].outreach_m, chart[1].load_t, chart[1].conditions) == (outreach, 7.5, (second,))
+    _exports_valid(doc)
+
+
+def test_add_chart_point_defaults_to_every_condition_listing_the_hoist(doc):
+    first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    assert editor.usable_conditions(HOIST) == [first, second]
+    far = max(p[0] for p in _points(doc, first)) + 10.0
+
+    editor.add_chart_point(HOIST, False, build_contractual_point(far, 1.0))
+
+    assert _points(doc, first)[-1] == _points(doc, second)[-1] == (far, 1.0)
+    assert editor.tagged_chart(HOIST)[-1].conditions == (first, second)
+    _exports_valid(doc)
+
+    # Not usable in ``second`` any more: the default names ``first`` only.
+    editor.remove_condition_hoist(second, HOIST)
+    assert editor.usable_conditions(HOIST) == [first]
+    editor.add_chart_point(HOIST, False, build_contractual_point(far + 1.0, 0.5))
+    assert editor.tagged_chart(HOIST)[-1].conditions == (first,)
+    _exports_valid(doc)
+
+
+def test_add_chart_point_on_the_split_chart():
+    doc = _two_conditions(RULES_EXAMPLE)
+    first, second = _names(doc)
+    normal = _points(doc, first)
+    DocumentEditor(doc).add_chart_point(HOIST, True, build_contractual_point(0.5, 3.0), [first])
+    assert _points(doc, first, split=True)[0] == (0.5, 3.0)
+    assert (0.5, 3.0) not in _points(doc, second, split=True)
+    assert _points(doc, first) == normal
+    _exports_valid(doc)
+
+
+@pytest.mark.parametrize(
+    "conditions",
+    [[], ["nope"], ["{first}", "{first}"]],
+    ids=["empty", "undefined", "repeated"],
+)
+def test_add_chart_point_refuses_bad_names(doc, conditions):
+    first, _second = _names(doc)
+    names = [c.format(first=first) for c in conditions]
+    point = build_contractual_point(30.0, 1.0)
+    _refused(doc, lambda e: e.add_chart_point(HOIST, False, point, names))
+
+
+def test_add_chart_point_refuses_a_condition_not_listing_the_hoist_or_a_bad_chart(doc):
+    first, second = _names(doc)
+    DocumentEditor(doc).remove_condition_hoist(second, HOIST)
+    point = build_contractual_point(30.0, 1.0)
+    message = _refused(doc, lambda e: e.add_chart_point(HOIST, False, point, [second]))
+    assert second in message and HOIST in message
+    _refused(doc, lambda e: e.add_chart_point("BH", False, point, [first]))
+    _refused(doc, lambda e: e.add_chart_point("nope", False, point, [first]))
+
+
+def test_update_chart_point_changes_it_in_every_condition_naming_it(doc):
+    first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    original = _points(doc, first)
+    new = (original[0][0] + 0.25, original[0][1] - 1.0)
+
+    editor.update_chart_point(HOIST, False, 0, build_contractual_point(*new))
+
+    assert _points(doc, first) == _points(doc, second) == [new, *original[1:]]
+    assert editor.tagged_chart(HOIST)[0].conditions == (first, second)
+    _exports_valid(doc)
+
+
+def test_update_chart_point_can_retag_in_the_same_edit(doc):
+    first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    original = _points(doc, first)
+    new = (original[0][0], original[0][1] + 5.0)
+
+    editor.update_chart_point(HOIST, False, 0, build_contractual_point(*new), [second])
+
+    assert _points(doc, first) == original[1:]
+    assert _points(doc, second) == [new, *original[1:]]
+    _exports_valid(doc)
+
+
+def test_update_chart_point_refusals_change_nothing(doc):
+    first, _second = _names(doc)
+    point = build_contractual_point(30.0, 1.0)
+    _refused(doc, lambda e: e.update_chart_point(HOIST, False, 99, point))
+    _refused(doc, lambda e: e.update_chart_point(HOIST, False, 0, point, []))
+    _refused(doc, lambda e: e.update_chart_point(HOIST, False, 0, point, ["nope"]))
+    # A negative outreach does not save (authored ``outreach_m >= 0``): the guard refuses.
+    bad = build_contractual_point(-5.0, 1.0)
+    assert "outreach_m" in _refused(doc, lambda e: e.update_chart_point(HOIST, False, 0, bad))
+    assert "outreach_m" in _refused(doc, lambda e: e.add_chart_point(HOIST, False, bad, [first]))
+
+
+def test_delete_chart_point_removes_it_from_every_condition_naming_it(doc):
+    first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    original = _points(doc, first)
+
+    editor.delete_chart_point(HOIST, False, 0)
+
+    assert _points(doc, first) == _points(doc, second) == original[1:]
+    _exports_valid(doc)
+
+
+def test_delete_chart_point_refuses_to_leave_a_condition_without_points():
+    doc = _two_conditions(RULES_LESS_EXAMPLE)
+    _first, second = _names(doc)
+    message = _refused(doc, lambda e: e.delete_chart_point("trolley", False, 0))
+    assert "trolley" in message
+    _refused(doc, lambda e: e.delete_chart_point(HOIST, False, 99))
+    _refused(doc, lambda e: e.delete_chart_point(HOIST, True, 0))  # not splitable
+
+
+def test_chart_point_edits_use_the_saved_files_point_indices():
+    """The indices the editor takes are the saved file's: after a merge where the two
+    conditions order their points differently, index k is the k-th authored point."""
+    doc = _two_conditions(RULES_EXAMPLE)
+    first, second = _names(doc)
+    editor = DocumentEditor(doc)
+    editor.set_point_conditions(HOIST, False, 0, [first])  # point 0 names only ``first``
+    saved = document_to_authored_form(doc)
+    authored = saved["model_definition"]["hoists"][HOIST]["load_chart"]
+    chart = editor.tagged_chart(HOIST)
+    assert [(p["outreach_m"], p["load_t"], tuple(p["conditions"])) for p in authored] == [
+        (p.outreach_m, p.load_t, p.conditions) for p in chart
+    ]
+    editor.delete_chart_point(HOIST, False, 1)
+    assert _points(doc, second) == [(p.outreach_m, p.load_t) for p in chart[2:]]
+
+
+# ----------------------------------------------------------------------
+# Model view model: the tagged chart-point table
+# ----------------------------------------------------------------------
+
+
+def test_chart_point_table_rows_carry_their_conditions():
+    session, vm, failed, _edited = _vm(RULES_EXAMPLE)
+    first, second = _names(session.model.document)
+    vm.selectHoist(HOIST)
+    model = vm.contractualModel
+    assert model.rowCount() == len(vm.chartPoints) == len(_points(session.model.document, first))
+    headers = [model.headerData(c, Qt.Orientation.Horizontal) for c in range(model.columnCount())]
+    assert headers == ["Outreach (m)", "Load (t)", "Conditions"]
+    conditions = model.data(model.index(0, 2))
+    assert conditions == f"{first}, {second}"
+    assert not model.isCellEditable(0, 2) and model.isCellEditable(0, 0)
+    assert vm.chartConditionNames == [first, second]
+    assert vm.chartPointFields(0)["conditions"] == [first, second]
+    assert failed == []
+
+
+def test_chart_point_slots_add_update_delete():
+    session, vm, failed, edited = _vm(RULES_EXAMPLE)
+    first, second = _names(session.model.document)
+    vm.selectHoist(HOIST)
+    original = _points(session.model.document, first)
+    rows = len(vm.chartPoints)
+
+    vm.addChartPoint({"outreach_m": 200.0, "load_t": 1.0})  # default: every condition
+    assert vm.chartPoints[-1]["conditions"] == [first, second]
+    vm.addChartPoint({"outreach_m": 210.0, "load_t": 0.5, "conditions": [second]})
+    assert vm.chartPoints[-1]["conditions"] == [second]
+    assert len(vm.chartPoints) == rows + 2
+
+    assert vm.updateChartPoint(0, {"outreach_m": original[0][0], "load_t": 1234.0})
+    assert _points(session.model.document, second)[0] == (original[0][0], 1234.0)
+    # A cell edit goes through the same slot, in every condition naming the point.
+    model = vm.contractualModel
+    assert model.commitCell(0, 1, "1500.000")
+    assert _points(session.model.document, first)[0] == (original[0][0], 1500.0)
+
+    vm.deleteChartPoint(len(vm.chartPoints) - 1)
+    assert (210.0, 0.5) not in _points(session.model.document, second)
+    assert failed == []
+    assert session.model.undo()
+    assert (210.0, 0.5) in _points(session.model.document, second)
+
+
+def test_chart_point_slot_refusals_signal_and_change_nothing():
+    session, vm, failed, edited = _vm(RULES_LESS_EXAMPLE)
+    vm.selectHoist("trolley")
+    snapshot = session.model.document.model_dump_json()
+    vm.deleteChartPoint(0)  # the only point of both conditions
+    vm.addChartPoint({"outreach_m": 1.0, "load_t": 1.0, "conditions": ["nope"]})
+    assert not vm.updateChartPoint(5, {"outreach_m": 1.0, "load_t": 1.0})
+    assert len(failed) == 3 and edited == []
+    assert session.model.document.model_dump_json() == snapshot
+
+
+def test_chart_point_table_ignores_the_scene_condition():
+    """The table is the saved chart: switching the Scene's condition changes nothing."""
+    session, vm, _failed, _edited = _vm(RULES_EXAMPLE)
+    vm.selectHoist(HOIST)
+    rows = vm.chartPoints
+    _first, second = _names(session.model.document)
+    assert session.model.set_scene_condition(second, None, seed=True)
+    assert vm.chartPoints == rows
+
+
+def test_has_rules_follows_the_document():
+    _session, vm, _failed, _edited = _vm(RULES_EXAMPLE)
+    assert vm.hasRules is True
+    _session, vm, _failed, _edited = _vm(RULES_LESS_EXAMPLE)
+    assert vm.hasRules is False

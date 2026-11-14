@@ -261,9 +261,9 @@ def wind_area_fields(area: Any) -> dict[str, Any]:
     }
 
 
-def hoist_fields(hoist: Any, *, is_boom_hoist: bool, settings: Any = None) -> dict[str, Any]:
-    """One hoist as a flat form dict. ``settings`` is its entry (``ConditionHoist``) in the
-    condition the form edits; the DAF and lead keys are left out without one."""
+def hoist_fields(hoist: Any, *, is_boom_hoist: bool) -> dict[str, Any]:
+    """One hoist as a flat form dict (its DAF and lead limits are per condition:
+    ``condition_hoist_rows``)."""
     fields = {
         "id": hoist.id,
         "is_boom_hoist": is_boom_hoist,
@@ -281,14 +281,6 @@ def hoist_fields(hoist: Any, *, is_boom_hoist: bool, settings: Any = None) -> di
             else hoist.lower_block_mass_t
         ),
     }
-    if settings is not None:
-        fields.update(
-            {
-                "hook_daf": shown_daf(settings.daf),
-                "offlead_deg": float(settings.offlead_deg),
-                "sidelead_deg": float(settings.sidelead_deg),
-            }
-        )
     return fields
 
 
@@ -300,8 +292,13 @@ def rope_segment_fields(segment: Any) -> dict[str, Any]:
     }
 
 
-def contractual_fields(point: Any) -> dict[str, Any]:
-    return {"outreach_m": float(point.outreach_m), "load_t": float(point.load_t)}
+def chart_point_fields(point: TaggedChartPoint) -> dict[str, Any]:
+    """One load-chart point as the chart-point form dict, with the conditions it names."""
+    return {
+        "outreach_m": float(point.outreach_m),
+        "load_t": float(point.load_t),
+        "conditions": list(point.conditions),
+    }
 
 
 # ----------------------------------------------------------------------
@@ -364,20 +361,13 @@ def hoist_kwargs(fields: dict) -> dict:
     }
 
 
-CONDITION_HOIST_KEYS = ("hook_daf", "offlead_deg", "sidelead_deg")
-
-
-def condition_hoist_kwargs(fields: dict) -> Optional[dict]:
-    """The ``DocumentEditor.hoist_form_settings`` keywords in a hoist form dict; None when
-    it has none. ``shown_daf`` is the DAF number the form shows (``hoist_fields``); the
-    editor decides what it stores."""
-    if not any(key in fields for key in CONDITION_HOIST_KEYS):
+def chart_point_conditions(fields: dict) -> Optional[list[str]]:
+    """The condition names a submitted chart-point form carries; None when it carries
+    none (the editor's default applies)."""
+    names = fields.get("conditions")
+    if names is None:
         return None
-    return {
-        "offlead_deg": float(fields.get("offlead_deg", 0.0)),
-        "sidelead_deg": float(fields.get("sidelead_deg", 0.0)),
-        "shown_daf": float(fields.get("hook_daf", 1.0)),
-    }
+    return [str(name) for name in names]
 
 
 # ----------------------------------------------------------------------

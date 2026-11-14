@@ -37,14 +37,3 @@ def entered_daf(value: Optional[float], *, rules: bool) -> Optional[float]:
     if not rules and number == 1.0:
         return None
     return number
-
-
-def submitted_daf(current: Optional[float], submitted: float, *, rules: bool) -> Optional[float]:
-    """The DAF to store when a form that shows ``shown_daf(current)`` submits ``submitted``.
-
-    An unchanged number keeps what is stored (an explicit 1.0 override under rules, or no
-    override): a form edit of another field never alters the DAF. A changed number is
-    entered (``entered_daf``)."""
-    if float(submitted) == shown_daf(current):
-        return current
-    return entered_daf(submitted, rules=rules)
